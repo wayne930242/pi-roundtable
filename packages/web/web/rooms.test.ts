@@ -880,3 +880,44 @@ describe("cards the history brings", () => {
 		});
 	});
 });
+
+describe("muting", () => {
+	test("the room list carries a room's mute, and a mute the server took changes that room only", () => {
+		let state = run([
+			READY,
+			{
+				type: "rooms_loaded",
+				rooms: [view(GUIDE, { muted: true }), view(SCOUT)],
+			},
+		]);
+		expect(state.rooms[GUIDE]?.view?.muted).toBe(true);
+		expect(state.rooms[SCOUT]?.view?.muted).toBeUndefined();
+		state = reduce(state, { type: "room_muted", room: SCOUT, muted: true });
+		expect(state.rooms[SCOUT]?.view?.muted).toBe(true);
+		expect(state.rooms[GUIDE]?.view?.muted).toBe(true);
+		state = reduce(state, { type: "room_muted", room: GUIDE, muted: false });
+		expect(state.rooms[GUIDE]?.view?.muted).toBeUndefined();
+		expect(state.rooms[SCOUT]?.view?.muted).toBe(true);
+	});
+
+	test("a mute for a room the page does not know, or one that is as told, changes nothing", () => {
+		const state = run([READY, { type: "rooms_loaded", rooms: [view(GUIDE)] }]);
+		expect(
+			reduce(state, { type: "room_muted", room: SCOUT, muted: true }),
+		).toBe(state);
+		expect(
+			reduce(state, { type: "room_muted", room: GUIDE, muted: false }),
+		).toBe(state);
+	});
+
+	test("the next room list is what the server says", () => {
+		let state = run([
+			READY,
+			{ type: "rooms_loaded", rooms: [view(GUIDE)] },
+			{ type: "room_muted", room: GUIDE, muted: true },
+		]);
+		expect(state.rooms[GUIDE]?.view?.muted).toBe(true);
+		state = reduce(state, { type: "rooms_loaded", rooms: [view(GUIDE)] });
+		expect(state.rooms[GUIDE]?.view?.muted).toBeUndefined();
+	});
+});

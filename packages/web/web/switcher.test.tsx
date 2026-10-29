@@ -353,3 +353,26 @@ test("each room keeps its unsent text when the person leaves it and comes back",
 	await page.render(composer(BUILD));
 	expect(box()).toBe("");
 });
+
+test("a muted room shows the bell-slash in the drawer, and only that room", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			view(GUIDE, { last: said(GUIDE, "2026-10-28T10:00:00.000Z") }),
+			view(SCOUT, {
+				last: said(SCOUT, "2026-10-28T12:00:00.000Z"),
+				muted: true,
+			}),
+			view(BUILD, { last: said(BUILD, "2026-10-28T11:00:00.000Z") }),
+		],
+	});
+	await page.render(<Room />);
+	await page.click(element("avatar"));
+	const marked = [...page.container.querySelectorAll(".switcher-row")]
+		.filter((row) => row.querySelector('[data-mode="muted"]'))
+		.map((row) => row.querySelector("strong")?.textContent);
+	expect(marked).toEqual(["scout"]);
+	expect(
+		page.container.querySelector('[data-mode="muted"]')?.getAttribute("title"),
+	).toBe("Notifications are off");
+});

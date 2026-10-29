@@ -21,9 +21,10 @@ import { Composer } from "./components/composer.tsx";
 import { MessageRow } from "./components/message-row.tsx";
 import { RoomConfirmHost } from "./components/room-confirms.tsx";
 import { RoomSwitcher, useSwitcher } from "./components/switcher.tsx";
+import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { closeMenu } from "./lib/action-menu.ts";
-import { takeLook } from "./lib/agent-focus.ts";
+import { closeAgentSheet, currentAgentSheet } from "./lib/agent-sheet.ts";
 import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
@@ -107,7 +108,7 @@ afterEach(async () => {
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	clearDrafts();
-	takeLook();
+	closeAgentSheet();
 	Reflect.deleteProperty(navigator, "share");
 	Reflect.deleteProperty(navigator, "canShare");
 });
@@ -167,17 +168,19 @@ const List = () => (
 		<RoomsPage onSearch={() => undefined} />
 		<ActionMenuHost />
 		<RoomConfirmHost />
+		<Toaster />
 	</ConfigContext.Provider>
 );
 
 // ── Agent and group rows ─────────────────────────────────────────────────────────────────────
 
-test("an agent row's menu has the edit, look, mode and restart actions that work today", async () => {
+test("an agent row's menu has the edit, look, notifications, mode and restart actions that work today", async () => {
 	await page.render(<List />);
 	await rightClick(rowOf("scout"));
 	expect(labels()).toEqual([
 		"Edit agent",
 		"Change look",
+		"Notifications",
 		"Yolo mode",
 		"Long-running mode",
 		"Start over",
@@ -189,25 +192,76 @@ test("an agent row's menu has the edit, look, mode and restart actions that work
 test("a group row has the modes and restart but no agent edit; a thread row has no menu", async () => {
 	await page.render(<List />);
 	await rightClick(rowOf("team"));
-	expect(labels()).toEqual(["Yolo mode", "Long-running mode", "Start over"]);
+	expect(labels()).toEqual([
+		"Notifications",
+		"Yolo mode",
+		"Long-running mode",
+		"Start over",
+	]);
 	await page.act(() => closeMenu());
 	await rightClick(q(".thread-row"));
 	expect(labels()).toEqual([]);
 });
 
-test("Edit agent opens the agent's profile; Change look opens it at the character creator", async () => {
+test("Edit agent opens the agent sheet; Change look opens it at the character creator", async () => {
 	await page.render(<List />);
 	await rightClick(rowOf("scout"));
 	await choose("Edit agent");
-	expect(window.location.hash).toBe("#/agent/scout");
-	expect(takeLook()).toBe(false);
+	expect(currentAgentSheet()).toEqual({ name: "scout", look: false });
+	// The sheet is over the page, not a page of its own.
+	expect(window.location.hash).toBe("#/rooms");
 
-	window.location.hash = "#/rooms";
+	closeAgentSheet();
 	await rightClick(rowOf("scout"));
 	await choose("Change look");
-	expect(window.location.hash).toBe("#/agent/scout");
-	expect(takeLook()).toBe(true);
-	expect(takeLook()).toBe(false);
+	expect(currentAgentSheet()).toEqual({ name: "scout", look: true });
+	expect(window.location.hash).toBe("#/rooms");
+});
+
+test("the notifications item shows whether the room is pushed and flips it through the server", async () => {
+	const setMute = spyOn(api, "setMute").mockResolvedValue({ muted: true });
+	try {
+		await page.render(<List />);
+		await rightClick(rowOf("scout"));
+		expect(checked("Notifications")).toBe("true");
+		await choose("Notifications");
+		expect(setMute).toHaveBeenCalledWith(SCOUT, true);
+		// The list shows the bell-slash as soon as the server has said so.
+		expect(store.getState().rooms[SCOUT]?.view?.muted).toBe(true);
+		expect(
+			rowOf("scout")
+				?.querySelector("svg[aria-label]")
+				?.getAttribute("aria-label"),
+		).toBe("Notifications are off");
+		expect(document.body.textContent).toContain(
+			"Notifications are off for scout",
+		);
+
+		setMute.mockResolvedValue({ muted: false });
+		await rightClick(rowOf("scout"));
+		expect(checked("Notifications")).toBe("false");
+		await choose("Notifications");
+		expect(setMute).toHaveBeenLastCalledWith(SCOUT, false);
+		expect(store.getState().rooms[SCOUT]?.view?.muted).toBeUndefined();
+		expect(rowOf("scout")?.querySelector("svg[aria-label]")).toBeNull();
+	} finally {
+		setMute.mockRestore();
+	}
+});
+
+test("a mute the server refuses leaves the room as it was and says so", async () => {
+	const setMute = spyOn(api, "setMute").mockRejectedValue(
+		new Error("Only an owner may do this."),
+	);
+	try {
+		await page.render(<List />);
+		await rightClick(rowOf("scout"));
+		await choose("Notifications");
+		expect(store.getState().rooms[SCOUT]?.view?.muted).toBeUndefined();
+		expect(document.body.textContent).toContain("Only an owner may do this.");
+	} finally {
+		setMute.mockRestore();
+	}
 });
 
 test("the long-running item flips the mode through changeMode; yolo off does too", async () => {
@@ -307,7 +361,7 @@ test("a row of the phone drawer opens the same menu as a sheet; an action that l
 	expect(labels()).toContain("Edit agent");
 	await choose("Edit agent");
 	await settle(300);
-	expect(window.location.hash).toBe("#/agent/scout");
+	expect(currentAgentSheet()).toEqual({ name: "scout", look: false });
 	expect(q(".switcher")?.getAttribute("data-state")).toBe("closed");
 });
 
@@ -445,12 +499,12 @@ test("system lines have no menu", async () => {
 	expect(labels()).toEqual([]);
 });
 
-test("a message's avatar opens the agent's profile; the message's own menu does not also open", async () => {
+test("a message's avatar opens the agent sheet; the message's own menu does not also open", async () => {
 	await page.render(<Message />);
 	await rightClick(q(".message-avatar"));
 	expect(labels()).toEqual(["Agent profile"]);
 	await choose("Agent profile");
-	expect(window.location.hash).toBe("#/agent/scout");
+	expect(currentAgentSheet()).toEqual({ name: "scout", look: false });
 });
 
 // ── Cards and files ──────────────────────────────────────────────────────────────────────────

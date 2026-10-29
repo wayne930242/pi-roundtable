@@ -335,6 +335,38 @@
 	}
 }
 
+/* The header name opens the agent sheet; it reads as the title it is, with a hint on hover. */
+button.room-name {
+	display: inline;
+	min-height: 0;
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+button.room-name:hover:not(:disabled) {
+	background: transparent;
+	text-decoration: underline;
+	text-decoration-color: var(--muted);
+	text-underline-offset: 0.2em;
+}
+
+.room-muted,
+.muted-mark {
+	flex: none;
+	margin-left: var(--space-2);
+	vertical-align: -0.1em;
+	color: var(--muted);
+}
+
 /* The header picture opens the room switcher where the room has one. */
 button.room-picture {
 	flex: none;
@@ -541,6 +573,10 @@ button.room-picture:hover:not(:disabled) {
 
 .switcher-mode[data-mode="long"] {
 	color: var(--long);
+}
+
+.switcher-mode[data-mode="muted"] {
+	color: var(--muted);
 }
 
 .mode-banner {
@@ -1652,6 +1688,139 @@ dialog.palette .sheet-body {
 	min-width: 0;
 }
 
+/* ── The agent sheet ──────────────────────────────────────────────────────────────────────────── */
+
+.agent-sheet .form {
+	max-width: none;
+}
+
+.agent-sheet h3 {
+	font-size: var(--text-md);
+}
+
+.field-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+}
+
+.field-label,
+.agent-sheet legend {
+	font-size: var(--text-sm);
+	color: var(--muted);
+	font-weight: var(--weight-medium);
+}
+
+button.compact {
+	min-height: 2rem;
+	padding: 0 var(--space-3);
+	font-size: var(--text-sm);
+}
+
+/* A model or a thinking level, one of a few: chips that wrap, and scroll when the host lists many. */
+.option-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	max-height: 10.5rem;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+button.option-chip {
+	min-height: 2.25rem;
+	max-width: 100%;
+	padding: 0 var(--space-3);
+	border-color: var(--control-border);
+	border-radius: var(--radius-full);
+	background: var(--surface);
+	color: var(--text);
+	font-size: var(--text-sm);
+	font-weight: 400;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+button.option-chip:hover:not(:disabled) {
+	border-color: var(--accent);
+	background: var(--surface-2);
+}
+
+button.option-chip[aria-pressed="true"],
+button.option-chip[aria-pressed="true"]:hover:not(:disabled) {
+	border-color: var(--accent);
+	background: var(--accent);
+	color: var(--on-accent);
+}
+
+textarea.prompt-full {
+	flex: 1;
+	min-height: 12rem;
+	resize: none;
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+}
+
+.review-fields {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.review-fields li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: var(--space-2);
+	font-size: var(--text-sm);
+}
+
+.review-before {
+	color: var(--muted);
+	text-decoration: line-through;
+}
+
+pre.diff {
+	max-height: 18rem;
+	margin: 0;
+	padding: var(--space-2) 0;
+	overflow: auto;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	line-height: 1.5;
+}
+
+.diff-line {
+	display: block;
+	padding: 0 var(--space-3) 0 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.diff-line[data-kind="add"] {
+	background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.diff-line[data-kind="del"] {
+	background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.diff-mark {
+	display: inline-block;
+	width: 1.5rem;
+	text-align: center;
+	color: var(--muted);
+	user-select: none;
+}
+
 /* ── The character creator on an agent's profile ─────────────────────────────────────────────── */
 
 .creator {
@@ -1707,7 +1876,7 @@ dialog.palette .sheet-body {
 }
 
 /* In the phone's sheet the sheet's own title says what the group is. */
-.sheet .creator-field > h3 {
+dialog.sheet dialog.sheet .creator-field > h3 {
 	display: none;
 }
 

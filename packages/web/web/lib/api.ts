@@ -155,6 +155,12 @@ export const api = {
 			method: "PUT",
 			body: JSON.stringify(change),
 		}),
+	/** Mutes or unmutes the push of a room for every owner. */
+	setMute: (room: string, muted: boolean) =>
+		request<{ muted: boolean }>(`rooms/${encodeURIComponent(room)}/mute`, {
+			method: "PUT",
+			body: JSON.stringify({ muted }),
+		}),
 	startRoomOver: (room: string) =>
 		request<{ ok: true }>(`rooms/${encodeURIComponent(room)}/start-over`, {
 			method: "POST",

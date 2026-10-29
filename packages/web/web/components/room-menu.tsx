@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { RoomMode } from "../../src/api-types.ts";
+import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { translate as t } from "../lib/messages.ts";
 import { changeMode } from "../lib/modes.ts";
+import { setRoomMuted } from "../lib/mute.ts";
 import { hrefFor } from "../lib/router.ts";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
@@ -9,12 +11,15 @@ import { Switch } from "./switch.tsx";
 
 const YOLO_ID = "room-menu-yolo";
 const LONG_ID = "room-menu-long";
+const MUTE_ID = "room-menu-mute";
 
-/** The room's menu: the two modes, the agent's profile, and starting over; a thread's only links to its parent. */
+/** The room's menu: the push, the two modes, the agent's sheet, and starting over; a thread's only links to its parent. */
 export function RoomMenu(props: {
 	open: boolean;
 	room: string;
 	mode: RoomMode | undefined;
+	/** The owners muted this room's push. */
+	muted?: boolean;
 	/** The agent whose profile to link; absent for a group. */
 	agent?: string | undefined;
 	/** A thread's room: it has no modes and cannot be started over. */
@@ -59,6 +64,34 @@ export function RoomMenu(props: {
 						)}
 					</li>
 				) : null}
+				{props.readOnly ? null : (
+					<li>
+						<label className="menu-item menu-toggle" htmlFor={MUTE_ID}>
+							<span className="menu-icon">
+								<Icon name={props.muted ? "bell-off" : "bell"} />
+							</span>
+							<span className="menu-text">
+								<strong>{t("Notifications")}</strong>
+								<span className="meta">
+									{t(
+										"Push this room's posts to every owner's devices. A card that waits for you is always pushed.",
+									)}
+								</span>
+							</span>
+							<Switch
+								id={MUTE_ID}
+								checked={!props.muted}
+								label={t("Notifications")}
+								onChange={async (next) => {
+									setBusy(true);
+									await setRoomMuted(props.room, !next);
+									setBusy(false);
+								}}
+								busy={busy}
+							/>
+						</label>
+					</li>
+				)}
 				{props.readOnly ? null : (
 					<li>
 						<label className="menu-item menu-toggle" htmlFor={YOLO_ID}>
@@ -117,22 +150,26 @@ export function RoomMenu(props: {
 				)}
 				{props.agent ? (
 					<li>
-						<a
+						<button
+							type="button"
 							className="menu-item menu-link"
-							href={hrefFor("agent", props.agent)}
-							onClick={props.onClose}
+							aria-haspopup="dialog"
+							onClick={() => {
+								props.onClose();
+								openAgentSheet(props.agent as string);
+							}}
 						>
 							<span className="menu-icon">
 								<Icon name="profile" />
 							</span>
 							<span className="menu-text">
-								<strong>{t("Profile")}</strong>
+								<strong>{t("Edit agent")}</strong>
 								<span className="meta">
 									{t("Name, prompt, model and picture")}
 								</span>
 							</span>
 							<Icon name="chevron" size={16} />
-						</a>
+						</button>
 					</li>
 				) : null}
 				{props.readOnly ? null : (

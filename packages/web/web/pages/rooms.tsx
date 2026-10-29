@@ -79,6 +79,16 @@ const RoomRow = memo(function RoomRow(
 				<span className="room-row-main">
 					<span className="room-row-top">
 						<strong>{view.displayName}</strong>
+						{view.muted ? (
+							<Icon
+								name="bell-off"
+								size={14}
+								className="muted-mark"
+								role="img"
+								aria-hidden={false}
+								aria-label={t("Notifications are off")}
+							/>
+						) : null}
 						{view.home ? (
 							<span className="badge badge-accent">{t("Home")}</span>
 						) : null}

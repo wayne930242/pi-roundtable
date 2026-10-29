@@ -1149,6 +1149,8 @@ dialog.sheet[data-dragging] {
 }
 
 .sheet-body {
+	/* Visually hidden text inside it is positioned against the body, so it scrolls and clips with it. */
+	position: relative;
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
@@ -1195,6 +1197,17 @@ dialog.sheet[data-dragging] {
 	dialog.sheet.wide {
 		width: min(56rem, calc(100vw - 4rem));
 	}
+}
+
+/* A prompt is written at length: the editor takes the whole window. */
+dialog.sheet.full {
+	width: 100vw;
+	max-width: none;
+	height: 100dvh;
+	max-height: none;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
 }
 
 @media (max-width: 719px) {

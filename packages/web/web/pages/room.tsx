@@ -1,4 +1,6 @@
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -15,9 +17,9 @@ import { Icon } from "../components/icons.tsx";
 import { LiveRow, MessageRow, PendingRow } from "../components/message-row.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
-import { RoomMenu } from "../components/room-menu.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
+import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import {
@@ -36,6 +38,11 @@ import { ROOM_PAGE, type TimelineItem, timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { toast } from "../lib/toast.ts";
+
+// The room's menu is read only when it is opened.
+const RoomMenu = lazy(() =>
+	import("../components/room-menu.tsx").then((m) => ({ default: m.RoomMenu })),
+);
 
 /** A pause this long between two messages of one author shows the author again. */
 const PAUSE_MS = 5 * 60_000;
@@ -111,6 +118,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const [loaded, setLoaded] = useState(false);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [menu, setMenu] = useState(false);
+	/** The menu has been opened once, so its code is wanted. */
+	const [menuOpened, setMenuOpened] = useState(false);
 	/** Under the header: where a group's table strip and panel go. */
 	const [tableSlot, setTableSlot] = useState<HTMLDivElement | null>(null);
 	const [dropped, setDropped] = useState<File[]>();
@@ -298,7 +307,31 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					)}
 				</HeaderPicture>
 				<div className="room-title">
-					<h1>{name}</h1>
+					<h1>
+						{agentName ? (
+							<button
+								type="button"
+								className="room-name"
+								aria-haspopup="dialog"
+								title={t("Edit agent")}
+								onClick={() => openAgentSheet(agentName)}
+							>
+								{name}
+							</button>
+						) : (
+							name
+						)}
+						{view?.muted ? (
+							<Icon
+								name="bell-off"
+								size={14}
+								className="room-muted"
+								role="img"
+								aria-hidden={false}
+								aria-label={t("Notifications are off")}
+							/>
+						) : null}
+					</h1>
 					<span
 						className="room-status"
 						data-working={room?.typing || undefined}
@@ -329,7 +362,10 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					className="icon-button"
 					aria-label={t("Room menu")}
 					aria-haspopup="dialog"
-					onClick={() => setMenu(true)}
+					onClick={() => {
+						setMenuOpened(true);
+						setMenu(true);
+					}}
 				>
 					<Icon name="menu" />
 				</button>
@@ -467,33 +503,38 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						: {})}
 				/>
 			)}
-			<RoomMenu
-				open={menu}
-				room={roomKey}
-				mode={mine}
-				agent={agentName}
-				readOnly={view?.readOnly ?? false}
-				parent={parent}
-				onClose={() => setMenu(false)}
-				onAskYolo={() => {
-					setMenu(false);
-					askRoomConfirm({
-						kind: "yolo",
-						room: roomKey,
-						name,
-						restoreFocus: () => menuButton.current,
-					});
-				}}
-				onAskStartOver={() => {
-					setMenu(false);
-					askRoomConfirm({
-						kind: "start-over",
-						room: roomKey,
-						name,
-						restoreFocus: () => menuButton.current,
-					});
-				}}
-			/>
+			{menuOpened ? (
+				<Suspense fallback={null}>
+					<RoomMenu
+						open={menu}
+						room={roomKey}
+						mode={mine}
+						muted={view?.muted === true}
+						agent={agentName}
+						readOnly={view?.readOnly ?? false}
+						parent={parent}
+						onClose={() => setMenu(false)}
+						onAskYolo={() => {
+							setMenu(false);
+							askRoomConfirm({
+								kind: "yolo",
+								room: roomKey,
+								name,
+								restoreFocus: () => menuButton.current,
+							});
+						}}
+						onAskStartOver={() => {
+							setMenu(false);
+							askRoomConfirm({
+								kind: "start-over",
+								room: roomKey,
+								name,
+								restoreFocus: () => menuButton.current,
+							});
+						}}
+					/>
+				</Suspense>
+			) : null}
 			<RoomSwitcher {...switcher.drawer} current={roomKey} />
 		</section>
 	);

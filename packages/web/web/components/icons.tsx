@@ -41,6 +41,9 @@ const PATHS = {
 	table:
 		"M3 12a9 4.5 0 1 0 18 0 9 4.5 0 1 0-18 0ZM6.5 14.5L5 19M17.5 14.5L19 19M12 16.5V20",
 	list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
+	bell: "M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16ZM10 21h4",
+	"bell-off":
+		"M6 16V11a6 6 0 0 1 .8-3M9.5 5.2A6 6 0 0 1 18 11v5l1.5 2H8M10 21h4M4 4l16 16",
 } as const;
 
 export type IconName = keyof typeof PATHS;

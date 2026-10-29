@@ -277,6 +277,18 @@ function Row(props: {
 						{plural(waiting, "{count} card waiting", "{count} cards waiting")}
 					</span>
 				) : null}
+				{view.muted ? (
+					<span
+						className="switcher-mode"
+						data-mode="muted"
+						title={t("Notifications are off")}
+					>
+						<Icon name="bell-off" size={14} />
+						<span className="visually-hidden">
+							{t("Notifications are off")}
+						</span>
+					</span>
+				) : null}
 				{room?.mode.yolo ? (
 					<span className="switcher-mode" data-mode="yolo" title={t("Yolo")}>
 						<Icon name="bolt" size={14} />

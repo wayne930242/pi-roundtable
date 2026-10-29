@@ -75,19 +75,30 @@ export function blockNavigation(ask: NavigationBlocker): () => void {
 }
 
 /** Goes to a pane (and key) as the browser's own navigation would, with a view transition. */
-export function navigate(pane: string, key?: string): void {
+export function navigate(
+	pane: string,
+	key?: string,
+	options: { replace?: boolean } = {},
+): void {
 	const href = hrefFor(pane, key);
+	const replace = options.replace === true;
 	if (blocker) {
 		blocker(() => {
 			releaseGuard?.();
-			go(href);
+			go(href, replace);
 		});
 		return;
 	}
-	go(href);
+	go(href, replace);
 }
 
-function go(href: string): void {
+function go(href: string, replace: boolean): void {
+	// A step that only stands in for another leaves no history entry behind it, so Back does not return to it.
+	if (replace) {
+		window.history.replaceState(null, "", href);
+		window.dispatchEvent(new PopStateEvent("popstate"));
+		return;
+	}
 	if (mountPath) {
 		window.history.pushState(null, "", href);
 		window.dispatchEvent(new PopStateEvent("popstate"));

@@ -9,14 +9,14 @@ import type {
 	RoomMessage,
 } from "../../src/api-types.ts";
 import type { MenuItem } from "./action-menu.ts";
-import { wantLook } from "./agent-focus.ts";
+import { openAgentSheet } from "./agent-sheet.ts";
 import { store } from "./app-store.ts";
 import { quoteInto } from "./drafts.ts";
 import { translate as t } from "./messages.ts";
 import { changeMode } from "./modes.ts";
+import { setRoomMuted } from "./mute.ts";
 import { askRoomConfirm } from "./room-confirm.ts";
 import { fileUrl } from "./rooms.ts";
-import { navigate } from "./router.ts";
 import { toast } from "./toast.ts";
 
 export interface MenuSpec {
@@ -53,7 +53,7 @@ const canShare = (): boolean => typeof navigator.share === "function";
 
 // ── A room row ───────────────────────────────────────────────────────────────────────────────
 
-/** The actions of an agent's or group's row: the profile, the look, the two modes, and starting over. */
+/** The actions of an agent's or group's row: the agent's sheet and look, the push, the two modes, and starting over. */
 export function roomMenu(
 	key: string,
 	leave: Leave = now,
@@ -70,20 +70,31 @@ export function roomMenu(
 				id: "edit",
 				label: t("Edit agent"),
 				icon: "profile",
-				run: () => leave(() => navigate("agent", name)),
+				run: () => leave(() => openAgentSheet(name)),
 			},
 			{
 				id: "look",
 				label: t("Change look"),
 				icon: "sparkle",
-				run: () =>
-					leave(() => {
-						wantLook();
-						navigate("agent", name);
-					}),
+				run: () => leave(() => openAgentSheet(name, { look: true })),
 			},
 		);
 	}
+	items.push({
+		id: "notifications",
+		label: t("Notifications"),
+		icon: view.muted ? "bell-off" : "bell",
+		checked: !view.muted,
+		run: async () => {
+			const muted = view.muted !== true;
+			if (!(await setRoomMuted(key, muted))) return;
+			toast(
+				muted
+					? t("Notifications are off for {name}", { name: view.displayName })
+					: t("Notifications are on for {name}", { name: view.displayName }),
+			);
+		},
+	});
 	if (!view.readOnly)
 		items.push(
 			{
@@ -195,7 +206,7 @@ export function messageMenu(
 	return { title: message.author, items };
 }
 
-/** The one action of a message's picture: the agent's profile. */
+/** The one action of a message's picture: the agent's sheet. */
 export function avatarMenu(agent: string, author: string): MenuSpec {
 	return {
 		title: author,
@@ -204,7 +215,7 @@ export function avatarMenu(agent: string, author: string): MenuSpec {
 				id: "profile",
 				label: t("Agent profile"),
 				icon: "profile",
-				run: () => navigate("agent", agent),
+				run: () => openAgentSheet(agent),
 			},
 		],
 	};

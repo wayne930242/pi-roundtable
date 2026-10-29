@@ -226,14 +226,12 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Yesterday: "昨天",
 
 	// 夥伴
-	"Back to the room": "回到聊天室",
 	"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.":
 		"職業、配色與部件。這裡、聊天室與 Discord 的圖像都會跟著改變。",
 	"Follow the assistant (automatic)": "跟隨助理（自動）",
 	"Follow the assistant": "跟隨助理",
 	Look: "造型",
 	Name: "名稱",
-	Profile: "個人檔案",
 	Prompt: "提示詞",
 	"Runs on {model}, thinking {thinking}": "使用 {model}，思考程度 {thinking}",
 	"Saved.": "已儲存。",
@@ -380,6 +378,24 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	// 長按與右鍵選單
 	"Edit agent": "編輯夥伴",
 	"Change look": "換外觀",
+	"Notifications are off": "通知已關閉",
+	"Notifications are on for {name}": "已開啟{name}的通知",
+	"Notifications are off for {name}": "已關閉{name}的通知",
+	"Push this room's posts to every owner's devices. A card that waits for you is always pushed.":
+		"把這個聊天室的發言推送到每位擁有者的裝置。等你處理的卡片一律會推送。",
+	"Full screen": "全螢幕",
+	"Review changes": "檢視變更",
+	"Back to editing": "繼續編輯",
+	"Lines: {added} added, {removed} removed":
+		"新增 {added} 行、移除 {removed} 行",
+	Added: "新增",
+	Removed: "移除",
+	Off: "關閉",
+	Minimal: "最低",
+	Low: "低",
+	Medium: "中",
+	High: "高",
+	"Very high": "極高",
 	"Copy as Markdown": "複製為 Markdown",
 	"Quote reply": "引用回覆",
 	"Select text": "選取文字",
@@ -509,6 +525,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"There is no such API.": "沒有這個 API。",
 	"before and limit must be whole numbers.": "before 與 limit 必須是整數。",
 	"Give yolo or longRunning.": "請提供 yolo 或 longRunning。",
+	"muted must be true or false.": "muted 必須是 true 或 false。",
 	"This pane is not served.": "沒有提供這個頁面。",
 	"The schedule id is a number.": "排程 ID 必須是數字。",
 	"There is no such schedule.": "找不到這個排程。",
@@ -525,7 +542,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Too many failed attempts. Try again later.": "失敗次數過多，請稍後再試。",
 	"Wrong password.": "密碼錯誤。",
 	Password: "密碼",
-	"muted must be true or false.": "muted 必須是 true 或 false。",
 	"Sign in": "登入",
 	"There is no such conversation.": "找不到這段對話。",
 	"Only workspace and outside conversations can be deleted.":

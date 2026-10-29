@@ -10,14 +10,14 @@ export function Dialog(props: {
 	title: string;
 	onClose(): void;
 	children: ReactNode;
-	size?: "default" | "wide";
+	size?: "default" | "wide" | "full";
 }) {
 	return (
 		<Sheet
 			open={props.open}
 			title={props.title}
 			onClose={props.onClose}
-			{...(props.size === "wide" ? { size: "wide" as const } : {})}
+			{...(props.size && props.size !== "default" ? { size: props.size } : {})}
 		>
 			{props.children}
 		</Sheet>

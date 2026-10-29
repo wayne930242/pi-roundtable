@@ -127,6 +127,8 @@ export type LocalAction =
 	| { type: "connection"; status: RoomsState["connection"] }
 	| { type: "forbidden" }
 	| { type: "rooms_loaded"; rooms: RoomView[] }
+	/** The server took a room's mute or unmute. */
+	| { type: "room_muted"; room: string; muted: boolean }
 	| {
 			type: "history_loaded";
 			room: string;
@@ -597,6 +599,15 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			return { ...state, presence: action.agents };
 		case "rooms_loaded":
 			return onRooms(state, action.rooms);
+		case "room_muted": {
+			const held = state.rooms[action.room]?.view;
+			if (!held || (held.muted === true) === action.muted) return state;
+			const { muted: _muted, ...rest } = held;
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				view: action.muted ? { ...rest, muted: true } : rest,
+			}));
+		}
 		case "history_loaded":
 			return resolvedPruned(
 				withClosedCards(

@@ -30,7 +30,6 @@ import {
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
-import { AgentPage } from "./pages/agent.tsx";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -44,10 +43,18 @@ const ActionMenuHost = lazy(() =>
 		default: m.ActionMenuHost,
 	})),
 );
+const AgentSheetHost = lazy(() =>
+	import("./components/agent-sheet.tsx").then((m) => ({
+		default: m.AgentSheetHost,
+	})),
+);
 const RoomConfirmHost = lazy(() =>
 	import("./components/room-confirms.tsx").then((m) => ({
 		default: m.RoomConfirmHost,
 	})),
+);
+const AgentPage = lazy(() =>
+	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
 );
 const OverviewPage = lazy(() =>
 	import("./pages/overview.tsx").then((m) => ({ default: m.OverviewPage })),
@@ -471,6 +478,7 @@ function Console({ config }: { config: ConfigView }) {
 				<Suspense fallback={null}>
 					<ActionMenuHost />
 					<RoomConfirmHost />
+					<AgentSheetHost />
 				</Suspense>
 			) : null}
 			{hasApp ? (
