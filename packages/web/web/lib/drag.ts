@@ -2,6 +2,7 @@
 // scrolls near its edges, and the zone under the finger lights up. Loaded on the first lift only.
 // The decisions (where a drop lands) are `reorder.ts`; this file measures and paints.
 
+import { setLifting } from "./lifting.ts";
 import { MOVE_LIMIT } from "./long-press.ts";
 import {
 	HOVER_OPEN_MS,
@@ -76,6 +77,22 @@ export function lift(options: Lift): () => void {
 	let headers: ItemBox[] = [];
 	let bounds = { top: 0, bottom: 0 };
 	const measure = () => {
+		// Boxes are taken where the rows lie: the lifted row and the rows making way are painted
+		// away from there, and are put back before anything is drawn.
+		const painted = [
+			...root.querySelectorAll<HTMLElement>(
+				"[data-drop-item], [data-folder-block]",
+			),
+		].map((el) => [el, el.style.transform] as const);
+		for (const [el] of painted) el.style.removeProperty("transform");
+		try {
+			measureAt();
+		} finally {
+			for (const [el, transform] of painted)
+				if (transform) el.style.transform = transform;
+		}
+	};
+	const measureAt = () => {
 		if (mode === "room") {
 			zoneEls = [...root.querySelectorAll<HTMLElement>("[data-drop-zone]")];
 			zones = zoneEls.map((el) => {
@@ -111,6 +128,7 @@ export function lift(options: Lift): () => void {
 	};
 	// The lift shows the places that wait empty (the pinned list); the lifted item stays under the
 	// finger when they push it down, and the places are measured with them there.
+	setLifting(true);
 	const shownAt = item.getBoundingClientRect().top;
 	item.setAttribute("data-lifted", "");
 	root.setAttribute("data-reordering", "");
@@ -286,6 +304,7 @@ export function lift(options: Lift): () => void {
 	};
 	const hold = (event: Event) => event.preventDefault();
 	function cleanup() {
+		setLifting(false);
 		window.removeEventListener("pointermove", onMove, true);
 		window.removeEventListener("pointerup", onUp, true);
 		window.removeEventListener("pointercancel", onCancel, true);

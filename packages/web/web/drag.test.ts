@@ -250,6 +250,37 @@ test("a folded folder opens after the finger rests on it, and the list is measur
 	run.stop();
 });
 
+test("measuring again after a folder opens sees the lifted row where it lies, not where it is dragged to", async () => {
+	const { root, rows, folder } = page5();
+	// happy-dom has no layout: a box moves with the transform painted on it, as a browser's would.
+	for (const one of Object.values(rows)) {
+		const own = one.getBoundingClientRect.bind(one);
+		one.getBoundingClientRect = () => {
+			const rect = own();
+			const moved = /translate3d\(0(?:px)?, (-?[\d.]+)px/.exec(
+				one.style.transform,
+			);
+			const dy = moved ? Number(moved[1]) : 0;
+			return { ...rect, top: rect.top + dy, bottom: rect.bottom + dy };
+		};
+	}
+	folder.setAttribute("data-collapsed", "");
+	const run = start(rows.A as HTMLElement, root, 120);
+	run.opened.push = ((id: string) => {
+		folder.removeAttribute("data-collapsed");
+		return Array.prototype.push.call(run.opened, id);
+	}) as typeof run.opened.push;
+	// The finger rests on the folded folder until it opens, with the lifted row 140 px from its place.
+	pointer("pointermove", 260);
+	await new Promise((resolve) => setTimeout(resolve, 900));
+	expect(run.opened).toEqual(["f1"]);
+	// Back over the pinned list, past B: B makes way by the row's height and the gap between them (60).
+	pointer("pointermove", 200);
+	await frames();
+	expect(rows.B?.style.transform).toBe("translate3d(0, -60px, 0)");
+	run.stop();
+});
+
 test("a folder dragged by its header moves among the folder blocks", async () => {
 	const block = (key: string) =>
 		el(

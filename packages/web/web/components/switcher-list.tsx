@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { installArrangedStyle } from "../lib/arranged-style.ts";
 import { useAccentStyle } from "../lib/characters.ts";
@@ -6,6 +6,7 @@ import { fuzzyScore } from "../lib/fuzzy.ts";
 import { composingKey } from "../lib/ime.ts";
 import { roomLifting } from "../lib/layout.ts";
 import { activityAt } from "../lib/layout-now.ts";
+import { useLifting } from "../lib/lifting.ts";
 import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { waitingCards } from "../lib/rooms.ts";
@@ -50,7 +51,12 @@ function useGroups(): Group[] {
 			})),
 		),
 	);
-	return useMemo(() => JSON.parse(shape) as Group[], [shape]);
+	// While a row is lifted the drawer keeps the order it had; the latest shows once it is dropped.
+	const lifting = useLifting();
+	const kept = useRef(shape);
+	if (!lifting) kept.current = shape;
+	const frozen = kept.current;
+	return useMemo(() => JSON.parse(frozen) as Group[], [frozen]);
 }
 
 function Row(props: {

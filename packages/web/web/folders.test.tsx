@@ -819,6 +819,59 @@ test("a mouse's right click is not a hold: it opens the menu at once, with no li
 	);
 });
 
+test("while a row is lifted the list keeps its order, and the latest order shows once it is dropped", async () => {
+	const said = (room: string, at: string) => ({
+		id: 1,
+		room,
+		kind: "agent" as const,
+		author: "x",
+		text: "hi",
+		files: [],
+		at,
+	});
+	const order = (newest: string) =>
+		store.dispatch({
+			type: "rooms_loaded",
+			rooms: [
+				view(HOME, { home: true }),
+				view(SCOUT, {
+					last: said(
+						SCOUT,
+						newest === SCOUT ? "2026-10-28T12:00:00Z" : "2026-10-28T10:00:00Z",
+					),
+				}),
+				view(BUILD, {
+					last: said(
+						BUILD,
+						newest === BUILD ? "2026-10-28T12:00:00Z" : "2026-10-28T10:00:00Z",
+					),
+				}),
+			],
+			pins: [],
+			folders: [{ id: F1, name: "Work", rooms: [] }],
+		});
+	const names = () => all(".room-row strong").map((one) => one.textContent);
+	order(BUILD);
+	await show(<List />);
+	expect(names()).toEqual(["guide", "build", "scout"]);
+	const row = rowOf("scout") as HTMLElement;
+	const item = row.closest("li") as HTMLElement;
+	await page.act(async () => {
+		pointer(row, "pointerdown");
+		await until(() => item.hasAttribute("data-lifted"));
+	});
+	expect(item.hasAttribute("data-lifted")).toBe(true);
+	// A message arrives in the room under the finger: the rows do not move under it.
+	await page.act(async () => {
+		order(SCOUT);
+		await settle(60);
+	});
+	expect(names()).toEqual(["guide", "build", "scout"]);
+	await page.act(() => pointer(row, "pointerup"));
+	await settle(80);
+	expect(names()).toEqual(["guide", "scout", "build"]);
+});
+
 test("a finger that goes down within 32 px of a screen edge never lifts a row: the hold opens the menu as before", async () => {
 	await show(<List />);
 	const row = rowOf("scout") as HTMLElement;

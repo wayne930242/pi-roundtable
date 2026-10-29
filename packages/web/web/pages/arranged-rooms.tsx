@@ -1,4 +1,4 @@
-import { lazy, memo, type ReactNode, Suspense, useMemo } from "react";
+import { lazy, memo, type ReactNode, Suspense, useMemo, useRef } from "react";
 import { Icon } from "../components/icons.tsx";
 import { Empty } from "../components/states.tsx";
 import { openMenu } from "../lib/action-menu.ts";
@@ -9,6 +9,7 @@ import { useConfig } from "../lib/config.ts";
 import { askFolderDialog } from "../lib/folder-dialogs.ts";
 import { roomLifting } from "../lib/layout.ts";
 import { activityAt } from "../lib/layout-now.ts";
+import { useLifting } from "../lib/lifting.ts";
 import { useLive } from "../lib/live.ts";
 import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -172,9 +173,14 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 			...sections(state, (key) => activityAt(state, key)),
 		}),
 	);
+	// While a row is lifted the list keeps the order it had, whatever arrives; the latest shows once it is dropped.
+	const lifting = useLifting();
+	const kept = useRef(shape);
+	if (!lifting) kept.current = shape;
+	const frozen = kept.current;
 	const { listed, ...arrangement } = useMemo(
-		() => JSON.parse(shape) as { listed: boolean } & Sections,
-		[shape],
+		() => JSON.parse(frozen) as { listed: boolean } & Sections,
+		[frozen],
 	);
 	const {
 		home,
