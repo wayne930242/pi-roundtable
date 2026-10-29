@@ -50,6 +50,16 @@ const SheetHosts = lazy(() =>
 		default: m.SheetHosts,
 	})),
 );
+const FolderDialogHost = lazy(() =>
+	import("./components/folder-dialogs.tsx").then((m) => ({
+		default: m.FolderDialogHost,
+	})),
+);
+const RoomConfirmHost = lazy(() =>
+	import("./components/room-confirms.tsx").then((m) => ({
+		default: m.RoomConfirmHost,
+	})),
+);
 const AgentPage = lazy(() =>
 	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
 );
@@ -181,7 +191,12 @@ function useRoomsSync(enabled: boolean, version: number): void {
 		api.rooms().then(
 			(view) => {
 				if (current)
-					store.dispatch({ type: "rooms_loaded", rooms: view.rooms });
+					store.dispatch({
+						type: "rooms_loaded",
+						rooms: view.rooms,
+						pins: view.pins,
+						folders: view.folders,
+					});
 			},
 			() => undefined,
 		);
@@ -497,6 +512,8 @@ function Console({ config }: { config: ConfigView }) {
 				<Suspense fallback={null}>
 					<ActionMenuHost />
 					<SheetHosts />
+					<RoomConfirmHost />
+					<FolderDialogHost />
 					<Palette
 						open={palette}
 						onClose={() => setPalette(false)}

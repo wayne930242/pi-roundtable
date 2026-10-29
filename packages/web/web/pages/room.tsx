@@ -188,7 +188,12 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		let current = true;
 		api.rooms().then(
 			(listing) => {
-				store.dispatch({ type: "rooms_loaded", rooms: listing.rooms });
+				store.dispatch({
+					type: "rooms_loaded",
+					rooms: listing.rooms,
+					pins: listing.pins,
+					folders: listing.folders,
+				});
 				if (current) setRechecked(true);
 			},
 			() => {

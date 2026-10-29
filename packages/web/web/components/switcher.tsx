@@ -12,11 +12,13 @@ import { useSelector } from "../lib/app-store.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
 import { composingKey } from "../lib/ime.ts";
-import { useMenuPress } from "../lib/menu-press.ts";
+import { roomLifting } from "../lib/layout.ts";
 import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
-import { switcherOrder, waitingCards } from "../lib/rooms.ts";
+import { activityAt, waitingCards } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
+import { useRowPress } from "../lib/row-press.ts";
+import { drawerGroups } from "../lib/sections.ts";
 import { blocksSwipe, Swipe } from "../lib/swipe.ts";
 import { Icon } from "./icons.tsx";
 import { RoomPicture } from "./room-picture.tsx";
@@ -205,17 +207,32 @@ interface Entry {
 	waiting: boolean;
 }
 
-function useEntries(): Entry[] {
+/** A run of rows under one heading: the waiting rooms, the pinned ones, a folder, or the rest. */
+interface Group {
+	id: string;
+	title?: string;
+	entries: Entry[];
+}
+
+function useGroups(): Group[] {
 	const shape = useSelector((state) =>
 		JSON.stringify(
-			switcherOrder(state).map((key) => ({
-				key,
-				name: state.rooms[key]?.view?.displayName ?? key,
-				waiting: waitingCards(state, key) > 0,
+			drawerGroups(
+				state,
+				(key) => activityAt(state, key),
+				(key) => waitingCards(state, key) > 0,
+			).map((group) => ({
+				id: group.id,
+				...(group.title === undefined ? {} : { title: group.title }),
+				entries: group.keys.map((key) => ({
+					key,
+					name: state.rooms[key]?.view?.displayName ?? key,
+					waiting: waitingCards(state, key) > 0,
+				})),
 			})),
 		),
 	);
-	return useMemo(() => JSON.parse(shape) as Entry[], [shape]);
+	return useMemo(() => JSON.parse(shape) as Group[], [shape]);
 }
 
 function Row(props: {
@@ -224,16 +241,25 @@ function Row(props: {
 	onPick(key: string): void;
 	/** Closes the drawer, then runs what leaves the room. */
 	onLeave(go: () => void): void;
+	/** The row can be lifted and dropped in another list. */
+	liftable: boolean;
 }) {
 	const { key, name } = props.entry;
 	const room = useSelector((state) => state.rooms[key]);
 	const waiting = useSelector((state) => waitingCards(state, key));
 	const view = room?.view;
 	const accent = useAccentStyle(view?.character);
-	const press = useMenuPress(() => roomMenuOf(key, props.onLeave));
+	const press = useRowPress(
+		() => roomMenuOf(key, props.onLeave),
+		props.liftable && !view?.home ? roomLifting(key) : undefined,
+	);
 	if (!view) return null;
 	return (
-		<li>
+		<li
+			{...(props.liftable && !view.home
+				? { "data-drop-item": "", "data-key": key }
+				: {})}
+		>
 			<a
 				className="switcher-row"
 				{...press}
@@ -312,29 +338,20 @@ function Row(props: {
 
 function List(props: { current: string; close(then?: () => void): void }) {
 	const [query, setQuery] = useState("");
-	const entries = useEntries();
-	const shown = entries.filter(
-		(entry) => fuzzyScore(query, entry.name) !== undefined,
-	);
-	const waiting = shown.filter((entry) => entry.waiting);
-	const rest = shown.filter((entry) => !entry.waiting);
+	const groups = useGroups();
+	const shown = groups
+		.map((group) => ({
+			...group,
+			entries: group.entries.filter(
+				(entry) => fuzzyScore(query, entry.name) !== undefined,
+			),
+		}))
+		.filter((group) => group.entries.length > 0);
 	const pick = (key: string) =>
 		props.close(
 			key === props.current ? undefined : () => navigate("room", key),
 		);
-	const rows = (list: Entry[]) => (
-		<ul className="switcher-list">
-			{list.map((entry) => (
-				<Row
-					key={entry.key}
-					entry={entry}
-					current={props.current}
-					onPick={pick}
-					onLeave={props.close}
-				/>
-			))}
-		</ul>
-	);
+	const headed = shown.length > 1;
 	return (
 		<>
 			<div className="switcher-search">
@@ -348,7 +365,7 @@ function List(props: { current: string; close(then?: () => void): void }) {
 					autoComplete="off"
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={(event) => {
-						const first = shown[0];
+						const first = shown[0]?.entries[0];
 						if (
 							event.key === "Enter" &&
 							first &&
@@ -367,23 +384,63 @@ function List(props: { current: string; close(then?: () => void): void }) {
 					<Icon name="plus" />
 				</button>
 			</div>
-			<div className="switcher-scroll">
-				{waiting.length > 0 ? (
-					<section aria-label={t("Waiting for you")}>
-						<h2 className="switcher-heading" data-waiting="">
-							{t("Waiting for you")}
-						</h2>
-						{rows(waiting)}
-					</section>
-				) : null}
-				{rest.length > 0 ? (
-					<section aria-label={t("Rooms")}>
-						{waiting.length > 0 ? (
-							<h2 className="switcher-heading">{t("Rooms")}</h2>
-						) : null}
-						{rows(rest)}
-					</section>
-				) : null}
+			<div className="switcher-scroll" data-drop-root="">
+				{shown.map((group) => {
+					const waiting = group.id === "waiting";
+					const zone =
+						group.id === "pinned"
+							? "pinned"
+							: group.id === "rest"
+								? "rest"
+								: waiting
+									? undefined
+									: "folder";
+					return (
+						<section
+							key={group.id}
+							aria-label={
+								waiting
+									? t("Waiting for you")
+									: group.id === "pinned"
+										? t("Pinned")
+										: (group.title ?? t("Rooms"))
+							}
+							{...(zone
+								? {
+										"data-drop-zone": zone,
+										"data-zone-id": group.id,
+										...(zone === "folder" ? { "data-folder": group.id } : {}),
+									}
+								: {})}
+						>
+							{waiting ? (
+								<h2 className="switcher-heading" data-waiting="">
+									{t("Waiting for you")}
+								</h2>
+							) : headed ? (
+								<h2 className="switcher-heading">
+									{group.id === "pinned"
+										? t("Pinned")
+										: group.id === "rest"
+											? t("Rooms")
+											: group.title}
+								</h2>
+							) : null}
+							<ul className="switcher-list">
+								{group.entries.map((entry) => (
+									<Row
+										key={entry.key}
+										entry={entry}
+										current={props.current}
+										onPick={pick}
+										onLeave={props.close}
+										liftable={!waiting}
+									/>
+								))}
+							</ul>
+						</section>
+					);
+				})}
 			</div>
 		</>
 	);

@@ -408,3 +408,36 @@ test("a muted room shows the bell-slash in the drawer, and only that room", asyn
 		page.container.querySelector('[data-mode="muted"]')?.getAttribute("title"),
 	).toBe("Notifications are off");
 });
+
+test("pinned rooms and the owners' folders lead the drawer, each under its heading, before the rest by activity", async () => {
+	// The test before leaves its card open.
+	store.dispatch({ type: "prompt_closed", prompt: "p1", outcome: "approved" });
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			view(GUIDE, { last: said(GUIDE, "2026-10-28T10:00:00.000Z") }),
+			view(SCOUT, { last: said(SCOUT, "2026-10-28T12:00:00.000Z") }),
+			view(BUILD, { last: said(BUILD, "2026-10-28T11:00:00.000Z") }),
+		],
+		pins: [BUILD],
+		folders: [{ id: "folder.1", name: "Work", rooms: [SCOUT] }],
+	});
+	await page.render(<Room />);
+	await page.click(element("avatar"));
+	expect(rowNames()).toEqual(["build", "scout", "guide"]);
+	const headings = [
+		...page.container.querySelectorAll(".switcher-heading"),
+	].map((one) => one.textContent);
+	expect(headings).toEqual(["Pinned", "Work", "Rooms"]);
+	// A room that is not Home can be lifted; each list is a place to drop it.
+	const zones = [...page.container.querySelectorAll("[data-drop-zone]")].map(
+		(one) => one.getAttribute("data-drop-zone"),
+	);
+	expect(zones).toEqual(["pinned", "folder", "rest"]);
+	expect(
+		page.container.querySelector(
+			'[data-drop-item][data-key="app:agent.guide"]',
+		),
+	).toBeNull();
+	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
+});

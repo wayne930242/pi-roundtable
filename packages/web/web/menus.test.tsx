@@ -178,6 +178,8 @@ test("an agent row's menu has the edit, look, notifications, mode and restart ac
 	await page.render(<List />);
 	await rightClick(rowOf("scout"));
 	expect(labels()).toEqual([
+		"Pin",
+		"Move to folder…",
 		"Edit agent",
 		"Change look",
 		"Notifications",
@@ -194,6 +196,8 @@ test("a group row has the modes and restart but no agent edit; a thread row has 
 	await page.render(<List />);
 	await rightClick(rowOf("team"));
 	expect(labels()).toEqual([
+		"Pin",
+		"Move to folder…",
 		"Edit group",
 		"Notifications",
 		"Yolo mode",
