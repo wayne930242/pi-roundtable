@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-10-29
+
+### Added
+
+- pi-roundtable-sandbox: opt-in `channelContext` hands a sealed turn the recent messages of its Discord channel, appended after the addressed message as untrusted public text; see its changelog. Every other workspace releases in lockstep.
+
 ## [0.24.1] - 2026-10-29
 
 ### Added
