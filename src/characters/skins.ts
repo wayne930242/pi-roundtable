@@ -4,18 +4,18 @@ import { CharacterError, checkHex, type Hex } from "./spec.ts";
 const SKIN_COUNT = 6;
 
 /**
- * Six light East Asian skin tones, from very fair porcelain to light wheat, for a host whose
+ * Six light East Asian skin tones, from very fair porcelain to light beige, for a host whose
  * agents should read that way: `characters: { skins: EAST_ASIAN_SKINS }` in the configuration.
- * Every tone leans pink to peach, never green or yellow, and the face lines read on each at 6:1
+ * Every tone leans pink to peach, never green or yellow, and the face lines read on each at 5:1
  * or more. Stored looks keep their skin index, so they take the new tones as they are.
  */
 export const EAST_ASIAN_SKINS: readonly Hex[] = Object.freeze([
-	"#f8dfcd",
-	"#f2d1ba",
-	"#ebc3a7",
-	"#e3b396",
-	"#d9a285",
-	"#cc9272",
+	"#fbebe0",
+	"#f8e1d2",
+	"#f5d8c5",
+	"#f1cfb8",
+	"#edc6ac",
+	"#e9bf9f",
 ]);
 
 /**

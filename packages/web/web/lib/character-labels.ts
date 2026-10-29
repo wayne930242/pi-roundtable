@@ -17,7 +17,7 @@ export type LabelKind =
 const ENGLISH: Readonly<Record<string, string>> = {
 	"hat.none": "No hat",
 	"hat.goggcap": "Leather cap",
-	"hat.tallcap": "Tall hat",
+	"hat.tallcap": "Burgundian felt cap",
 	"hat.softcap": "Soft cap",
 	"hat.hardhat": "Iron skullcap",
 	"hat.fcap": "Hunter's cap",
@@ -30,7 +30,7 @@ const ENGLISH: Readonly<Record<string, string>> = {
 	"hat.sailor": "Straw hat",
 	"hat.kettle": "Kettle hat",
 	"hat.cavalier": "Feathered hat",
-	"hat.toque": "Cook's cap",
+	"hat.toque": "Linen cook's cap",
 	"hair.none": "No hair",
 	"beard.none": "No beard",
 	"accessory.none": "No accessory",

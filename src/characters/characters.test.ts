@@ -709,7 +709,7 @@ test("EAST_ASIAN_SKINS is six light, warm-pink to peach tones the face lines rea
 		expect(hue).toBeGreaterThanOrEqual(18);
 		expect(hue).toBeLessThanOrEqual(30);
 		// Light: every tone is lighter than the default's second tone, and they darken one by one.
-		expect(r).toBeGreaterThanOrEqual(0xcc);
+		expect(r).toBeGreaterThanOrEqual(0xe9);
 		const luminance = (r + g + b) / 3;
 		expect(luminance).toBeLessThan(lastLuminance);
 		lastLuminance = luminance;

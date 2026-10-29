@@ -167,12 +167,12 @@ describe("config", () => {
 describe("config skins", () => {
 	test("hands the page the host's six skin tones, and only when the host has them", async () => {
 		const skins = [
-			"#f8dfcd",
-			"#f2d1ba",
-			"#ebc3a7",
-			"#e3b396",
-			"#d9a285",
-			"#cc9272",
+			"#fbebe0",
+			"#f8e1d2",
+			"#f5d8c5",
+			"#f1cfb8",
+			"#edc6ac",
+			"#e9bf9f",
 		];
 		const { body } = await call<ConfigView>(
 			api({ characterSkins: skins }).api,

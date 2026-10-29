@@ -3412,7 +3412,7 @@ The parts are medieval: the clothes, hats and gear of an agent are what a late-m
 | `accentOf(spec, on)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the page. `on` is a scheme (`light`: white, `dark`: `#0d1018`) or a look (`modern-light`, `modern-dark` as the schemes; `camelot-light`: the darkest parchment `#e3d2a9`, `camelot-dark`: the lightest night blue `#243557`) |
 | `characterCss()` | The text of `characters.css` |
 | `checkSkins(value, field?)` | A host's skin tones checked: exactly six `#rrggbb` colors, returned lower-cased and frozen; otherwise a `CharacterError` whose `field` is `field` (default `skins`) or the place in the list. The host's configuration and `composeSvg` call it |
-| `EAST_ASIAN_SKINS` | Six light East Asian skin tones, from very fair porcelain to light wheat (`#f8dfcd`, `#f2d1ba`, `#ebc3a7`, `#e3b396`, `#d9a285`, `#cc9272`), warm pink to peach and never green or yellow, with the face lines reading on each at 5:1 or better. A frozen constant for a host's `characters.skins` |
+| `EAST_ASIAN_SKINS` | Six light East Asian skin tones, from very fair porcelain to light beige (`#fbebe0`, `#f8e1d2`, `#f5d8c5`, `#f1cfb8`, `#edc6ac`, `#e9bf9f`), warm pink to peach and never green or yellow, with the face lines reading on each at 5:1 or better. A frozen constant for a host's `characters.skins` |
 
 `CharacterError.field` is the path of the offending field (`hat`, `colors.primary`).
 
