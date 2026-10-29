@@ -15,7 +15,7 @@ import { Icon, type IconName } from "./components/icons.tsx";
 import { Failure, Loading } from "./components/states.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { api, messageOf } from "./lib/api.ts";
-import { store, useSelector } from "./lib/app-store.ts";
+import { useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
 import { initLook } from "./lib/look.ts";
@@ -26,6 +26,7 @@ import {
 	translate as t,
 	wording,
 } from "./lib/messages.ts";
+import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
@@ -175,32 +176,6 @@ function useViewportSize(): void {
 			window.removeEventListener("resize", apply);
 		};
 	}, []);
-}
-
-/** Fetches the room list at the start, after every `changed` and after every reconnect. */
-function useRoomsSync(enabled: boolean, version: number): void {
-	const revision = useSelector((state) => state.revision);
-	const connects = useSelector((state) => state.connects);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the counters say when to fetch
-	useEffect(() => {
-		if (!enabled) return;
-		let current = true;
-		api.rooms().then(
-			(view) => {
-				if (current)
-					store.dispatch({
-						type: "rooms_loaded",
-						rooms: view.rooms,
-						pins: view.pins,
-						folders: view.folders,
-					});
-			},
-			() => undefined,
-		);
-		return () => {
-			current = false;
-		};
-	}, [enabled, revision, connects, version]);
 }
 
 function ThemeButton() {
