@@ -165,7 +165,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | Field | What it is |
 |---|---|
 | `logger` | The host's logger with `plugin: <your name>` on every line; each line is JSON on stdout. Its type is `Logger` (`debug`, `info`, `warn`, `error`, `fatal`, `child(fields)`), which a pino logger satisfies |
-| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, and `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
+| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)), and `agentTools`, `"full"` or `"chat-only"` ([chat-only agents](#chat-only-agents-no-shell-file-or-workspace-tools)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
 | `database()` | The host's one PostgreSQL connection (a Bun `SQL`), already migrated |
 | `toolTiers` | What each tool needs; ask it when a tool is used, not during setup |
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
@@ -1240,6 +1240,7 @@ export const library = definePlugin({
 | `turnEnded(turn)` | The turn ended; `turn.result` is `"ok"`, `"failed"`, or `"stopped"` |
 | `turnProgress(event)` | A turn run through `context.turns` wrote text or ran a tool, between its start and its end: `event` is the turn's fields and `progress`, a `TurnProgress` (see the surface's `progress` below); a runtime without live progress reports none |
 | `changed()` | The team changed: an agent or group was created, edited, arranged, archived, or started over |
+| `action(event)` | A plugin reported something a person did through its surface with `context.events.action?.(...)`: `event` is `{ kind, actor, principalId, channel?, ok, at }`, with `kind` in the reporting plugin's own words (a support inbox says `"assign"`, `"reply"` or `"close"`), `actor` the `Speaker.id`, and `channel` a `ChannelKey` or a `page:<name>`. It carries no content. The core reports none itself; a plugin hears the others' |
 | `shutdown(left)` | The shutdown drain ended, before any service stops; `left` lists the work it gave up on |
 
 The host logs errors thrown by a handler and continues running the others.

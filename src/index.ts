@@ -306,6 +306,8 @@ export type {
 } from "./core/modules/skills/skill-rules.ts";
 export { SkillConflictError } from "./core/modules/skills/skill-rules.ts";
 export type {
+	ActionEvent,
+	AgentTools,
 	Contribution,
 	EventHandlers,
 	EventSink,

@@ -128,3 +128,41 @@ describe("agentServer left out", () => {
 		);
 	});
 });
+
+describe('agentServer: { tools: "chat-only" }', () => {
+	test("keeps the agent server and resolves the agents' tools to chat-only", () => {
+		const config = resolveConfig({
+			...guest,
+			agentServer: { tools: "chat-only" },
+			discord: {
+				...guest.discord,
+				entryChannel: "900000000000000002",
+			},
+			http: { publicUrl: "https://bot.example.com" },
+		});
+		expect(config.agentServer).toBe(true);
+		expect(config.agentTools).toBe("chat-only");
+	});
+
+	test("a config without the key, or with false, keeps the full tools", () => {
+		const { agentServer: _, discord: __, ...bare } = guest;
+		expect(
+			resolveConfig({
+				...bare,
+				agents: [{ name: "a", displayName: "A", prompt: "p" }],
+			}).agentTools,
+		).toBe("full");
+		expect(resolveConfig(guest).agentTools).toBe("full");
+	});
+
+	test("anything else is refused, naming the accepted forms", () => {
+		for (const bad of [true, "chat-only", { tools: "full" }, { tools: 1 }]) {
+			expect(refusal({ ...guest, agentServer: bad })).toContain(
+				"config agentServer",
+			);
+		}
+		expect(refusal({ ...guest, agentServer: { tool: "chat-only" } })).toContain(
+			"unknown key",
+		);
+	});
+});

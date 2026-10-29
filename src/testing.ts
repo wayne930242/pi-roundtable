@@ -455,6 +455,7 @@ export async function testPlugin(
 		timeZone: "UTC",
 		now: () => new Date(),
 		characterSkins: CATALOG.skins,
+		agentTools: "full",
 		...options.env,
 	};
 	// What the agent server does with the slot: the provider's runtime serves `context.turns`.

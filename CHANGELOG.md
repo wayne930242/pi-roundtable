@@ -10,6 +10,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `IdentityService.peek(facts, { conversation }?)`: who these facts resolve to now, read only. It never links, claims, admits, records the person as seen or touches a tier, also when it refuses, and its tier is exactly what `resolve` gives (the lasting roles together with what the access rules give the facts), never the tier last recorded. It answers undefined for an unlinked identity, a disabled principal, or no tier. **Breaking** for code: a hand-built `IdentityService` stand-in adds `peek` (`testHost` and `servicePair` already cover tests).
 - `ActorFacts.partial`: a surface that is not the authority on a person's roles marks its facts `partial: true`, and `resolve` records no lower tier and no refusal from them. Optional, not breaking.
 - `pi-roundtable/kit`: `oidcProvider` (`oidcProvider(issuer)`) and `oidcIdentity` (`oidcIdentity(issuer, subject)`), the one writer of `oidc:<base64url issuer>[:<subject>]`. `oidcSpeakerId` of `pi-roundtable-webchat` gives the same strings through it.
+- `agentServer: { tools: "chat-only" }` (config), `HostEnv.agentTools` and `ResolvedConfig.agentTools` (`"full"` by default, `AgentTools`): the configuration form and the value plugins read as `context.env.agentTools`. `RoundtableOptions.environment.agentTools` carries it for hosts that build their options by hand.
+- Events: `EventHandlers.action(event)` and the optional `EventSink.action(event)`: a plugin reports what a person did through its surface (`ActionEvent`: `kind`, `actor`, `principalId`, `channel?`, `ok`, `at`, never content) and every plugin's handler hears it; a handler that throws is logged and never stops the others. The core reports none itself.
+
+### Breaking
+
+- `HostEnv.agentTools` is required: code that builds a `HostEnv` by hand sets it (`testHost` and `testPlugin` fill `"full"`).
 
 ## [0.25.0] - 2026-10-29
 
