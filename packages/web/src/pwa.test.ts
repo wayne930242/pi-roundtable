@@ -137,6 +137,22 @@ test("the built worker leaves the round table's WebGL chunk out of the precache 
 	expect(text).toContain('"api/"');
 });
 
+test("the built worker leaves the files pane's editor out of the precache, and nothing precached carries it", () => {
+	const text = readFileSync(join(built, "sw.js"), "utf8");
+	const list = JSON.parse(
+		/\["index\.html"[^\]]*\]/.exec(text)?.[0] ?? "[]",
+	) as string[];
+	expect(list.length).toBeGreaterThan(2);
+	for (const file of list) {
+		expect(file).not.toMatch(/^chunk-(codeeditor|lang-[a-z]+)-/);
+		if (file.endsWith(".js"))
+			expect(readFileSync(join(built, file), "utf8")).not.toContain(
+				"cm-scroller",
+			);
+	}
+	expect(text).toContain("codeeditor");
+});
+
 test("the page names a theme colour for each scheme and loads the stored scheme before it paints", async () => {
 	const { presentPage } = await import("./page-presentation.ts");
 	const html = String(

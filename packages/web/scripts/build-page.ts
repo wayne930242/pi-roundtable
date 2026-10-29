@@ -7,8 +7,16 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const HASHED = /-[a-z0-9]{6,}\.[a-z0-9]+$/;
 // The round table's WebGL scene (three, about 150 KB gzip) is fetched when a table first opens and
 // cached by the worker then, so a fresh install does not download it. The 2D table and the module
-// that picks between the two are small and are precached.
-const NOT_PRECACHED = /^chunk-table3d-/;
+// that picks between the two are small and are precached. The files pane's editor (CodeMirror,
+// about 100 KB gzip) and its language wrappers are the same: fetched when a file first opens.
+// `web/sw.ts` keeps the same names in its `LAZY` pattern.
+const NOT_PRECACHED = /^chunk-(table3d|codeeditor|lang-[a-z]+)-/;
+/**
+ * Whatever carries the editor stays out of the precache whatever the bundler named it: a module
+ * the editor and a language wrapper both import may be hoisted into a chunk with no name of its own.
+ * `cm-scroller` is a class name CodeMirror's base theme writes, which minifying leaves alone.
+ */
+const EDITOR_MARKER = "cm-scroller";
 
 /**
  * Builds `web/index.html` and everything it imports into `outdir`, which it empties first, then
@@ -53,9 +61,17 @@ export async function buildPage(outdir: string): Promise<string[]> {
 		throw new Error(
 			`the console page has files without a content hash, which the service worker cannot cache safely: ${unhashed.join(", ")}`,
 		);
+	const editor = new Set<string>();
+	for (const output of result.outputs) {
+		const file = relative(outdir, output.path).split(sep).join("/");
+		if (file.endsWith(".js") && (await output.text()).includes(EDITOR_MARKER))
+			editor.add(file);
+	}
 	const precache = [
 		"index.html",
-		...assets.filter((file) => !NOT_PRECACHED.test(file)).sort(),
+		...assets
+			.filter((file) => !NOT_PRECACHED.test(file) && !editor.has(file))
+			.sort(),
 	];
 	const worker = await Bun.build({
 		entrypoints: [`${root}web/sw.ts`],

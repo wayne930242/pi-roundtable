@@ -113,7 +113,6 @@ export async function createEditor(
 	const editable = new Compartment();
 	const wrapping = new Compartment();
 	const lang = new Compartment();
-	const separator = new Compartment();
 	const initialLanguage = await languageExtension(options.language);
 
 	const editableExtensions = (on: boolean): Extension => [
@@ -155,7 +154,7 @@ export async function createEditor(
 			...historyKeymap,
 			...defaultKeymap,
 		]),
-		separator.of(EditorState.lineSeparator.of(eol)),
+		EditorState.lineSeparator.of(eol),
 		editable.of(editableExtensions(options.editable)),
 		wrapping.of(options.wrap ? EditorView.lineWrapping : []),
 		lang.of(initialLanguage ?? []),

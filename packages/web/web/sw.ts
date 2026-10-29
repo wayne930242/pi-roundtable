@@ -44,9 +44,11 @@ const base = new URL(scope.registration.scope);
 const cacheName = `roundtable-web-${__VERSION__}`;
 const shell = new URL("index.html", base).href;
 const precached = new Set(__PRECACHE__.map((file) => new URL(file, base).href));
-// Not precached (see scripts/build-page.ts): cached the first time a round table opens.
-const LAZY = /\/chunk-table3d-[a-z0-9]+\.js$/;
+// Not precached (see scripts/build-page.ts): cached the first time a round table opens, or a file
+// opens in the files pane (its editor and the language it highlights).
+const LAZY = /\/chunk-(?:table3d|codeeditor|lang-[a-z]+)-[a-z0-9]+\.js$/;
 // The API, the login flow and the private files change with the session; none is ever cached.
+// `api/` covers the workspace files (`api/workspace/…`), which a file's text and bytes are never kept from.
 const BYPASS = ["api/", "auth/", "login", "files/", "avatars/"];
 
 const bypassed = (url: URL): boolean => {

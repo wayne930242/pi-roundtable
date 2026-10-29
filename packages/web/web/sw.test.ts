@@ -169,3 +169,26 @@ test("the round table's WebGL chunk is cached when it is first fetched, while th
 	const other = await fetched("chunk-other-m7wew621.js");
 	expect(other.answered).toBe(false);
 });
+
+test("the files pane's editor and language chunks are cached when they are first fetched, and a workspace file never is", async () => {
+	for (const name of [
+		"chunk-codeeditor-a1b2c3d4.js",
+		"chunk-lang-python-a1b2c3d4.js",
+	]) {
+		const chunk = await fetched(name);
+		expect(chunk.answered).toBe(true);
+		expect([...chunk.stored.keys()]).toEqual([
+			`https://app.example.test/console/${name}`,
+		]);
+	}
+	for (const path of [
+		"api/workspace",
+		"api/workspace/agents/file?path=a.ts",
+		"api/workspace/agents/raw?path=a.png",
+		"api/workspace/agents/list?path=",
+	]) {
+		const file = await fetched(path);
+		expect(file.answered).toBe(false);
+		expect(file.stored.size).toBe(0);
+	}
+});

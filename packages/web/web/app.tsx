@@ -30,7 +30,6 @@ import {
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
-import { placeOf } from "./lib/workspace-place.ts";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -281,7 +280,7 @@ function Console({ config }: { config: ConfigView }) {
 	const fill =
 		(hasApp && (pane === "room" || pane === "agent") && Boolean(route.key)) ||
 		// The files fill the screen beside the rail, and a phone's file leaves the keyboard its room.
-		(pane === "workspace" && (sideRail || placeOf(route.key)?.dir === false));
+		(pane === "workspace" && (sideRail || /[^:/]$/.test(route.key ?? "")));
 	const current = pane === "room" || pane === "agent" ? "rooms" : pane;
 
 	// A page opens at its top.

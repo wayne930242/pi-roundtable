@@ -127,6 +127,56 @@ test("the round table ships as two lazy chunks: the WebGL scene stays small enou
 		).toBe(name === entry);
 });
 
+test("the files pane's editor is a lazy chunk of its own, each language another, and no file the page loads first carries CodeMirror", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "web-console-editor-"));
+	await buildPage(dir);
+	const assets = loadAssets(dir);
+	const html = new TextDecoder().decode(assets.get("index.html")?.body);
+	const first = [...html.matchAll(/(?:src|href)="\.\/([^"]+\.js)"/g)].map(
+		(match) => match[1] ?? "",
+	);
+	const scripts = readdirSync(dir).filter((name) => name.endsWith(".js"));
+	const carries = (name: string) =>
+		readFileSync(join(dir, name), "utf8").includes("cm-scroller");
+	for (const name of first) expect(carries(name)).toBe(false);
+	const gzipped = (name: string) =>
+		gzipSync(readFileSync(join(dir, name)), { level: 9 }).length;
+	const editor = scripts.filter((name) => name.startsWith("chunk-codeeditor-"));
+	expect(editor).toHaveLength(1);
+	// Everything that carries CodeMirror is a chunk of the editor or of a language, or shared by them;
+	// the pane's page itself (tree, breadcrumbs, dialogs) does not.
+	const carriers = scripts.filter(carries);
+	expect(carriers.length).toBeGreaterThanOrEqual(1);
+	for (const name of carriers)
+		expect(name).toMatch(/^chunk-(codeeditor|lang-[a-z]+)-/);
+	const page = scripts.filter((name) => name.startsWith("chunk-workspace-"));
+	expect(page).toHaveLength(1);
+	expect(carries(page[0] ?? "")).toBe(false);
+	for (const language of [
+		"typescript",
+		"javascript",
+		"json",
+		"markdown",
+		"css",
+		"html",
+		"python",
+		"yaml",
+		"go",
+		"rust",
+		"sql",
+		"xml",
+		"shell",
+		"toml",
+		"dockerfile",
+	])
+		expect(
+			scripts.filter((name) => name.startsWith(`chunk-lang-${language}-`)),
+		).toHaveLength(1);
+	// The editor with the shared parts stays within what the spec measured: about 101 KB gzipped.
+	const total = carriers.reduce((sum, name) => sum + gzipped(name), 0);
+	expect(total).toBeLessThanOrEqual(380 * 1024);
+});
+
 test("the zh-TW catalog is a chunk of its own, which the page loads only for that locale and the worker still caches", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "web-console-catalog-"));
 	await buildPage(dir);

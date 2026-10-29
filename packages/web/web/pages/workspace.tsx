@@ -40,6 +40,7 @@ import {
 	segmentsOf,
 } from "../lib/workspace-place.ts";
 import type { EditorHandle } from "../workspace/codeeditor.ts";
+import { Glyph } from "../workspace/icons.tsx";
 
 // The files pane: the roots the owner may see, a tree and breadcrumbs to move through them, a
 // file shown with highlighting, and for a file that can be changed an editor with Save. The editor
@@ -223,7 +224,7 @@ function TreeDir(props: {
 							)}
 							{target ? (
 								<a href={hrefOf(target)} title={entry.name}>
-									<Icon name={isDir ? "folder" : "file"} size={15} />
+									<Glyph name={isDir ? "folder" : "file"} size={15} />
 									<span className="ws-tree-label">{entry.name}</span>
 								</a>
 							) : (
@@ -281,7 +282,7 @@ function DirView(props: {
 					const target = entryTarget(props.root.id, props.path, entry);
 					const body = (
 						<>
-							<Icon
+							<Glyph
 								name={target?.dir ? "folder" : "file"}
 								size={20}
 								className="ws-row-icon"
@@ -1086,7 +1087,7 @@ function TrashDialog(props: {
 					{items?.map((item) => (
 						<li key={item.id} className="ws-row">
 							<span className="ws-row-link" data-off>
-								<Icon
+								<Glyph
 									name={item.kind === "dir" ? "folder" : "file"}
 									size={20}
 									className="ws-row-icon"
@@ -1241,7 +1242,7 @@ export function WorkspacePage() {
 									href={hrefOf({ root: one.id, path: "", dir: true })}
 								>
 									<span className="menu-icon">
-										<Icon name="folder" />
+										<Glyph name="folder" />
 									</span>
 									<span className="menu-text">
 										<strong>{rootLabel(one)}</strong>
@@ -1303,7 +1304,7 @@ export function WorkspacePage() {
 						title={t("New file")}
 						onClick={() => setAsk({ kind: "file", dir: here })}
 					>
-						<Icon name="file-plus" />
+						<Glyph name="file-plus" />
 					</button>
 					<button
 						type="button"
@@ -1312,7 +1313,7 @@ export function WorkspacePage() {
 						title={t("New folder")}
 						onClick={() => setAsk({ kind: "dir", dir: here })}
 					>
-						<Icon name="folder-plus" />
+						<Glyph name="folder-plus" />
 					</button>
 					<button
 						type="button"
