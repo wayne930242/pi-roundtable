@@ -21,6 +21,7 @@ import { withPushFetch } from "./push.ts";
 export const ORIGIN = "https://app.example.test";
 export const ADA_DISCORD = "100000000000000001";
 export const MEL_DISCORD = "200000000000000002";
+export const ADA_LINE = "U00000000000000000000000000000001";
 export const SAM_DISCORD = "300000000000000003";
 const GUILD = "900000000000000761";
 const ENTRY_CHANNEL = "900000000000000762";
@@ -119,7 +120,7 @@ export async function bootE(options: {
 					{
 						name: "Ada",
 						principal: ADA_DISCORD,
-						identities: [`discord:${ADA_DISCORD}`],
+						identities: [`discord:${ADA_DISCORD}`, `line:${ADA_LINE}`],
 					},
 				],
 				members: {

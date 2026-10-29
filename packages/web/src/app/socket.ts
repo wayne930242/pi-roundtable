@@ -99,6 +99,8 @@ export const viewerOfSocket = (connection: AppSocket): Viewer => ({
 export class SocketRoute {
 	readonly #options: SocketRouteOptions;
 	readonly #now: () => number;
+	/** The steps each socket was last told it owes, so a change of them is announced. */
+	readonly #owed = new WeakMap<AppSocket, string>();
 
 	constructor(options: SocketRouteOptions) {
 		this.#options = options;
@@ -292,11 +294,16 @@ export class SocketRoute {
 			connection.focus = undefined;
 		const steps = await gate.required(viewerOfSocket(connection));
 		const gated = steps.length > 0;
-		if (gated !== connection.gated) {
+		// A change of which steps are owed is announced too, not only a change of whether any is.
+		const owed = steps.map((step) => step.id).join(",");
+		const listChanged = owed !== this.#owed.get(connection);
+		this.#owed.set(connection, owed);
+		if (gated !== connection.gated || (gated && listChanged)) {
+			const opens = connection.gated && !gated;
 			connection.gated = gated;
 			if (options.announce) {
 				sockets.deliver({ type: "gate", steps }, { connection });
-				if (!gated) this.#replay(connection);
+				if (opens) this.#replay(connection);
 			}
 		}
 		return {
