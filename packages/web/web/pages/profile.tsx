@@ -48,9 +48,12 @@ function Who({ profile }: { profile: ProfileView }) {
 /** One account the person can link: its state, and the way to link or unlink it. */
 function LinkRow({
 	link,
+	labels,
 	changed,
 }: {
 	link: LinkView;
+	/** The name of each provider, so a link that waits on another names it. */
+	labels: Readonly<Record<string, string>>;
 	changed(view: LinkView): void;
 }) {
 	const [issued, setIssued] = useState<LinkIssuedView>();
@@ -193,7 +196,9 @@ function LinkRow({
 				<div className="stack">
 					{blocked ? (
 						<p className="meta">
-							{t("Link {name} first.", { name: link.blockedBy.join(", ") })}
+							{t("Link {name} first.", {
+								name: link.blockedBy.map((id) => labels[id] ?? id).join(", "),
+							})}
 						</p>
 					) : null}
 					<div className="actions">
@@ -435,7 +440,14 @@ export function ProfilePage() {
 					<h2>{t("Your accounts")}</h2>
 					<ul className="stack notices">
 						{links.links.map((link) => (
-							<LinkRow key={link.provider} link={link} changed={linkChanged} />
+							<LinkRow
+								key={link.provider}
+								link={link}
+								labels={Object.fromEntries(
+									links.links.map((l) => [l.provider, l.label]),
+								)}
+								changed={linkChanged}
+							/>
 						))}
 					</ul>
 				</section>

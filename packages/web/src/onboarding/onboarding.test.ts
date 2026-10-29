@@ -128,6 +128,8 @@ describeDb("onboarding, links and the profile over a real host", () => {
 		// The gate holds the required steps; the nudge for crm is on the steps page.
 		expect(gated.gate?.map((s) => s.id)).toEqual(["link:line", "push"]);
 		expect(gated.gate?.[0]?.builtin).toBe("link");
+		// The prover was registered after the app made the step, and its label is still the step's.
+		expect(gated.gate?.[0]?.label).toBe("LINE");
 		expect(gated.gate?.[1]?.builtin).toBe("push");
 		// The owner's configuration links line, so only the push step is theirs to owe.
 		const owner = await SESSIONS("owner", app);

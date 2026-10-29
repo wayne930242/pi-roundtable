@@ -146,8 +146,8 @@ export function App() {
 	const shell = <Console config={config} />;
 	return (
 		<ConfigContext.Provider value={config}>
-			{/* The connection opens before the first render under it, which a room reloaded in place asks for. */}
-			{config.app && config.panes.includes("rooms") ? (
+			{/* The connection opens before the first render under it, which a room reloaded in place asks for. A person with no rooms still has it: their notices and the gate arrive on it. */}
+			{config.app ? (
 				<ConnectionGate protocol={config.app.protocol}>{shell}</ConnectionGate>
 			) : (
 				shell
@@ -401,7 +401,7 @@ function Console({ config }: { config: ConfigView }) {
 		}
 	})();
 
-	const online = hasApp ? connection === "open" : live.connected;
+	const online = app ? connection === "open" : live.connected;
 	// Where the app admits more than its owners, the bell shows what waits on the person.
 	const bell =
 		config.tier !== undefined ? (

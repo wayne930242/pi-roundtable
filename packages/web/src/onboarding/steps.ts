@@ -28,7 +28,10 @@ export function builtInSteps(options: BuiltInStepsOptions): OnboardingStep[] {
 	for (const [provider, mode] of Object.entries(options.links)) {
 		steps.push({
 			id: linkStep(provider),
-			label: options.prover(provider)?.label ?? provider,
+			// Read when asked: a host registers its provers after the app has made its steps.
+			get label() {
+				return options.prover(provider)?.label ?? provider;
+			},
 			required: mode === "required",
 			builtin: "link",
 			open: { page: "profile" },

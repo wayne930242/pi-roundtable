@@ -145,6 +145,21 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `push.endpointHosts` | none | Extra push-service hosts; a leading `*.` allows subdomains. |
 | `push.tiers` | `["owner"]` | The tiers whose people may subscribe and receive push. |
 | `push.subject` | `origin` if https | The VAPID contact: a `mailto:` or `https:` URL. Push is off without one. |
+| `push.sender` | `"internal"` | Who signs and sends a push: this process, or `{ external: { publicKey, subscribePath? } }`, a sender process you run that holds the VAPID key so the app never does. |
+| `push.content` | `"full"` internal, `"none"` external | What leaves the app for a push: a title and a preview (`"full"`), or only the kind, a tag and a count (`"none"`). |
+| `push.transports` | none | Names of the transports besides `web-push` that the sender carries, such as `slack`; a notice's `via` may name only these. |
+| `onboarding.links` | none | Maps a provider to `"required"` (gates the app) or `"nudge"` (only asks); each needs a `LinkProver` registered through `WEB_APP`. |
+| `onboarding.push` | `"off"` | `"required"` or `"nudge"` asks the person to turn push on and receive a test notification. |
+| `onboarding.pushWaiver` | `false` | Lets a person skip a required push step. |
+
+## Notices and an external push sender
+
+A notice waits on one person. A host raises it with `Notices.raise` and an `open` target, `{ room, message? }` or `{ page, query? }`, and takes it back with `Notices.resolve`. It shows in the bell and on the app icon, and a normal one waits in the bell during the person's quiet hours while an urgent one rings. Tapping a notice or a notification opens exactly that room or page, with the app open or closed.
+
+What a person owes before the app opens is set with `onboarding` (`links`, `push` and `pushWaiver`, above).
+The profile page lists the accounts a person linked, lets them link or unlink the ones the host's `LinkProver`s allow, choose which account names them (**Shown as**), and set their quiet hours.
+
+With `push.sender: { external }` the app holds no VAPID key. It queues each push in `web_push_outbox`, and a process you run with `runPushSender` from `pi-roundtable-web/push-sender` signs and sends it through its transports, and can serve the subscription routes at `subscribePath`. Those routes answer only with the app's session cookie, and a request other than GET must carry exactly the console's `Origin`.
 
 ## Members and the gate
 
