@@ -11,6 +11,7 @@ import {
 	type Pronouns,
 	type RoleGrant,
 } from "../core/identity/principal-store.ts";
+import { chosenProfileSource } from "../core/identity/profile-choices.ts";
 import type { Tier } from "../core/speakers.ts";
 import { CONFIG_FILE } from "./project.ts";
 
@@ -166,6 +167,7 @@ async function list(
 
 async function show(
 	store: PgPrincipalStore,
+	sql: SQL,
 	principal: PrincipalRecord,
 	io: PrincipalIo,
 	configured: Configured,
@@ -178,6 +180,10 @@ async function show(
 		`  last seen: ${principal.lastSeenAt ? `${stamp(principal.lastSeenAt)} as ${principal.lastTier ?? "unknown"}` : "never"}`,
 	);
 	io.out(`  roles: ${rolesText(await store.rolesOf(principal.id))}`);
+	const chosen = await chosenProfileSource(sql, principal.id);
+	io.out(
+		`  profile source: ${chosen ?? "none chosen (the profiles.prefer order, else the display name)"}`,
+	);
 	const links = await store.identitiesOf(principal.id);
 	io.out(`  identities: ${links.length === 0 ? "none" : ""}`.trimEnd());
 	for (const link of links)
@@ -236,6 +242,7 @@ function listedUnder(
 
 async function run(
 	store: PgPrincipalStore,
+	sql: SQL,
 	args: readonly string[],
 	io: PrincipalIo,
 	configured: Configured,
@@ -317,7 +324,7 @@ async function run(
 		return;
 	}
 	const principal = await find(store, rest[0]);
-	if (command === "show") return show(store, principal, io, configured);
+	if (command === "show") return show(store, sql, principal, io, configured);
 	if (command === "link") {
 		const identity = identityArgument(rest[1]);
 		const spends = claimable(principal, await store.rolesOf(principal.id));
@@ -398,7 +405,7 @@ export async function principalCommand(
 			);
 			return 1;
 		}
-		await run(await PgPrincipalStore.attach(sql), args, io, configured);
+		await run(await PgPrincipalStore.attach(sql), sql, args, io, configured);
 		return 0;
 	} catch (error) {
 		if (error instanceof Refusal || error instanceof IdentityError) {

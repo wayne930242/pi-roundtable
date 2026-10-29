@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `lineProfileSource(api)`: a `ProfileSource` for provider `line` over LINE's `/v2/bot/profile/{userId}`, to register with `PROFILES` from a plugin's `setup`: `services.get(PROFILES).register(lineProfileSource(services.get(LINE).api))`. Its picture hosts are `profile.line-scdn.net` and `obs.line-scdn.net`, and it is not `modelVisible`: a host that lets agents read LINE names lists `line` in `profiles.modelVisible`. Needs pi-roundtable 0.26.
+
 ## [0.25.0] - 2026-10-29
 
 - Release in lockstep with pi-roundtable 0.25.0; no package-specific behavior changes. The core peer range is now `>=0.25.0 <0.26.0`.

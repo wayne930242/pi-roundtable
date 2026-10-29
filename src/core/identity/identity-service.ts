@@ -52,8 +52,15 @@ const DAY_MS = 24 * 60 * 60_000;
 /** How many people assessed at a first contact but not yet taken are remembered. */
 const PROVISIONAL_MAX = 1_000;
 
+/** What names a principal to the agents: the profile name when the host lists its provider as model-visible. */
+export interface ModelNames {
+	modelName(principalId: string): Promise<string | undefined>;
+}
+
 export interface IdentityServiceOptions {
 	logger: Logger;
+	/** The profiles that name people to the agents; without them every name is the facts'. */
+	profiles?: ModelNames;
 	/** The identities the plugins declare, checked by `declaredIdentities`; `syncConfig` links them. */
 	identities?: readonly DeclaredIdentity[];
 	/** The clock, in milliseconds; a test gives its own. */
@@ -66,6 +73,7 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 	readonly store: PrincipalStore;
 	readonly #rules: AccessRules;
 	readonly #logger: Logger;
+	readonly #profiles: ModelNames | undefined;
 	readonly #now: () => number;
 	/** When each principal is written as seen. */
 	readonly #seen = new SeenThrottle();
@@ -95,6 +103,13 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 			...this.#declared.map((declared) => declared.identity),
 		]);
 		this.#logger = options.logger;
+		this.#profiles = options.profiles;
+	}
+
+	/** The speaker under the name the profiles give the principal, when the host lets agents see it. */
+	async #named(speaker: Speaker): Promise<Speaker> {
+		const name = await this.#profiles?.modelName(speaker.principalId);
+		return name ? { ...speaker, name } : speaker;
 	}
 
 	/** The refusals `syncConfig` makes from the configuration and the declarations alone, for `Roundtable.check()`. */
@@ -192,7 +207,7 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 		const principal = await this.store.get(link.principalId);
 		if (!principal || principal.disabled) return undefined;
 		const tier = await this.#tier(principal.id, facts, scope.conversation);
-		return tier && speakerOf(facts, principal.id, tier);
+		return tier ? this.#named(speakerOf(facts, principal.id, tier)) : undefined;
 	}
 
 	/**
@@ -223,10 +238,19 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 			assessed = { principalId: principal.id, tier };
 		} else assessed = await this.#firstContact(facts, conversation);
 		if (!assessed) return undefined;
-		const speaker = speakerOf(facts, assessed.principalId, assessed.tier);
+		const speaker = await this.#named(
+			speakerOf(facts, assessed.principalId, assessed.tier),
+		);
 		return {
 			speaker,
-			take: () => this.#take(facts, conversation, assessed.principalId),
+			take: async () => {
+				const taken = await this.#take(
+					facts,
+					conversation,
+					assessed.principalId,
+				);
+				return taken && this.#named(taken);
+			},
 		};
 	}
 
@@ -276,12 +300,12 @@ export class PgIdentityService implements IdentityService, ContactAssessor {
 			throw new IdentityError(`principal ${principalId} is disabled`);
 		const cap =
 			(await this.#lastingTier(principalId)) ?? this.#lastSeenTier(principal);
-		return {
+		return this.#named({
 			id: principal.id,
 			name: principal.displayName,
 			tier: tier ? lowest(tier, cap) : cap,
 			principalId: principal.id,
-		};
+		});
 	}
 
 	async principalOf(identity: string): Promise<string | undefined> {

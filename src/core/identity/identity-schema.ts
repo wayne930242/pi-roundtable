@@ -10,6 +10,7 @@ import {
 } from "./principal-store.ts";
 import {
 	PRINCIPAL_PLUGIN_LINKS,
+	PRINCIPAL_PROFILE_CHOICES,
 	PRINCIPAL_SELF_LINKS,
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
@@ -272,6 +273,7 @@ export function identityMigrations(
 		{ name: "principals-claimable", up: PRINCIPALS_CLAIMABLE },
 		{ name: "principals-plugin-links", up: PRINCIPAL_PLUGIN_LINKS },
 		{ name: "principals-self-links", up: PRINCIPAL_SELF_LINKS },
+		{ name: "principal-profile-choices", up: PRINCIPAL_PROFILE_CHOICES },
 		{
 			name: "backfill",
 			runs: "every-boot",

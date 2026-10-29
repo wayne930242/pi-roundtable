@@ -48,6 +48,7 @@ export type {
 	TierConfig,
 } from "./core/config/config.ts";
 export type { LimitsConfig } from "./core/config/limits.ts";
+export type { ProfilesConfig } from "./core/config/profiles.ts";
 export type { SkillsConfig } from "./core/config/skills-config.ts";
 export type {
 	AttachmentPort,
@@ -214,6 +215,12 @@ export type {
 } from "./core/identity/principal-store.ts";
 export { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
 export type {
+	PersonDisplay,
+	PersonProfiles,
+	ProfileRules,
+	ProfileSource,
+} from "./core/identity/profiles.ts";
+export type {
 	Approval,
 	ApprovalDetails,
 	ApprovalFile,
@@ -367,6 +374,7 @@ export {
 	MEMORY,
 	MODES,
 	PRECHECKS,
+	PROFILES,
 	PROMPTS,
 	RUNTIME,
 	SCHEDULES,

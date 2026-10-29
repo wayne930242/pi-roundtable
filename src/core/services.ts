@@ -14,6 +14,7 @@ import type { PendingConfirmation } from "./domain/conversation.ts";
 import type { HttpRoute } from "./http/listeners.ts";
 import type { IdentityLinks } from "./identity/identity-links.ts";
 import type { IdentityService } from "./identity/identity-service.ts";
+import type { PersonProfiles } from "./identity/profiles.ts";
 import type { ThinkingLevel, ThinkingSetting } from "./models.ts";
 import type { ConversationModes } from "./modes/conversation-modes.ts";
 import type {
@@ -53,6 +54,13 @@ import type { DispatchThreads } from "./threads/dispatch-threads.ts";
  */
 export const IDENTITY: ServiceKey<IdentityService> =
 	serviceKey<IdentityService>("roundtable.identity");
+/**
+ * How the core names a person: the names and pictures of their linked accounts, the account they
+ * chose to be shown by, and the sources a plugin adds. Provided by the `identity` plugin, always.
+ */
+export const PROFILES: ServiceKey<PersonProfiles> = serviceKey<PersonProfiles>(
+	"roundtable.profiles",
+);
 /**
  * Links a person's own account to their principal, which `IDENTITY` cannot. Provided by the
  * `identity` plugin only when the configuration lists providers in `access.selfLink`; read it with

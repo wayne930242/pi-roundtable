@@ -7,6 +7,7 @@ import type { InterimTextMode } from "../domain/interim.ts";
 import { DRAIN_LIMIT_MS } from "../drain.ts";
 import type { Locale } from "../i18n/index.ts";
 import type { AccessRules } from "../identity/access-policy.ts";
+import type { ProfileRules } from "../identity/profiles.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import {
 	type EffortPolicy,
@@ -30,6 +31,7 @@ import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema } from "./config-schema.ts";
 import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
 import { opsOf, type ResolvedOps } from "./ops.ts";
+import { type ProfilesConfig, profileRulesOf } from "./profiles.ts";
 import type { SkillsConfig } from "./skills-config.ts";
 
 export type { DiscordConfig };
@@ -128,6 +130,12 @@ export interface RoundtableConfig extends LimitsConfig {
 	 * unless the deprecated `owner` is given, and never with it.
 	 */
 	access?: AccessConfig;
+	/**
+	 * How people are named: `prefer` lists the providers that name a person who has not chosen, the
+	 * first they have linked winning, and `modelVisible` the providers whose names agents may read as
+	 * `Speaker.name`. Default none of either, which leaves every name as it was.
+	 */
+	profiles?: ProfilesConfig;
 	/**
 	 * Each person's limits across all their conversations: `perPrincipal.schedules` they may keep and
 	 * `perPrincipal.delegations` running at once. Unset, only each conversation's, as in 0.8.
@@ -240,6 +248,8 @@ export interface ResolvedConfig extends ResolvedLimits {
 	owner: OwnerIdentity & { id: string };
 	/** Who the host serves, the 0.8 `owner` and `speakers` converted when they are what the configuration gives. */
 	access: AccessRules;
+	/** How people are named, checked; empty lists by default. */
+	profiles: ProfileRules;
 	/** What the configuration wrote in a deprecated form, which the host logs once. */
 	deprecations: string[];
 	/** Undefined on a host without Discord. */
@@ -335,6 +345,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		name,
 		slug,
 		...access,
+		profiles: profileRulesOf(config.profiles),
 		deprecations: [
 			...access.deprecations,
 			...(config.avatar ? [AVATAR_DEPRECATION] : []),

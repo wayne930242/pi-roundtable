@@ -5,6 +5,7 @@ import type { DeclaredIdentity } from "../core/identity/plugin-identities.ts";
 import { PgPrincipalStore } from "../core/identity/principal-store.ts";
 import {
 	PRINCIPAL_PLUGIN_LINKS,
+	PRINCIPAL_PROFILE_CHOICES,
 	PRINCIPAL_SELF_LINKS,
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
@@ -292,6 +293,30 @@ describeDb("roundtable principal", () => {
 		);
 		expect((await principal("show", OWNER)).out).not.toContain(
 			"discord:966666600000000010",
+		);
+	});
+
+	test("show prints the profile source a person chose, and says none was chosen before the table exists or a choice is stored", async () => {
+		const store = await PgPrincipalStore.attach(db?.sql as never);
+		const member = await store.create({ displayName: "Mel" });
+		// A database the host has not migrated to 0.26 yet has no table to read.
+		expect((await principal("show", member.id)).out).toContain(
+			"  profile source: none chosen",
+		);
+		await migrate(db?.sql as never, [
+			{
+				name: "identity/principal-profile-choices",
+				up: PRINCIPAL_PROFILE_CHOICES,
+			},
+		]);
+		expect((await principal("show", member.id)).out).toContain(
+			"  profile source: none chosen",
+		);
+		const sql = db?.sql;
+		if (!sql) throw new Error("no database");
+		await sql`INSERT INTO principal_profile_choices (principal_id, provider) VALUES (${member.id}, 'line')`;
+		expect((await principal("show", member.id)).out).toContain(
+			"  profile source: line\n",
 		);
 	});
 

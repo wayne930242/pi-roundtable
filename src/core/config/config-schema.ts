@@ -8,6 +8,7 @@ import { discordShape } from "./adapters.ts";
 import { attachmentsShape } from "./attachments.ts";
 import type { Pronouns } from "./config.ts";
 import { limitsShape } from "./limits.ts";
+import { profilesShape } from "./profiles.ts";
 import {
 	bool,
 	characterInput,
@@ -83,6 +84,7 @@ export const configSchema = shape({
 		shape({ admins: optional(tierMembers), members: optional(tierMembers) }),
 	),
 	access: optional(accessShape),
+	profiles: optional(profilesShape),
 	background: optional(
 		shape({
 			perPrincipal: optional(

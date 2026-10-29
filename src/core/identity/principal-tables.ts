@@ -59,3 +59,13 @@ export const PRINCIPAL_SELF_LINKS = async (sql: SQL): Promise<void> => {
 		ALTER TABLE principal_identities ADD CONSTRAINT principal_identities_source_check
 		CHECK (source IN ('config', 'plugin', 'cli', 'jit', 'legacy', 'self'))`;
 };
+
+/** Which linked account represents each person (`PROFILES.choose`): only the choice, never a name or a picture address. */
+export const PRINCIPAL_PROFILE_CHOICES = async (sql: SQL): Promise<void> => {
+	await sql`
+		CREATE TABLE IF NOT EXISTS principal_profile_choices (
+			principal_id text PRIMARY KEY REFERENCES principals (id) ON DELETE CASCADE,
+			provider text NOT NULL,
+			chosen_at timestamptz NOT NULL DEFAULT now()
+		)`;
+};

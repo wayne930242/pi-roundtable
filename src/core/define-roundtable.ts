@@ -335,7 +335,11 @@ export async function defineRoundtable(
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [
-			identityPlugin({ rules: config.access, plugins: config.plugins }),
+			identityPlugin({
+				rules: config.access,
+				plugins: config.plugins,
+				profiles: config.profiles,
+			}),
 			...(config.memory ? [memoryPlugin({ owner })] : []),
 			scheduleStorePlugin(),
 			precheckPlugin(),

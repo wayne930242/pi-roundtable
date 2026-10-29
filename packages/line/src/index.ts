@@ -48,6 +48,7 @@ export type {
 export { line } from "./plugin.ts";
 export type { LineBridgePort } from "./port.ts";
 export { LINE } from "./port.ts";
+export { lineProfileSource } from "./profile.ts";
 export type { QuotaOptions } from "./quota.ts";
 export type { RetentionOptions } from "./retention.ts";
 export type { LineScreen, LineScreenVerdict } from "./screen.ts";

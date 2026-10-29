@@ -235,6 +235,7 @@ The built-in plugins provide these, from the main entry:
 |---|---|---|---|
 | `IDENTITY` | `IdentityService` | `identity` | Who the host serves, read-only: `resolve(facts, { conversation }?)` gives the `Speaker` with its `principalId` behind a surface's `ActorFacts`, or undefined; `principal(id)`, `list()`, `identities(principalId)`, `roles(principalId)`, `tierOf(principalId)` (the lasting roles' tier), `speakerFor(principalId, tier?)` for a turn on someone's behalf, `owners()`, and `principalOf(identity)`, the principal an identity written `<provider>:<subject>` is linked to, such as one a plugin declares in `identities`. Principals are written only by the configuration and `roundtable principal`. `SYSTEM_PRINCIPAL` is the host's own, which no plugin speaks as |
 | `IDENTITY_LINKS` | `IdentityLinks` | `identity`, only with `access.selfLink` | Lets a plugin link a person's own account to their principal, which `IDENTITY` cannot: `link(principalId, identity)` and `unlink(identity)`, identities written `<provider>:<subject>`. See [Self-linking](#self-linking). Absent unless the configuration lists the providers; read it with `find` |
+| `PROFILES` | `PersonProfiles` | `identity` | How the core names a person: `register(source)` a `ProfileSource` for a provider, `observed(principalId, provider, name)` a name a signed-in session reported, `sourceOf`, `choose`, `of(principalId)` (name, source, whether a picture exists) and `picture(principalId)` (the picture through the source's allowed hosts). Always on. See [Naming people: `PROFILES`](#naming-people-profiles) |
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`, and `adopt(key, principalId)` only for migrating a conversation recorded before 0.9; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `MODES` | `ConversationModes` | `modes` | Each conversation's modes, stored per key and kept across restarts: `peek(channel)` gives its `ConversationMode` (`yolo` and `longRunning`, both off by default; `changedBy?`, `changedAt?`) from memory, `set(channel, { yolo?, longRunning? }, speaker)` changes them and throws `PluginError` unless the speaker is an owner other than `SYSTEM_PRINCIPAL`, `onChange(listener)` hears each change, and `autoApproved(entry)` with `onAutoApproved(listener)` report a held call that yolo mode approved. See [Conversation modes](#conversation-modes-modes) |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
@@ -627,6 +628,45 @@ test("an unavailable principal is refused even at owner tier", async () => {
 <!-- /example -->
 
 For existing hosts and compatibility aliases, read [Migrating to 0.9](migration-0.9.md).
+
+### Naming people: `PROFILES`
+
+A person's linked accounts each carry a name and maybe a picture, and a host decides which one represents them.
+`PROFILES` (provided by the `identity` plugin, always) holds the sources and the choices:
+
+```ts
+setup: ({ services }) => {
+	services.get(PROFILES).register({
+		provider: "github",
+		label: "GitHub",
+		modelVisible: false,
+		pictureHosts: ["avatars.githubusercontent.com"],
+		fetch: async (login, signal) => {
+			const user = await (await fetch(`https://api.github.com/users/${login}`, { signal })).json();
+			return { name: user.name ?? login, pictureUrl: user.avatar_url };
+		},
+	});
+}
+```
+
+- **Who names a person.** Their stored choice (`choose(principalId, provider)`, which refuses a provider they have not linked; `null` returns to the default), else the first provider in `profiles.prefer` they have linked, else nobody, and `of` falls back to the principal's display name.
+- **Observed names.** A surface that signs a person in reports the name its identity provider gave (`observed`), so an OIDC issuer names people with no fetch. It is held in memory for an hour and renewed by each sign-in.
+- **A fetch** has two seconds. A miss, a failure or a timeout is remembered for ten minutes, so the name on the hot path costs the wait at most once per person per ten minutes. Fetched and observed names and picture addresses stay in memory for an hour at most and are written to no table; only the choice (`principal_profile_choices`) is stored.
+- **What agents read.** `Speaker.name` from `IDENTITY.resolve`, `peek` and `speakerFor` is the profile name only for a provider the host lists in `profiles.modelVisible`; the source's own `modelVisible` flag never decides it. With no source, no observed name and an empty list nothing changes. Names are made safe first: control characters become spaces and at most 80 characters remain.
+- **Pictures.** `picture(principalId)` fetches only an `https` address on the source's `pictureHosts`, follows no redirect, accepts PNG, JPEG, GIF and WebP only (an SVG is refused), at most 2 MiB, and answers `nosniff` and `private, max-age=3600`. The bytes stay in memory for an hour, and a failure is remembered for ten minutes.
+
+```ts
+export default defineRoundtable({
+	// ...
+	profiles: {
+		prefer: ["line"],        // LINE names whoever linked it and has not chosen
+		modelVisible: ["line"],  // and agents read that name
+	},
+});
+```
+
+`pi-roundtable-line` ships `lineProfileSource(services.get(LINE).api)`, a source for provider `line` over LINE's `/v2/bot/profile/{userId}` (picture hosts `profile.line-scdn.net` and `obs.line-scdn.net`, `modelVisible: false`).
+`roundtable principal show` prints the source a person chose.
 
 ## Tiers: who may use what
 
@@ -4223,11 +4263,16 @@ Import from the entries listed below; source area files are internal.
 | `OwnerQuestion` | `pi-roundtable` | type |
 | `PendingConfirmation` | `pi-roundtable` | type |
 | `PerPrincipalLimits` | `pi-roundtable` | type |
+| `PersonDisplay` | `pi-roundtable` | type |
+| `PersonProfiles` | `pi-roundtable` | type |
 | `Persona` | `pi-roundtable` | type |
 | `PluginContext` | `pi-roundtable` | type |
 | `PluginIdentity` | `pi-roundtable` | type |
 | `PluginError` | `pi-roundtable` | value |
 | `Principal` | `pi-roundtable` | type |
+| `ProfileRules` | `pi-roundtable` | type |
+| `ProfileSource` | `pi-roundtable` | type |
+| `ProfilesConfig` | `pi-roundtable` | type |
 | `PromptDocumentSpec` | `pi-roundtable` | type |
 | `PromptDocuments` | `pi-roundtable` | type |
 | `PromptDocumentView` | `pi-roundtable` | type |
@@ -4267,6 +4312,7 @@ Import from the entries listed below; source area files are internal.
 | `RuntimeFactory` | `pi-roundtable` | type |
 | `SCHEDULES` | `pi-roundtable` | value |
 | `PRECHECKS` | `pi-roundtable` | value |
+| `PROFILES` | `pi-roundtable` | value |
 | `RUNTIME` | `pi-roundtable` | value |
 | `PRECHECK_TIMEOUT_MS` | `pi-roundtable` | value |
 | `Precheck` | `pi-roundtable` | type |
