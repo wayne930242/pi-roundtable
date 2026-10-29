@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-29
+
+The core peer range is now `>=0.25.0 <0.26.0`.
+
 ### Added
 
 - Make, archive and arrange agents. The **+** button of the room list and of the switcher drawer opens a menu: **New agent**, **New group** and **Archived**. New agent takes a name, the permanent name (`^[a-z0-9-]{1,32}$`, filled in from the name until typed by hand), the prompt, a model, an optional opening task and a look (the one its role suggests, or one picked in the character creator, which opens in place of the form), and opens the new agent's room. A bad or taken name, an unusable model, a bad look field (`400 {error, field}`) and an unknown skill are refused with the agent server's words before anything is made.
