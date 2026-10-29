@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-30
+
+The core peer range is now `>=0.26.0 <0.27.0`.
+
 ### Fixed
 
 - A card or an unprompted reply in a host room no longer pushes to every owner's phone; host rooms reach phones only through notices.

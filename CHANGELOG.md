@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-30
+
 ### Added
 
 - `IdentityService.peek(facts, { conversation }?)`: who these facts resolve to now, read only. It never links, claims, admits, records the person as seen or touches a tier, also when it refuses, and its tier is exactly what `resolve` gives (the lasting roles together with what the access rules give the facts), never the tier last recorded. It answers undefined for an unlinked identity, a disabled principal, or no tier. **Breaking** for code: a hand-built `IdentityService` stand-in adds `peek` (`testHost` and `servicePair` already cover tests).
