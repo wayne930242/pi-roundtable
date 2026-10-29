@@ -1826,6 +1826,27 @@ pre.diff {
 	user-select: none;
 }
 
+.field-tools {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+/* The editors of a main prompt and of a SKILL.md fill the full-screen sheet they stand in. */
+.sheet.full .field textarea.prompt-full {
+	min-height: 55vh;
+}
+
+.skill-lock {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.history .menu-item[aria-pressed="true"] {
+	background: var(--surface-2);
+}
+
 /* ── The character creator on an agent's profile ─────────────────────────────────────────────── */
 
 .creator {

@@ -38,6 +38,7 @@ const PATHS = {
 	profile: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0",
 	reset: "M4 4v6h6M4.5 10A8 8 0 1 1 6 16",
 	chevron: "M9 6l6 6-6 6",
+	lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2",
 	sparkle: "M12 3l2 5.5L19.5 10 14 12l-2 5.5L10 12l-5.5-2L10 8.5 12 3Z",
 	shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z",
 	table:

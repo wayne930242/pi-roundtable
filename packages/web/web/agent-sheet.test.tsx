@@ -27,6 +27,7 @@ import {
 import { ApiFailure, api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
+import { editApi } from "./lib/edit-api.ts";
 import { loadKit } from "./lib/kit.ts";
 import { clearRoomConfirm } from "./lib/room-confirm.ts";
 import { setRouting } from "./lib/router.ts";
@@ -326,6 +327,133 @@ test("the prompt opens in a full-screen editor that edits the same text", async 
 	expect(q("dialog.sheet.full")?.hasAttribute("open")).toBe(false);
 	// The agent sheet itself stays open under it.
 	expect(q<HTMLDialogElement>("dialog.sheet.wide")?.open).toBe(true);
+});
+
+const AT = "2026-10-29T08:00:00.000Z";
+const versions = (): Awaited<
+	ReturnType<typeof editApi.agentPromptHistory>
+> => ({
+	versions: [
+		{
+			id: 2,
+			action: "set",
+			text: "You scout.\nBe thorough.\nNever guess.",
+			previous: "You scout.\nBe brief.\nNever guess.",
+			by: "doctor",
+			at: AT,
+		},
+		{
+			id: 1,
+			action: "set",
+			text: "You scout.\nBe brief.\nNever guess.",
+			previous: "You scout.",
+			by: "Riley",
+			at: AT,
+		},
+	],
+});
+
+/** The history sheet loads when asked for; wait for it to draw what it was given. */
+async function openHistory() {
+	await page.click(button("History"));
+	for (let waited = 0; waited < 3000; waited += 40) {
+		await page.act(() => settle(40));
+		if (
+			q(".history .menu-item") ||
+			q(".history .empty") ||
+			q(".history .failure")
+		)
+			return;
+	}
+}
+
+test("History lists who changed the prompt and when, shows a change as a diff, and takes its text into the editor to be reviewed and saved", async () => {
+	const history = spyOn(editApi, "agentPromptHistory").mockResolvedValue(
+		versions(),
+	);
+	try {
+		await open();
+		await openHistory();
+		expect(history).toHaveBeenCalledWith("scout");
+		expect(q("dialog.sheet.wide .history")).not.toBeNull();
+		const rows = all(".history .menu-item").map((one) => one.textContent ?? "");
+		expect(rows).toHaveLength(2);
+		expect(rows[0]).toContain("doctor");
+		expect(rows[1]).toContain("Riley");
+		// Nothing is shown of a change until one is chosen.
+		expect(q(".history .diff")).toBeNull();
+		await page.click(all<HTMLButtonElement>(".history .menu-item")[1] ?? null);
+		const lines = all(".history .diff-line").map((one) => [
+			one.getAttribute("data-kind"),
+			one.textContent?.replace(/^[ +−]/, "").replace(/^(Added|Removed): /, ""),
+		]);
+		// This change added two lines under the first.
+		expect(lines).toEqual([
+			["same", "You scout."],
+			["add", "Be brief."],
+			["add", "Never guess."],
+		]);
+		await page.click(button("Use this text"));
+		// The text is in the editor as an edit to save; nothing was sent.
+		expect(q<HTMLTextAreaElement>(".agent-sheet > form textarea")?.value).toBe(
+			"You scout.\nBe brief.\nNever guess.",
+		);
+		expect(q(".history")).toBeNull();
+		expect(update).not.toHaveBeenCalled();
+	} finally {
+		history.mockRestore();
+	}
+});
+
+test("a version taken from the history is saved through the same diff review as any edit", async () => {
+	const history = spyOn(editApi, "agentPromptHistory").mockResolvedValue(
+		versions(),
+	);
+	try {
+		agent.mockResolvedValue(
+			profile({ prompt: "You scout.\nBe thorough.\nNever guess." }),
+		);
+		await open();
+		await openHistory();
+		await page.click(all<HTMLButtonElement>(".history .menu-item")[1] ?? null);
+		await page.click(button("Use this text"));
+		expect(submit()?.textContent).toBe("Review changes");
+		await page.click(submit());
+		expect(update).not.toHaveBeenCalled();
+		await page.click(inReview("Save"));
+		expect(update).toHaveBeenCalledWith("scout", {
+			prompt: "You scout.\nBe brief.\nNever guess.",
+		});
+	} finally {
+		history.mockRestore();
+	}
+});
+
+test("History says so when no change was kept, and shows a failure to read it", async () => {
+	const history = spyOn(editApi, "agentPromptHistory").mockResolvedValue({
+		versions: [],
+	});
+	try {
+		await open();
+		await openHistory();
+		expect(q(".history .empty")?.textContent).toBe(
+			"No changes have been kept yet.",
+		);
+		history.mockRejectedValue(new Error("history is down"));
+		await page.act(() => {
+			document
+				.querySelector<HTMLElement>("dialog.sheet.wide .history")
+				?.closest("dialog")
+				?.dispatchEvent(
+					new Event("cancel", { bubbles: true, cancelable: true }),
+				);
+		});
+		await page.act(() => settle(300));
+		await openHistory();
+		expect(q(".history .failure")?.textContent).toBe("history is down");
+	} finally {
+		history.mockRestore();
+	}
 });
 
 test("Escape in the full-screen editor closes only the editor", async () => {

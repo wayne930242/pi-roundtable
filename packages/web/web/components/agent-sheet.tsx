@@ -20,7 +20,7 @@ import {
 import { ApiFailure, api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useRoomState } from "../lib/characters.ts";
-import { type DiffLine, diffCounts, lineDiff } from "../lib/diff.ts";
+import { editApi } from "../lib/edit-api.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import { setRoomMuted } from "../lib/mute.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
@@ -28,10 +28,16 @@ import { teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
 import { Chips } from "./chips.tsx";
+import { TextDiff } from "./diff-block.tsx";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 import { Failure, Loading } from "./states.tsx";
 import { Switch } from "./switch.tsx";
+
+// The history of a prompt is read now and then; it loads when it is asked for.
+const HistorySheet = lazy(() =>
+	import("./prompt-history.tsx").then((m) => ({ default: m.HistorySheet })),
+);
 
 // The creator is a page's worth of picking; it loads when the sheet opens.
 const CharacterCreator = lazy(() =>
@@ -137,6 +143,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 	const [saving, setSaving] = useState(false);
 	const [reviewing, setReviewing] = useState(false);
 	const [full, setFull] = useState(false);
+	const [history, setHistory] = useState(false);
 	// The profile's own picture shows what its room shows.
 	const state = useRoomState(profile?.room ?? "");
 	const look = useRef<HTMLElement>(null);
@@ -294,15 +301,26 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 					<div className="field">
 						<div className="field-head">
 							<label htmlFor={promptId}>{t("Prompt")}</label>
-							<button
-								type="button"
-								className="secondary compact"
-								aria-haspopup="dialog"
-								onClick={() => setFull(true)}
-							>
-								<Expand />
-								{t("Full screen")}
-							</button>
+							<span className="field-tools">
+								<button
+									type="button"
+									className="secondary compact"
+									aria-haspopup="dialog"
+									onClick={() => setHistory(true)}
+								>
+									<Icon name="reset" size={16} />
+									{t("History")}
+								</button>
+								<button
+									type="button"
+									className="secondary compact"
+									aria-haspopup="dialog"
+									onClick={() => setFull(true)}
+								>
+									<Expand />
+									{t("Full screen")}
+								</button>
+							</span>
 						</div>
 						<textarea
 							id={promptId}
@@ -386,6 +404,28 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 					</div>
 				</section>
 			)}
+			{history ? (
+				<Suspense fallback={null}>
+					<HistorySheet
+						open={history}
+						title={t("History of the prompt")}
+						load={async () =>
+							(await editApi.agentPromptHistory(name)).versions.map((v) => ({
+								id: v.id,
+								text: v.text,
+								previous: v.previous,
+								by: v.by,
+								at: v.at,
+							}))
+						}
+						onUse={(text) => {
+							setDraft({ ...draft, prompt: text });
+							setHistory(false);
+						}}
+						onClose={() => setHistory(false)}
+					/>
+				</Suspense>
+			) : null}
 			<Sheet
 				open={full}
 				title={t("Prompt")}
@@ -508,12 +548,6 @@ const Expand = () => (
 	</svg>
 );
 
-const DIFF_MARK: Record<DiffLine["kind"], string> = {
-	same: " ",
-	add: "+",
-	del: "−",
-};
-
 /** What a save would change, read over once: the changed fields, and the prompt line by line. */
 function Review(props: {
 	profile: AgentProfileView;
@@ -526,11 +560,6 @@ function Review(props: {
 	const root = useRef<HTMLElement>(null);
 	// The form's button that opened the review is gone; the keyboard continues from the review.
 	useEffect(() => root.current?.focus(), []);
-	const lines = useMemo(
-		() => lineDiff(profile.prompt, draft.prompt),
-		[profile.prompt, draft.prompt],
-	);
-	const counts = diffCounts(lines);
 	const changes: { label: string; before: string; after: string }[] = [];
 	if (draft.displayName !== profile.displayName)
 		changes.push({
@@ -572,35 +601,11 @@ function Review(props: {
 					))}
 				</ul>
 			) : null}
-			<div className="field">
-				<span className="field-label">
-					{t("Prompt")} ·{" "}
-					{t("Lines: {added} added, {removed} removed", {
-						added: counts.added,
-						removed: counts.removed,
-					})}
-				</span>
-				<pre className="diff">
-					{lines.map((line, index) => (
-						<span
-							// biome-ignore lint/suspicious/noArrayIndexKey: a diff's lines have no identity but their place
-							key={index}
-							className="diff-line"
-							data-kind={line.kind}
-						>
-							<span className="diff-mark" aria-hidden="true">
-								{DIFF_MARK[line.kind]}
-							</span>
-							{line.kind === "add" || line.kind === "del" ? (
-								<span className="visually-hidden">
-									{line.kind === "add" ? t("Added") : t("Removed")}:{" "}
-								</span>
-							) : null}
-							{line.text || " "}
-						</span>
-					))}
-				</pre>
-			</div>
+			<TextDiff
+				label={t("Prompt")}
+				before={profile.prompt}
+				after={draft.prompt}
+			/>
 			<div className="actions">
 				<button
 					type="button"

@@ -53,6 +53,9 @@ const SheetHosts = lazy(() =>
 const AgentPage = lazy(() =>
 	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
 );
+const PromptsPage = lazy(() =>
+	import("./pages/prompts.tsx").then((m) => ({ default: m.PromptsPage })),
+);
 const OverviewPage = lazy(() =>
 	import("./pages/overview.tsx").then((m) => ({ default: m.OverviewPage })),
 );
@@ -270,7 +273,8 @@ function Console({ config }: { config: ConfigView }) {
 	const first = config.panes[0] ?? "conversations";
 	const known = (name: string) =>
 		config.panes.includes(name as PaneName) ||
-		(hasApp && ["room", "agent", "settings", "more"].includes(name)) ||
+		(hasApp &&
+			["room", "agent", "settings", "prompts", "more"].includes(name)) ||
 		name === "more";
 	const pane = known(route.pane) ? route.pane : first;
 	// The room and the profile fill the screen; everything else is a page in a column.
@@ -278,7 +282,12 @@ function Console({ config }: { config: ConfigView }) {
 		(hasApp && (pane === "room" || pane === "agent") && Boolean(route.key)) ||
 		// The files fill the screen beside the rail, and a phone's file leaves the keyboard its room.
 		(pane === "workspace" && (sideRail || /[^:/]$/.test(route.key ?? "")));
-	const current = pane === "room" || pane === "agent" ? "rooms" : pane;
+	const current =
+		pane === "room" || pane === "agent"
+			? "rooms"
+			: pane === "prompts"
+				? "settings"
+				: pane;
 
 	// A page opens at its top.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the route changing is the trigger
@@ -336,6 +345,8 @@ function Console({ config }: { config: ConfigView }) {
 				return <WorkspacePage />;
 			case "settings":
 				return <SettingsPage />;
+			case "prompts":
+				return <PromptsPage />;
 			case "more":
 				return <MorePage items={moreItems} />;
 			case "overview":

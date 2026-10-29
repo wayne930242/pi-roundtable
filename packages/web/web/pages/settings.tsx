@@ -13,6 +13,7 @@ import {
 	pushState,
 	thisDevice,
 } from "../lib/push.ts";
+import { hrefFor } from "../lib/router.ts";
 import { setTheme, type ThemePreference, useTheme } from "../lib/theme.ts";
 import { toast } from "../lib/toast.ts";
 
@@ -271,6 +272,26 @@ export function SettingsPage() {
 					</p>
 				)}
 			</section>
+			{session?.prompts ? (
+				<section className="card stack">
+					<h2>{t("Main prompts")}</h2>
+					<ul className="menu">
+						<li>
+							<a className="menu-item menu-link" href={hrefFor("prompts")}>
+								<span className="menu-text">
+									<strong>{t("Edit the main prompts")}</strong>
+									<span className="meta">
+										{t(
+											"The texts the assistant and the agents start from, with a diff to read before you save and a way back to the file's text.",
+										)}
+									</span>
+								</span>
+								<Icon name="chevron" size={16} />
+							</a>
+						</li>
+					</ul>
+				</section>
+			) : null}
 			<Notifications
 				enabled={session?.push === true}
 				quietHours={session?.quietHours}

@@ -909,4 +909,62 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.accessory.glasses": "眼鏡",
 	"character.accessory.freckles": "雀斑",
 	"character.accessory.scar": "疤痕",
+
+	// 主要提示詞與技能內容的編輯
+	"Main prompts": "主要提示詞",
+	"Edit the main prompts": "編輯主要提示詞",
+	"The texts the assistant and the agents start from, with a diff to read before you save and a way back to the file's text.":
+		"夥伴們開始工作時所依據的文字；儲存前可檢視差異，也能回到檔案裡的版本。",
+	"The texts the assistant and the agents start from. A text you save here replaces the one from the file from the next turn on, until you go back to the file's.":
+		"夥伴們開始工作時所依據的文字。你在這裡儲存的文字，從下一回合起取代檔案裡的版本，直到你回到檔案版本為止。",
+	"Shared prompt": "共用提示詞",
+	"Guest prompt": "訪客提示詞",
+	"The base every agent's prompt starts with, the main assistant's included.":
+		"每位夥伴的提示詞都以它開頭，主要夥伴也不例外。",
+	"Used instead of the shared prompt when the person speaking is not the owner.":
+		"說話的人不是擁有者時，改用它取代共用提示詞。",
+	"No prompts to edit.": "沒有可編輯的提示詞。",
+	"Differs from the file version": "與檔案版本不同",
+	"Set by {name}, {time}": "由{name}設定，{time}",
+	"Revert to the file version": "還原為檔案版本",
+	"Revert {name} to the file version?": "要把{name}還原為檔案版本嗎？",
+	"Back to the file version.": "已還原為檔案版本。",
+	"The text you saved is dropped and the text from the file applies from the next turn. It stays in the history, so you can bring it back.":
+		"你儲存的文字會被移除，從下一回合起改用檔案裡的文字。它仍留在歷史中，之後可以再取回。",
+	History: "歷史",
+	"History of the prompt": "提示詞的歷史",
+	"History of {name}": "{name}的歷史",
+	"No changes have been kept yet.": "還沒有留下任何更動紀錄。",
+	"Back to the file version": "已回到檔案版本",
+	"This change": "這次更動",
+	"It goes into the editor, where you read it over and save it to put it in force.":
+		"它會放進編輯器；檢視差異並儲存後才會生效。",
+	"Use this text": "使用這段文字",
+	"New skill": "新增技能",
+	"Create skill": "建立技能",
+	"Skill created.": "已建立技能。",
+	"This skill cannot be edited here.": "這個技能無法在這裡編輯。",
+	"This skill changed while you were editing it. The changes below are against the version there now; save again to replace it, or go back to edit.":
+		"這個技能在你編輯時被更動了。下方的差異是對照目前的版本；再儲存一次會取代它，或回去繼續編輯。",
+	"Frontmatter holds the name, which cannot change, and a description that starts with “Use when”. The rest is the skill.":
+		"Frontmatter 含有名稱（不能更改）與以「Use when」開頭的描述，其餘就是技能內容。",
+	"Registered skills and their carriers. A skill an agent wrote can be edited here; the others are read-only.":
+		"已登錄的技能與攜帶者。夥伴撰寫的技能可以在這裡編輯，其他的唯讀。",
+	"Built in with the release; it changes with the release.":
+		"隨版本內建；要隨版本更新才會改變。",
+	"From the package {package}; it changes when the package is upgraded.":
+		"來自套件 {package}；套件升級時才會改變。",
+	"Linked from {repo}; change it in its repository.":
+		"連結自 {repo}；請到它的儲存庫修改。",
+	// 主要提示詞與技能內容的編輯：伺服器的拒絕訊息
+	"This host has no prompts to edit.": "這個主機沒有可編輯的提示詞。",
+	"There is no such prompt.": "沒有這份提示詞。",
+	"base must be the text the prompt was edited from.":
+		"base 必須是編輯所依據的提示詞文字。",
+	"This prompt changed while you were editing it.":
+		"這份提示詞在你編輯時被更動了。",
+	"baseHash must be the hash the skill was read with.":
+		"baseHash 必須是讀取技能時的雜湊值。",
+	"This skill changed while you were editing it.":
+		"這個技能在你編輯時被更動了。",
 };
