@@ -14,7 +14,7 @@ import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
-import { discordKey, keysOf } from "./team-keys.ts";
+import { agentRoomKey, discordKey, keysOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 
@@ -117,15 +117,16 @@ export class TeamEditing {
 			prompt: string;
 			character?: CharacterInput;
 			task?: string;
+			openIn?: string;
 			category?: string;
 			skills?: string[];
 			model?: string;
 			thinking?: string;
 		},
 	): Promise<Agent> {
-		const { model, thinking, task, ...rest } = input;
+		const { model, thinking, task, openIn, ...rest } = input;
 		const made = await this.#create(
-			{ speaker, by: speaker.name, creator: undefined },
+			{ speaker, by: speaker.name, creator: undefined, openIn },
 			{ ...rest, ...(task ? { task } : {}) },
 			{ model, thinking },
 		);
@@ -133,7 +134,13 @@ export class TeamEditing {
 	}
 
 	async #create(
-		who: { speaker: Speaker; by: string; creator: Agent | undefined },
+		who: {
+			speaker: Speaker;
+			by: string;
+			creator: Agent | undefined;
+			/** The surface whose room runs the opening task. */
+			openIn?: string | undefined;
+		},
 		input: {
 			name: string;
 			displayName: string;
@@ -212,10 +219,15 @@ export class TeamEditing {
 				agent,
 				text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}.`,
 			};
-		// The opening task runs where the agent is first reached: its channel, else its first room.
-		const home = channelId
-			? discordKey(channelId)
-			: keysOf(store, agent.name, surfaces?.roomSurfaces() ?? [])[0];
+		// The opening task runs in the room of the surface that asked, else where the agent is first
+		// reached: its channel, else its first room.
+		const rooms = surfaces?.roomSurfaces() ?? [];
+		const home =
+			who.openIn !== undefined && rooms.includes(who.openIn)
+				? agentRoomKey(who.openIn, agent.name)
+				: channelId
+					? discordKey(channelId)
+					: keysOf(store, agent.name, rooms)[0];
 		if (!home) {
 			logger.warn(
 				{ agent: agent.name },

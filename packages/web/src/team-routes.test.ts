@@ -103,6 +103,7 @@ function setup(withSkills = true) {
 				model?: string;
 				thinking?: string;
 				task?: string;
+				openIn?: string;
 				skills?: string[];
 			},
 		) => {
@@ -120,7 +121,7 @@ function setup(withSkills = true) {
 			agents.set(made.name, made);
 			if (input.skills) carried.set(made.name, input.skills);
 			calls.push(
-				`createAgent ${input.name} task=${input.task ?? "-"} skills=${(input.skills ?? []).join("+") || "-"}`,
+				`createAgent ${input.name} task=${input.task ?? "-"} in=${input.openIn ?? "-"} skills=${(input.skills ?? []).join("+") || "-"}`,
 			);
 			return made;
 		},
@@ -401,7 +402,9 @@ describe("POST api/agents", () => {
 			room: "app:agent.notes",
 			model: "m/two",
 		});
-		expect(calls).toEqual(["createAgent notes task=Say hi. skills=kit-do"]);
+		expect(calls).toEqual([
+			"createAgent notes task=Say hi. in=app skills=kit-do",
+		]);
 		expect(speakers[0]).toMatchObject({ tier: "owner", principalId: "owner" });
 		expect(changes).toBe(1);
 	});
@@ -417,7 +420,7 @@ describe("POST api/agents", () => {
 			},
 		});
 		expect(response.status).toBe(201);
-		expect(calls).toEqual(["createAgent bare task=- skills=-"]);
+		expect(calls).toEqual(["createAgent bare task=- in=app skills=-"]);
 	});
 
 	test("refuses a bad body with 400 and makes nothing", async () => {

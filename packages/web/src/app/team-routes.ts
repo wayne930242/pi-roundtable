@@ -180,7 +180,11 @@ export class TeamApi {
 				made.character,
 				suggestCharacter({ name, displayName, prompt }),
 			);
-		await this.#options.team.createAgent(speaker, made);
+		// The opening task starts in the app's room for the agent, where the owner is looking.
+		await this.#options.team.createAgent(speaker, {
+			...made,
+			openIn: this.#options.surface,
+		});
 		this.#options.changed();
 		return json(this.#profile(name), 201);
 	}

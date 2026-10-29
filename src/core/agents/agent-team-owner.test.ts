@@ -51,6 +51,32 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			expect(turn?.text).toContain("Say hi.");
 		});
 
+		test("the opening task runs in the room of the surface that asked, not the Discord channel", async () => {
+			fx.surfaces.rooms = ["app"];
+			await fx.team.createAgent(OWNER_SPEAKER, {
+				...NOTES,
+				task: "Say hi.",
+				openIn: "app",
+			});
+			await settle();
+			expect(fx.runtime.turns.map((t) => t.channel)).toEqual([
+				agentRoomKey("app", "notes"),
+			]);
+			// A surface that hosts no rooms falls back to the agent's channel.
+			await fx.team.createAgent(OWNER_SPEAKER, {
+				name: "more",
+				displayName: "More",
+				prompt: "More.",
+				task: "Go.",
+				openIn: "elsewhere",
+			});
+			await settle();
+			const channel = fx.store.agent("more")?.channelId ?? "";
+			expect(fx.runtime.turns.map((t) => t.channel)).toContain(
+				discordKey(channel),
+			);
+		});
+
 		test("without a task the agent only exists", async () => {
 			await fx.team.createAgent(OWNER_SPEAKER, NOTES);
 			await settle();

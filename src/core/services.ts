@@ -220,6 +220,12 @@ export interface NewAgent {
 	character?: CharacterInput;
 	/** Its opening task; without it the agent only exists. */
 	task?: string;
+	/**
+	 * The surface whose room the opening task runs in, so the person who asked sees it start
+	 * there. Without it, or for a surface that hosts no rooms, the task runs where `agent_create`
+	 * runs it: the agent's Discord channel, else its first room.
+	 */
+	openIn?: string;
 	category?: string;
 	/** Skills it carries; refused when the skills addon is off. */
 	skills?: string[];
