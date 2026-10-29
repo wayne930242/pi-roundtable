@@ -207,6 +207,9 @@ test("a list from the server that is not six #rrggbb colors leaves the kit's own
 			[...EAST_ASIAN_SKINS.slice(0, 5), "peach"],
 			[...EAST_ASIAN_SKINS.slice(0, 5), 7],
 			"#ffffff",
+			"abcdef",
+			Array(6).fill(["#aabbcc"]),
+			new Array(6),
 		]) {
 			initSkins(bad as never);
 			expect(skinsNow()).toBeUndefined();

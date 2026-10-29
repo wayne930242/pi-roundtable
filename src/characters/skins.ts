@@ -30,6 +30,7 @@ export function checkSkins(value: unknown, field = "skins"): readonly Hex[] {
 			`must be a list of exactly ${SKIN_COUNT} #rrggbb colors`,
 		);
 	return Object.freeze(
-		value.map((hex, index) => checkHex(hex, `${field}[${index}]`)),
+		// Array.from, not map: map skips the holes of a sparse list, which would pass unchecked.
+		Array.from(value, (hex, index) => checkHex(hex, `${field}[${index}]`)),
 	);
 }

@@ -11,9 +11,12 @@ const HEX = /^#[0-9a-f]{6}$/;
 let current: readonly Hex[] | undefined;
 
 /** Puts the host's skin tones on the page, six `#rrggbb` colors or else the kit's own; called once the config is in. */
-export function initSkins(skins: readonly string[] | undefined): void {
+export function initSkins(skins: unknown): void {
 	const next =
-		skins?.length === 6 && skins.every((hex) => HEX.test(hex))
+		Array.isArray(skins) &&
+		skins.length === 6 &&
+		// Array.from, not every on the list itself: every skips the holes of a sparse list.
+		Array.from(skins).every((hex) => typeof hex === "string" && HEX.test(hex))
 			? (skins as readonly Hex[])
 			: undefined;
 	if (next === current) return;

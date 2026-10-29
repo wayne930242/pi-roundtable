@@ -84,6 +84,9 @@ describe("characters.skins", () => {
 		expect(refused({ ...minimal, characters: { skins: badSix } })).toContain(
 			"config characters.skins[3]",
 		);
+		expect(
+			refused({ ...minimal, characters: { skins: new Array(6) } }),
+		).toContain("config characters.skins[0]");
 		expect(refused({ ...minimal, characters: { skinTones: six } })).toContain(
 			"config characters.skinTones: unknown key",
 		);

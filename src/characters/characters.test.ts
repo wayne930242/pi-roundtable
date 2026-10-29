@@ -687,6 +687,7 @@ test("a skins option that is not six #rrggbb colors is refused and names the pla
 	expect(field([...six.slice(0, 2), "#fff", ...six.slice(3)])).toBe("skins[2]");
 	expect(field([...six.slice(0, 5), 123])).toBe("skins[5]");
 	expect(field([...six.slice(0, 5), "#12345g"])).toBe("skins[5]");
+	expect(field(new Array(6))).toBe("skins[0]");
 	expect(() => checkSkins(six, "characters.skins")).not.toThrow();
 	expect(fieldOf(() => checkSkins(six.slice(1), "characters.skins"))).toBe(
 		"characters.skins",
