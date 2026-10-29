@@ -641,7 +641,7 @@ test("the pinned list is a place to drop before it holds a room: hidden until a 
 // ── The room's own menu ────────────────────────────────────────────────────────────────────
 
 const RoomMenuFor = (props: { room: string; onClose?: () => void }) => (
-	<>
+	<ConfigContext.Provider value={config}>
 		<RoomMenu
 			open
 			room={props.room}
@@ -651,7 +651,7 @@ const RoomMenuFor = (props: { room: string; onClose?: () => void }) => (
 			onAskStartOver={() => undefined}
 		/>
 		<FolderDialogHost />
-	</>
+	</ConfigContext.Provider>
 );
 
 const menuLabels = () => all(".menu-text strong").map((one) => one.textContent);

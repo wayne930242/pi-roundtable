@@ -6,7 +6,7 @@ import type {
 	Authenticator,
 	Unauthenticated,
 } from "./auth/authenticator.ts";
-import { nextOfPath } from "./auth/next.ts";
+import { allowedNext, nextOfPath } from "./auth/next.ts";
 import { type Decision, decide } from "./authz.ts";
 import type { ConsoleApi } from "./console-api.ts";
 import { type ConsolePresentation, message } from "./features.ts";
@@ -270,10 +270,15 @@ export class ConsoleServer {
 			READ_METHODS.has(request.method) &&
 			!rest.startsWith("api/")
 		) {
-			// A path route can say where to come back to; a hash route's place never reaches the server.
-			const next = this.#options.pathRouting
-				? nextOfPath(rest, this.#options.surface ?? "app")
-				: undefined;
+			// A link can name where to come back to (`?next=`), and so can a path route; a hash route's place never reaches the server.
+			const surface = this.#options.surface ?? "app";
+			const named = allowedNext(
+				URL.parse(request.url)?.searchParams.get("next"),
+				surface,
+			);
+			const next =
+				named ??
+				(this.#options.pathRouting ? nextOfPath(rest, surface) : undefined);
 			return new Response(null, {
 				status: 303,
 				headers: {

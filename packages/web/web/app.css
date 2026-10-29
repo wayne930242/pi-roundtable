@@ -971,6 +971,20 @@ button.room-picture:hover:not(:disabled) {
 	}
 }
 
+.chip-more-item {
+	display: contents;
+}
+
+/* Folds a long run of tool calls: the newest few stay, the rest open on a tap. */
+.chip-more {
+	border: 1px dashed var(--border);
+	background: transparent;
+	color: var(--muted);
+	font: inherit;
+	cursor: pointer;
+	min-height: 0;
+}
+
 .chip-dot {
 	width: 0.45rem;
 	height: 0.45rem;

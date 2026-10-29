@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A running turn's strip shows only its three newest tool calls; a button counts the earlier ones and opens them all (and folds them again).
+
 ## [0.25.0] - 2026-10-29
 
 The core peer range is now `>=0.25.0 <0.26.0`.

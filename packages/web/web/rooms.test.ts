@@ -921,3 +921,41 @@ describe("muting", () => {
 		expect(state.rooms[GUIDE]?.view?.muted).toBeUndefined();
 	});
 });
+
+describe("the gate", () => {
+	const STEP = {
+		id: "name",
+		label: "Name",
+		required: true,
+		open: { page: "profile" },
+	};
+
+	test("a ready that carries steps closes the app on them, and a ready without any opens it", () => {
+		let state = run([{ ...READY, gate: [STEP] } as ServerFrame]);
+		expect(state.gate).toEqual([STEP]);
+		state = run([READY], state);
+		expect(state.gate).toEqual([]);
+	});
+
+	test("a gate frame replaces the steps owed, and an empty one opens the app", () => {
+		let state = run([READY]);
+		state = run([{ type: "gate", steps: [STEP] } as ServerFrame], state);
+		expect(state.gate).toEqual([STEP]);
+		state = run([{ type: "gate", steps: [] } as ServerFrame], state);
+		expect(state.gate).toEqual([]);
+	});
+
+	test("the frames of host rooms and notices leave an owner's state as it was", () => {
+		const before = run([READY]);
+		const after = run(
+			[
+				{ type: "host_card", room: "case:1" },
+				{ type: "list_changed", kind: "case" },
+				{ type: "page_changed", page: "crm" },
+				{ type: "badge", count: 2 },
+			] as unknown as ServerFrame[],
+			before,
+		);
+		expect(after).toEqual(before);
+	});
+});

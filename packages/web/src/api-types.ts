@@ -54,6 +54,8 @@ export interface ConfigView {
 		surface: string;
 		/** The WebSocket subprotocol to offer. */
 		protocol: string;
+		/** False when the host leaves the yolo and long-running switches out (`modes: false`). */
+		modes?: false;
 	};
 	/** The visitor's tier. Sent only where the host admits more than its owners (`admission: "access"`). */
 	tier?: AppTier;

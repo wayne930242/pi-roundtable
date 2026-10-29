@@ -7,7 +7,7 @@ import {
 	type FakePrincipal,
 	fakeIdentity,
 } from "./testing/fixtures.ts";
-import { consoleVisitors } from "./visitors.ts";
+import { accessVisitors, consoleVisitors } from "./visitors.ts";
 
 const ADA: FakePrincipal = {
 	id: "100000000000000001",
@@ -179,5 +179,103 @@ describe("consoleVisitors", () => {
 		expect(
 			await identify({ provider: "", subject: "x", name: "x" }),
 		).toMatchObject({ refusal: expect.stringContaining("no identity") });
+	});
+});
+
+describe("admitting members (admission access)", () => {
+	interface Held {
+		id: string;
+		tier?: "owner" | "admin" | "member";
+		disabled?: boolean;
+		linked?: string;
+	}
+	/** An identity that records which read each sign-in made, and answers from `held`. */
+	function setup(held: Held[], provisioned: Held[] = []) {
+		const calls: { read: string; facts: ActorFacts }[] = [];
+		const byIdentity = (name: string) =>
+			held.find((one) => one.linked === name);
+		const speakerOf = (one: Held | undefined) =>
+			one?.tier
+				? { principalId: one.id, tier: one.tier, speakerId: one.id }
+				: undefined;
+		const identity = {
+			principalOf: async (name: string) => byIdentity(name)?.id,
+			principal: async (id: string) => {
+				const one = [...held, ...provisioned].find((row) => row.id === id);
+				return one
+					? { id, displayName: id, disabled: one.disabled === true }
+					: undefined;
+			},
+			peek: async (facts: ActorFacts) => {
+				calls.push({ read: "peek", facts });
+				return speakerOf(byIdentity(`${facts.provider}:${facts.subject}`));
+			},
+			resolve: async (facts: ActorFacts) => {
+				calls.push({ read: "resolve", facts });
+				return speakerOf(provisioned[0]);
+			},
+		};
+		const identify = accessVisitors(identity as never, {
+			surface: "app",
+			logger: recordingLogger().logger,
+		});
+		return { identify, calls };
+	}
+	const person = (subject: string, roles?: string[]): ActorFacts => ({
+		provider: "oidc:idp",
+		subject,
+		name: subject,
+		...(roles ? { roles } : {}),
+	});
+
+	test("a first contact is provisioned through resolve, as the app's partial facts", async () => {
+		const { identify, calls } = setup([], [{ id: "new", tier: "member" }]);
+		expect(await identify(person("fresh"))).toMatchObject({
+			visitor: { principal: { id: "new" }, tier: "member" },
+		});
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatchObject({
+			read: "resolve",
+			facts: { surface: "app", partial: true },
+		});
+	});
+
+	test("a person already linked is only read, never recorded, and keeps the tier the rules give", async () => {
+		const { identify, calls } = setup([
+			{ id: "web-member", tier: "member", linked: "oidc:idp:web" },
+			{ id: "boss", tier: "admin", linked: "oidc:idp:boss" },
+		]);
+		expect(await identify(person("web"))).toMatchObject({
+			visitor: { principal: { id: "web-member" }, tier: "member" },
+		});
+		expect(await identify(person("boss", ["app:role:ops"]))).toMatchObject({
+			visitor: { tier: "admin", roles: ["app:role:ops"] },
+		});
+		expect(calls.map((call) => call.read)).toEqual(["peek", "peek"]);
+		expect(calls.every((call) => call.facts.partial === true)).toBe(true);
+	});
+
+	test("a disabled principal, a person with no tier, and a request with no actor are refused", async () => {
+		const { identify } = setup([
+			{ id: "off", tier: "member", disabled: true, linked: "oidc:idp:off" },
+			{ id: "none", linked: "oidc:idp:none" },
+		]);
+		expect(await identify(person("off"))).toMatchObject({
+			refusal: expect.stringContaining("disabled"),
+		});
+		expect(await identify(person("none"))).toMatchObject({
+			refusal: expect.stringContaining("no tier"),
+		});
+		expect(await identify(undefined)).toEqual({
+			refusal: "the credential names no one",
+		});
+	});
+
+	test("a 0.8 id is no identity here either", async () => {
+		const { identify, calls } = setup([]);
+		expect(
+			await identify({ provider: "legacy", subject: "x", name: "x" }),
+		).toEqual({ refusal: "a 0.8 id is not an identity" });
+		expect(calls).toEqual([]);
 	});
 });

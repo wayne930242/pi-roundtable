@@ -33,7 +33,22 @@ export type { PushPolicy } from "./git-push.ts";
 export { simpleCommands } from "./shell-lexer.ts";
 export { YOLO_CARDED_SHELL_CLASSES } from "./shell-programs.ts";
 
-const MAX_SHOWN_COMMAND = 600;
+const MAX_SHOWN_COMMAND = 120;
+
+/**
+ * The command as a card's sentence shows it: its first line, cut to a length, in one code span.
+ * The card shows the whole command beside it; a second line or a backtick here would break the
+ * sentence's Markdown (a `# comment` line reads as a heading).
+ */
+function shownCommand(command: string): string {
+	const [line = ""] = command.trim().split("\n", 1);
+	const cut = line.length > MAX_SHOWN_COMMAND;
+	const more = cut || line.length < command.trim().length;
+	const shown = (cut ? line.slice(0, MAX_SHOWN_COMMAND) : line)
+		.replaceAll("`", "'")
+		.trimEnd();
+	return more ? `${shown} …` : shown;
+}
 
 /** Pi's built-in shell and file tools, which agent sessions activate. */
 export const SHELL_TOOLS = Object.freeze([
@@ -382,7 +397,7 @@ function shellHold(
 		let detail = `the ${toolName} call`;
 		try {
 			if (toolName === "bash" && typeof input.command === "string")
-				detail = `the shell command \`${input.command.slice(0, MAX_SHOWN_COMMAND)}\``;
+				detail = `the shell command \`${shownCommand(input.command)}\``;
 		} catch {
 			// The input itself cannot be read; the call is held without showing it.
 		}
@@ -410,7 +425,7 @@ function judge(
 		const [first] = found;
 		return first
 			? {
-					action: `run the shell command \`${command.slice(0, MAX_SHOWN_COMMAND)}\` on the host (${first.reason})`,
+					action: `run the shell command \`${shownCommand(command)}\` on the host (${first.reason})`,
 					classes: [...new Set(found.map((held) => held.class))],
 				}
 			: undefined;

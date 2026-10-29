@@ -663,3 +663,31 @@ describe("YOLO_CARDED_SHELL_CLASSES", () => {
 		expect(YOLO_CARDED_SHELL_CLASSES).not.toContain("shell.push");
 	});
 });
+
+describe("the held command in the card's words", () => {
+	test("a multi-line command shows its first line only, so its lines never read as Markdown", () => {
+		const command = [
+			"cd /tmp && cat > run.sh <<'EOF'",
+			"#!/usr/bin/env bash",
+			"# usage: ./run.sh query",
+			'echo "$(date)"',
+			"EOF",
+			"bash run.sh",
+		].join("\n");
+		const action = held(command) ?? "";
+		expect(action).toContain("`cd /tmp && cat > run.sh <<'EOF' …`");
+		expect(action).not.toContain("\n");
+		expect(action).not.toContain("# usage");
+	});
+
+	test("a long single line is cut with an ellipsis and a backtick never closes the code span early", () => {
+		const action = held(`rm -rf ${"a/".repeat(200)} \`x\``) ?? "";
+		const shown = action.slice(
+			action.indexOf("`") + 1,
+			action.lastIndexOf("`"),
+		);
+		expect(shown.length).toBeLessThanOrEqual(122);
+		expect(shown.endsWith(" …")).toBe(true);
+		expect(shown).not.toContain("`");
+	});
+});
