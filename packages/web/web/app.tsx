@@ -12,7 +12,6 @@ import { ErrorBoundary } from "./components/boundary.tsx";
 import { BrandMark } from "./components/brand-mark.tsx";
 import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
-import { Palette } from "./components/palette.tsx";
 import { Failure, Loading } from "./components/states.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { api, messageOf } from "./lib/api.ts";
@@ -43,19 +42,12 @@ const ActionMenuHost = lazy(() =>
 		default: m.ActionMenuHost,
 	})),
 );
-const AgentSheetHost = lazy(() =>
-	import("./components/agent-sheet.tsx").then((m) => ({
-		default: m.AgentSheetHost,
-	})),
+const Palette = lazy(() =>
+	import("./components/palette.tsx").then((m) => ({ default: m.Palette })),
 );
-const TeamSheetHost = lazy(() =>
-	import("./components/team-sheets.tsx").then((m) => ({
-		default: m.TeamSheetHost,
-	})),
-);
-const RoomConfirmHost = lazy(() =>
-	import("./components/room-confirms.tsx").then((m) => ({
-		default: m.RoomConfirmHost,
+const SheetHosts = lazy(() =>
+	import("./components/sheet-hosts.tsx").then((m) => ({
+		default: m.SheetHosts,
 	})),
 );
 const AgentPage = lazy(() =>
@@ -493,17 +485,13 @@ function Console({ config }: { config: ConfigView }) {
 			{hasApp ? (
 				<Suspense fallback={null}>
 					<ActionMenuHost />
-					<RoomConfirmHost />
-					<AgentSheetHost />
-					<TeamSheetHost />
+					<SheetHosts />
+					<Palette
+						open={palette}
+						onClose={() => setPalette(false)}
+						pages={items}
+					/>
 				</Suspense>
-			) : null}
-			{hasApp ? (
-				<Palette
-					open={palette}
-					onClose={() => setPalette(false)}
-					pages={items}
-				/>
 			) : null}
 		</LiveContext.Provider>
 	);

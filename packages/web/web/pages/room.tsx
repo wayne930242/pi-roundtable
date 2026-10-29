@@ -38,7 +38,6 @@ import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { useTableMode } from "../lib/table-mode.ts";
 import { openTeamSheet } from "../lib/team-sheet.ts";
-import { toast } from "../lib/toast.ts";
 
 // The scene a group room can switch to is read only when it is first shown, with the dialogue box and the table.
 const GroupScene = lazy(() =>
@@ -219,6 +218,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		.find((m) => m.kind === "agent");
 	const mine = room?.mode;
 	const agentName = view?.kind === "agent" ? view.name : undefined;
+	const groupName = view?.kind === "group" ? view.name : undefined;
 	const parent = view?.kind === "thread" ? view.parent : undefined;
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: dropping files on the room attaches them; the paperclip is the keyboard path
@@ -263,24 +263,17 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				</HeaderPicture>
 				<div className="room-title">
 					<h1>
-						{agentName ? (
+						{agentName || groupName ? (
 							<button
 								type="button"
 								className="room-name"
 								aria-haspopup="dialog"
-								title={t("Edit agent")}
-								onClick={() => openAgentSheet(agentName)}
-							>
-								{name}
-							</button>
-						) : view?.kind === "group" ? (
-							<button
-								type="button"
-								className="room-name"
-								aria-haspopup="dialog"
-								title={t("Edit group")}
+								title={agentName ? t("Edit agent") : t("Edit group")}
 								onClick={() =>
-									openTeamSheet({ kind: "group", name: view.name })
+									agentName
+										? openAgentSheet(agentName)
+										: groupName &&
+											openTeamSheet({ kind: "group", name: groupName })
 								}
 							>
 								{name}
@@ -450,7 +443,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						mode={mine}
 						muted={view?.muted === true}
 						agent={agentName}
-						group={view?.kind === "group" ? view.name : undefined}
+						group={groupName}
 						coordinator={view?.coordinator === true}
 						displayName={name}
 						readOnly={view?.readOnly ?? false}

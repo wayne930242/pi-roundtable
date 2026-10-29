@@ -328,7 +328,7 @@ export function RoomsPage(props: {
 		<div className="page" data-column={props.active ? "" : undefined}>
 			<header className="page-head">
 				<h1>{t("Rooms")}</h1>
-				<div className="page-head-end">
+				<div className="actions">
 					<button
 						type="button"
 						className="secondary search-button"

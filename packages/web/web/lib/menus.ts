@@ -6,7 +6,6 @@ import type {
 	RoomFile,
 	RoomMessage,
 } from "../../src/api-types.ts";
-import { openMenu } from "./action-menu.ts";
 import type { Leave, MenuSpec } from "./menu-items.ts";
 
 const items = () => import("./menu-items.ts");
@@ -36,17 +35,5 @@ export const fileMenuOf = (file: RoomFile): Promise<MenuSpec> =>
 	items().then((one) => one.fileMenu(file));
 
 /** Opens the "+" menu under a button: a new agent, a new group, and the archive. */
-export function openAddMenu(button: HTMLElement, leave?: Leave): void {
-	items().then(
-		(one) => {
-			const box = button.getBoundingClientRect();
-			openMenu({
-				...one.addMenu(leave),
-				at: { x: box.left, y: box.bottom },
-				via: "key",
-				source: button,
-			});
-		},
-		() => undefined,
-	);
-}
+export const openAddMenu = (button: HTMLElement, leave?: Leave): void =>
+	void items().then((one) => one.openAddMenu(button, leave));

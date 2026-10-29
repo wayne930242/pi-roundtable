@@ -8,7 +8,7 @@ import type {
 	RoomFile,
 	RoomMessage,
 } from "../../src/api-types.ts";
-import type { MenuItem } from "./action-menu.ts";
+import { type MenuItem, openMenu } from "./action-menu.ts";
 import { openAgentSheet } from "./agent-sheet.ts";
 import { store } from "./app-store.ts";
 import { quoteInto } from "./drafts.ts";
@@ -177,6 +177,17 @@ export function addMenu(leave: Leave = now): MenuSpec {
 			},
 		],
 	};
+}
+
+/** Opens the "+" menu under a button. */
+export function openAddMenu(button: HTMLElement, leave?: Leave): void {
+	const box = button.getBoundingClientRect();
+	openMenu({
+		...addMenu(leave),
+		at: { x: box.left, y: box.bottom },
+		via: "key",
+		source: button,
+	});
 }
 
 // ── A message ────────────────────────────────────────────────────────────────────────────────

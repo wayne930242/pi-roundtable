@@ -15,6 +15,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The new sheets (the new agent form, the group editor and the archive) are one chunk that loads when first opened; the creator takes an `onPick` mode that hands back the look instead of saving it.
 - Traditional Chinese for the new wording.
 
+### Changed
+
+- The search palette (⌘K) is a lazy chunk, and the question and sheet hosts (agent, team, confirms) share one, so the page loads them after the first screen instead of with it.
+
 ## [0.24.0] - 2026-10-29
 
 The core peer range is now `>=0.24.0 <0.25.0`.
