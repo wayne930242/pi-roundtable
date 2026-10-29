@@ -7,7 +7,11 @@ export type { ContextUse };
 /** The part of the runtime the agent team drives. */
 export type AgentTurnRunner = Pick<
 	AgentRuntime,
-	"runTurn" | "heldActions" | "startFresh" | "contextUsage"
+	| "runTurn"
+	| "heldActions"
+	| "startFresh"
+	| "deleteConversation"
+	| "contextUsage"
 >;
 
 /** One agent's message in a channel, posted under its name and avatar. */

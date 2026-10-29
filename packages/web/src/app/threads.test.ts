@@ -35,6 +35,22 @@ describeDb("dispatch threads of the app", () => {
 		expect((await threads.list(0)).map((t) => t.id)).not.toContain(thread.id);
 	});
 
+	test("the threads under a room are listed and removed with it, and no other room's", async () => {
+		const mine = await threads.open("app:agent.gone", "One");
+		const closed = await threads.open("app:agent.gone", "Two");
+		await threads.close(closed.id);
+		const other = await threads.open("app:agent.gone-too", "Other");
+		expect((await threads.under("app:agent.gone")).map((t) => t.id)).toEqual([
+			mine.id,
+			closed.id,
+		]);
+		expect(await threads.removeUnder("app:agent.gone")).toBe(2);
+		expect(await threads.under("app:agent.gone")).toEqual([]);
+		expect(await threads.get(other.id)).toBeDefined();
+		expect(await threads.removeUnder("app:agent.gone")).toBe(0);
+		await threads.removeUnder("app:agent.gone-too");
+	});
+
 	test("a thread is a read-only room of the app and nothing else's, open or closed", async () => {
 		const thread = await threads.open("app:agent.guide", "Look");
 		const rooms = new Rooms({

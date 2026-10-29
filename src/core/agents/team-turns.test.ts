@@ -100,6 +100,7 @@ function setup(
 			},
 			heldActions: async () => held,
 			startFresh: async () => undefined,
+			deleteConversation: async () => undefined,
 			contextUsage: () => undefined,
 		}),
 		selection: () => ({ id: "agent", tools: [], groups: [] }),

@@ -203,6 +203,10 @@ export class FakeRuntime implements AgentTurnRunner {
 	async startFresh(session: ChannelKey) {
 		this.fresh.push(session);
 	}
+	deleted: ChannelKey[] = [];
+	async deleteConversation(session: ChannelKey) {
+		this.deleted.push(session);
+	}
 	usage = new Map<ChannelKey, ContextUse>();
 	contextUsage(session: ChannelKey) {
 		return this.usage.get(session);

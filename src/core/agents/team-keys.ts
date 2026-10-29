@@ -217,3 +217,20 @@ export function keysOf(
 		];
 	return [];
 }
+
+/**
+ * Every conversation of an agent's seat in a group: the Discord channel's, when the group has
+ * one, then each room's on `roomSurfaces`.
+ */
+export function seatsOf(
+	group: AgentGroup,
+	agent: string,
+	roomSurfaces: readonly string[],
+): ChannelKey[] {
+	return [
+		...(group.channelId ? [groupSessionKey(group, agent)] : []),
+		...roomSurfaces.map((surface) =>
+			groupSessionKey(group, agent, groupRoomKey(surface, group.name)),
+		),
+	];
+}

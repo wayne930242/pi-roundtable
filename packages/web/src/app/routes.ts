@@ -40,6 +40,7 @@ import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
 import type { AppSurface } from "./surface.ts";
 import { TeamApi } from "./team-routes.ts";
+import type { WebThreads } from "./threads.ts";
 import { UploadRefusal, type Uploads } from "./uploads.ts";
 import {
 	EDIT_MAX_BYTES,
@@ -59,6 +60,8 @@ export interface AppApiOptions {
 	modes: Pick<ConversationModes, "set" | "peek">;
 	/** The rooms whose push the owners muted. */
 	mutes: Pick<PushMutes, "set">;
+	/** The dispatch threads, which go with the room they hang under. */
+	threads: Pick<WebThreads, "under" | "removeUnder">;
 	conversations: Pick<ConversationPort, "startFresh">;
 	identity: Pick<IdentityService, "tierOf">;
 	/** Present when the schedules pane is served. */
@@ -204,6 +207,7 @@ export class AppApi {
 			cards: options.cards,
 			mutes: options.mutes,
 			modes: options.modes,
+			threads: options.threads,
 			changed: () => options.changed(),
 		});
 	}

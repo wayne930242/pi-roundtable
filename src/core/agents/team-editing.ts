@@ -14,7 +14,7 @@ import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
-import { agentRoomKey, discordKey, keysOf } from "./team-keys.ts";
+import { agentRoomKey, discordKey, keysOf, seatsOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 
@@ -368,7 +368,17 @@ export class TeamEditing {
 		name: string,
 		change: { displayName?: string; members?: string[]; host?: string },
 	): Promise<string> {
-		const group = await this.#ctx.options.store.updateGroup(name, change);
+		const { store, surfaces } = this.#ctx.options;
+		const before = store.group(name);
+		const group = await store.updateGroup(name, change);
+		// A member taken out starts its seat over, so an agent of that name that joins later
+		// does not resume the old conversation.
+		const runtime = this.#ctx.options.runtime();
+		const rooms = surfaces?.roomSurfaces() ?? [];
+		for (const left of before?.members ?? [])
+			if (!group.members.includes(left))
+				for (const seat of seatsOf(group, left, rooms))
+					await runtime.startFresh(seat);
 		this.#ctx.retitle(group);
 		this.#ctx.changed();
 		return `Updated the group "${group.displayName}": members ${group.members.join(", ")}; host ${group.host}.`;

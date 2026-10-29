@@ -106,6 +106,32 @@ describeDb("an owner's operations on the team (Discord)", () => {
 		});
 	});
 
+	describe("editing a group's members", () => {
+		test("a member taken out starts its seat over, in the channel and in each room", async () => {
+			fx.surfaces.rooms = ["app"];
+			await fx.team.createGroup({
+				name: "trio",
+				displayName: "Trio",
+				members: ["infra", "doctor", "coordinator"],
+				host: "infra",
+			});
+			const channel = fx.store.group("trio")?.channelId ?? "";
+			fx.runtime.fresh.length = 0;
+			await fx.team.updateGroup("trio", { members: ["infra", "coordinator"] });
+			expect(fx.runtime.fresh).toEqual([
+				`agentgroup:${channel}.doctor`,
+				"agentgroup:app.group.trio.doctor",
+			]);
+			// Changing only the name or the host touches no seat.
+			fx.runtime.fresh.length = 0;
+			await fx.team.updateGroup("trio", {
+				displayName: "Three",
+				host: "coordinator",
+			});
+			expect(fx.runtime.fresh).toEqual([]);
+		});
+	});
+
 	describe("archive, restore and remove", () => {
 		test("an owner archives an agent without a calling agent, and may archive any non-coordinator", async () => {
 			const doctor = fx.store.agent("doctor")?.channelId ?? "";
@@ -214,6 +240,47 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			await fx.team.remove("notes", cleanup);
 			expect(ran).toBe(1);
 			expect(fx.store.agent("notes")).toBeUndefined();
+		});
+
+		test("remove makes the runtime forget an agent's conversations, its own and its seats in every group", async () => {
+			fx.surfaces.rooms = ["app"];
+			await fx.team.createAgent(OWNER_SPEAKER, NOTES);
+			await fx.team.createGroup({
+				name: "trio",
+				displayName: "Trio",
+				members: ["notes", "infra", "doctor"],
+			});
+			const channel = fx.store.agent("notes")?.channelId ?? "";
+			const groupChannel = fx.store.group("trio")?.channelId ?? "";
+			await fx.team.archive(undefined, "notes");
+			expect(fx.runtime.deleted).toEqual([]);
+			await fx.team.remove("notes");
+			expect(fx.runtime.deleted).toEqual([
+				discordKey(channel),
+				agentRoomKey("app", "notes"),
+				`agentgroup:${groupChannel}.notes`,
+				"agentgroup:app.group.trio.notes",
+			]);
+		});
+
+		test("remove makes the runtime forget a group's seats of every member", async () => {
+			fx.surfaces.rooms = ["app"];
+			await fx.team.createGroup({
+				name: "pair",
+				displayName: "Pair",
+				members: ["infra", "doctor"],
+			});
+			const channel = fx.store.group("pair")?.channelId ?? "";
+			await fx.team.archive(undefined, "pair");
+			await fx.team.remove("pair");
+			expect(fx.runtime.deleted).toEqual([
+				discordKey(channel),
+				"app:group.pair",
+				`agentgroup:${channel}.infra`,
+				"agentgroup:app.group.pair.infra",
+				`agentgroup:${channel}.doctor`,
+				"agentgroup:app.group.pair.doctor",
+			]);
 		});
 
 		test("remove refuses an agent the configuration seeds, which the next start would seed again", async () => {

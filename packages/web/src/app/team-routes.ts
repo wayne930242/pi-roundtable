@@ -36,6 +36,7 @@ import {
 import type { CardLog } from "./card-log.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
+import type { WebThreads } from "./threads.ts";
 
 /** The largest body of a character write: 4 KiB. */
 const MAX_CHARACTER_BYTES = 4 * 1024;
@@ -72,6 +73,8 @@ export interface TeamApiOptions {
 	cards: Pick<CardLog, "removeRoom">;
 	mutes: Pick<PushMutes, "set">;
 	modes: Pick<ConversationModes, "set">;
+	/** The dispatch threads under a room, which go with it. */
+	threads: Pick<WebThreads, "under" | "removeUnder">;
 	changed(): void;
 }
 
@@ -416,9 +419,19 @@ export class TeamApi {
 		return json({ entries } satisfies ArchiveView);
 	}
 
-	/** What the app kept of a room that is gone for good: its messages, cards and mute. */
+	/**
+	 * What the app kept of a room that is gone for good: its messages, cards and mute, and its
+	 * dispatch threads with theirs. It can run again after a failure: the threads go last, so
+	 * until then the retry still finds them.
+	 */
 	async #forget(room: string, by: Speaker): Promise<void> {
-		const { log, cards, mutes, modes } = this.#options;
+		const { log, cards, mutes, modes, threads, surface } = this.#options;
+		for (const thread of await threads.under(room)) {
+			const threadRoom = `${surface}:${thread.id}`;
+			await log.removeRoom(threadRoom);
+			await cards.removeRoom(threadRoom);
+		}
+		await threads.removeUnder(room);
 		await log.removeRoom(room);
 		await cards.removeRoom(room);
 		await mutes.set(room, false, by.principalId);

@@ -2,14 +2,21 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SQL } from "bun";
 import { type ActorFacts, AGENTS, SKILLS } from "pi-roundtable";
-import { describeDb, type TestHost, testHost } from "pi-roundtable/testing";
+import {
+	describeDb,
+	type TestHost,
+	testDatabaseUrl,
+	testHost,
+} from "pi-roundtable/testing";
 import type {
 	AgentProfileView,
 	AgentSkillsView,
 	ApiError,
 	ArchiveView,
 	GroupProfileView,
+	MessagesView,
 	RoomsView,
 } from "./api-types.ts";
 import { admitAs, refuse, type Verdict } from "./verifier.ts";
@@ -213,6 +220,47 @@ describeDb("making, archiving and grouping agents over a real host", () => {
 			prompt: "Keep notes.",
 		});
 		expect(remade.status).toBe(201);
+	});
+
+	test("a deleted agent leaves no history, thread or card for a new agent of the same name", async () => {
+		const room = "app:agent.ghost";
+		const thread = "thread.00000000-0000-4000-8000-000000000001";
+		const made = await send(app, "POST", "agents", {
+			name: "ghost",
+			displayName: "Ghost",
+			prompt: "Haunt.",
+		});
+		expect(made.status).toBe(201);
+		const sql = new SQL(testDatabaseUrl, { max: 1 });
+		try {
+			await sql`INSERT INTO web_threads (id, parent, title) VALUES (${thread}, ${room}, 'Old dispatch')`;
+			for (const where of [room, `app:${thread}`])
+				await sql`INSERT INTO web_room_messages (room, kind, author_name, text) VALUES (${where}, 'system', 'Notice', 'old line')`;
+			expect((await send(app, "DELETE", "agents/ghost")).status).toBe(400);
+			expect((await send(app, "POST", "agents/ghost/archive")).status).toBe(
+				200,
+			);
+			expect((await send(app, "DELETE", "agents/ghost")).status).toBe(200);
+			const kept: unknown[] = await sql`
+				SELECT 1 FROM web_room_messages WHERE room IN (${room}, ${`app:${thread}`})`;
+			const threads: unknown[] = await sql`
+				SELECT 1 FROM web_threads WHERE parent = ${room}`;
+			expect(kept).toEqual([]);
+			expect(threads).toEqual([]);
+			const again = await send(app, "POST", "agents", {
+				name: "ghost",
+				displayName: "Ghost again",
+				prompt: "Haunt.",
+			});
+			expect(again.status).toBe(201);
+			const history = (await (
+				await call(app, `rooms/${encodeURIComponent(room)}/messages`)
+			).json()) as MessagesView;
+			expect(history.messages).toEqual([]);
+			expect(await roomKeys(app)).not.toContain(`app:${thread}`);
+		} finally {
+			await sql.close();
+		}
 	});
 
 	test("the skills an agent carries are the host's catalog; built-in ones stay", async () => {

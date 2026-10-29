@@ -66,6 +66,7 @@ function setup(withWorkspace = true) {
 		team: {} as never,
 		avatars: {} as never,
 		mutes: {} as never,
+		threads: {} as never,
 		...(withWorkspace
 			? {
 					workspace: new WorkspaceFiles({

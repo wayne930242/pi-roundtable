@@ -39,6 +39,8 @@ let carried: Map<string, string[]>;
 let changes: number;
 let who: { id: string; tier: Tier };
 let speakers: Speaker[];
+/** The dispatch threads under each room, by parent. */
+let threadsOf: Map<string, string[]>;
 /** Makes the app's cleanup of a deleted room fail, as a database error would. */
 let cleanupFails: boolean;
 
@@ -211,6 +213,15 @@ function setup(withSkills = true) {
 		directory: directory as never,
 		team: team as never,
 		avatars: {} as never,
+		threads: {
+			under: async (parent: string) =>
+				(threadsOf.get(parent) ?? []).map((id) => ({ id, parent })),
+			removeUnder: async (parent: string) => {
+				if (!threadsOf.delete(parent)) return 0;
+				calls.push(`forget threads ${parent}`);
+				return 1;
+			},
+		} as never,
 		mutes: {
 			set: async (room: string, muted: boolean) => {
 				calls.push(`mute ${room} ${muted}`);
@@ -286,6 +297,7 @@ beforeEach(() => {
 	changes = 0;
 	speakers = [];
 	cleanupFails = false;
+	threadsOf = new Map();
 	who = { id: "owner", tier: "owner" };
 	agents = new Map([
 		["boss", agent({ name: "boss", displayName: "Boss" })],
@@ -561,6 +573,26 @@ describe("agent archive, restore and delete", () => {
 			"remove old",
 		]);
 		expect(changes).toBe(1);
+	});
+
+	test("deleting an agent also deletes its dispatch threads, with their messages and cards", async () => {
+		const server = setup();
+		threadsOf.set("app:agent.old", ["thread.a", "thread.b"]);
+		const response = await call(server, "DELETE", "agents/old");
+		expect(response.status).toBe(200);
+		expect(calls).toEqual([
+			"forget log app:thread.a",
+			"forget cards app:thread.a",
+			"forget log app:thread.b",
+			"forget cards app:thread.b",
+			"forget threads app:agent.old",
+			"forget log app:agent.old",
+			"forget cards app:agent.old",
+			"mute app:agent.old false",
+			"modes reset app:agent.old",
+			"remove old",
+		]);
+		expect(threadsOf.has("app:agent.old")).toBe(false);
 	});
 
 	test("a cleanup that fails halfway leaves the agent deletable, and the retry finishes", async () => {

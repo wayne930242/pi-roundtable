@@ -17,11 +17,11 @@ import {
 	discordIdOf,
 	groupLogName,
 	groupOfChannel,
-	groupRoomKey,
 	groupSessionKey,
 	homeScope,
 	keysOf,
 	roomScope,
+	seatsOf,
 } from "./team-keys.ts";
 import { categoryKind, groupTopic } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
@@ -278,8 +278,10 @@ export class TeamLifecycle {
 
 	/**
 	 * Deletes an archived agent or group for good, its name free again. Its carried skills are
-	 * detached; a Discord channel it had stays under Archive with its history, since Discord is
-	 * never asked to delete one. An active agent or group is refused: archive it first, and so is an
+	 * detached, and the runtime forgets its conversations (an agent's own, its seats in every
+	 * group, a group's members' seats), so nothing is left for a later agent or group of that name;
+	 * a Discord channel it had stays under Archive with its history, since Discord is never asked
+	 * to delete one. An active agent or group is refused: archive it first, and so is an
 	 * agent the host's seeds name, since the next start would seed it again.
 	 */
 	async remove(name: string, cleanup?: () => Promise<void>): Promise<string> {
@@ -299,6 +301,14 @@ export class TeamLifecycle {
 				`"${name}" is active; archive it before deleting it.`,
 			);
 		await cleanup?.();
+		// What a name keeps in the runtime would be picked up by the next agent or group made under it.
+		const runtime = this.#ctx.options.runtime();
+		const rooms = this.#rooms();
+		const seats = group
+			? group.members.flatMap((member) => seatsOf(group, member, rooms))
+			: store.groups().flatMap((other) => seatsOf(other, name, rooms));
+		const kept = [...keysOf(store, name, rooms), ...seats];
+		for (const key of kept) await runtime.deleteConversation(key);
 		if (agent) {
 			await store.deleteAgent(name);
 			const carried = skills?.carriedNames(name) ?? [];
@@ -321,7 +331,7 @@ export class TeamLifecycle {
 			await runtime.startFresh(key);
 		}
 		for (const group of left) {
-			for (const seat of this.#seats(group, agent.name, rooms))
+			for (const seat of seatsOf(group, agent.name, rooms))
 				await runtime.startFresh(seat);
 			if (group.status === "active") this.retitle(group);
 		}
@@ -338,7 +348,7 @@ export class TeamLifecycle {
 		const rooms = this.#rooms();
 		await store.archiveGroup(group.name);
 		for (const member of group.members)
-			for (const seat of this.#seats(group, member, rooms))
+			for (const seat of seatsOf(group, member, rooms))
 				await runtime.startFresh(seat);
 		logger.info({ group: group.name }, "group archived");
 		this.#ctx.changed();
@@ -347,23 +357,6 @@ export class TeamLifecycle {
 	/** The surfaces that host rooms; none for a team without a surface port. */
 	#rooms(): readonly string[] {
 		return this.#ctx.options.surfaces?.roomSurfaces() ?? [];
-	}
-
-	/**
-	 * Every conversation of an agent's seat in a group: the Discord channel's, when the group has
-	 * one, then each room's.
-	 */
-	#seats(
-		group: AgentGroup,
-		agent: string,
-		rooms: readonly string[],
-	): ChannelKey[] {
-		return [
-			...(group.channelId ? [groupSessionKey(group, agent)] : []),
-			...rooms.map((surface) =>
-				groupSessionKey(group, agent, groupRoomKey(surface, group.name)),
-			),
-		];
 	}
 
 	/** Writes a group's members and host into its channel topic, without waiting on Discord; a group without a channel has no topic. */

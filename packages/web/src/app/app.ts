@@ -278,6 +278,7 @@ export class OwnerApp {
 			files: stored,
 			modes,
 			mutes,
+			threads,
 			conversations: options.conversations,
 			identity,
 			...(options.schedules ? { schedules: options.schedules } : {}),

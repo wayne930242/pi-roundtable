@@ -82,6 +82,20 @@ export class WebThreads {
 		return row && threadOf(row);
 	}
 
+	/** Every thread under `parent`, open or closed. */
+	async under(parent: string): Promise<WebThread[]> {
+		const rows: Row[] = await this.#sql`
+			SELECT * FROM web_threads WHERE parent = ${parent} ORDER BY created_at, id`;
+		return rows.map(threadOf);
+	}
+
+	/** Deletes every thread under a room that is gone for good; returns how many. */
+	async removeUnder(parent: string): Promise<number> {
+		const rows: unknown[] = await this
+			.#sql`DELETE FROM web_threads WHERE parent = ${parent} RETURNING 1`;
+		return rows.length;
+	}
+
 	/**
 	 * The threads the room list shows, newest first: every open one, and the `closedLimit` newest
 	 * closed ones, which stay readable but are not kept in view for ever.
