@@ -189,6 +189,8 @@ export async function mountRoundTable(
 		},
 		setReducedMotion: (r) => inner!.setReducedMotion(r),
 		resetCamera: () => inner!.resetCamera(),
+		focus: (id, options) => inner!.focus(id, options),
+		focused: () => inner!.focused(),
 		getStats: () => inner!.getStats(),
 		dispose() {
 			inner?.dispose();

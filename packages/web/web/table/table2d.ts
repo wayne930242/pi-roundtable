@@ -52,6 +52,7 @@ export function createTable2D(
 	let seats: SeatInit[] = [];
 	const svgs = new Map<string, string>();
 	const states = new Map<string, SeatState>();
+	let focusId: string | null = opts.focus ?? null;
 
 	const root = document.createElement("div");
 	root.className = "t2d";
@@ -410,6 +411,11 @@ export function createTable2D(
 			draw();
 		},
 		resetCamera() {},
+		focus(id) {
+			focusId = id;
+			draw();
+		},
+		focused: () => focusId,
 		getStats(): TableStats {
 			return {
 				kind: "svg",

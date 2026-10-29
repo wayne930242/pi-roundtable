@@ -27,6 +27,8 @@ export interface SeatInit {
 	/** composed character SVG (from the art lab); placeholder bust is drawn until set */
 	avatarSvg?: string;
 	state?: SeatState;
+	/** The seat is asleep or away: its standee is dimmed. */
+	dim?: boolean;
 }
 
 /** What the table says to a screen reader, as the page words it. */
@@ -59,6 +61,14 @@ export interface TableOptions {
 	onNames?: (readable: boolean) => void;
 	/** The screen-reader words; English when absent. */
 	labels?: TableLabels;
+	/** The name on the owner's own podium, the camera's home; "You" when absent. */
+	ownerName?: string;
+	/** The seat the camera starts on; the whole ring when absent. */
+	focus?: string | null;
+	/** The camera was turned by the person (a zoom, a swipe in a close-up), not by the page: the page follows it. `null` is back to the whole ring. */
+	onFocus?: (id: string | null) => void;
+	/** The "+N" podium was tapped: the page shows the agents the ring leaves out. */
+	onMore?: () => void;
 }
 
 export interface TableStats {
@@ -91,6 +101,10 @@ export interface TableHandle {
 	setAvatar(id: string, svg: string): Promise<void>;
 	setReducedMotion(reduced: boolean): void;
 	resetCamera(): void;
+	/** Turns the camera to a seat (a close-up) or back to the whole ring (`null`); cuts under reduced motion or when `cut`. */
+	focus(id: string | null, options?: { cut?: boolean }): void;
+	/** The seat the camera is on, or null for the whole ring. */
+	focused(): string | null;
 	getStats(): TableStats;
 	dispose(): void;
 }

@@ -69,9 +69,15 @@ export function seatUid(index: number, id: string): string {
 	return `s${index}${id.toLowerCase().replace(/[^a-z0-9]/g, "")}`.slice(0, 16);
 }
 
+/** What the standee shows of the figure: the whole width and head-room for tall hats, down to the waist where the kit cuts it off. */
+const STANDEE_BOX = { x: -7, y: -3, w: 114, h: 100 } as const;
+const STANDEE_PX = 256;
+
 /**
- * A seat's picture: the character in the shield, still, wearing the face of its state. The table
- * draws its own badges, so the picture carries none; the state shows as the expression only.
+ * A seat's picture: the character from the waist up, without the round or shield frame, wearing the
+ * face of its state. It is the figure on a standee board, so its edge is drawn by the table (a thin
+ * light rim round the cut-out), not by a frame. The table draws its own badges, so the picture
+ * carries none; the state shows as the expression only.
  */
 export function seatPicture(
 	kit: Kit,
@@ -81,16 +87,23 @@ export function seatPicture(
 	uid: string,
 	skins?: readonly Hex[],
 ): string {
-	return kit.composeSvg(spec, {
-		frame: "shield",
+	const figure = kit.composeSvg(spec, {
+		bare: true,
 		look,
 		expr: seatExpressionOf(state, kit),
 		state: "idle",
 		still: true,
-		size: 256,
+		size: STANDEE_PX,
 		uid,
 		skins,
 	});
+	const { x, y, w, h } = STANDEE_BOX;
+	return figure
+		.replace('viewBox="0 0 100 100"', `viewBox="${x} ${y} ${w} ${h}"`)
+		.replace(
+			`width="${STANDEE_PX}" height="${STANDEE_PX}"`,
+			`width="${STANDEE_PX}" height="${Math.round((STANDEE_PX * h) / w)}"`,
+		);
 }
 
 export interface Timers {

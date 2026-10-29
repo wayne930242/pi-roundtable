@@ -195,4 +195,13 @@ describe("seatPicture", () => {
 		);
 		expect(ear(host)).toBe(EAST_ASIAN_SKINS[knight.skin] as string);
 	});
+
+	test("is the figure from the waist up with no frame, cropped to a standee's proportions", async () => {
+		const kit = await loadKit();
+		const svg = seatPicture(kit, knight, "camelot-dark", "idle", "s0knight");
+		expect(svg).not.toContain('class="frame"');
+		expect(svg).toContain('viewBox="-7 -3 114 100"');
+		expect(svg).toContain('width="256" height="225"');
+		expect(svg).not.toContain('viewBox="0 0 100 100"');
+	});
 });
