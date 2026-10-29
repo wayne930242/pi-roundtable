@@ -266,7 +266,11 @@ export class PgAgentStore implements AgentDirectory {
 		});
 	}
 
-	/** Archives an agent and takes it out of every group; says which groups it left. */
+	/**
+	 * Archives an agent and takes it out of every group; says which groups it left. A group this
+	 * would leave with too few members is archived whole, its members kept, so it can be restored
+	 * once they are all active again.
+	 */
 	async archiveAgent(name: string): Promise<AgentGroup[]> {
 		return this.#serial(async () => {
 			const rows: AgentRow[] = await this.#sql`
@@ -278,14 +282,12 @@ export class PgAgentStore implements AgentDirectory {
 				if (group.status !== "active" || !group.members.includes(name))
 					continue;
 				const members = group.members.filter((m) => m !== name);
+				if (members.length < MIN_GROUP_MEMBERS) {
+					left.push(await this.#writeGroup(group.name, { status: "archived" }));
+					continue;
+				}
 				const host = group.host === name ? (members[0] ?? name) : group.host;
-				left.push(
-					await this.#writeGroup(group.name, {
-						members,
-						host,
-						status: members.length < MIN_GROUP_MEMBERS ? "archived" : "active",
-					}),
-				);
+				left.push(await this.#writeGroup(group.name, { members, host }));
 			}
 			return left;
 		});

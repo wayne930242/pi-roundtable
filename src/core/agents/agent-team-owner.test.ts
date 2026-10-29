@@ -190,12 +190,35 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			await fx.team.restore("pair");
 			expect(fx.store.group("pair")?.status).toBe("active");
 			expect(fx.channels.categoryOf(channel)).toBe("Groups");
-			// Archiving a member takes it out of the group, which then has too few members.
+			// Archiving a member that leaves too few archives the group whole, members kept.
 			await fx.team.archive(undefined, "pair");
 			await fx.team.archive(undefined, "doctor");
 			await expect(fx.team.restore("pair")).rejects.toThrow(AgentError);
 			expect(fx.store.group("pair")?.status).toBe("archived");
 			expect(fx.channels.categoryOf(channel)).toBe("Archive");
+		});
+
+		test("a group archived because a member was archived restores once that member does", async () => {
+			await fx.team.createGroup({
+				name: "pair",
+				displayName: "Pair",
+				members: ["infra", "doctor"],
+				host: "doctor",
+			});
+			await fx.team.archive(undefined, "doctor");
+			// The group is archived with both members, not left with one.
+			expect(fx.store.group("pair")).toMatchObject({
+				status: "archived",
+				members: ["infra", "doctor"],
+				host: "doctor",
+			});
+			await expect(fx.team.restore("pair")).rejects.toThrow(AgentError);
+			await fx.team.restore("doctor");
+			await fx.team.restore("pair");
+			expect(fx.store.group("pair")).toMatchObject({
+				status: "active",
+				members: ["infra", "doctor"],
+			});
 		});
 
 		test("remove deletes only an archived agent, detaches its skills and frees its name", async () => {

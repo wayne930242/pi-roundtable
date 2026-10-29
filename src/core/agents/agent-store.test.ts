@@ -296,7 +296,10 @@ describeDb("PostgreSQL", () => {
 			expect(group?.members).toEqual(["infra", "doctor"]);
 			expect(group?.host).toBe("infra");
 			await store.archiveAgent("doctor");
+			// The group left with one is archived whole, so it can be restored with its members.
 			expect(store.group("ops")?.status).toBe("archived");
+			expect(store.group("ops")?.members).toEqual(["infra", "doctor"]);
+			expect(store.group("ops")?.host).toBe("infra");
 		});
 
 		test("each message reaches each member once, its own excluded", async () => {
