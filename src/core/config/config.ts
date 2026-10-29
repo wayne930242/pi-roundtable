@@ -28,6 +28,7 @@ import {
 import { checkAgentServerOff, checkAgentTeamKeys } from "./agent-team.ts";
 import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema } from "./config-schema.ts";
+import type { ConversationsConfig } from "./conversations.ts";
 import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
 import { opsOf, type ResolvedOps } from "./ops.ts";
 import type { SkillsConfig } from "./skills-config.ts";
@@ -110,6 +111,8 @@ export interface RoundtableConfig extends LimitsConfig {
 	dataDir: string;
 	/** What the host does with the files people send, such as removing them after a retention period. */
 	attachments?: AttachmentsConfig;
+	/** What the host does with the conversations it has recorded, such as deleting idle ones of a kind. */
+	conversations?: ConversationsConfig;
 	/** Pi's agent directory, holding the model logins; default `<dataDir>/pi`. */
 	agentDir?: string;
 	/** The model of the agents, written `<provider>/<id>`. */
@@ -257,6 +260,8 @@ export interface ResolvedConfig extends ResolvedLimits {
 	dataDir: string;
 	/** Absent `retention`: used files live as long as their conversation. */
 	attachments: AttachmentsConfig;
+	/** Days to keep each conversation kind after its last activity; a kind not listed is kept. */
+	conversations: { keepDays: Readonly<Record<string, number>> };
 	agentDir: string;
 	model: ModelRef;
 	thinking: ThinkingLevel;
@@ -357,6 +362,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		attachments: config.attachments?.retention
 			? { retention: config.attachments.retention }
 			: {},
+		conversations: { keepDays: { ...config.conversations?.keepDays } },
 		agentDir: config.agentDir ?? `${config.dataDir}/pi`,
 		model,
 		thinking,

@@ -19,8 +19,11 @@ import { ServiceRegistry } from "./services.ts";
 
 const ANSWER = serviceKey<number>("test.answer");
 
-/** A context the plugins under test never read. */
-const context = { logger: silentLogger() } as unknown as PluginContext;
+/** A context the plugins under test never read; the collection reads only the agent tools mode. */
+const context = {
+	logger: silentLogger(),
+	env: { agentTools: "full" },
+} as unknown as PluginContext;
 
 const plugin = (
 	name: string,

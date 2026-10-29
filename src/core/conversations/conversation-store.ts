@@ -113,6 +113,12 @@ export class PgConversationRegistry implements ConversationRegistry {
 		return row ? recordOf(row) : this.get(key);
 	}
 
+	async remove(key: ChannelKey): Promise<boolean> {
+		const rows: Row[] = await this
+			.#sql`DELETE FROM conversations WHERE key = ${key} RETURNING *`;
+		return rows.length > 0;
+	}
+
 	async setTitle(
 		key: ChannelKey,
 		title: string | undefined,

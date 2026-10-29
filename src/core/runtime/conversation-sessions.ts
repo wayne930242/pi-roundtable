@@ -102,7 +102,8 @@ export class ConversationSessions {
 				this.#factory.link().holds,
 				this.#options.owner,
 				await this.#options.confirmations.load(key),
-				agents
+				// A chat-only host's agents have no shell, so their gate judges no workspace.
+				agents && this.#options.agentTools !== "chat-only"
 					? {
 							workspace: agents.workDir,
 							...(agents.scratchDir ? { scratchDir: agents.scratchDir } : {}),

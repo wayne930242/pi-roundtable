@@ -425,6 +425,12 @@ export interface RoundtablePlugin {
 	 * dropped plugin provides a service this one does not replace.
 	 */
 	replaces?: readonly ServiceKey<unknown>[];
+	/**
+	 * Marks a plugin whose tools reach the host's machine, such as one that runs shells or edits
+	 * its files for the agents. A host that configures `agentServer: { tools: "chat-only" }`
+	 * refuses to start with one registered, with a ConfigError that names the plugin.
+	 */
+	hostAccess?: true;
 	setup(context: PluginContext): Promise<Contribution> | Contribution;
 	/**
 	 * Runs once every plugin is set up and linked, before any service starts; a failure stops the

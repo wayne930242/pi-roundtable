@@ -368,7 +368,7 @@ export async function defineRoundtable(
 			}),
 			...(assembly?.admin ?? []),
 			...(agentTeam?.skills ?? []),
-			conversationsPlugin(),
+			conversationsPlugin(undefined, config.conversations.keepDays),
 			modesPlugin(),
 			runtimePlugin({
 				owner,

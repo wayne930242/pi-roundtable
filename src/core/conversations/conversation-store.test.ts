@@ -187,6 +187,17 @@ describeDb("PgConversationRegistry", () => {
 		expect(await registry.setTitle("web:none", "x")).toBeUndefined();
 	});
 
+	test("remove forgets a record and says whether it was there", async () => {
+		await registry.register({
+			key: "web:gone",
+			kind: "support",
+			visibility: "shared",
+		});
+		expect(await registry.remove("web:gone")).toBe(true);
+		expect(await registry.get("web:gone")).toBeUndefined();
+		expect(await registry.remove("web:gone")).toBe(false);
+	});
+
 	test("a key without a surface prefix is refused", async () => {
 		await expect(
 			registry.register({

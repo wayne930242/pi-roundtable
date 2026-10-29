@@ -199,6 +199,7 @@ export function runtimePlugin(
 						},
 						...turnPolicy(options),
 						sessions: context.sessions,
+						agentTools: context.env.agentTools,
 						agentDir: options.agentDir,
 						modelRuntime: options.modelRuntime,
 						dataDir: options.dataDir,

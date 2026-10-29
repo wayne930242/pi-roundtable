@@ -3,14 +3,11 @@ import { join } from "node:path";
 import {
 	type AgentSession,
 	createAgentSession,
-	createBashToolDefinition,
 	DefaultResourceLoader,
 	type ModelRuntime,
 	type SessionManager,
-	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { channelSegment } from "../attachments/attachment-dir.ts";
-import type { ImageDrawer } from "../contract/providers.ts";
 import type { ClientPort } from "../domain/client.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
@@ -29,16 +26,13 @@ import {
 	ATTACH_FILE_TOOL,
 	attachFileExtension,
 } from "../shared/attach-file-tool.ts";
-import {
-	GENERATE_IMAGE_TOOL,
-	generateImageExtension,
-} from "../shared/generate-image-tool.ts";
+import { GENERATE_IMAGE_TOOL } from "../shared/generate-image-tool.ts";
 import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
-import type { WorkspaceRoots } from "../shared/workspace-files.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
 import { currentToolNames } from "../tool-tiers.ts";
 import { toolTurn } from "../tool-turn.ts";
+import { refuseShellTools } from "./chat-only.ts";
 import {
 	CompactionTiers,
 	compactionEngine,
@@ -64,7 +58,6 @@ import type { PromptSlot } from "./prompt-slot.ts";
 import type {
 	ChannelSession,
 	CompactionEnd,
-	CoreExtensions,
 	PiAgentRuntimeOptions,
 } from "./runtime-types.ts";
 import {
@@ -78,6 +71,9 @@ import {
 	sessionAddressee,
 	turnAddressee,
 } from "./session-conversation.ts";
+import { imageTools, scratchBash } from "./session-helpers.ts";
+
+export { imageTools, scratchBash };
 
 /** What a session factory asks of the runtime that owns the turns. */
 export interface SessionFactoryDeps {
@@ -139,11 +135,22 @@ export class SessionFactory {
 		);
 	}
 
+	/** Whether the host's agents carry no shell or file tools. */
+	get chatOnly(): boolean {
+		return this.#options.agentTools === "chat-only";
+	}
+
 	get plan(): SessionPlan {
 		return this.link().plan;
 	}
 
+	/**
+	 * The tools a selection turns into. A chat-only host refuses a selection that names a shell or
+	 * file tool, whatever built it (the agent team, `context.turns`, a plugin), so the turn fails
+	 * closed before any session runs it.
+	 */
 	toolsFor(selection: ToolSelection): string[] {
+		if (this.chatOnly) refuseShellTools(selection.tools, "a tool selection");
 		const groups = planOrder(this.plan).flatMap(
 			(tool) => tool.snapshot().groups ?? [],
 		);
@@ -360,7 +367,8 @@ export class SessionFactory {
 			},
 			conversation,
 			addressee,
-			...(agents
+			// A chat-only host's agents work in no workspace.
+			...(agents && !this.chatOnly
 				? {
 						workspace: {
 							workspace: cwd,
@@ -450,7 +458,7 @@ export class SessionFactory {
 			cwd,
 			agentDir,
 			// Pi's bash under its own name, run with TMPDIR at the agents' scratch dir.
-			...(agents?.scratchDir
+			...(agents?.scratchDir && !this.chatOnly
 				? { customTools: [scratchBash(cwd, agents.scratchDir)] }
 				: {}),
 			thinkingLevel: thinking,
@@ -478,23 +486,4 @@ export class SessionFactory {
 		});
 		return Object.assign(state, { session });
 	}
-}
-
-/** `generate_image` for a session of a host with an image provider; nothing without one. */
-export function imageTools(
-	images: ImageDrawer | undefined,
-	roots: WorkspaceRoots,
-): Pick<CoreExtensions, "generateImage"> {
-	return images ? { generateImage: generateImageExtension(images, roots) } : {};
-}
-
-/** Pi's bash tool with TMPDIR set to `scratchDir`, so tools that read TMPDIR and GNU `mktemp` write there (BSD `mktemp` needs `-p "$TMPDIR"`). */
-export function scratchBash(cwd: string, scratchDir: string): ToolDefinition {
-	// SAFETY: Pi's bash definition is a ToolDefinition typed by its own parameter schema, which the session takes as any custom tool.
-	return createBashToolDefinition(cwd, {
-		spawnHook: (context) => ({
-			...context,
-			env: { ...context.env, TMPDIR: scratchDir },
-		}),
-	}) as unknown as ToolDefinition;
 }

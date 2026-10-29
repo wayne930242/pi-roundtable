@@ -7,6 +7,7 @@ import { accessShape } from "./access.ts";
 import { discordShape } from "./adapters.ts";
 import { attachmentsShape } from "./attachments.ts";
 import type { Pronouns } from "./config.ts";
+import { conversationsShape } from "./conversations.ts";
 import { limitsShape } from "./limits.ts";
 import {
 	bool,
@@ -70,6 +71,7 @@ export const configSchema = shape({
 	database: shape({ url: text }),
 	dataDir: text,
 	attachments: attachmentsShape,
+	conversations: conversationsShape,
 	agentDir: optional(text),
 	model: text,
 	thinking: optional(oneOf(...THINKING_LEVELS)),

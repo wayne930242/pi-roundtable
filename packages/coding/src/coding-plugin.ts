@@ -163,6 +163,8 @@ export function coding(options: CodingOptions) {
 	};
 	return definePlugin({
 		name: "coding",
+		// Its workers run shells and edit files on the host's machine.
+		hostAccess: true,
 		provides: [CODING],
 		setup(context) {
 			const shelf = new RepoShelf(options.shelfDir, options.clone, {

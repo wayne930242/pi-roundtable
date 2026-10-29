@@ -1,5 +1,6 @@
 import {
 	CONVERSATIONS,
+	ConfigError,
 	definePlugin,
 	type HttpRoute,
 	IDENTITY,
@@ -9,6 +10,7 @@ import {
 	type WebSocketAccept,
 	type WebSocketRoute,
 } from "pi-roundtable";
+import { SHELL_TOOLS } from "pi-roundtable/kit";
 import {
 	type Admitted,
 	checkPersonas,
@@ -260,6 +262,9 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 				throw new Error(
 					"webChat: this version keeps uploaded files with context.attachments, which pi-roundtable 0.9.2 added. Update pi-roundtable to 0.9.2 or later.",
 				);
+			// A chat-only host (pi-roundtable 0.26) withholds the shell from every turn; say so at start, not at the first turn.
+			if (context.env?.agentTools === "chat-only")
+				refuseShellPersonas(options.personas);
 			const chat = new WebChat({
 				surface,
 				...(options.formatting === undefined
@@ -408,4 +413,17 @@ export function webChat(options: WebChatOptions): RoundtablePlugin {
 			};
 		},
 	});
+}
+
+/** Refuses a persona whose own selection names a shell or file tool, which a chat-only host withholds. */
+function refuseShellPersonas(personas: readonly WebPersona[]): void {
+	for (const persona of personas) {
+		const shell = (persona.selection?.tools ?? []).filter((tool) =>
+			(SHELL_TOOLS as readonly string[]).includes(tool),
+		);
+		if (shell.length > 0)
+			throw new ConfigError(
+				`webChat: persona "${persona.kind}" selects ${shell.join(", ")}, which agentServer: { tools: "chat-only" } withholds from every turn. Take the tool out of the persona's selection.`,
+			);
+	}
 }

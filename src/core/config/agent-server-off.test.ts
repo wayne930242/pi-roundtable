@@ -145,7 +145,12 @@ describe('agentServer: { tools: "chat-only" }', () => {
 	});
 
 	test("a config without the key, or with false, keeps the full tools", () => {
-		const { agentServer: _, discord: __, ...bare } = guest;
+		const bare = {
+			owner: guest.owner,
+			database: guest.database,
+			dataDir: guest.dataDir,
+			model: guest.model,
+		};
 		expect(
 			resolveConfig({
 				...bare,
@@ -162,6 +167,29 @@ describe('agentServer: { tools: "chat-only" }', () => {
 			);
 		}
 		expect(refusal({ ...guest, agentServer: { tool: "chat-only" } })).toContain(
+			"unknown key",
+		);
+	});
+});
+
+describe("conversations.keepDays", () => {
+	test("resolves to the days per kind, and to none when the key is left out", () => {
+		expect(resolveConfig(guest).conversations).toEqual({ keepDays: {} });
+		expect(
+			resolveConfig({
+				...guest,
+				conversations: { keepDays: { support: 365, chat: 30 } },
+			}).conversations,
+		).toEqual({ keepDays: { support: 365, chat: 30 } });
+	});
+
+	test("a day count that is not a whole number from 1 up is refused, naming the key", () => {
+		for (const bad of [0, -1, 1.5, "30"]) {
+			expect(
+				refusal({ ...guest, conversations: { keepDays: { support: bad } } }),
+			).toContain("config conversations.keepDays.support");
+		}
+		expect(refusal({ ...guest, conversations: { keep: {} } })).toContain(
 			"unknown key",
 		);
 	});

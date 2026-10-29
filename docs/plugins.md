@@ -136,6 +136,7 @@ definePlugin({
 	provides: [],              // optional: keys of the services setup provides to other plugins
 	replaces: [],              // optional: keys of built-in services this plugin takes over
 	identities: [],            // optional: identities the plugin's own credentials stand for
+	hostAccess: true,          // optional: its tools reach the host's machine (shell, files)
 	preflight() {},            // optional: a check that runs before anything starts
 	setup(context) {           // required: returns the parts the plugin adds
 		return { /* parts */ };
@@ -145,6 +146,9 @@ definePlugin({
 
 `definePlugin` checks the name and the presence of `setup`, then returns the typed object you gave it.
 Errors point to the plugin definition.
+
+`hostAccess: true` marks a plugin whose tools reach the host's machine, such as one whose workers run shells or edit files (`pi-roundtable-coding` declares it).
+A host that gives its agents [no shell](#chat-only-agents-no-shell-file-or-workspace-tools) refuses to start with such a plugin registered.
 
 A plugin whose `setup` returns `{}` and has no migrations, providers, or hooks stops startup (see [Errors](#errors-and-their-fixes)).
 
@@ -2123,6 +2127,48 @@ export function alwaysOn(tools: () => string[]) {
 }
 ```
 <!-- /example -->
+
+### Chat-only agents: no shell, file, or workspace tools
+
+By default an agent's turn carries Pi's shell and file tools (`bash`, `read`, `edit`, `write`) and works in a shared workspace on the host.
+A host whose agents only talk, such as one that serves a team through a web app and has no use for a shell, switches them off:
+
+```ts
+export default defineRoundtable({
+	// ...
+	agentServer: { tools: "chat-only" },
+});
+```
+
+The agent server stays, with its team, rooms, memory, schedules and the tools plugins add; `agentServer: false` still leaves it out, and a key left out keeps the full tools.
+Plugins read the mode as `context.env.agentTools` (`"full"` or `"chat-only"`), and `ResolvedConfig.agentTools` and `RoundtableOptions.environment.agentTools` carry it for a host that builds its own options.
+With `"chat-only"`:
+
+- No turn is offered `bash`, `read`, `edit` or `write`: the agent team's selection leaves them out, an agent's system prompt says it has no shell, file tools or workspace, its sessions get no workspace (no `attach_file`, no shell scratch dir) and its held-action gate judges none.
+- The host refuses to start with a plugin that declares `hostAccess: true` (`pi-roundtable-coding` does), with a `ConfigError` that names the plugin, and with a plugin whose `agentSelection` names one of the four tools. `roundtable doctor` prints `agent tools: chat-only (no shell, file or workspace tools)` and fails for a registered `hostAccess` plugin; with the full tools it prints `full`.
+- A selection that names one of the four tools anyway, whatever built it (a turn run through `context.turns` with its own `selection`, a plugin that grants tools at run time), is refused at the one place where `SessionFactory` turns a selection into active tools (`toolsFor` and `taskTools`): the turn fails closed with a `ConfigError`, which is logged as the turn's failure, and no session runs it.
+- `pi-roundtable-webchat` stops at start when a persona's own `selection` names one of the four tools.
+
+The mode is the host's decision, not a permission: it does not change who may use which tool (`toolTiers`), and an MCP server or other plugin that reaches the machine in a way it does not declare is outside what it can see.
+A plugin whose tools reach the host declares `hostAccess`, so that the one flag decides.
+
+### Conversation retention: `conversations.keepDays`
+
+The conversations run through `context.turns` are recorded (`CONVERSATIONS`).
+`conversations.keepDays` deletes the idle ones of a kind after a number of days, so a host that must not keep a kind of conversation for ever, such as support threads, does not:
+
+```ts
+export default defineRoundtable({
+	// ...
+	conversations: { keepDays: { support: 365, chat: 30 } },
+});
+```
+
+The key is a conversation's kind (`ConversationRecord.kind`) and the value a whole number of days from 1 up, counted from the conversation's last activity.
+A sweep runs when the host starts and once a day after: for each recorded conversation of a listed kind past its days, it calls `ConversationPort.deleteConversation`, which its claim carries out, and then forgets the record (`ConversationRegistry.remove`, optional on a hand-built registry).
+A conversation with a turn running or waiting (`"busy"`) is skipped and tried again at the next sweep; one whose claim cannot delete it is logged and kept.
+A kind not listed, and a host without the key, keeps its conversations as before.
+The agents' own channels are not recorded conversations and are not touched.
 
 ### `piPackages`: Pi extensions every session loads
 

@@ -1,6 +1,6 @@
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { ThinkingSetting } from "../models.ts";
-import type { PromptSection } from "../plugin.ts";
+import type { AgentTools, PromptSection } from "../plugin.ts";
 import type { AvatarStudio, SkillRegistry } from "../services.ts";
 import type { ToolSelection } from "../sessions.ts";
 import type { AgentChannels, AgentModels } from "./agent-ports.ts";
@@ -18,6 +18,8 @@ export interface AgentTeamOptions
 	seeds: () => readonly AgentSeed[];
 	/** Sections the plugins add to every agent turn's system prompt, read before each run. */
 	promptSections?: () => readonly PromptSection[];
+	/** "chat-only": agent turns carry no shell or file tools, and the prompt says so; default "full". */
+	agentTools?: AgentTools;
 	/** The tools plugins defined for agents, read before each agent turn. */
 	pluginTools?: () => readonly string[];
 	/**

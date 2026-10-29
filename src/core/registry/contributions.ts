@@ -25,6 +25,7 @@ import {
 	type DirectChannelProvider,
 	directChannelsPort,
 } from "../presence/direct-channels.ts";
+import { refuseShellTools } from "../runtime/chat-only.ts";
 import {
 	compileSessionPlan,
 	type SessionTool,
@@ -451,8 +452,14 @@ export async function collectContributions(
 				registry.holdRules.push(tool.hold);
 			}
 		}
-		if (contribution.agentSelection)
+		if (contribution.agentSelection) {
+			if (context.env.agentTools === "chat-only")
+				refuseShellTools(
+					contribution.agentSelection().tools,
+					`plugin ${plugin.name}: agentSelection`,
+				);
 			registry.agentSelections.push(contribution.agentSelection);
+		}
 		if (events) registry.handlers.push({ plugin: plugin.name, events });
 		registry.routes.push(...http);
 		registry.holdRules.push(...holdRules);
