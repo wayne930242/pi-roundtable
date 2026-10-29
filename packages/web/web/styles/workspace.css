@@ -1,0 +1,482 @@
+/*
+ * The files pane: roots, a tree, breadcrumbs, a folder's rows, and a file in the editor. Colors
+ * are the page's tokens and the --code-* set (tokens.css, styles/camelot.css), so a look or a
+ * light/dark switch recolors it with nothing rebuilt. Only transform and opacity ever move.
+ */
+
+.ws-page {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+
+.ws {
+	height: 100%;
+}
+
+/* ── Header and breadcrumbs ─────────────────────────────────────────────────────────────────────── */
+
+.ws-head {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: var(--touch);
+	padding: var(--space-1) var(--space-3);
+	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+}
+
+.ws-root-picker {
+	width: auto;
+	min-width: 9rem;
+	max-width: 14rem;
+	min-height: 2.25rem;
+	flex: none;
+}
+
+.ws-crumbs {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	overflow-x: auto;
+	scrollbar-width: none;
+	white-space: nowrap;
+	font-size: var(--text-sm);
+	-webkit-overflow-scrolling: touch;
+}
+
+.ws-crumbs::-webkit-scrollbar {
+	display: none;
+}
+
+.ws-crumbs a {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	min-height: 2rem;
+	padding: 0 var(--space-3);
+	border-radius: var(--radius-full);
+	background: var(--surface-2);
+	color: var(--text);
+	text-decoration: none;
+	max-width: 14rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ws-crumbs a[aria-current="page"] {
+	background: var(--accent-soft);
+	color: var(--accent-ink);
+	font-weight: var(--weight-medium);
+}
+
+.ws-crumbs a:hover {
+	background: var(--surface-3);
+}
+
+.ws-crumbs a + a::before {
+	content: "/";
+	margin-right: var(--space-2);
+	color: var(--muted);
+}
+
+.ws-head-actions {
+	flex: none;
+	display: flex;
+	gap: 0;
+}
+
+/* ── Body: tree and main ────────────────────────────────────────────────────────────────────────── */
+
+.ws-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+
+.ws-main {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: auto;
+}
+
+.ws-tree {
+	flex: none;
+	width: var(--ws-tree, 280px);
+	overflow: auto;
+	padding: var(--space-2) 0;
+	border-right: 1px solid var(--border);
+	background: var(--surface);
+	font-size: var(--text-sm);
+}
+
+.ws-resizer {
+	flex: none;
+	width: 6px;
+	margin-left: -3px;
+	margin-right: -3px;
+	z-index: 1;
+	cursor: col-resize;
+	touch-action: none;
+}
+
+.ws-resizer:hover,
+.ws-resizer:focus-visible {
+	background: var(--accent-soft);
+	outline: none;
+}
+
+.ws-tree-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ws-tree-row {
+	display: flex;
+	align-items: center;
+	min-height: 1.875rem;
+	padding-right: var(--space-2);
+}
+
+.ws-tree-row a,
+.ws-tree-off {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 1.75rem;
+	padding: 0 var(--space-2);
+	border-radius: var(--radius-sm);
+	color: var(--text);
+	text-decoration: none;
+}
+
+.ws-tree-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ws-tree-row a:hover {
+	background: var(--surface-2);
+}
+
+.ws-tree-row[data-selected] a {
+	background: var(--accent-soft);
+	color: var(--accent-ink);
+}
+
+.ws-tree-row[data-quiet] {
+	opacity: 0.6;
+}
+
+.ws-tree-off {
+	color: var(--muted);
+	cursor: not-allowed;
+}
+
+.ws-tree-note {
+	margin: 0;
+	padding: var(--space-1) var(--space-3);
+	color: var(--muted);
+	font-size: var(--text-xs);
+}
+
+.ws-twist {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	width: 1.5rem;
+	min-width: 1.5rem;
+	height: 1.5rem;
+	min-height: 1.5rem;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--muted);
+}
+
+.ws-twist svg {
+	transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.ws-twist[aria-expanded="true"] svg {
+	transform: rotate(90deg);
+}
+
+/* ── A folder ───────────────────────────────────────────────────────────────────────────────────── */
+
+.ws-dir {
+	padding: var(--space-2) var(--space-3)
+		calc(var(--space-6) + var(--safe-bottom));
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+
+.ws-rows {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.ws-row {
+	display: flex;
+	align-items: center;
+	border-bottom: 1px solid var(--border);
+}
+
+.ws-row[data-quiet] {
+	opacity: 0.6;
+}
+
+.ws-row-link {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-height: 3rem;
+	padding: var(--space-2) var(--space-1);
+	color: var(--text);
+	text-decoration: none;
+}
+
+.ws-row-link[data-off] {
+	color: var(--muted);
+}
+
+a.ws-row-link:hover {
+	background: var(--surface-2);
+}
+
+.ws-row-icon {
+	flex: none;
+	color: var(--muted);
+}
+
+.ws-row-main {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.ws-row-main strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: var(--weight-medium);
+}
+
+/* ── A file ─────────────────────────────────────────────────────────────────────────────────────── */
+
+.ws-file {
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.ws-file-head {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	flex-wrap: wrap;
+	padding: var(--space-2) var(--space-3);
+	border-bottom: 1px solid var(--border);
+	background: var(--surface);
+}
+
+.ws-file-title {
+	flex: 1;
+	min-width: 8rem;
+	display: flex;
+	flex-direction: column;
+}
+
+.ws-file-title strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ws-actions {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.ws-banner {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+	padding: var(--space-2) var(--space-3);
+	background: var(--warn-soft);
+	color: var(--warn);
+	border-bottom: 1px solid var(--warn);
+	font-size: var(--text-sm);
+}
+
+.ws-banner-text {
+	flex: 1;
+	min-width: 10rem;
+}
+
+.ws-view {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--code-bg);
+}
+
+.ws-editor {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--code-bg);
+}
+
+.ws-editor .cm-editor {
+	flex: 1;
+	min-height: 0;
+}
+
+/* Editor font is 16px on a phone so a focus does not zoom the page; 13px beside a mouse. */
+.ws-editor {
+	--code-size: 16px;
+}
+
+@media (min-width: 720px) {
+	.ws-editor {
+		--code-size: 13px;
+	}
+}
+
+/* Before the editor's code has arrived, and where it cannot load, the text is shown plainly. */
+.ws-plain {
+	flex: 1;
+	margin: 0;
+	padding: var(--space-3);
+	overflow: auto;
+	font-family: var(--font-mono);
+	font-size: var(--code-size);
+	line-height: 1.55;
+	color: var(--code-fg);
+	tab-size: 2;
+}
+
+.ws-image {
+	flex: 1;
+	display: grid;
+	place-items: center;
+	padding: var(--space-4);
+	overflow: auto;
+	background: var(--surface-2);
+}
+
+.ws-image img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.ws-card {
+	margin: var(--space-4);
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--space-3);
+}
+
+.ws-card p {
+	margin: 0;
+}
+
+.button-link {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 2.5rem;
+	padding: 0 var(--space-4);
+	border-radius: var(--radius);
+	background: var(--accent);
+	color: var(--on-accent);
+	text-decoration: none;
+	font-weight: var(--weight-medium);
+}
+
+/* The bar of the phone's editor: above the keyboard, whose height the layout already follows. */
+.ws-editbar {
+	flex: none;
+	display: flex;
+	gap: var(--space-2);
+	overflow-x: auto;
+	padding: var(--space-2) var(--space-3)
+		calc(var(--space-2) + var(--safe-bottom));
+	border-top: 1px solid var(--border);
+	background: var(--surface);
+}
+
+.ws-editbar button {
+	flex: none;
+	min-height: var(--touch);
+	min-width: var(--touch);
+}
+
+/* ── Looks ──────────────────────────────────────────────────────────────────────────────────────── */
+
+[data-look="camelot"] .ws-head,
+[data-look="camelot"] .ws-file-head {
+	border-bottom-color: var(--gold-soft);
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--gold) 38%, transparent);
+}
+
+[data-look="camelot"] .ws-tree {
+	background: var(--surface);
+	border-right-color: var(--gold-soft);
+}
+
+[data-look="camelot"] .ws-tree-row[data-selected] a {
+	background: var(--gold-wash);
+	color: var(--accent-ink);
+}
+
+/* Rune bullets for the folders of the Camelot tree. */
+[data-look="camelot"] .ws-tree-row a svg,
+[data-look="camelot"] .ws-row-icon {
+	color: var(--gold);
+}
+
+[data-look="camelot"] .ws-view {
+	margin: var(--space-2) var(--space-3) var(--space-3);
+	border: 1px solid color-mix(in srgb, var(--gold) 34%, var(--border));
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+[data-look="camelot"] .ws-crumbs a[aria-current="page"] {
+	background: var(--gold-wash);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ws-twist svg {
+		transition: none;
+	}
+}

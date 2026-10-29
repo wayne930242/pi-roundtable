@@ -42,6 +42,21 @@
 	--long: light-dark(#6d3fc0, #b99cf5);
 	--long-soft: light-dark(#efe7fb, #2a2140);
 
+	/* Code: the files pane's editor and highlighting. Each text color is 4.5:1 or better on --code-bg. */
+	--code-bg: light-dark(#fbfbfd, #14171c);
+	--code-fg: light-dark(#1d2129, #e6e8ee);
+	--code-gutter-bg: light-dark(#f1f2f6, #191d23);
+	--code-gutter: light-dark(#5c6372, #8b93a1);
+	--code-selection: light-dark(#cfdcff, #2b3a66);
+	--code-active-line: light-dark(#f0f2f8, #1a1f27);
+	--code-keyword: light-dark(#a0267a, #f08bd0);
+	--code-string: light-dark(#1a6a35, #7fd69a);
+	--code-number: light-dark(#9a4a00, #ffb070);
+	--code-comment: light-dark(#5f6878, #8e98aa);
+	--code-type: light-dark(#0b6a8f, #6cc7e6);
+	--code-function: light-dark(#3a4fc0, #9db2ff);
+	--code-meta: light-dark(#7a5a00, #e0c070);
+
 	/* Aliases the older panes use */
 	--busy: var(--success);
 	--accent-text: var(--on-accent);

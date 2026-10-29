@@ -36,17 +36,31 @@ const API = "api/";
 /** An error the API answered, with the field it names when the refusal is about one. */
 export class ApiFailure extends Error {
 	readonly field: string | undefined;
-	constructor(message: string, field?: string) {
+	/** The HTTP status the API answered. */
+	readonly status: number | undefined;
+	/** The error body, for a caller that reads more than the message (a conflict names the file as it is now). */
+	readonly body: unknown;
+	constructor(
+		message: string,
+		field?: string,
+		status?: number,
+		body?: unknown,
+	) {
 		super(message);
 		this.name = "ApiFailure";
 		this.field = field;
+		this.status = status;
+		this.body = body;
 	}
 }
 
 const serverText = (text: string | undefined): string | undefined =>
 	text === undefined ? undefined : t(text);
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(
+	path: string,
+	init: RequestInit = {},
+): Promise<T> {
 	let response: Response;
 	try {
 		response = await fetch(`${API}${path}`, {
@@ -65,17 +79,24 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 			t("The console is unreachable. Reload the page to sign in again."),
 		);
 	}
-	if (response.status === 403)
+	const body: unknown = await response.json().catch(() => undefined);
+	// A 403 from the app's own API names its reason (a file in a read-only place, a link out of the
+	// workspace); one without is the sign-in's.
+	if (
+		response.status === 403 &&
+		typeof (body as { reason?: unknown } | undefined)?.reason !== "string"
+	)
 		throw new Error(
 			t("The request was refused. Reload the page to sign in again."),
 		);
-	const body: unknown = await response.json().catch(() => undefined);
 	if (!response.ok)
 		throw new ApiFailure(
 			// The app's API words its refusals in English; the console's arrive in the host's wording already.
 			serverText((body as ApiError | undefined)?.error) ??
 				t("The console answered {status}.", { status: response.status }),
 			(body as Partial<CharacterRefusal> | undefined)?.field,
+			response.status,
+			body,
 		);
 	return body as T;
 }

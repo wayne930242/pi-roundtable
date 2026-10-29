@@ -30,6 +30,7 @@ import {
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
+import { placeOf } from "./lib/workspace-place.ts";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -76,6 +77,10 @@ const SkillsPage = lazy(() =>
 const ConnectorsPage = lazy(() =>
 	import("./pages/connectors.tsx").then((m) => ({ default: m.ConnectorsPage })),
 );
+// The files pane is light too; its editor is a chunk of its own that waits for the first file to open.
+const WorkspacePage = lazy(() =>
+	import("./pages/workspace.tsx").then((m) => ({ default: m.WorkspacePage })),
+);
 // The table's page is light, and the scene it mounts is a chunk of its own that waits for the view to open.
 const TablePage = lazy(() =>
 	import("./pages/table.tsx").then((m) => ({ default: m.TablePage })),
@@ -90,6 +95,7 @@ const LABELS: Record<PaneName | "settings" | "more", string> = {
 	rooms: wording("Rooms"),
 	schedules: wording("Schedules"),
 	table: wording("Round table"),
+	workspace: wording("Files"),
 	settings: wording("Settings"),
 	more: wording("More"),
 };
@@ -216,6 +222,8 @@ function Console({ config }: { config: ConfigView }) {
 	const [palette, setPalette] = useState(false);
 	// Wide enough, the room list stands beside the open room.
 	const wide = useMedia("(min-width: 1024px)");
+	// From here the rail stands beside the page and the top and tab bars are gone.
+	const sideRail = useMedia("(min-width: 720px)");
 	const stage = useRef<HTMLDivElement>(null);
 	useViewportSize();
 	useRoomsSync(hasApp, live.version);
@@ -271,7 +279,9 @@ function Console({ config }: { config: ConfigView }) {
 	const pane = known(route.pane) ? route.pane : first;
 	// The room and the profile fill the screen; everything else is a page in a column.
 	const fill =
-		hasApp && (pane === "room" || pane === "agent") && Boolean(route.key);
+		(hasApp && (pane === "room" || pane === "agent") && Boolean(route.key)) ||
+		// The files fill the screen beside the rail, and a phone's file leaves the keyboard its room.
+		(pane === "workspace" && (sideRail || placeOf(route.key)?.dir === false));
 	const current = pane === "room" || pane === "agent" ? "rooms" : pane;
 
 	// A page opens at its top.
@@ -326,6 +336,8 @@ function Console({ config }: { config: ConfigView }) {
 				return <SchedulesPage />;
 			case "table":
 				return <TablePage />;
+			case "workspace":
+				return <WorkspacePage />;
 			case "settings":
 				return <SettingsPage />;
 			case "more":

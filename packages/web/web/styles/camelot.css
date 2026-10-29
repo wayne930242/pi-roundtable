@@ -33,6 +33,21 @@
 	--accent-soft: light-dark(#f0deb0, #2d3045);
 	--accent-ink: light-dark(#553705, #f0cd78);
 
+	/* Code, as parchment and iron-gall ink by day, the night castle and candle-gold by night */
+	--code-bg: light-dark(#fffaf0, #121c33);
+	--code-fg: light-dark(#2b2118, #efe6d2);
+	--code-gutter-bg: light-dark(#f1e5c6, #16213a);
+	--code-gutter: light-dark(#66543c, #bcb8ab);
+	--code-selection: light-dark(#ecd9a0, #31446e);
+	--code-active-line: light-dark(#f6ecd2, #18243f);
+	--code-keyword: light-dark(#7a500a, #e6b94c);
+	--code-string: light-dark(#8a1c1c, #ff9a8f);
+	--code-number: light-dark(#5f3d94, #c3a7f5);
+	--code-comment: light-dark(#6a5a42, #b0ab9d);
+	--code-type: light-dark(#26602d, #6fd49b);
+	--code-function: light-dark(#1f4a80, #8fb4ff);
+	--code-meta: light-dark(#764a07, #f0b95b);
+
 	/* Gold for the ornaments, which carry no text */
 	--gold: light-dark(#b98a2c, #e6b94c);
 	--gold-soft: light-dark(#e9d29a, #3b4256);

@@ -74,6 +74,7 @@ describe("the built-in zh-TW catalog", () => {
 				'web/pages/settings.tsx: t(LOOKS.find((option) => option.value === look)?.hint ?? "")',
 				"web/pages/settings.tsx: t(theme.label)",
 				"web/pages/transcript.tsx: t(LABELS[entry.role])",
+				"web/pages/workspace.tsx: t(REASONS[reason])",
 			].sort(),
 		);
 	});

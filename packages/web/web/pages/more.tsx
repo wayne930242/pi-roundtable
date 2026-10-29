@@ -7,6 +7,7 @@ export const PANE_ICONS: Record<PaneName | "settings" | "more", IconName> = {
 	rooms: "rooms",
 	schedules: "schedules",
 	table: "table",
+	workspace: "folder",
 	overview: "overview",
 	conversations: "conversations",
 	notes: "notes",
