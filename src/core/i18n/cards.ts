@@ -65,7 +65,7 @@ export function cardsZhTW(ctx: CatalogContext): ReturnType<typeof cardsEn> {
 		cardRunLabel: "執行",
 		cardCancelLabel: "取消",
 		cardCopyLabel: "複製",
-		cardCopyGone: "這張卡片的文字已經不在了；請再請助理顯示一次。",
+		cardCopyGone: "這張卡片的文字已經不在了；請再請夥伴顯示一次。",
 		cardCopyFile: "文字比較長，所以用檔案附上。",
 		cardApprovalFooter: "你核准之前不會執行；準備好再回覆就好。",
 		cardQuestionFooter: "準備好再回答就好。",

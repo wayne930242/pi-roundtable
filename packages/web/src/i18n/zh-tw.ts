@@ -327,8 +327,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	// 夥伴
 	"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.":
 		"職業、配色與部件。這裡、聊天室與 Discord 的圖像都會跟著改變。",
-	"Follow the assistant (automatic)": "跟隨助理（自動）",
-	"Follow the assistant": "跟隨助理",
+	"Follow the assistant (automatic)": "跟隨夥伴（自動）",
+	"Follow the assistant": "跟隨夥伴",
 	Look: "造型",
 	Name: "名稱",
 	Prompt: "提示詞",
@@ -347,7 +347,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Unreachable: "無法連線",
 	"Upstream gateways": "上游閘道",
 	"Upstream MCP gateways and virtual servers used by the assistant.":
-		"助理使用的上游 MCP 閘道與虛擬伺服器。",
+		"夥伴使用的上游 MCP 閘道與虛擬伺服器。",
 	"Used by": "使用者",
 	"Virtual servers": "虛擬伺服器",
 
@@ -358,7 +358,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	running: "進行中",
 	"Owner channels": "擁有者頻道",
 	"Direct messages and channels where the owner talks to the assistant.":
-		"擁有者與助理交談的私訊與頻道。",
+		"擁有者與夥伴交談的私訊與頻道。",
 	"Agent channels": "夥伴頻道",
 	"The agent server's one-to-one channels.": "夥伴伺服器的一對一頻道。",
 	"Group channels": "群組頻道",
@@ -395,12 +395,12 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Search notes": "搜尋記憶",
 	Text: "內容",
 	"What the assistant remembers. A change applies from the next turn.":
-		"助理記得的內容。變更會從下一個回合起生效。",
+		"夥伴記得的內容。變更會從下一個回合起生效。",
 	"Whose notes": "誰的記憶",
 	Core: "核心",
 	"Carried into every turn.": "每個回合都會帶入。",
 	Note: "備忘",
-	"Searched when the assistant needs them.": "助理需要時才會搜尋。",
+	"Searched when the assistant needs them.": "夥伴需要時才會搜尋。",
 	Events: "事件",
 	"Carried into every turn until their date.": "到期日之前每個回合都會帶入。",
 
@@ -415,7 +415,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Conversations opened through remote MCP; after deletion the session ID cannot be resumed.":
 		"透過遠端 MCP 開啟的對話；刪除後無法再用該工作階段 ID 接續。",
 	"Direct messages and channels where you mention the assistant. Start over archives; delete removes every archive permanently.":
-		"你在私訊與頻道中提及助理的對話。重新開始會封存；刪除會永久移除所有封存。",
+		"你在私訊與頻道中提及夥伴的對話。重新開始會封存；刪除會永久移除所有封存。",
 	"Enabled by {name} at {time}": "由{name}於 {time} 啟用",
 	idle: "閒置",
 	"Just compacted (limit {limit})": "剛完成壓縮（上限 {limit}）",
@@ -642,7 +642,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 
 	// 技能
 	"All agents": "所有夥伴",
-	"Assistant-written": "助理撰寫",
+	"Assistant-written": "夥伴撰寫",
 	"Built-in": "內建",
 	Carriers: "搭載對象",
 	"File missing": "檔案遺失",
@@ -672,7 +672,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Tool failed": "工具執行失敗",
 	"Tool result": "工具結果",
 	User: "使用者",
-	Assistant: "助理",
+	Assistant: "夥伴",
 	"Summary of earlier conversation": "先前對話的摘要",
 
 	// 伺服器回應
@@ -840,7 +840,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.class.paladin": "聖騎士",
 	"character.class.archivist": "檔案管理員",
 	// 職業適合的工作
-	"character.jobs.wizard": "協調者、規劃者、主要助理",
+	"character.jobs.wizard": "協調者、規劃者、主要夥伴",
 	"character.jobs.knight": "審查者、品質把關、守護者",
 	"character.jobs.scholar": "研究員、文獻回顧",
 	"character.jobs.smith": "程式開發、建置、重構",

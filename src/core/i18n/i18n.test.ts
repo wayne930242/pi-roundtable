@@ -78,6 +78,13 @@ describe("catalogs", () => {
 		expect(offenders).toEqual([]);
 	});
 
+	test("the Traditional Chinese catalog says 夥伴, never 助理", () => {
+		const hits = rendered(createZhTW(CTX)).filter(([, text]) =>
+			text.includes("助理"),
+		);
+		expect(hits).toEqual([]);
+	});
+
 	test("the Traditional Chinese catalog is not the English one", () => {
 		const en = new Map(rendered(createEn(CTX)));
 		const same = rendered(createZhTW(CTX)).filter(

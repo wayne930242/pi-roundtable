@@ -33,6 +33,13 @@ const missing = (keys: Iterable<string>): string[] =>
 	[...keys].filter((key) => !(key in ZH_TW));
 
 describe("the built-in zh-TW catalog", () => {
+	test("says 夥伴, never 助理", () => {
+		const hits = Object.entries(ZH_TW).filter(([, text]) =>
+			text.includes("助理"),
+		);
+		expect(hits).toEqual([]);
+	});
+
 	test("covers every string the browser app translates", () => {
 		expect(missing(client.client.keys())).toEqual([]);
 	});
