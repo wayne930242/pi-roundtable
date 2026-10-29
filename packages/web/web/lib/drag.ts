@@ -85,9 +85,14 @@ export function lift(options: Lift): () => void {
 					...(el.dataset.folder ? { folder: el.dataset.folder } : {}),
 					top,
 					bottom: top + height,
-					items: [...el.querySelectorAll<HTMLElement>("[data-drop-item]")].map(
-						(row) => ({ key: row.dataset.key ?? "", ...boxOf(row) }),
-					),
+					// A folded folder's rows are hidden: there is no place between them to drop, and the
+					// folder as a whole is what the finger rests on to open it.
+					items:
+						el.dataset.collapsed === undefined
+							? [...el.querySelectorAll<HTMLElement>("[data-drop-item]")].map(
+									(row) => ({ key: row.dataset.key ?? "", ...boxOf(row) }),
+								)
+							: [],
 				};
 			});
 			return;

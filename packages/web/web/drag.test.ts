@@ -190,8 +190,8 @@ test("another finger's events are ignored, and stopping early cleans up", async 
 test("a folded folder opens after the finger rests on it, and the list is measured again", async () => {
 	const { root, rows, folder } = page5();
 	folder.setAttribute("data-collapsed", "");
-	// A folded folder holds no rows to measure.
-	rows.C?.remove();
+	// A folded folder's rows, if any are in the document, are hidden: they are not places to drop between.
+	expect(rows.C?.isConnected).toBe(true);
 	const run = start(rows.A as HTMLElement, root, 120);
 	pointer("pointermove", 260);
 	await frames();
