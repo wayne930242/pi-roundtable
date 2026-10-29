@@ -59,6 +59,12 @@ export type {
 } from "./core/contract/attachments.ts";
 export { AttachmentRefusal } from "./core/contract/attachments.ts";
 export type {
+	ChannelContextSource,
+	ChannelContextSourceAttachment,
+	ChannelContexts,
+	ChannelContextVerdict,
+} from "./core/contract/channel-context.ts";
+export type {
 	Admission,
 	AttachmentContent,
 	AttachmentFile,
@@ -362,6 +368,7 @@ export type {
 export {
 	AGENTS,
 	BACKGROUND_TURNS,
+	CHANNEL_CONTEXT,
 	CONVERSATIONS,
 	DELEGATION,
 	IDENTITY,

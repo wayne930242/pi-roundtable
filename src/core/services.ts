@@ -3,6 +3,7 @@ import type { CharacterInput, CharacterSpec } from "../characters/index.ts";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
 import type { AvatarMode } from "./agents/agent-tools.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
+import type { ChannelContexts } from "./contract/channel-context.ts";
 import type {
 	BackgroundRunsAs,
 	ScheduledOutcome,
@@ -92,6 +93,9 @@ export const MODES: ServiceKey<ConversationModes> =
  */
 export const THREADS: ServiceKey<DispatchThreads> =
 	serviceKey<DispatchThreads>("roundtable.threads");
+/** The channel context of any surface, chosen by the message's channel key as `THREADS` is; provided by the `channel-context` plugin, which every host registers. */
+export const CHANNEL_CONTEXT: ServiceKey<ChannelContexts> =
+	serviceKey<ChannelContexts>("roundtable.channel-context");
 /** The agent server: its team, its directory, the runtime that runs every agent turn. Provided by the agent-server plugin. */
 export const AGENTS: ServiceKey<AgentServer> = serviceKey<AgentServer>(
 	"roundtable.agents",

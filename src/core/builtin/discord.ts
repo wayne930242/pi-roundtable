@@ -142,6 +142,8 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				ownerId: options.ownerId,
 				ownerName: options.ownerName,
 				prompts: (channel, scope) => cards.prompts(channel, scope),
+				// Built below, once the surface can read messages; called only after setup.
+				channelContext: (message, given) => context.of(message, given),
 				logger,
 				...(options.freshMarker === undefined
 					? {}
@@ -189,7 +191,8 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				threads,
 				// Built over the client's REST queue and sends nothing until a plugin calls it.
 				poster: restPoster(restOf(connected.rest())),
-				channelContext: (message, given) => context.of(message, given),
+				channelContext: (message, given) =>
+					connected.channelContext(message, given),
 			});
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.

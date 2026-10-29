@@ -3,6 +3,7 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { ModelRegistry, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { agentServerPlugin, LOCAL_TEAM_ID } from "./builtin/agent-server.ts";
+import { channelContextPlugin } from "./builtin/channel-context.ts";
 import { discordPlugin } from "./builtin/discord.ts";
 import { discordAdminPlugin } from "./builtin/discord-admin.ts";
 import { modulesPlugin, schedulerPlugin } from "./builtin/modules.ts";
@@ -344,6 +345,7 @@ export async function defineRoundtable(
 			promptsPlugin({ guildId: discord?.guild ?? LOCAL_TEAM_ID }),
 			// Before Discord, whose services hand out its instance, and the modules and agent server that use it.
 			threadsPlugin({ dataDir: config.dataDir }),
+			channelContextPlugin(),
 			...(assembly ? [assembly.discord] : []),
 			modulesPlugin({
 				owner,
