@@ -5,6 +5,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import type { RoomView } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useAccentStyle, useCharacters } from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
@@ -17,6 +18,7 @@ import {
 } from "../lib/dialogue.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
+import type { RoomState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
 import { PromptCard } from "./cards.tsx";
 import { PageCharacter } from "./character.tsx";
@@ -73,6 +75,37 @@ function useReveal(line: Line | undefined): {
 	};
 }
 
+/** The newest line of a room, with the room's state and view: what the box shows, and what a group scene follows. */
+export function useRoomLine(roomKey: string): {
+	room: RoomState | undefined;
+	view: RoomView | undefined;
+	line: Line | undefined;
+} {
+	const room = useSelector((state) => state.rooms[roomKey]);
+	const ownerName = useSelector((state) => state.principal?.name) ?? t("You");
+	/** Each agent's name to show, by name. */
+	const names = useSelector((state) => {
+		const found: Record<string, string> = {};
+		for (const one of Object.values(state.rooms))
+			if (one.view?.kind === "agent")
+				found[one.view.name] = one.view.displayName;
+		return found;
+	});
+	const view = room?.view;
+	const displayOf = (name: string | undefined): string =>
+		(name === undefined ? undefined : names[name]) ??
+		name ??
+		view?.displayName ??
+		roomKey;
+	const line = currentLine(
+		room,
+		ownerName,
+		displayOf,
+		view?.kind === "agent" ? view.name : undefined,
+	);
+	return { room, view, line };
+}
+
 /** The sheet that holds the room's whole message list, over the scene. */
 function LogSheet(props: {
 	roomKey: string;
@@ -124,6 +157,8 @@ export interface DialogueBoxProps {
 	roomKey: string;
 	/** Slid up (the camera has arrived) or down (the camera is on its way, or away). */
 	open: boolean;
+	/** The page streams the room's progress to this box; false where the room's own page already does. */
+	streams?: boolean;
 	/** Goes back to the whole ring; the box offers it as a button when given. */
 	onBack?: (() => void) | undefined;
 }
@@ -140,39 +175,21 @@ export function DialogueBox(props: DialogueBoxProps) {
 	const config = useConfig();
 	const history = useRoomHistory(roomKey);
 	// The room streams its progress to this page while the box speaks in it.
+	const streams = props.streams !== false;
 	useEffect(() => {
+		if (!streams) return;
 		connection.focus(roomKey);
 		return () => connection.focus(undefined);
-	}, [connection, roomKey]);
-	const room = useSelector((state) => state.rooms[roomKey]);
+	}, [connection, roomKey, streams]);
 	const limits = useSelector((state) => state.limits);
-	const ownerName = useSelector((state) => state.principal?.name) ?? t("You");
 	const cards = useSelector((state) =>
 		boxCards(state, roomKey, state.rooms[roomKey]?.messages.at(-1)?.id),
 	);
 	const characters = useCharacters();
-	/** Each agent's name to show, by name. */
-	const names = useSelector((state) => {
-		const found: Record<string, string> = {};
-		for (const one of Object.values(state.rooms))
-			if (one.view?.kind === "agent")
-				found[one.view.name] = one.view.displayName;
-		return found;
-	});
-	const view = room?.view;
-	const displayOf = (name: string | undefined): string =>
-		(name === undefined ? undefined : names[name]) ??
-		name ??
-		view?.displayName ??
-		roomKey;
-	const line = currentLine(
-		room,
-		ownerName,
-		displayOf,
-		view?.kind === "agent" ? view.name : undefined,
-	);
+	const { room, view, line } = useRoomLine(roomKey);
 	const agent = line?.who === "agent" ? line.agent : undefined;
 	const accent = useAccentStyle(agent ? characters[agent] : undefined);
+
 	const speaker = line ? line.author : (view?.displayName ?? roomKey);
 	const { shown, done, finish } = useReveal(line);
 	const [log, setLog] = useState(false);

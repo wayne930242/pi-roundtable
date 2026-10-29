@@ -10,6 +10,7 @@ import {
 } from "react";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
+import { GroupScene } from "../components/group-scene.tsx";
 import { GroupTable } from "../components/group-table.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
@@ -36,6 +37,7 @@ import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
+import { useTableMode } from "../lib/table-mode.ts";
 
 // The room's menu is read only when it is opened.
 const RoomMenu = lazy(() =>
@@ -113,6 +115,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	/** Under the header: where a group's table strip and panel go. */
 	const [tableSlot, setTableSlot] = useState<HTMLDivElement | null>(null);
 	const [dropped, setDropped] = useState<File[]>();
+	const [scene, setScene] = useTableMode(roomKey);
+	const inScene = view?.kind === "group" && scene;
 	const menuButton = useRef<HTMLButtonElement>(null);
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
@@ -297,7 +301,12 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					</span>
 				</div>
 				{view?.kind === "group" ? (
-					<GroupTable roomKey={roomKey} slot={tableSlot} />
+					<GroupTable
+						roomKey={roomKey}
+						slot={tableSlot}
+						scene={scene}
+						onScene={setScene}
+					/>
 				) : null}
 				<button
 					ref={menuButton}
@@ -325,75 +334,91 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				mode={mine && (mine.yolo || mine.longRunning) ? mine : undefined}
 				approved={room?.autoApproved ?? 0}
 			/>
-			<div
-				className="room-scroll"
-				ref={scroller}
-				onScroll={onScroll}
-				{...switcher.surface}
-			>
-				<div className="room-content" ref={content}>
-					{error ? <Failure message={error} /> : null}
-					{!loaded && !error ? <Loading /> : null}
-					{room?.more ? (
+			{inScene ? (
+				<GroupScene roomKey={roomKey} members={view?.members ?? []} />
+			) : (
+				<>
+					<div
+						className="room-scroll"
+						ref={scroller}
+						onScroll={onScroll}
+						{...switcher.surface}
+					>
+						<div className="room-content" ref={content}>
+							{error ? <Failure message={error} /> : null}
+							{!loaded && !error ? <Loading /> : null}
+							{room?.more ? (
+								<button
+									type="button"
+									className="secondary older"
+									disabled={loadingOlder}
+									onClick={loadOlder}
+								>
+									{loadingOlder ? t("Loading…") : t("Load earlier messages")}
+								</button>
+							) : null}
+							{loaded && items.length === 0 ? (
+								<Empty>{t("No messages yet. Say hello.")}</Empty>
+							) : null}
+							<RoomLog
+								roomKey={roomKey}
+								enterAfter={mountedLast.current}
+								quotable={!view?.readOnly}
+							/>
+							{room?.typing ? (
+								<ProgressStrip
+									name={lastAgent?.author ?? name}
+									progress={room.progress}
+								/>
+							) : null}
+						</div>
+					</div>
+					{away ? (
 						<button
 							type="button"
-							className="secondary older"
-							disabled={loadingOlder}
-							onClick={loadOlder}
+							className="to-end"
+							onClick={() => toEnd(true)}
 						>
-							{loadingOlder ? t("Loading…") : t("Load earlier messages")}
+							<Icon
+								name="send"
+								size={16}
+								style={{ transform: "rotate(180deg)" }}
+							/>
+							{t("Latest")}
 						</button>
 					) : null}
-					{loaded && items.length === 0 ? (
-						<Empty>{t("No messages yet. Say hello.")}</Empty>
-					) : null}
-					<RoomLog
-						roomKey={roomKey}
-						enterAfter={mountedLast.current}
-						quotable={!view?.readOnly}
-					/>
-					{room?.typing ? (
-						<ProgressStrip
-							name={lastAgent?.author ?? name}
-							progress={room.progress}
+					{view?.readOnly ? (
+						<p className="room-note">
+							{t(
+								"This is a dispatch thread. It shows what was sent and answered; reply in its parent room.",
+							)}{" "}
+							{parent ? (
+								<a href={hrefFor("room", parent)}>
+									{t("Open the parent room")}
+								</a>
+							) : null}
+						</p>
+					) : (
+						<Composer
+							key={roomKey}
+							draftKey={roomKey}
+							name={name}
+							limits={limits}
+							stoppable={Boolean(room?.stoppable)}
+							onSend={(text, files) => {
+								connection.say(roomKey, text, files);
+								toEnd(true);
+							}}
+							onStop={() => connection.send({ type: "stop", room: roomKey })}
+							{...(dropped
+								? {
+										incoming: dropped,
+										onIncomingTaken: () => setDropped(undefined),
+									}
+								: {})}
 						/>
-					) : null}
-				</div>
-			</div>
-			{away ? (
-				<button type="button" className="to-end" onClick={() => toEnd(true)}>
-					<Icon name="send" size={16} style={{ transform: "rotate(180deg)" }} />
-					{t("Latest")}
-				</button>
-			) : null}
-			{view?.readOnly ? (
-				<p className="room-note">
-					{t(
-						"This is a dispatch thread. It shows what was sent and answered; reply in its parent room.",
-					)}{" "}
-					{parent ? (
-						<a href={hrefFor("room", parent)}>{t("Open the parent room")}</a>
-					) : null}
-				</p>
-			) : (
-				<Composer
-					key={roomKey}
-					draftKey={roomKey}
-					name={name}
-					limits={limits}
-					stoppable={Boolean(room?.stoppable)}
-					onSend={(text, files) => {
-						connection.say(roomKey, text, files);
-						toEnd(true);
-					}}
-					onStop={() => connection.send({ type: "stop", room: roomKey })}
-					{...(dropped
-						? {
-								incoming: dropped,
-								onIncomingTaken: () => setDropped(undefined),
-							}
-						: {})}
-				/>
+					)}
+				</>
 			)}
 			{menuOpened ? (
 				<Suspense fallback={null}>

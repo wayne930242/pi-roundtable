@@ -1,5 +1,6 @@
+import { type Hall, hallOf, STATE_COLOR } from "./hall";
 import { fitLabel } from "./label";
-import { palette, STATE_COLOR } from "./themes";
+import { PLATE_FONT_STACK } from "./plate";
 import type {
 	Scheme,
 	SeatInit,
@@ -11,7 +12,13 @@ import type {
 } from "./types";
 import { ENGLISH_TABLE_LABELS } from "./types";
 
-/** 2D SVG round table: same contract as the WebGL view. State motion is CSS transform/opacity only (web/styles/table.css), and reduced-motion drops it. */
+/**
+ * The 2D council hall: the same ring of podiums with standees behind them, drawn as SVG in the hall's
+ * palette, for a browser without WebGL, a lost context, and the compact strip. It has the scene's
+ * own contract (seats, states, focus, a click on a seat), so the page's dialogue box works over it
+ * unchanged. State motion is CSS transform and opacity only (web/styles/table.css), and reduced
+ * motion drops it.
+ */
 
 const NS = "http://www.w3.org/2000/svg";
 
@@ -33,8 +40,17 @@ const dataUri = (svg: string) => {
 	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sized)}`;
 };
 
-/** Counts tables, so the ids one table's gradients carry are not the next table's: two tables share a page (the strip and the panel). */
+/** Counts tables, so the ids one table's filters carry are not the next table's: two tables share a page (the strip and the scene). */
 let tables = 0;
+
+/** How the podiums are laid out: how many rows, and how many in each. */
+export function layoutOf(
+	count: number,
+	compact: boolean,
+): { rows: number; perRow: number } {
+	const rows = compact || count <= 6 ? 1 : 2;
+	return { rows, perRow: Math.max(1, Math.ceil(count / rows)) };
+}
 
 export function createTable2D(
 	container: HTMLElement,
@@ -62,97 +78,106 @@ export function createTable2D(
 		container.style.position = "relative";
 	container.appendChild(root);
 
+	/** The filter that cuts a figure out as a standee: a light rim and a dark line round it. */
+	function rimFilter(defs: Element, hall: Hall, size: number) {
+		const rim = Math.max(1.6, size * 0.022);
+		const line = rim + Math.max(1.2, size * 0.014);
+		const filter = el(
+			"filter",
+			{
+				id: `${uid}-rim`,
+				x: "-15%",
+				y: "-15%",
+				width: "130%",
+				height: "130%",
+			},
+			defs,
+		);
+		el(
+			"feMorphology",
+			{ in: "SourceAlpha", operator: "dilate", radius: line, result: "far" },
+			filter,
+		);
+		el("feFlood", { "flood-color": hall.ink, result: "ink" }, filter);
+		el(
+			"feComposite",
+			{ in: "ink", in2: "far", operator: "in", result: "line" },
+			filter,
+		);
+		el(
+			"feMorphology",
+			{ in: "SourceAlpha", operator: "dilate", radius: rim, result: "near" },
+			filter,
+		);
+		el("feFlood", { "flood-color": hall.paper, result: "paper" }, filter);
+		el(
+			"feComposite",
+			{ in: "paper", in2: "near", operator: "in", result: "rim" },
+			filter,
+		);
+		const merge = el("feMerge", {}, filter);
+		for (const node of ["line", "rim", "SourceGraphic"])
+			el("feMergeNode", { in: node }, merge);
+	}
+
 	function draw() {
-		const pal = palette(theme, scheme);
+		const hall = hallOf(theme, scheme);
 		root.classList.toggle("reduced", reduced);
+		root.classList.toggle("focus", focusId !== null);
 		root.classList.toggle(
 			"dim",
 			seats.some((s) => states.get(s.id) === "speaking"),
 		);
+		const compact = opts.variant === "compact";
 		const W = Math.max(container.clientWidth, 200);
-		const H = Math.max(
-			container.clientHeight,
-			opts.variant === "compact" ? 60 : 200,
-		);
+		const H = Math.max(container.clientHeight, compact ? 60 : 200);
 		svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
 		svg.replaceChildren();
 		const n = Math.max(seats.length, 1);
-		const portrait = W / H < 0.8;
-		const cx = W / 2;
-		const cy = H / 2;
-		const av = Math.max(
-			44,
-			Math.min(
-				96,
-				Math.min(W, H) *
-					(n > 8 ? 0.13 : n > 6 ? 0.15 : 0.19) *
-					(portrait ? 1.1 : 1),
-			),
-		);
-		const Ry = Math.min(H / 2 - av * 1.15, portrait ? W * 0.5 : H);
-		// The widest a seat's plate gets, so the seats at the left and right edge keep theirs and the rug inside the box.
-		const widest = Math.max(
-			av * 1.5,
-			Math.max(11, Math.min(15, av * 0.2)) * 5.5 + 14,
-		);
-		const Rx = Math.min(
-			W / 2 - Math.max(av * 0.8, widest / 2) - 1,
-			portrait ? W : Ry * 1.75,
-		);
-		const tx = Math.max(Rx - av * 0.85, 30);
-		const ty = Math.max(Ry - av * 0.8, 24);
+		const { rows, perRow } = layoutOf(n, compact);
 
-		el("rect", { width: W, height: H, fill: pal.bg }, svg);
+		el("rect", { width: W, height: H, fill: hall.css.bg }, svg);
 		const defs = el("defs", {}, svg);
-		const fl = el("radialGradient", { id: `${uid}-floor` }, defs);
-		el("stop", { offset: 0, "stop-color": pal.rug }, fl);
-		el("stop", { offset: 0.9, "stop-color": pal.rug }, fl);
-		el("stop", { offset: 1, "stop-color": pal.rugEdge }, fl);
+		// the floor and the rune circle
+		const cx = W / 2;
+		const floorY = compact ? H * 0.82 : H * 0.62;
 		el(
 			"ellipse",
 			{
 				cx,
-				cy: cy + 10,
-				rx: Rx + av * 0.75,
-				ry: Ry + av * 0.5,
-				fill: `url(#${uid}-floor)`,
-			},
-			svg,
-		);
-		el(
-			"ellipse",
-			{
-				cx,
-				cy: cy + 16,
-				rx: tx * 1.05,
-				ry: ty * 1.1,
-				fill: "#000",
-				opacity: pal.shadow * 0.45,
-			},
-			svg,
-		);
-		el("ellipse", { cx, cy: cy + 9, rx: tx, ry: ty, fill: pal.rim }, svg);
-		el("ellipse", { cx, cy, rx: tx, ry: ty, fill: pal.table }, svg);
-		el(
-			"ellipse",
-			{
-				cx,
-				cy,
-				rx: tx * 0.5,
-				ry: ty * 0.5,
-				fill: "none",
-				stroke: pal.inlay,
+				cy: floorY,
+				rx: W * 0.47,
+				ry: compact ? H * 0.2 : H * 0.34,
+				fill: hall.css.floor,
+				stroke: hall.ink,
 				"stroke-width": 2,
-				opacity: 0.7,
-				"stroke-dasharray": pal.candles ? "5 4" : "0",
 			},
 			svg,
 		);
-		if (pal.candles)
-			el("circle", { cx, cy: cy - 4, r: 5, fill: pal.flame }, svg);
+		if (!compact)
+			el(
+				"ellipse",
+				{
+					cx,
+					cy: floorY,
+					rx: W * 0.3,
+					ry: H * 0.2,
+					fill: "none",
+					stroke: hall.css.ring,
+					"stroke-width": 3,
+					opacity: hall.night ? 0.9 : 0.7,
+				},
+				svg,
+			);
+
+		const slotW = W / perRow;
+		const room = compact ? H * 0.95 : H / (rows + 0.6);
+		const pw = Math.max(46, Math.min(slotW * 0.94, 132, room * 1.05));
+		const ph = pw * 0.72;
+		const figure = pw * 1.05;
+		rimFilter(defs, hall, figure);
 		seats.forEach((s2, i) => {
-			const gid = `${uid}-h${i}`;
-			const rg = el("radialGradient", { id: gid }, defs);
+			const rg = el("radialGradient", { id: `${uid}-h${i}` }, defs);
 			el(
 				"stop",
 				{ offset: 0, "stop-color": s2.color, "stop-opacity": 0.95 },
@@ -161,38 +186,28 @@ export function createTable2D(
 			el("stop", { offset: 1, "stop-color": s2.color, "stop-opacity": 0 }, rg);
 		});
 
-		const compact = opts.variant === "compact";
-		const placed = compact
-			? seats.map((s, i) => {
-					const slot = W / n;
-					const size = Math.min(H * 0.62, slot * 0.82);
-					return { s, x: slot * (i + 0.5), y: H * 0.7, size, a: 0 };
-				})
-			: seats
-					.map((s, i) => ({ s, a: Math.PI + (i / n) * Math.PI * 2 }))
-					.sort((p, q) => Math.cos(p.a) - Math.cos(q.a))
-					.map(({ s, a }) => {
-						const depth = 0.9 + 0.1 * Math.cos(a);
-						return {
-							s,
-							a,
-							x: cx + Math.sin(a) * Rx,
-							y: cy + Math.cos(a) * Ry + av * 0.22,
-							size: av * depth,
-						};
-					});
-		for (const { s, x, y, size } of placed) {
+		const rowY = (row: number) => {
+			if (compact) return H * 0.92;
+			return rows === 1 ? H * 0.62 : H * (0.46 + row * 0.3);
+		};
+		seats.forEach((s, i) => {
+			const row = Math.floor(i / perRow);
+			const inRow = Math.min(perRow, n - row * perRow);
+			const col = i - row * perRow;
+			const x = (W / inRow) * (col + 0.5);
+			const y = rowY(row);
 			const st = states.get(s.id) ?? "idle";
 			const g = el(
 				"g",
 				{
 					class: "seat",
 					"data-state": st,
+					...(focusId === s.id ? { "data-focus": "" } : {}),
 					transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
 					tabindex: opts.listBelow ? -1 : 0,
 					role: "button",
 					"aria-label": labels.seat(s.name, st),
-					color: pal.css.text,
+					color: hall.css.text,
 					...(opts.listBelow ? { "aria-hidden": "true" } : {}),
 				},
 				svg,
@@ -201,11 +216,11 @@ export function createTable2D(
 				"ellipse",
 				{
 					cx: 0,
-					cy: 4,
-					rx: size * 0.55,
-					ry: size * 0.16,
+					cy: 3,
+					rx: pw * 0.55,
+					ry: pw * 0.1,
 					fill: "#000",
-					opacity: pal.shadow * 0.6,
+					opacity: 0.35,
 				},
 				g,
 			);
@@ -214,86 +229,114 @@ export function createTable2D(
 				{
 					class: "halo",
 					cx: 0,
-					cy: -size * 0.5,
-					rx: size * 0.85,
-					ry: size * 0.85,
-					fill: `url(#${uid}-h${seats.indexOf(s)})`,
+					cy: -ph - figure * 0.35,
+					rx: figure * 0.8,
+					ry: figure * 0.8,
+					fill: `url(#${uid}-h${i})`,
 				},
 				g,
 			);
-			const beam = el(
+			el(
 				"polygon",
 				{
 					class: "beam",
-					points: `${-size * 0.12},${-size * 2.1} ${size * 0.12},${-size * 2.1} ${size * 0.5},0 ${-size * 0.5},0`,
+					points: `${-figure * 0.12},${-figure * 2.1} ${figure * 0.12},${-figure * 2.1} ${figure * 0.5},0 ${-figure * 0.5},0`,
 					fill: s.color,
-					opacity: 0.22,
+					opacity: 0.2,
 				},
 				g,
 			);
-			void beam;
 			const lift = el("g", { class: "lift" }, g);
-			const img = el(
-				"image",
-				{
-					href: svgs.has(s.id) ? dataUri(svgs.get(s.id)!) : "",
-					x: -size / 2,
-					y: -size,
-					width: size,
-					height: size,
-				},
-				lift,
-			);
-			if (!svgs.has(s.id)) {
-				img.remove();
+			const picture = svgs.get(s.id);
+			if (picture) {
+				el(
+					"image",
+					{
+						href: dataUri(picture),
+						x: -figure / 2,
+						y: -ph - figure * 0.78,
+						width: figure,
+						height: figure * 0.88,
+						filter: `url(#${uid}-rim)`,
+						...(s.dim ? { opacity: 0.55 } : {}),
+					},
+					lift,
+				);
+			} else {
 				el(
 					"circle",
-					{ cx: 0, cy: -size / 2, r: size * 0.36, fill: s.color },
+					{
+						cx: 0,
+						cy: -ph - figure * 0.3,
+						r: figure * 0.3,
+						fill: s.color,
+						stroke: hall.ink,
+						"stroke-width": 2,
+					},
 					lift,
 				);
 				const t = el(
 					"text",
 					{
 						x: 0,
-						y: -size / 2 + size * 0.12,
+						y: -ph - figure * 0.3 + figure * 0.1,
 						"text-anchor": "middle",
-						"font-size": size * 0.36,
+						"font-size": figure * 0.3,
 						"font-weight": 700,
 						fill: "#fff",
+						"font-family": PLATE_FONT_STACK,
 					},
 					lift,
 				);
-				t.textContent = s.name.slice(0, 1).toUpperCase();
+				t.textContent = Array.from(s.name)[0]?.toUpperCase() ?? "?";
 			}
-			const fs = Math.max(11, Math.min(15, size * 0.2));
-			// Room for about eight Latin letters even on a small seat, so a short name is never cut.
-			const pw = Math.min(
-				Math.max(size * 1.5, fs * 5.5 + 14),
-				Math.max(size * 0.9, s.name.length * fs * 0.62 + 18),
-			);
+			// the podium in front of the figure: a desk top, a body and the gold plate
+			const top = ph * 0.22;
 			el(
-				"rect",
+				"path",
 				{
-					class: "plate",
-					x: -pw / 2,
-					y: 2,
-					width: pw,
-					height: fs + 12,
-					rx: 7,
-					fill: pal.css.plate,
-					stroke: "none",
+					d: `M ${-pw * 0.5} ${-ph} L ${pw * 0.5} ${-ph} L ${pw * 0.42} 0 L ${-pw * 0.42} 0 Z`,
+					fill: hall.wood,
+					stroke: hall.ink,
+					"stroke-width": 2,
+					"stroke-linejoin": "round",
 				},
 				g,
 			);
 			el(
 				"rect",
 				{
-					x: -pw / 2,
-					y: 2 + fs + 7,
-					width: pw,
-					height: 5,
-					rx: 2.5,
-					fill: s.color,
+					x: -pw * 0.54,
+					y: -ph - top * 0.2,
+					width: pw * 1.08,
+					height: top,
+					rx: 2,
+					fill: hall.woodLight,
+					stroke: hall.ink,
+					"stroke-width": 2,
+				},
+				g,
+			);
+			const fs = Math.max(11, Math.min(15, pw * 0.14));
+			// room for about eight Latin letters even on a small seat, so a short name is never cut
+			const plateW = Math.min(
+				Math.max(pw * 0.9, fs * 5.5 + 14),
+				Math.max(pw * 0.9, s.name.length * fs * 0.62 + 18),
+				slotW * 0.98,
+			);
+			const plateH = fs + 8;
+			el(
+				"rect",
+				{
+					class: "plate",
+					x: -plateW / 2,
+					y: -ph * 0.78,
+					width: plateW,
+					height: plateH,
+					rx: 3,
+					fill: hall.gold,
+					stroke: hall.ink,
+					"stroke-width": 2,
 				},
 				g,
 			);
@@ -301,29 +344,38 @@ export function createTable2D(
 				"text",
 				{
 					x: 0,
-					y: 2 + fs + 1,
+					y: -ph * 0.78 + fs + 1.5,
 					"text-anchor": "middle",
 					"font-size": fs,
 					"font-weight": 700,
-					fill: pal.css.text,
+					"font-family": PLATE_FONT_STACK,
+					fill: hall.plateInk,
 				},
 				g,
 			);
-			// Whole while it fits the plate, an ellipsis only when it is longer than the plate.
-			label.textContent = fitLabel(s.name, (pw - 14) / fs);
+			label.textContent = fitLabel(s.name, (plateW - 8) / fs);
 			// badges
 			const badge = el(
 				"g",
 				{ class: "badge" },
-				el("g", { transform: `translate(${size * 0.42} ${-size * 0.9})` }, g),
+				el(
+					"g",
+					{ transform: `translate(${figure * 0.4} ${-ph - figure * 0.78})` },
+					g,
+				),
 			);
 			const isDone = st === "done";
 			const isErr = st === "error";
+			let badgeFill: string = hall.gold;
+			if (isDone) badgeFill = STATE_COLOR.done;
+			else if (isErr) badgeFill = STATE_COLOR.error;
 			el(
 				"circle",
 				{
-					r: size * 0.17,
-					fill: isDone ? STATE_COLOR.done : isErr ? STATE_COLOR.error : s.color,
+					r: figure * 0.15,
+					fill: badgeFill,
+					stroke: hall.ink,
+					"stroke-width": 2,
 				},
 				badge,
 			);
@@ -331,28 +383,36 @@ export function createTable2D(
 				"text",
 				{
 					x: 0,
-					y: size * 0.07,
+					y: figure * 0.06,
 					"text-anchor": "middle",
-					"font-size": size * 0.22,
+					"font-size": figure * 0.2,
 					"font-weight": 800,
-					fill: "#fff",
+					"font-family": PLATE_FONT_STACK,
+					fill: isDone || isErr ? "#fff" : hall.ink,
 				},
 				badge,
 			);
-			glyph.textContent = isDone ? "✓" : isErr ? "✕" : "!";
+			glyph.textContent = "!";
+			if (isDone) glyph.textContent = "✓";
+			else if (isErr) glyph.textContent = "✕";
 			// thinking mote
 			const orbit = el("g", { class: "orbit" }, g);
 			el(
 				"circle",
-				{ cx: size * 0.38, cy: -size * 0.62, r: size * 0.055, fill: s.color },
+				{
+					cx: figure * 0.4,
+					cy: -ph - figure * 0.5,
+					r: figure * 0.05,
+					fill: s.color,
+				},
 				orbit,
 			);
 			el(
 				"circle",
 				{
-					cx: -size * 0.38,
-					cy: -size * 0.62,
-					r: size * 0.035,
+					cx: -figure * 0.4,
+					cy: -ph - figure * 0.5,
+					r: figure * 0.035,
 					fill: s.color,
 					opacity: 0.6,
 				},
@@ -370,6 +430,39 @@ export function createTable2D(
 					opts.onSeatClick({ id: s.id, name: s.name });
 				}
 			});
+		});
+		if (!compact) {
+			// the owner's own place: a low desk at the near edge
+			const ow = Math.min(W * 0.34, 190);
+			const oy = H - 6;
+			el(
+				"rect",
+				{
+					x: cx - ow / 2,
+					y: oy - 22,
+					width: ow,
+					height: 22,
+					rx: 4,
+					fill: hall.wood,
+					stroke: hall.ink,
+					"stroke-width": 2,
+				},
+				svg,
+			);
+			const you = el(
+				"text",
+				{
+					x: cx,
+					y: oy - 7,
+					"text-anchor": "middle",
+					"font-size": 12,
+					"font-weight": 700,
+					"font-family": PLATE_FONT_STACK,
+					fill: hall.gold,
+				},
+				svg,
+			);
+			you.textContent = fitLabel(opts.ownerName ?? "You", 12);
 		}
 	}
 
@@ -410,8 +503,13 @@ export function createTable2D(
 			reduced = r;
 			draw();
 		},
-		resetCamera() {},
+		resetCamera() {
+			focusId = null;
+			draw();
+			opts.onFocus?.(null);
+		},
 		focus(id) {
+			if (id === focusId) return;
 			focusId = id;
 			draw();
 		},

@@ -37,6 +37,7 @@ import {
 import { badgeOf, STANDEE_TURN } from "./table/podium3d.ts";
 import { createSpeedLines } from "./table/speed.ts";
 import { mixHex, ringOffsets } from "./table/standee.ts";
+import { layoutOf } from "./table/table2d.ts";
 
 beforeAll(() => GlobalRegistrator.register({ width: 1280, height: 800 }));
 afterAll(() => GlobalRegistrator.unregister());
@@ -433,5 +434,16 @@ describe("the standee board", () => {
 		expect(mixHex("#ffffff", "#000000", 0.5)).toBe("#808080");
 		expect(mixHex("#c0392b", "#0b0f1e", 0)).toBe("#c0392b");
 		expect(mixHex("#c0392b", "#0b0f1e", 1)).toBe("#0b0f1e");
+	});
+});
+
+describe("the 2D hall", () => {
+	test("up to six podiums stand in one row, more in two rows, and the strip is always one", () => {
+		expect(layoutOf(3, false)).toEqual({ rows: 1, perRow: 3 });
+		expect(layoutOf(6, false)).toEqual({ rows: 1, perRow: 6 });
+		expect(layoutOf(7, false)).toEqual({ rows: 2, perRow: 4 });
+		expect(layoutOf(12, false)).toEqual({ rows: 2, perRow: 6 });
+		expect(layoutOf(12, true)).toEqual({ rows: 1, perRow: 12 });
+		expect(layoutOf(0, false)).toEqual({ rows: 1, perRow: 1 });
 	});
 });

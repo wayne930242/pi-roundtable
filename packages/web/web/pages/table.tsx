@@ -62,7 +62,7 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 					</button>
 				) : null}
 			</header>
-			<div className="table-frame">
+			<div className="table-frame" data-focused={target !== null || undefined}>
 				<RoundTable
 					onHandle={setTable}
 					focus={target}

@@ -1,10 +1,14 @@
-import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
+import { partial } from "pi-roundtable/testing";
 import type { RoomView } from "../src/api-types.ts";
 import { GroupTable } from "./components/group-table.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
+import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
+import { ConfigContext } from "./lib/config.ts";
 import { loadKit } from "./lib/kit.ts";
 import { setLook } from "./lib/look.ts";
+import { type AppConnection, setConnection } from "./lib/socket.ts";
 import { TablePage } from "./pages/table.tsx";
 
 const NAMES = [
@@ -163,7 +167,13 @@ test("under Camelot a group room renders the compact strip, lit on its speaker",
 		...agents(3),
 		group(["scout", "mason"], { typing: true, agent: "mason" }),
 	]);
-	await page.render(<GroupTable roomKey="app:group.crew" />);
+	await page.render(
+		<GroupTable
+			roomKey="app:group.crew"
+			scene={false}
+			onScene={() => undefined}
+		/>,
+	);
 	await settle();
 	expect(query('[data-variant="compact"]')).not.toBeNull();
 	const states = Object.fromEntries(
@@ -176,26 +186,48 @@ test("under Camelot a group room renders the compact strip, lit on its speaker",
 	expect(states).toEqual({ scout: "idle", mason: "speaking" });
 });
 
-test("under modern the strip is collapsed, and the Table button opens only the members", async () => {
+test("under modern the strip is collapsed, and the Table button switches the room to the scene and back", async () => {
 	setLook("modern");
 	load([...agents(3), group(["scout", "mason"])]);
-	await page.render(<GroupTable roomKey="app:group.crew" />);
+	const asked: boolean[] = [];
+	await page.render(
+		<GroupTable
+			roomKey="app:group.crew"
+			scene={false}
+			onScene={(on) => void asked.push(on)}
+		/>,
+	);
 	await settle();
 	expect(query('[data-variant="compact"]')).toBeNull();
-	const open = all<HTMLButtonElement>("button").find((button) =>
+	const toggle = all<HTMLButtonElement>("button").find((button) =>
 		button.textContent?.includes("Table"),
 	);
-	expect(open).toBeDefined();
-	await page.click(open ?? null);
+	expect(toggle?.getAttribute("aria-pressed")).toBe("false");
+	await page.click(toggle ?? null);
+	expect(asked).toEqual([true]);
+	await page.render(
+		<GroupTable
+			roomKey="app:group.crew"
+			scene
+			onScene={(on) => void asked.push(on)}
+		/>,
+	);
+	const pressed = all<HTMLButtonElement>("button").find((button) =>
+		button.textContent?.includes("Table"),
+	);
+	expect(pressed?.getAttribute("aria-pressed")).toBe("true");
+	await page.click(pressed ?? null);
+	expect(asked).toEqual([true, false]);
+});
+
+test("in the scene a group's strip is gone: the camera is the table", async () => {
+	setLook("camelot");
+	load([...agents(3), group(["scout", "mason"])]);
+	await page.render(
+		<GroupTable roomKey="app:group.crew" scene onScene={() => undefined} />,
+	);
 	await settle();
-	expect(query('[data-variant="full"]')).not.toBeNull();
-	expect(all("g.seat")).toHaveLength(2);
-	// The panel is narrow: its members are also listed by name under the table.
-	expect(
-		all<HTMLButtonElement>(".rt-table-list button").map((button) =>
-			button.textContent?.replace(/ \(.*$/, ""),
-		),
-	).toEqual(["scout", "mason"]);
+	expect(query('[data-variant="compact"]')).toBeNull();
 });
 
 test("a seat's picture is drawn again once its face changes, and not before 300 ms", async () => {
@@ -257,4 +289,56 @@ test("the seat pictures are frameless figures and carry no id that two of them c
 		const href = image.getAttribute("href") ?? "";
 		expect(decodeURIComponent(href)).not.toContain('class="frame"');
 	}
+});
+
+test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold plates that letter Chinese, and the focused seat marked", async () => {
+	load([
+		agent("guide", { displayName: "騎士" }),
+		agent("scout"),
+		agent("mason"),
+	]);
+	const messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
+	setConnection(
+		partial<AppConnection>({
+			send: () => true,
+			focus: () => undefined,
+			say: () => undefined,
+		}),
+	);
+	await page.render(
+		<ConfigContext.Provider
+			value={{
+				title: "Console",
+				panes: ["table"],
+				timeZone: "UTC",
+				look: "modern",
+			}}
+		>
+			<TablePage focus="scout" />
+		</ConfigContext.Provider>,
+	);
+	await settle();
+	expect(query(".t2d")).not.toBeNull();
+	expect(query("canvas")).toBeNull();
+	for (const image of all("image"))
+		expect(image.getAttribute("filter")).toMatch(/^url\(#t2d\d+-rim\)$/);
+	expect(query("filter feMorphology")).not.toBeNull();
+	const plates = all<SVGTextElement>("g.seat text").map(
+		(text) => text.textContent,
+	);
+	expect(plates).toContain("騎士");
+	expect(
+		all("g.seat text").every((text) =>
+			(text.getAttribute("font-family") ?? "").includes("PingFang TC"),
+		),
+	).toBe(true);
+	expect(
+		all("g.seat[data-focus]").map((seat) => seat.getAttribute("aria-label")),
+	).toEqual(["scout (idle)"]);
+	expect(query(".t2d")?.classList.contains("focus")).toBe(true);
+	messages.mockRestore();
 });

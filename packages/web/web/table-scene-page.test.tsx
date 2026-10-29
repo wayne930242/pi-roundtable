@@ -15,6 +15,7 @@ import type {
 	RoomView,
 } from "../src/api-types.ts";
 import { ConfigContext } from "./components/../lib/config.ts";
+import { GroupScene } from "./components/group-scene.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
@@ -22,6 +23,11 @@ import { clearDrafts, draftOf } from "./lib/drafts.ts";
 import { loadKit } from "./lib/kit.ts";
 import { setRouting } from "./lib/router.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
+import {
+	resetTableModes,
+	setTableMode,
+	tableModeOf,
+} from "./lib/table-mode.ts";
 import { TablePage } from "./pages/table.tsx";
 
 const SCOUT = "app:agent.lena";
@@ -337,4 +343,137 @@ test("the Log button opens the room's whole message list over the scene", async 
 	expect(query(".scene-log .messages")?.textContent).toContain(
 		"Found three leads.",
 	);
+});
+
+const CREW = "app:group.crew";
+
+const crew = (): RoomView => ({
+	key: CREW,
+	kind: "group",
+	name: "crew",
+	displayName: "Crew",
+	home: false,
+	readOnly: false,
+	members: ["lena", "otto"],
+	mode: { yolo: false, longRunning: false },
+	typing: false,
+	stoppable: false,
+});
+
+const heard = (
+	id: number,
+	who: "owner" | "lena" | "otto",
+	text: string,
+): RoomMessage => ({
+	id,
+	room: CREW,
+	kind: who === "owner" ? "owner" : "agent",
+	...(who === "owner" ? {} : { agent: who }),
+	author: who === "owner" ? "Ada" : who === "lena" ? "Lena" : "梅森",
+	text,
+	files: [],
+	at: "2026-10-29T10:00:00.000Z",
+});
+
+/** Ids that keep rising across the tests, because the store keeps the room's messages between them. */
+let seq = 10;
+const nid = () => ++seq;
+
+const say = (...messages: RoomMessage[]) =>
+	store.dispatch({
+		type: "history_loaded",
+		room: CREW,
+		messages,
+		more: false,
+		older: false,
+	});
+
+const lit = () =>
+	[...page.container.querySelectorAll("g.seat[data-focus]")].map(
+		(seat) => seat.getAttribute("aria-label")?.split(" ")[0],
+	);
+
+test("a group scene turns the camera to whoever speaks, and rests on the whole ring while the owner does", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [agent("lena", "Lena"), agent("otto", "梅森"), crew()],
+	});
+	say(heard(nid(), "owner", "Who has the plan?"));
+	await page.render(
+		<ConfigContext.Provider value={config}>
+			<GroupScene roomKey={CREW} members={["lena", "otto"]} />
+		</ConfigContext.Provider>,
+	);
+	await settle(380);
+	// the owner's line shows under the owner's name, and the camera is on the whole ring
+	expect(query(".scene-name")?.textContent).toBe("Ada");
+	expect(lit()).toEqual([]);
+	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(true);
+	await page.act(() => say(heard(nid(), "otto", "牆已經砌好了。")));
+	expect(lit()).toEqual(["梅森"]);
+	expect(query(".scene-name")?.textContent).toBe("梅森");
+	await page.act(() => say(heard(nid(), "lena", "Then I take the roof.")));
+	expect(lit()).toEqual(["Lena"]);
+	await page.act(() => say(heard(nid(), "owner", "Thanks both.")));
+	expect(lit()).toEqual([]);
+	expect(query(".scene-name")?.textContent).toBe("Ada");
+});
+
+test("a seat the person taps turns the camera there until the next line comes", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [agent("lena", "Lena"), agent("otto", "梅森"), crew()],
+	});
+	say(heard(nid(), "lena", "I am here."));
+	await page.render(
+		<ConfigContext.Provider value={config}>
+			<GroupScene roomKey={CREW} members={["lena", "otto"]} />
+		</ConfigContext.Provider>,
+	);
+	await settle(160);
+	expect(lit()).toEqual(["Lena"]);
+	const otto = page.container.querySelector<SVGGElement>(
+		'g.seat[aria-label^="梅森"]',
+	);
+	await page.act(() => {
+		otto?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+	});
+	expect(lit()).toEqual(["梅森"]);
+	await page.act(() => say(heard(nid(), "lena", "Back to me.")));
+	expect(lit()).toEqual(["Lena"]);
+});
+
+test("a speaker change while the owner is typing does not take the focus from the message box", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [agent("lena", "Lena"), agent("otto", "梅森"), crew()],
+	});
+	say(heard(nid(), "lena", "First."));
+	await page.render(
+		<ConfigContext.Provider value={config}>
+			<GroupScene roomKey={CREW} members={["lena", "otto"]} />
+		</ConfigContext.Provider>,
+	);
+	await settle(160);
+	const box = query<HTMLTextAreaElement>(".scene-box textarea");
+	box?.focus();
+	expect(document.activeElement).toBe(box);
+	await page.act(() => say(heard(nid(), "otto", "Second.")));
+	expect(lit()).toEqual(["梅森"]);
+	expect(document.activeElement).toBe(query(".scene-box textarea"));
+	expect(query<HTMLTextAreaElement>(".scene-box textarea")).toBe(box);
+});
+
+test("a room's choice of the scene is remembered for that room", () => {
+	resetTableModes();
+	expect(tableModeOf(CREW)).toBe(false);
+	setTableMode(CREW, true);
+	expect(tableModeOf(CREW)).toBe(true);
+	expect(tableModeOf("app:group.other")).toBe(false);
+	// a page that starts again reads it back from the browser's storage
+	resetTableModes();
+	expect(tableModeOf(CREW)).toBe(true);
+	setTableMode(CREW, false);
+	resetTableModes();
+	expect(tableModeOf(CREW)).toBe(false);
 });

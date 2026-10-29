@@ -192,3 +192,27 @@ export function resolveFocus(
 	const found = roster.find((seat) => seat.name === key || seat.key === key);
 	return found ? found.name : null;
 }
+
+/**
+ * The member the camera follows in a group room: whoever said the newest line, when they are one of
+ * the group; while the owner speaks, or nobody yet, the camera rests on the whole ring (null).
+ */
+export function speakerOf(
+	line: Pick<Line, "who" | "agent"> | undefined,
+	members: readonly string[],
+): string | null {
+	if (!line || line.who !== "agent" || line.agent === undefined) return null;
+	return members.includes(line.agent) ? line.agent : null;
+}
+
+/**
+ * The camera's focus in a group scene: the member the person turned it to by hand while the line
+ * they looked at stands, and the speaker as soon as a new line comes.
+ */
+export function followFocus(
+	speaker: string | null,
+	lineId: string | undefined,
+	manual: { lineId: string | undefined; member: string | null } | undefined,
+): string | null {
+	return manual && manual.lineId === lineId ? manual.member : speaker;
+}

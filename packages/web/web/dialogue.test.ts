@@ -4,10 +4,12 @@ import {
 	boxCards,
 	createReveal,
 	currentLine,
+	followFocus,
 	REVEAL_CPS,
 	resolveFocus,
 	revealStep,
 	sliceChars,
+	speakerOf,
 } from "./lib/dialogue.ts";
 import type { CardState, RoomState } from "./lib/rooms.ts";
 
@@ -202,4 +204,26 @@ test("a route key names an agent by its name or by the key of its room, and nobo
 	expect(resolveFocus("ghost", roster)).toBeNull();
 	expect(resolveFocus(undefined, roster)).toBeNull();
 	expect(resolveFocus("", roster)).toBeNull();
+});
+
+test("the camera follows the member who spoke last, and rests on the ring while the owner speaks", () => {
+	const members = ["lena", "otto"];
+	expect(speakerOf({ who: "agent", agent: "otto" }, members)).toBe("otto");
+	expect(speakerOf({ who: "owner" }, members)).toBeNull();
+	expect(speakerOf({ who: "agent", agent: "ghost" }, members)).toBeNull();
+	expect(speakerOf({ who: "agent", agent: undefined }, members)).toBeNull();
+	expect(speakerOf(undefined, members)).toBeNull();
+});
+
+test("a seat the person turned to holds only while the line they looked at stands", () => {
+	expect(followFocus("lena", "m5", undefined)).toBe("lena");
+	expect(followFocus("lena", "m5", { lineId: "m5", member: "otto" })).toBe(
+		"otto",
+	);
+	// they chose the whole ring: that holds too
+	expect(followFocus("lena", "m5", { lineId: "m5", member: null })).toBeNull();
+	// a new line ends it
+	expect(followFocus("otto", "m6", { lineId: "m5", member: "lena" })).toBe(
+		"otto",
+	);
 });

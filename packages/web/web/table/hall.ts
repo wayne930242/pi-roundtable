@@ -180,3 +180,6 @@ export const hallOf = (theme: ThemeName, scheme: Scheme): Hall => ({
 	...(scheme === "dark" ? NIGHT : DAY),
 	...ACCENT[theme][scheme],
 });
+
+/** State accents shared by the 3D scene and the 2D fallback. */
+export const STATE_COLOR = { done: "#58c878", error: "#ee4b4b" } as const;
