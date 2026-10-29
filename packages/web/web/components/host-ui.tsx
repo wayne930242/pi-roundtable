@@ -4,5 +4,6 @@
 export { HostRoomPage } from "../pages/host-room.tsx";
 export { HostPage } from "../pages/host-page.tsx";
 export { default as HostKinds } from "./host-kinds.tsx";
+export { default as HostSettingsPages } from "./host-settings-pages.tsx";
 export { default as ReadLog } from "./read-log.tsx";
 export { default as UnreadMark } from "./unread-mark.tsx";

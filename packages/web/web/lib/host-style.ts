@@ -124,7 +124,7 @@ export const HOST_CSS = `
 	align-items: center;
 	gap: var(--space-3);
 	margin: var(--space-3) 0 var(--space-1);
-	color: var(--accent-text);
+	color: var(--accent);
 	font-size: var(--text-xs);
 	font-weight: var(--weight-bold);
 }
@@ -174,12 +174,12 @@ export const HOST_CSS = `
 .host-head-fields {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--space-1) var(--space-4);
+	gap: 0 var(--space-4);
 	margin: 0;
-	padding: var(--space-2) var(--space-4);
+	padding: var(--space-1) var(--space-4);
 	border-bottom: 1px solid var(--border);
 	background: var(--surface);
-	font-size: var(--text-sm);
+	font-size: var(--text-xs);
 }
 
 .host-head-fields > div {
@@ -200,7 +200,7 @@ export const HOST_CSS = `
 
 .host-banner {
 	margin: 0;
-	padding: var(--space-2) var(--space-4);
+	padding: var(--space-1) var(--space-4);
 	border-bottom: 1px solid var(--border);
 	font-size: var(--text-sm);
 }
@@ -221,18 +221,64 @@ export const HOST_CSS = `
 }
 
 .host-actions.bar {
+	flex-wrap: nowrap;
 	padding: var(--space-2) var(--space-4);
 	border-bottom: 1px solid var(--border);
+	overflow-x: auto;
+}
+
+.host-actions.bar > button {
+	flex: none;
+	min-height: 2.25rem;
+	padding: 0 var(--space-3);
+	font-size: var(--text-sm);
 }
 
 .host-cards {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-2);
-	padding: var(--space-2) var(--space-4);
 	border-top: 1px solid var(--border);
 	background: var(--surface-2);
-	max-height: 40%;
+}
+
+.host-cards-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 2.5rem;
+	padding: 0 var(--space-4);
+	border: 0;
+	border-radius: 0;
+	background: none;
+	color: var(--text);
+	font: inherit;
+	font-size: var(--text-sm);
+	text-align: left;
+	overflow: hidden;
+}
+
+.host-cards-toggle > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.host-cards-toggle > svg {
+	flex: none;
+	transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.host-cards[data-open] .host-cards-toggle > svg {
+	transform: rotate(90deg);
+}
+
+.host-cards-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	max-height: min(16rem, 34vh);
+	padding: 0 var(--space-4) var(--space-3);
 	overflow-y: auto;
 }
 

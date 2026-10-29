@@ -1041,8 +1041,11 @@ describeDb("the host rooms over a real host", () => {
 		expect(seen).toMatchObject({
 			room: ROOM_A,
 			principal: app.principals.mel,
+			name: "Mel",
 			upTo: first.id,
 		});
+		// The page shows the reader from the frame alone.
+		expect(Date.parse((seen as { at: string }).at)).toBeGreaterThan(0);
 		// Mel's own other devices hear it too; a person who cannot read the room hears nothing.
 		expect((await mel.take(ofType("read"))).principal).toBe(app.principals.mel);
 		expect(await zed.sees(ofType("read"))).toBe(false);
@@ -1273,6 +1276,41 @@ describeDb("the host rooms over a real host", () => {
 		expect(await melSocket.sees(ofType("page_changed"), 400)).toBe(false);
 		adaSocket.close();
 		melSocket.close();
+	});
+
+	test("a page's picture is a saved PNG, JPEG or WebP, shown only to those the page is visible to", async () => {
+		const id = await web.pages.saveAsset("mailboxes", {
+			name: "chart.png",
+			type: "image/png",
+			bytes: PNG,
+		});
+		const seen = await rest(app, `files/${id}`, { who: "ada" });
+		expect(seen.status).toBe(200);
+		expect(seen.headers.get("content-type")).toBe("image/png");
+		// The page is the owners'; a member is not shown what hangs on it.
+		expect((await rest(app, `files/${id}`, { who: "mel" })).status).toBe(404);
+		// Only an image the bytes prove: GIF, a text and a type that lies are refused.
+		const gif = Uint8Array.from([
+			0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+		]);
+		for (const bytes of [
+			gif,
+			new TextEncoder().encode("<svg onload=alert(1)>"),
+		])
+			await expect(
+				web.pages.saveAsset("mailboxes", {
+					name: "x.png",
+					type: "image/png",
+					bytes,
+				}),
+			).rejects.toThrow(/PNG, JPEG or WebP/);
+		await expect(
+			web.pages.saveAsset("no-such-page", {
+				name: "x.png",
+				type: "image/png",
+				bytes: PNG,
+			}),
+		).rejects.toThrow(/no page/);
 	});
 
 	test("a press on a card that is not one of the room's, or a room that is not a host's, is not taken over the socket either", async () => {

@@ -77,9 +77,7 @@ function Choice(props: {
 					{...(field.search ? { size: 6 } : {})}
 					onChange={(event) => props.onChange(event.target.value)}
 				>
-					{field.required && !field.search ? null : (
-						<option value="">{field.search ? "" : t("None")}</option>
-					)}
+					{field.required ? null : <option value="">{t("None")}</option>}
 					{shown.map((option) => (
 						<option key={option.value} value={option.value}>
 							{option.label}

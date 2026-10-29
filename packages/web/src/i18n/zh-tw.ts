@@ -1061,6 +1061,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} unread messages": "{count} 則未讀訊息",
 	"New messages": "新訊息",
 	"Seen by {count}": "已讀 {count}",
+	"More settings": "更多設定",
 	// 主機聊天室與頁面：伺服器的拒絕訊息
 	"There is no such room.": "沒有這個聊天室。",
 	"There is no such page.": "沒有這個頁面。",
@@ -1070,4 +1071,12 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"card must be text.": "card 必須是文字。",
 	"This is not yours to do.": "這個操作不是你可以做的。",
 	"The page's query is too long.": "頁面的查詢參數太長。",
+	"This action takes no form.": "這個操作沒有表單。",
+	"The form has no such field.": "表單沒有這個欄位。",
+	"This field is required.": "這個欄位必填。",
+	"Choose from the list.": "請從清單中選擇。",
+	"This field takes one value.": "這個欄位只能填一個值。",
+	"This field is too long.": "這個欄位的內容太長。",
+	"Give a web address.": "請填入網址。",
+	"The action could not be done.": "無法執行這個操作。",
 };

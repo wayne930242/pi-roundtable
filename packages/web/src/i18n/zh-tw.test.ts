@@ -70,6 +70,7 @@ describe("the built-in zh-TW catalog", () => {
 				"web/lib/api.ts: t(text)",
 				"web/lib/character-labels.ts: translate(key)",
 				"web/lib/character-labels.ts: translate(key)",
+				"web/lib/host-api.ts: t(error)",
 				"web/lib/prompt-text.ts: t(CORE[source] ?? source)",
 				"web/pages/conversations.tsx: t(section.note)",
 				"web/pages/conversations.tsx: t(section.title)",

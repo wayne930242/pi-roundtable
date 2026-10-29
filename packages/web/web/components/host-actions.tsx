@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormInput, HostActionView } from "../../src/api-types.ts";
 import type { HostActionResult } from "../../src/host/views.ts";
 import { messageOf } from "../lib/api.ts";
-import { openTarget } from "../lib/host-api.ts";
+import { openTarget, refusalText } from "../lib/host-api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { toast } from "../lib/toast.ts";
 import { Confirm } from "./confirm.tsx";
@@ -22,7 +22,7 @@ export type RunAction = (
 function finish(result: HostActionResult): { error: string; field?: string } | undefined {
 	if (!result.ok)
 		return {
-			error: result.error,
+			error: refusalText(result.error),
 			...(result.field ? { field: result.field } : {}),
 		};
 	if (result.notice) toast(result.notice);

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { PushDeviceView, SessionView } from "../../src/api-types.ts";
 import { Icon, type IconName } from "../components/icons.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useConfig } from "../lib/config.ts";
+import { hostUi } from "../lib/frame-taps.ts";
 import { type PageLook, setLook, useLook } from "../lib/look.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import {
@@ -166,11 +167,17 @@ function Notifications({
 	);
 }
 
+// The host's own pages that belong with settings are listed by code that loads only where a host has them.
+const HostSettingsPages = lazy(() =>
+	hostUi().then((ui) => ({ default: ui.HostSettingsPages })),
+);
+
 /** How the page looks, how to put it on a home screen, which devices get push, and who is signed in. */
 export function SettingsPage() {
 	const { preference } = useTheme();
 	const look = useLook();
-	const hostLook = useConfig().look ?? "modern";
+	const config = useConfig();
+	const hostLook = config.look ?? "modern";
 	const principal = useSelector((state) => state.principal);
 	const [session, setSession] = useState<SessionView>();
 	const [canInstall, setCanInstall] = useState(deferred !== undefined);
@@ -187,6 +194,11 @@ export function SettingsPage() {
 			<header className="page-head">
 				<h1>{t("Settings")}</h1>
 			</header>
+			{config.pages?.some((page) => page.place === "settings") ? (
+				<Suspense fallback={null}>
+					<HostSettingsPages />
+				</Suspense>
+			) : null}
 			<section className="card stack">
 				<h2>{t("Appearance")}</h2>
 				<fieldset className="segmented segmented-wide">

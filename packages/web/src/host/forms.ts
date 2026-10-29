@@ -52,6 +52,8 @@ function checkField(field: FormField, where: string): void {
 		const values = new Set(options.map((option) => option.value));
 		if (values.size !== options.length)
 			fail(`${where}: field ${field.name} lists a value twice`);
+		if (field.search !== undefined && typeof field.search !== "boolean")
+			fail(`${where}: field ${field.name}'s search is true or false`);
 		const initial =
 			field.initial === undefined
 				? []
@@ -216,7 +218,7 @@ export function checkInput(
 		if (given.length > max)
 			return {
 				ok: false,
-				error: `This field takes at most ${max} characters.`,
+				error: "This field is too long.",
 				field: field.name,
 			};
 		if (field.type === "url") {

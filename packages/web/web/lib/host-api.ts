@@ -8,10 +8,27 @@ import type {
 	OpenView,
 } from "../../src/host/views.ts";
 import { request } from "./api.ts";
+import { translate as t, wording } from "./messages.ts";
 import { hrefFor } from "./router.ts";
 import { followUrl } from "./where.ts";
 
 const part = encodeURIComponent;
+
+/** The refusals the app itself words when it checks a form; a host's own are its own wording. */
+const CORE_REFUSALS: ReadonlySet<string> = new Set([
+	wording("This action takes no form."),
+	wording("The form has no such field."),
+	wording("This field is required."),
+	wording("Choose from the list."),
+	wording("This field takes one value."),
+	wording("This field is too long."),
+	wording("Give a web address."),
+	wording("The action could not be done."),
+]);
+
+/** A refusal in the page's words when the app worded it. */
+export const refusalText = (error: string): string =>
+	CORE_REFUSALS.has(error) ? t(error) : error;
 
 /** A host room's key `<surface>:<kind>.<id>`, split; undefined for a key of another shape. */
 export function splitRoomKey(

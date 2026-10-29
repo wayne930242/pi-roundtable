@@ -10,7 +10,7 @@ import { HostForm } from "../components/host-form.tsx";
 import { HostMarkdown } from "../components/host-markdown.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { ApiFailure, messageOf } from "../lib/api.ts";
-import { hostApi, openTarget } from "../lib/host-api.ts";
+import { hostApi, openTarget, refusalText } from "../lib/host-api.ts";
 import { useHost } from "../lib/host-state.ts";
 import { installHostStyle } from "../lib/host-style.ts";
 import type { PageRouteProps } from "../lib/page-routes.ts";
@@ -39,7 +39,7 @@ function useQuery(): string {
 function told(result: HostActionResult): { error: string; field?: string } | undefined {
 	if (!result.ok)
 		return {
-			error: result.error,
+			error: refusalText(result.error),
 			...(result.field ? { field: result.field } : {}),
 		};
 	if (result.notice) toast(result.notice);
