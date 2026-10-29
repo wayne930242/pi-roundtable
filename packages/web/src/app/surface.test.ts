@@ -57,3 +57,38 @@ test("a room's old page message is forgotten when another room is asked", async 
 	stop();
 	expect(heard).toEqual(["late"]);
 });
+
+test("a file an agent attaches in a host room is bound to it, with the kind's expiry", async () => {
+	const puts: unknown[][] = [];
+	const surface = new AppSurface({
+		surface: "app",
+		sockets: { deliver: () => undefined },
+		audienceOf: () => ({ room: "x" }),
+		isHostRoom: (room: string) => room === "app:inbox.1",
+		fileBinding: (room: string) => ({ room, expiresAt: 42 }),
+		log: { append: async (row: object) => ({ id: 1, ...row }) },
+		files: {
+			put: (...args: unknown[]) => {
+				puts.push(args);
+				return { id: "f", name: "a.txt", type: "text/plain", size: 1 };
+			},
+		},
+		uploads: { maxBytes: 1 },
+		threads: {},
+		canHost: async () => false,
+		changed: () => undefined,
+		logger: { warn: () => undefined },
+	} as never);
+	await surface.start(() => undefined);
+	const file = { name: "a.txt", data: new Uint8Array([1]) };
+	await surface.sendReply(
+		"app:inbox.1" as ChannelKey,
+		{
+			chunks: ["x"],
+			files: [file],
+		} as never,
+	);
+	await surface.sendReply(ROOM, { chunks: ["x"], files: [file] } as never);
+	expect(puts[0]?.[4]).toEqual({ room: "app:inbox.1", expiresAt: 42 });
+	expect(puts[1]?.[4]).toBeUndefined();
+});

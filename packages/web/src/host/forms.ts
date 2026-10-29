@@ -30,6 +30,9 @@ const fail = (what: string): never => {
 
 /** Whether a link may be put on a card: `https`, or a path of this origin. */
 export function safeLink(url: string): boolean {
+	// Browsers strip tabs and newlines, so "/\t/host" reads as "//host": no control or space.
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: the check is for them
+	if (/[\u0000-\u0020\u007f]/.test(url)) return false;
 	if (url.startsWith("/")) return !url.startsWith("//") && !url.includes("\\");
 	return URL.parse(url)?.protocol === "https:";
 }

@@ -224,6 +224,7 @@ export class OwnerApp {
 			onboarding: options.extras.onboarding,
 		});
 		const push = new PushService({
+			hostRoom: (room) => options.registry.isHostRoom(room),
 			subscriptions,
 			// The app signs only with its own key; with an external sender it queues for it instead.
 			...(options.push.vapid
@@ -295,6 +296,15 @@ export class OwnerApp {
 			},
 			audienceOf,
 			isHostRoom: (room) => registry.isHostRoom(room),
+			fileBinding: (room) => {
+				const kind = registry.hostKindOf(room)?.kind;
+				return {
+					room,
+					...(kind?.retention
+						? { expiresAt: Date.now() + kind.retention.fileDays * 86_400_000 }
+						: {}),
+				};
+			},
 			channelContext: (message, contextOptions) =>
 				hostApp?.channelContext(message, contextOptions) ??
 				Promise.resolve(undefined),

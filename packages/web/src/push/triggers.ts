@@ -48,6 +48,8 @@ export interface PushServiceOptions {
 	 * card is. Default never.
 	 */
 	muted?: (room: string) => Promise<boolean>;
+	/** Whether a room is a host's: those reach phones only through notices, never through a card or reply push. */
+	hostRoom?: (room: string) => boolean;
 }
 
 /** What a trigger says; the service shapes it into a notification. */
@@ -87,6 +89,7 @@ export class PushService {
 
 	/** A card opened in a room: an approval or a question waits for an owner. */
 	card(room: string, title: string, longRunningCap: boolean): Promise<void> {
+		if (this.#options.hostRoom?.(room)) return Promise.resolve();
 		return this.#push({
 			kind: longRunningCap ? "cap" : "card",
 			title: longRunningCap ? "Long-running cap reached" : "Card waiting",
@@ -98,6 +101,7 @@ export class PushService {
 
 	/** An agent posted in a room, such as a finished job's report or an answer nobody was watching for. */
 	async reply(room: string, author: string, text: string): Promise<void> {
+		if (this.#options.hostRoom?.(room)) return;
 		const now = this.#now();
 		if (this.#options.quiet?.(now)) return;
 		if (await this.#muted(room)) return;

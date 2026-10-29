@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import type { FormSpec, HostAction } from "../web-app.ts";
-import { checkActions, checkCard, checkInput, pressable } from "./forms.ts";
+import {
+	checkActions,
+	checkCard,
+	checkInput,
+	pressable,
+	safeLink,
+} from "./forms.ts";
 
 const options = [
 	{ value: "ada", label: "Ada" },
@@ -14,6 +20,12 @@ const withField = (field: object): HostAction[] => [
 		form: { title: "T", submit: "S", fields: [field as never] },
 	},
 ];
+
+test("a link with a tab, newline or space is no path of this origin", () => {
+	expect(safeLink("/\t/evil.example")).toBe(false);
+	expect(safeLink("/\n/evil.example")).toBe(false);
+	expect(safeLink("/rooms/a")).toBe(true);
+});
 
 test("a select or multiselect starts from options it has, and its search is true or false", () => {
 	const select = { name: "owner", label: "Owner", type: "select", options };

@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A card or an unprompted reply in a host room no longer pushes to every owner's phone; host rooms reach phones only through notices.
+- A file an agent attaches in a host room is bound to the room and the kind's file retention, so its readers can download it (before, only owners could, and the 30-day agent sweep applied).
+- Answering a card in a host room asks the kind's `access` with the person's roles, so a role-gated reader is no longer refused or dropped from the room.
+- A link with a tab, newline or space is no longer taken for a path of this origin.
+
 ### Changed
 
 - A running turn's strip shows only its three newest tool calls; a button counts the earlier ones and opens them all (and folds them again).

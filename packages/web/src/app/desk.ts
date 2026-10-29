@@ -50,6 +50,8 @@ export interface Answerer {
 	/** The identity they spoke as, `<provider>:<subject>`. */
 	speakerId: string;
 	name: string;
+	/** The roles their sign-in carried. */
+	roles?: readonly string[];
 	/** The actor their credential vouched for, which a message they start is written as. */
 	actor?: ActorFacts;
 }

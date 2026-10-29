@@ -16,7 +16,7 @@ import {
 } from "pi-roundtable";
 import type { RoomFile, RoomMessage } from "../api-types.ts";
 import type { OwnerDesk } from "./desk.ts";
-import { type FileDir, typeByName } from "./files.ts";
+import { type FileBinding, type FileDir, typeByName } from "./files.ts";
 import type { NewRoomMessage, RoomLog } from "./room-log.ts";
 import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import { AppSurfaceThreads } from "./surface-threads.ts";
@@ -49,6 +49,8 @@ export interface AppSurfaceOptions {
 	audienceOf(room: string): Audience;
 	/** Whether the room is a host's (its frames are the `host_*` ones). */
 	isHostRoom(room: string): boolean;
+	/** What binds a file an agent attaches in a host room, so its readers are served it. */
+	fileBinding?(room: string): FileBinding | undefined;
 	/** Tells the sockets the room list differs, once changes settle. */
 	changed(): void;
 	/**
@@ -298,7 +300,15 @@ export class AppSurface implements ChatSurface {
 		const entry = this.#activity.get(channel);
 		if (entry) entry.outcome = reply.failed ? "failed" : "done";
 		const files: RoomFile[] = (reply.files ?? []).map((file) =>
-			this.#options.files.put(file.name, typeByName(file.name), file.data),
+			this.#options.files.put(
+				file.name,
+				typeByName(file.name),
+				file.data,
+				undefined,
+				this.#options.isHostRoom(channel)
+					? this.#options.fileBinding?.(channel)
+					: undefined,
+			),
 		);
 		await this.publish({
 			room: channel,

@@ -38,7 +38,12 @@ import type {
 const ORIGIN = "https://app.example.test";
 const FACTS = {
 	ada: { provider: "discord", subject: "100000000000000011", name: "Ada" },
-	mel: { provider: "discord", subject: "200000000000000012", name: "Mel" },
+	mel: {
+		provider: "discord",
+		subject: "200000000000000012",
+		name: "Mel",
+		roles: ["web:role:pm"],
+	},
 	kim: { provider: "discord", subject: "300000000000000013", name: "Kim" },
 	zed: { provider: "discord", subject: "400000000000000014", name: "Zed" },
 } satisfies Record<string, ActorFacts>;
@@ -84,6 +89,8 @@ interface Inbox {
 		| undefined;
 	/** Refuses the next send. */
 	refuse: string | undefined;
+	/** When set, `access` answers only for viewers who carry this role. */
+	needRole: string | undefined;
 	web: WebApp | undefined;
 }
 
@@ -102,6 +109,7 @@ function inbox(): Inbox {
 		pageActs: [],
 		script: undefined,
 		refuse: undefined,
+		needRole: undefined,
 		web: undefined,
 	};
 }
@@ -132,7 +140,9 @@ function inboxPlugin(state: Inbox) {
 					};
 				},
 				access: async (viewer, id) =>
-					state.grants.get(viewer.principalId)?.get(id),
+					state.needRole && !viewer.roles.includes(state.needRole)
+						? undefined
+						: state.grants.get(viewer.principalId)?.get(id),
 				header: async (_viewer, id) => ({
 					title: `Thread ${id}`,
 					fields: [{ label: "Status", value: "Open" }],
@@ -1336,6 +1346,44 @@ describeDb("the host rooms over a real host", () => {
 		});
 		ada.close();
 	});
+
+	test("answering a card in a room whose access reads roles keeps the reader in the room", async () => {
+		const mel = await Client.open(app, "mel");
+		mel.send({ type: "subscribe", room: ROOM_A });
+		await Bun.sleep(100);
+		let reply: unknown;
+		app.state.script = async (message, speaker) => {
+			if (!speaker) return;
+			const prompts = app.host.context.surfaces.prompts(
+				message.channel,
+				promptScope(speaker, "shared"),
+			);
+			reply = await prompts?.ask("Which one?", {
+				question: "Which mailbox?",
+				options: [{ label: "support" }, { label: "sales" }],
+				multi: false,
+				allowOther: false,
+			});
+		};
+		mel.send({ type: "send", id: "roles1", room: ROOM_A, text: "which" });
+		const question = await mel.take(ofType("prompt"));
+		// With no followed room nothing refreshes the memo, so the answer asks the kind afresh.
+		mel.send({ type: "unsubscribe", room: ROOM_A });
+		app.state.needRole = "web:role:pm";
+		try {
+			await Bun.sleep(11_000);
+			mel.send({
+				type: "answer",
+				prompt: question.prompt.id,
+				answer: { choices: ["support"] },
+			});
+			await Bun.sleep(300);
+			expect(await mel.sees(ofType("refused"), 100)).toBe(false);
+			expect(reply).toBeDefined();
+		} finally {
+			app.state.needRole = undefined;
+		}
+	}, 30_000);
 
 	test("a question or an approval in a host room is its speaker's, the named approvers' and the owners' to answer, and a reader sees it only by following the room", async () => {
 		const mel = await Client.open(app, "mel");

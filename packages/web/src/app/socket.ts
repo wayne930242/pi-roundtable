@@ -311,6 +311,7 @@ export class SocketRoute {
 			tier: connection.tier,
 			speakerId: connection.speakerId,
 			name: connection.principal.name,
+			roles: connection.roles,
 			...(connection.actor ? { actor: connection.actor } : {}),
 		};
 	}
@@ -514,7 +515,7 @@ export class SocketRoute {
 					principalId: who.principalId,
 					speakerId: who.speakerId,
 					tier: who.tier,
-					roles: [],
+					roles: who.roles ?? [],
 					name: who.name,
 				};
 				if (!(await registry.access.read(viewer, room as ChannelKey)))

@@ -21,6 +21,7 @@ function service(
 		tiers?: Record<string, "owner" | "member">;
 		quiet?: (at: number) => boolean;
 		muted?: (room: string) => Promise<boolean>;
+		hostRoom?: (room: string) => boolean;
 	} = {},
 ) {
 	const sent: { endpoint: string; payload: PushPayload }[] = [];
@@ -50,6 +51,7 @@ function service(
 		},
 		visible: (id) => options.visible?.includes(id) ?? false,
 		preview: options.preview ?? true,
+		...(options.hostRoom ? { hostRoom: options.hostRoom } : {}),
 		urlOf: (room) => `/console/#/room/${room}`,
 		logger: silentLogger(),
 		now: () => clock,
@@ -105,6 +107,17 @@ describe("when a device is pushed", () => {
 		expect(sent.map((s) => s.endpoint)).toEqual([
 			"https://fcm.googleapis.com/bo",
 		]);
+	});
+
+	test("a card or reply of a host room pushes nothing to the owners", async () => {
+		const { instance, sent } = service({
+			hostRoom: (room) => room === "app:inbox.1",
+		});
+		await instance.card("app:inbox.1", "private title", false);
+		await instance.reply("app:inbox.1", "Main", "private preview");
+		expect(sent).toEqual([]);
+		await instance.card("app:agent.guide", "t", false);
+		expect(sent).toHaveLength(1);
 	});
 
 	test("a device of someone who is no owner any more is skipped", async () => {
