@@ -74,12 +74,13 @@ export function consoleVisitors(
 		const principal = await identity.principal(id);
 		if (!principal) return { refusal: `there is no principal ${id}` };
 		if (principal.disabled) return { refusal: `principal ${id} is disabled` };
-		if ((await identity.tierOf(id)) !== "owner")
+		const tier = await identity.tierOf(id);
+		if (tier !== "owner")
 			return { refusal: `principal ${id} holds no owner role` };
 		return {
 			visitor: {
 				principal,
-				tier: "owner",
+				tier,
 				speakerId: actor ? `${actor.provider}:${actor.subject}` : id,
 				roles: actor?.roles ?? [],
 			},
