@@ -16,6 +16,7 @@ import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
+import { PushMutes } from "../push/mutes.ts";
 import { QuietClock, type QuietWindow } from "../push/quiet-hours.ts";
 import { PushSender } from "../push/sender.ts";
 import { PushSubscriptions } from "../push/subscriptions.ts";
@@ -45,6 +46,7 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 	CardLog.migration,
 	WebThreads.migration,
 	PushSubscriptions.migration,
+	PushMutes.migration,
 ];
 
 export interface OwnerAppOptions {
@@ -128,6 +130,7 @@ export class OwnerApp {
 		});
 		const threads = new WebThreads(options.database);
 		const subscriptions = new PushSubscriptions(options.database);
+		const mutes = new PushMutes(options.database);
 		const policy = new EndpointPolicy(options.push.endpointHosts);
 		const quietClock = options.push.quietHours
 			? new QuietClock(options.push.quietHours, options.push.timeZone)
@@ -145,6 +148,7 @@ export class OwnerApp {
 			visible: (principalId) => sockets.anyVisible(principalId),
 			preview: options.push.preview,
 			...(quietClock ? { quiet: (at: number) => quietClock.quietAt(at) } : {}),
+			muted: (room) => mutes.has(room),
 			urlOf: options.push.urlOf,
 			logger,
 		});
@@ -215,6 +219,7 @@ export class OwnerApp {
 			threads,
 			log,
 			modes,
+			mutes,
 			activity: (room) => surface.activityOf(room),
 		});
 		route = new SocketRoute({
@@ -257,6 +262,7 @@ export class OwnerApp {
 			uploads,
 			files: stored,
 			modes,
+			mutes,
 			conversations: options.conversations,
 			identity,
 			...(options.schedules ? { schedules: options.schedules } : {}),

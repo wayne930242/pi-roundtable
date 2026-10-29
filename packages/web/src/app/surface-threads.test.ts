@@ -139,6 +139,7 @@ describeDb("the app surface's dispatch threads", () => {
 			threads,
 			log,
 			modes: { peek: () => ({ yolo: false, longRunning: false }) },
+			mutes: { all: async () => new Set() },
 			activity: () => ({ typing: false, stoppable: false }),
 		});
 		expect(await rooms.resolve(`app:${opened.id}`)).toMatchObject({

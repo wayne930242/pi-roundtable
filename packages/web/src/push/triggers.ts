@@ -28,6 +28,11 @@ export interface PushServiceOptions {
 	 * not pushed then, while a card is. Default never.
 	 */
 	quiet?: (at: number) => boolean;
+	/**
+	 * Whether the owners muted a room: an agent's post and a notice about it are not pushed, while a
+	 * card is. Default never.
+	 */
+	muted?: (room: string) => Promise<boolean>;
 }
 
 /** What a trigger says; the service shapes it into a notification. */
@@ -54,8 +59,8 @@ export function previewOf(text: string): string {
 /**
  * Decides when an owner's devices are pushed and what is said. Each trigger pushes only while no
  * page of an owner is in view, and only to owners: a device whose person is no owner any more is
- * skipped. In the quiet hours an agent's post and a notice wait for the owner to look; a card,
- * which holds up work, is still pushed. Delivery never throws into the code that raised the trigger.
+ * skipped. In the quiet hours, and in a room the owners muted, an agent's post and a notice wait
+ * for the owner to look; a card, which holds up work, is still pushed. Delivery never throws into the code that raised the trigger.
  */
 export class PushService {
 	readonly #options: PushServiceOptions;
@@ -77,14 +82,14 @@ export class PushService {
 	}
 
 	/** An agent posted in a room, such as a finished job's report or an answer nobody was watching for. */
-	reply(room: string, author: string, text: string): Promise<void> {
+	async reply(room: string, author: string, text: string): Promise<void> {
 		const now = this.#now();
-		if (this.#options.quiet?.(now)) return Promise.resolve();
+		if (this.#options.quiet?.(now)) return;
+		if (await this.#muted(room)) return;
 		const last = this.#repliedAt.get(room);
-		if (last !== undefined && now - last < REPLY_QUIET_MS)
-			return Promise.resolve();
+		if (last !== undefined && now - last < REPLY_QUIET_MS) return;
 		this.#repliedAt.set(room, now);
-		return this.#push({
+		await this.#push({
 			kind: "reply",
 			title: this.#options.preview ? author : "New reply",
 			text,
@@ -94,9 +99,14 @@ export class PushService {
 	}
 
 	/** A notice for one person, from the `notify` tool. */
-	notice(principalId: string, text: string, room?: string): Promise<void> {
-		if (this.#options.quiet?.(this.#now())) return Promise.resolve();
-		return this.#push({
+	async notice(
+		principalId: string,
+		text: string,
+		room?: string,
+	): Promise<void> {
+		if (this.#options.quiet?.(this.#now())) return;
+		if (room && (await this.#muted(room))) return;
+		await this.#push({
 			kind: "notice",
 			title: "Notice",
 			text,
@@ -104,6 +114,16 @@ export class PushService {
 			tag: room ?? "notice",
 			principalId,
 		});
+	}
+
+	/** Whether the room is muted; a mute that cannot be read leaves the owner's pushes on, with a warning. */
+	async #muted(room: string): Promise<boolean> {
+		try {
+			return (await this.#options.muted?.(room)) ?? false;
+		} catch (error) {
+			this.#options.logger.warn({ err: error, room }, "a mute was not read");
+			return false;
+		}
 	}
 
 	#now(): number {

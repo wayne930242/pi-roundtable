@@ -51,6 +51,7 @@ describeDb("dispatch threads of the app", () => {
 			threads,
 			log: { lastOf: async () => new Map() },
 			modes: { peek: () => ({ yolo: false, longRunning: false }) },
+			mutes: { all: async () => new Set() },
 			activity: () => ({ typing: false, stoppable: false }),
 		});
 		expect(await rooms.resolve(`app:${thread.id}`)).toMatchObject({

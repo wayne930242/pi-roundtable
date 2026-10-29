@@ -525,6 +525,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Too many failed attempts. Try again later.": "失敗次數過多，請稍後再試。",
 	"Wrong password.": "密碼錯誤。",
 	Password: "密碼",
+	"muted must be true or false.": "muted 必須是 true 或 false。",
 	"Sign in": "登入",
 	"There is no such conversation.": "找不到這段對話。",
 	"Only workspace and outside conversations can be deleted.":

@@ -10,7 +10,7 @@ import {
 	type TurnResult,
 } from "pi-roundtable";
 import { describeDb, type TestHost, testHost } from "pi-roundtable/testing";
-import type { PushDevicesView, ServerFrame } from "../api-types.ts";
+import type { PushDevicesView, RoomsView, ServerFrame } from "../api-types.ts";
 import { APP_PROTOCOL } from "../app/protocol.ts";
 import { MAX_DEVICES } from "../push/api.ts";
 import { fakePushService, receiver, withPushFetch } from "../testing/push.ts";
@@ -280,6 +280,7 @@ function rest(
 }
 
 const SCOUT = "app:agent.scout";
+const GUIDE = "app:agent.guide";
 const FCM = "https://fcm.googleapis.com/fcm/send/";
 
 describeDb("push over a real host", () => {
@@ -291,9 +292,11 @@ describeDb("push over a real host", () => {
 		await app.host.context.services.get(IDENTITY).resolve(MEL);
 		// The database is shared with other suites and earlier runs; this suite's devices start from none.
 		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+		await app.host.context.database()`DELETE FROM web_push_muted_rooms`;
 	}, 30_000);
 	afterAll(async () => {
 		await app.host.context.database()`DELETE FROM web_push_subscriptions`;
+		await app.host.context.database()`DELETE FROM web_push_muted_rooms`;
 		await app.stop();
 	});
 
@@ -433,6 +436,92 @@ describeDb("push over a real host", () => {
 		await app.host.context.surfaces.sendReply(SCOUT, {
 			chunks: ["the nightly report is ready"],
 			author: { name: "Scout", agent: "scout" },
+		});
+		await waitFor(() => service.posts.length === 1);
+		tab.close();
+	});
+
+	test("an owner mutes a room for every owner's devices: its posts wait, its cards still come", async () => {
+		service.posts.length = 0;
+		const put = (key: string, body: unknown, init: object = {}) =>
+			rest(app, `rooms/${encodeURIComponent(key)}/mute`, {
+				method: "PUT",
+				body: JSON.stringify(body),
+				...init,
+			});
+		const listed = async () =>
+			((await (await rest(app, "rooms")).json()) as RoomsView).rooms.find(
+				(room) => room.key === GUIDE,
+			);
+		// Refused: no such room, a room of another surface, a request from elsewhere, a member, a bad body.
+		for (const key of [
+			"app:agent.nobody",
+			"app:group.nobody",
+			"other:agent.guide",
+			"app:agent_guide",
+		])
+			expect((await put(key, { muted: true })).status).toBe(404);
+		expect((await put(GUIDE, { muted: true }, { origin: null })).status).toBe(
+			403,
+		);
+		expect(
+			(
+				await put(
+					GUIDE,
+					{ muted: true },
+					{ origin: "https://evil.example.test" },
+				)
+			).status,
+		).toBe(403);
+		expect((await put(GUIDE, { muted: true }, { who: "member" })).status).toBe(
+			403,
+		);
+		expect((await put(GUIDE, { muted: "yes" })).status).toBe(400);
+		expect((await put(GUIDE, {})).status).toBe(400);
+		expect((await listed())?.muted).toBeUndefined();
+
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		await tab.take(ofType("ready"));
+		tab.send({ type: "hello", visible: false });
+		const muted = await put(GUIDE, { muted: true });
+		expect(muted.status).toBe(200);
+		expect(await muted.json()).toEqual({ muted: true });
+		// Every open page is told to read the list again.
+		await tab.take(ofType("changed"));
+		expect((await listed())?.muted).toBe(true);
+		// Muting twice is the same as once.
+		expect((await put(GUIDE, { muted: true })).status).toBe(200);
+
+		await app.host.context.surfaces.sendReply(GUIDE, {
+			chunks: ["a report nobody needs tonight"],
+			author: { name: "Guide", agent: "guide" },
+		});
+		await Bun.sleep(300);
+		expect(service.posts).toHaveLength(0);
+		app.scripts.set("hold-muted", async (request) => {
+			const prompts = app.host.context.surfaces.prompts(
+				request.channel,
+				promptScope(request.speaker),
+			);
+			await prompts?.confirm("Send it?", "details", undefined, "owner");
+			return { ok: true, text: "done" };
+		});
+		tab.send({ type: "send", id: "m1", room: GUIDE, text: "hold-muted" });
+		const card = await tab.take(ofType("prompt"));
+		await waitFor(() => service.posts.length === 1);
+		tab.send({ type: "approval", prompt: card.prompt.id, approved: false });
+		await tab.take(agentReply("guide"));
+
+		// Unmuted, the room's posts are pushed again.
+		service.posts.length = 0;
+		const unmuted = await put(GUIDE, { muted: false });
+		expect(await unmuted.json()).toEqual({ muted: false });
+		expect((await listed())?.muted).toBeUndefined();
+		await Bun.sleep(300);
+		await app.host.context.surfaces.sendReply(GUIDE, {
+			chunks: ["a report worth hearing"],
+			author: { name: "Guide", agent: "guide" },
 		});
 		await waitFor(() => service.posts.length === 1);
 		tab.close();

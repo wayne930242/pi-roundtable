@@ -29,6 +29,7 @@ import type {
 } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
 import { json } from "../http.ts";
+import type { PushMutes } from "../push/mutes.ts";
 import { readLimited } from "../request-body.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
@@ -51,6 +52,8 @@ export interface AppApiOptions {
 	/** Where stored files are read from. */
 	files: FileDir;
 	modes: Pick<ConversationModes, "set" | "peek">;
+	/** The rooms whose push the owners muted. */
+	mutes: Pick<PushMutes, "set">;
 	conversations: Pick<ConversationPort, "startFresh">;
 	identity: Pick<IdentityService, "tierOf">;
 	/** Present when the schedules pane is served. */
@@ -258,7 +261,7 @@ export class AppApi {
 	): Promise<Response> {
 		const { method } = request;
 		const [, , key, action] = parts;
-		const { rooms, log, cards, modes, conversations } = this.#options;
+		const { rooms, log, cards, modes, mutes, conversations } = this.#options;
 		if (!key) {
 			if (method !== "GET") throw new HttpError(405, "Method not allowed.");
 			return json({ rooms: await rooms.list() } satisfies RoomsView);
@@ -312,6 +315,17 @@ export class AppApi {
 			await this.#owner(admission);
 			await conversations.startFresh(room.key);
 			return json({ ok: true });
+		}
+		if (action === "mute" && method === "PUT" && parts.length === 4) {
+			// Only an agent's or group's room has a mute of its own; a thread's posts are its parent's business.
+			if (room.readOnly) throw notFound();
+			const owner = await this.#owner(admission);
+			const { muted } = await bodyOf(request);
+			if (typeof muted !== "boolean") throw bad("muted must be true or false.");
+			await mutes.set(room.key, muted, owner.principalId);
+			// The other pages and devices read the room list again to show the bell.
+			this.#options.changed();
+			return json({ muted });
 		}
 		throw new HttpError(404, "There is no such API.");
 	}

@@ -324,6 +324,8 @@ export interface RoomView {
 	/** A thread whose dispatch has ended; its room stays readable. */
 	closed?: boolean;
 	mode: RoomMode;
+	/** The owners muted this room's push: its posts and notices are not pushed; a card still is. */
+	muted?: true;
 	/** The room's agent is working now. */
 	typing: boolean;
 	/** While typing: `working` during a tool call, `thinking` otherwise. */

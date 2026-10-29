@@ -15,6 +15,7 @@ import {
 	roomOf,
 } from "pi-roundtable";
 import type { RoomKind, RoomView } from "../api-types.ts";
+import type { PushMutes } from "../push/mutes.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { WebThreads } from "./threads.ts";
 
@@ -39,6 +40,8 @@ export interface RoomsOptions {
 	threads: Pick<WebThreads, "get" | "list">;
 	log: Pick<RoomLog, "lastOf">;
 	modes: Pick<ConversationModes, "peek">;
+	/** The rooms whose owners muted push. */
+	mutes: Pick<PushMutes, "all">;
 	activity(
 		room: ChannelKey,
 	): Pick<RoomView, "typing" | "stoppable" | "phase" | "agent">;
@@ -130,11 +133,13 @@ export class Rooms {
 	}
 
 	async list(): Promise<RoomView[]> {
-		const { surface, directory, modes, activity, log, threads } = this.#options;
+		const { surface, directory, modes, mutes, activity, log, threads } =
+			this.#options;
 		const home = this.homeKey();
 		const agents = directory.agents().filter((a) => a.status === "active");
 		const groups = directory.groups().filter((g) => g.status === "active");
 		const shown = await threads.list();
+		const muted = await mutes.all();
 		const view = (
 			key: ChannelKey,
 			rest: Pick<RoomView, "kind" | "name" | "displayName"> & Partial<RoomView>,
@@ -144,6 +149,7 @@ export class Rooms {
 				home: key === home,
 				readOnly: false,
 				mode: { yolo, longRunning },
+				...(muted.has(key) ? { muted: true as const } : {}),
 				...activity(key),
 				...rest,
 				key,

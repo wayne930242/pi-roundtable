@@ -20,6 +20,7 @@ function service(
 		answer?: (target: Target) => SendResult;
 		tiers?: Record<string, "owner" | "member">;
 		quiet?: (at: number) => boolean;
+		muted?: (room: string) => Promise<boolean>;
 	} = {},
 ) {
 	const sent: { endpoint: string; payload: PushPayload }[] = [];
@@ -53,6 +54,7 @@ function service(
 		logger: silentLogger(),
 		now: () => clock,
 		...(options.quiet ? { quiet: options.quiet } : {}),
+		...(options.muted ? { muted: options.muted } : {}),
 	});
 	return {
 		instance,
@@ -211,6 +213,46 @@ describe("during quiet hours", () => {
 		quiet = false;
 		await instance.reply("app:agent.guide", "Guide", "heard");
 		expect(sent.map((s) => s.payload.body)).toEqual(["heard"]);
+	});
+});
+
+describe("in a muted room", () => {
+	const muted = async (room: string) => room === "app:agent.guide";
+
+	test("an agent's post and a notice about the room are not pushed, but a waiting card and the long-running cap are", async () => {
+		const { instance, sent } = service({ muted });
+		await instance.reply("app:agent.guide", "Guide", "the report");
+		await instance.notice("ada", "hello", "app:agent.guide");
+		expect(sent).toEqual([]);
+		await instance.card("app:agent.guide", "Send the note?", false);
+		await instance.card("app:agent.guide", "Time limit", true);
+		expect(sent.map((s) => s.payload.kind)).toEqual(["card", "cap"]);
+	});
+
+	test("another room, and a notice that names no room, are still pushed", async () => {
+		const { instance, sent } = service({ muted });
+		await instance.reply("app:agent.scout", "Scout", "heard");
+		await instance.notice("ada", "no room");
+		expect(sent.map((s) => s.payload.body)).toEqual(["heard", "no room"]);
+	});
+
+	test("a post held back does not start the reply pause of its room", async () => {
+		let on = true;
+		const { instance, sent } = service({ muted: async () => on });
+		await instance.reply("app:agent.guide", "Guide", "held back");
+		on = false;
+		await instance.reply("app:agent.guide", "Guide", "heard");
+		expect(sent.map((s) => s.payload.body)).toEqual(["heard"]);
+	});
+
+	test("a mute that cannot be read does not silence the owner", async () => {
+		const { instance, sent } = service({
+			muted: async () => {
+				throw new Error("database down");
+			},
+		});
+		await instance.reply("app:agent.guide", "Guide", "still heard");
+		expect(sent.map((s) => s.payload.body)).toEqual(["still heard"]);
 	});
 });
 
