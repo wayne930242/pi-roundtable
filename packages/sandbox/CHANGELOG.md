@@ -16,6 +16,7 @@ Planned as 0.24.0. Every new option is optional; with none set, behavior, mounts
 
 ### Changed
 
+- The worker's request trim never drops the newest tool-call group (the model would call the same tools again until the call limit): when it does not fit, each of its results is cut to a fair share of what is left and marked as cut. Startup stops when `budgets.requestBytes` cannot hold `promptBytes` + 8,192 bytes of memory notes + 49,152 bytes for the current message + 8 KiB of tool-result room, naming every size.
 - The worker image carries the label `pi-roundtable-sandbox.protocol` (2), and the Dockerfile copies the new modules (`history.ts`, `paging.ts`, `files.ts`). **Rebuild the image** when you set `workspace: "server"`, `files`, `skills` or `budgets`: startup reads the label through the container driver (`ContainerDriver.imageProtocol`, optional; `DockerContainerDriver` uses `docker image inspect`) and stops on an older image, so an old worker never writes a channel's history into a shared workspace. The README's "exactly two bind mounts" now describes both modes.
 
 ## 0.23.2

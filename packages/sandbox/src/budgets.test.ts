@@ -230,3 +230,59 @@ test("out-of-range maxCalls and maxOutputTokens stop startup", () => {
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("requestBytes that cannot hold the prompt, notes, one message and eight tool results stops startup naming every size", () => {
+	const root = mkdtempSync("/tmp/sb-budgets-");
+	try {
+		// 24,576 + 8,192 + 49,152 + 8 * 1,024 = 90,112 bytes needed.
+		expect(() =>
+			resolveSandboxRuntimeOptions(
+				options(root, {
+					budgets: { promptBytes: 24_576, requestBytes: 90_111 },
+				}),
+			),
+		).toThrow(/90111.*24576.*8192.*49152.*8192/s);
+		expect(
+			resolveSandboxRuntimeOptions(
+				options(root, {
+					budgets: { promptBytes: 24_576, requestBytes: 90_112 },
+				}),
+			).budgets?.requestBytes,
+		).toBe(90_112);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("a request budget alone is checked against the default prompt budget", () => {
+	const root = mkdtempSync("/tmp/sb-budgets-");
+	try {
+		expect(() =>
+			resolveSandboxRuntimeOptions(
+				options(root, { budgets: { requestBytes: 4096 } }),
+			),
+		).toThrow(/4096.*8192/s);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("heilun's budgets pass the request floor", () => {
+	const root = mkdtempSync("/tmp/sb-budgets-");
+	try {
+		for (const toolResultBytes of [8192, 12_288])
+			expect(
+				resolveSandboxRuntimeOptions(
+					options(root, {
+						budgets: {
+							promptBytes: 24_576,
+							requestBytes: 98_304,
+							toolResultBytes,
+						},
+					}),
+				).budgets?.requestBytes,
+			).toBe(98_304);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

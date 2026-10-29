@@ -40,6 +40,31 @@ export const BUDGET_LIMITS = {
 	requestBytes: { min: 4096, max: 196_608 },
 } as const;
 
+/** The most the worker keeps of the current message (JSON-encoded bytes). */
+export const CURRENT_MESSAGE_MAX_BYTES = 48 * 1024;
+/** The speaker memory and the channel notes in the system line, 4 KiB each. */
+export const MEMORY_ROOM_BYTES = 8192;
+/** The most tool calls one model reply may make. */
+export const MAX_TOOL_CALLS = 8;
+/** The least room per tool result a request must leave when a reply makes the most calls. */
+export const MIN_TOOL_RESULT_ROOM_BYTES = 1024;
+
+/**
+ * Why `requestBytes` cannot hold one turn's fixed parts plus a minimum of room for every
+ * result of a full reply of tool calls, or undefined when it can. Sizes are the worker's measure.
+ */
+export function requestBytesError(
+	budgets: SandboxBudgets | undefined,
+): string | undefined {
+	const promptBytes = budgets?.promptBytes ?? BUDGET_DEFAULTS.promptBytes;
+	const requestBytes = budgets?.requestBytes ?? BUDGET_DEFAULTS.requestBytes;
+	const toolRoom = MAX_TOOL_CALLS * MIN_TOOL_RESULT_ROOM_BYTES;
+	const needed =
+		promptBytes + MEMORY_ROOM_BYTES + CURRENT_MESSAGE_MAX_BYTES + toolRoom;
+	if (requestBytes >= needed) return undefined;
+	return `budgets.requestBytes ${requestBytes} cannot hold budgets.promptBytes ${promptBytes} + ${MEMORY_ROOM_BYTES} bytes of memory notes + ${CURRENT_MESSAGE_MAX_BYTES} bytes for the current message + ${toolRoom} bytes for ${MAX_TOOL_CALLS} tool results of ${MIN_TOOL_RESULT_ROOM_BYTES} bytes (${needed} in all); raise requestBytes or lower promptBytes`;
+}
+
 /** Why `value` is not a valid budgets object, or undefined when it is one. */
 export function budgetsError(value: unknown): string | undefined {
 	if (!isRecord(value)) return "budgets must be an object";

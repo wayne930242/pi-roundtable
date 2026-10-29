@@ -17,6 +17,7 @@ import {
 	budgetsError,
 	FILES_DEFAULTS,
 	filesError,
+	requestBytesError,
 	SANDBOX_PROTOCOL,
 	type SandboxBudgets,
 	type SandboxFiles,
@@ -107,6 +108,8 @@ export function resolveSandboxRuntimeOptions(
 	if (options.budgets !== undefined) {
 		const error = budgetsError(options.budgets);
 		if (error) throw new Error(error);
+		const room = requestBytesError(options.budgets);
+		if (room) throw new Error(room);
 	}
 	resolveFiles(options.files);
 	const sealed = options.skills?.length

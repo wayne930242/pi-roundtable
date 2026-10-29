@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { userHistoryContent } from "../src/history.ts";
 import {
 	BUDGET_DEFAULTS,
+	CURRENT_MESSAGE_MAX_BYTES,
 	isRecord,
+	MAX_TOOL_CALLS,
 	type SandboxReply,
 	type SandboxTurn,
 	type ToolSpec,
@@ -50,6 +52,39 @@ export function promptText(
 		else high = middle - 1;
 	}
 	return text.slice(0, low) + marker;
+}
+
+/**
+ * Cuts the largest tool results of one group until `room` (negative: bytes over) is gained.
+ * Every result keeps a share: small ones stay whole, the larger ones are cut to a common cap.
+ * Returns false when nothing could be cut.
+ */
+function shrinkToolResults(
+	results: Record<string, unknown>[],
+	room: number,
+): boolean {
+	const sizes = results.map((result) =>
+		Buffer.byteLength(JSON.stringify(String(result.content))),
+	);
+	const total = sizes.reduce((sum, size) => sum + size, 0);
+	const target = Math.max(0, total + room);
+	let low = 0;
+	let high = Math.max(...sizes);
+	while (low < high) {
+		const middle = Math.ceil((low + high) / 2);
+		const used = sizes.reduce((sum, size) => sum + Math.min(size, middle), 0);
+		if (used <= target) low = middle;
+		else high = middle - 1;
+	}
+	let changed = false;
+	results.forEach((result, index) => {
+		if ((sizes[index] ?? 0) <= low) return;
+		const cut = promptText(String(result.content), low, RESULT_MARKER);
+		if (cut === result.content) return;
+		result.content = cut;
+		changed = true;
+	});
+	return changed;
 }
 
 async function brokerRequest(
@@ -172,7 +207,10 @@ export async function runWorkerTurn(
 	);
 	const user: Message = {
 		role: "user",
-		content: promptText(userHistoryContent(turn.speaker, turn.text), 48 * 1024),
+		content: promptText(
+			userHistoryContent(turn.speaker, turn.text),
+			CURRENT_MESSAGE_MAX_BYTES,
+		),
 	};
 	const currentUser: Record<string, unknown> = { ...user };
 	const modelTools = [...functions.values()].map(({ spec }) => ({
@@ -195,10 +233,19 @@ export async function runWorkerTurn(
 		while (Buffer.byteLength(JSON.stringify(payload)) > requestBytes) {
 			if (messages[1] !== currentUser) messages.splice(1, 1);
 			else if (messages.length > 2) {
-				// Remove a complete old assistant/tool group; never leave orphan tool replies.
 				let end = 3;
 				while (messages[end]?.role === "tool") end++;
-				messages.splice(2, end - 2);
+				// Never drop the newest tool-call group: the model would call the same tools
+				// again. Cut its results to what the request has room for instead.
+				if (end >= messages.length) {
+					const room =
+						requestBytes - Buffer.byteLength(JSON.stringify(payload));
+					if (!shrinkToolResults(messages.slice(3, end), room))
+						throw new Error("model context exceeds request budget");
+				} else {
+					// Remove a complete old assistant/tool group; never leave orphan tool replies.
+					messages.splice(2, end - 2);
+				}
 			} else throw new Error("model context exceeds request budget");
 		}
 		const raw = await callBroker("/model", payload);
@@ -232,7 +279,8 @@ export async function runWorkerTurn(
 			renameSync(`${historyFile}.tmp`, historyFile);
 			return { ok: true, text };
 		}
-		if (message.tool_calls.length > 8) throw new Error("too many tool calls");
+		if (message.tool_calls.length > MAX_TOOL_CALLS)
+			throw new Error("too many tool calls");
 		const calls = message.tool_calls.map((call: unknown, index: number) => {
 			const fn =
 				isRecord(call) && isRecord(call.function) ? call.function : undefined;

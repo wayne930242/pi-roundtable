@@ -209,3 +209,129 @@ test.each([
 		expect(isSandboxTurn({ ...turn, budgets })).toBe(valid);
 	},
 );
+
+const eightCalls = Array.from({ length: 8 }, (_, index) => ({
+	id: `t${index}`,
+	function: { name: "host_page", arguments: "{}" },
+}));
+
+async function eightToolTurn(
+	budgets: NonNullable<SandboxTurn["budgets"]>,
+	text: string,
+	prompt = "Be helpful",
+): Promise<{
+	reply: { ok: boolean; text: string };
+	modelCalls: number;
+	lastTools: { tool_call_id: string; content: string }[];
+	lastSize: number;
+}> {
+	const workspace = mkdtempSync(join(tmpdir(), "sb-budget-"));
+	let modelCalls = 0;
+	let lastTools: { tool_call_id: string; content: string }[] = [];
+	let lastSize = 0;
+	try {
+		const reply = await runWorkerTurn(
+			{
+				...turn,
+				prompt,
+				budgets,
+				tools: [
+					{ name: "page", description: "Page", parameters: { type: "object" } },
+				],
+			},
+			{
+				workspace,
+				broker: async (route, body) => {
+					if (route === "/tools/page") return { text };
+					modelCalls++;
+					const messages = body.messages as {
+						role: string;
+						tool_call_id: string;
+						content: string;
+					}[];
+					lastTools = messages.filter((message) => message.role === "tool");
+					lastSize = Buffer.byteLength(JSON.stringify(body));
+					if (lastTools.length === 0)
+						return { choices: [{ message: { tool_calls: eightCalls } }] };
+					return { choices: [{ message: { content: "done" } }] };
+				},
+			},
+		);
+		return { reply, modelCalls, lastTools, lastSize };
+	} finally {
+		rmSync(workspace, { recursive: true, force: true });
+	}
+}
+
+test("a request that cannot hold eight whole tool results keeps the newest group with every result cut to its share", async () => {
+	const { reply, modelCalls, lastTools, lastSize } = await eightToolTurn(
+		{ promptBytes: 4096, toolResultBytes: 12_288, requestBytes: 40_000 },
+		"w".repeat(20_000),
+	);
+	expect(reply).toEqual({ ok: true, text: "done" });
+	expect(modelCalls).toBe(2);
+	expect(lastTools.map((tool) => tool.tool_call_id)).toEqual(
+		eightCalls.map((call) => call.id),
+	);
+	for (const tool of lastTools) expect(tool.content).toContain("cut");
+	expect(lastSize).toBeLessThanOrEqual(40_000);
+});
+
+test("a small result stays whole while the large ones share what is left", async () => {
+	const workspace = mkdtempSync(join(tmpdir(), "sb-budget-"));
+	try {
+		let calls = 0;
+		let seen: { tool_call_id: string; content: string }[] = [];
+		const texts = ["tiny", ...Array(7).fill("w".repeat(12_000))];
+		let next = 0;
+		const reply = await runWorkerTurn(
+			{
+				...turn,
+				budgets: {
+					promptBytes: 4096,
+					toolResultBytes: 12_288,
+					requestBytes: 30_000,
+				},
+				tools: [
+					{ name: "page", description: "Page", parameters: { type: "object" } },
+				],
+			},
+			{
+				workspace,
+				broker: async (route, body) => {
+					if (route === "/tools/page") return { text: texts[next++] };
+					calls++;
+					const messages = body.messages as {
+						role: string;
+						tool_call_id: string;
+						content: string;
+					}[];
+					seen = messages.filter((message) => message.role === "tool");
+					if (seen.length === 0)
+						return { choices: [{ message: { tool_calls: eightCalls } }] };
+					return { choices: [{ message: { content: "done" } }] };
+				},
+			},
+		);
+		expect(reply.ok).toBe(true);
+		expect(calls).toBe(2);
+		expect(seen[0]?.content).toBe(JSON.stringify({ text: "tiny" }));
+		expect(seen[1]?.content).toContain("cut");
+	} finally {
+		rmSync(workspace, { recursive: true, force: true });
+	}
+});
+
+test("heilun's budgets (24576 / 98304 / 12288) answer after eight full-size tool results", async () => {
+	const { reply, modelCalls, lastTools, lastSize } = await eightToolTurn(
+		{ promptBytes: 24_576, toolResultBytes: 12_288, requestBytes: 98_304 },
+		"w".repeat(20_000),
+		"p".repeat(30_000),
+	);
+	expect(reply).toEqual({ ok: true, text: "done" });
+	expect(modelCalls).toBe(2);
+	expect(lastTools).toHaveLength(8);
+	expect(lastSize).toBeLessThanOrEqual(98_304);
+	const kept = lastTools.map((tool) => Buffer.byteLength(tool.content));
+	for (const size of kept) expect(size).toBeGreaterThan(2048);
+});
