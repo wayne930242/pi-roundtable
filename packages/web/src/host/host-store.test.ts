@@ -237,9 +237,12 @@ describeDb("what the host rooms store", () => {
 	});
 
 	test("a baseline room with nothing in it yet starts at the beginning, so the first thing said there is unread", async () => {
-		const fresh = `${ELSEWHERE}-empty` as typeof ELSEWHERE;
+		// The database is shared between runs: this room and this person are new to it.
+		const run = Math.random().toString(36).slice(2, 8);
+		const fresh = `${ELSEWHERE}-empty-${run}` as typeof ELSEWHERE;
+		const person = `reader-${run}`;
 		const baseline = new Set([fresh]);
-		expect((await reads.unread("ada", [fresh], baseline)).has(fresh)).toBe(
+		expect((await reads.unread(person, [fresh], baseline)).has(fresh)).toBe(
 			false,
 		);
 		await log.appendOnce({
@@ -249,7 +252,7 @@ describeDb("what the host rooms store", () => {
 			text: "first",
 		});
 		// A second look at the room does not move the cursor on to the newest message.
-		expect((await reads.unread("ada", [fresh], baseline)).get(fresh)).toBe(1);
+		expect((await reads.unread(person, [fresh], baseline)).get(fresh)).toBe(1);
 	});
 
 	test("the reads of a room are everyone's cursors", async () => {
