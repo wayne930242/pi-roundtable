@@ -17,8 +17,20 @@ import { json } from "../http.ts";
 import { bad, bodyOf, HttpError } from "./api-http.ts";
 import type { OwnerOf } from "./team-routes.ts";
 
-/** The largest body of a save: a document of 20,000 characters may be four bytes each. */
-const MAX_PROMPT_BYTES = 128 * 1024;
+/** The most bytes a character takes in a JSON body: a control character is escaped as `\u00XX`. */
+const BYTES_PER_CHAR = 6;
+/** What a body carries besides the texts: the braces, the keys and some room. */
+const BODY_OVERHEAD = 4 * 1024;
+
+/**
+ * The largest body of a write to a document: the new text, at most `maxChars` characters, and
+ * `base`, the text in force when the edit began, which may be longer (a file version has no limit).
+ */
+const bodyLimit = (document: PromptDocumentView): number =>
+	(Math.max(document.maxChars, document.text.length, document.fileText.length) +
+		document.maxChars) *
+		BYTES_PER_CHAR +
+	BODY_OVERHEAD;
 
 export interface PromptApiOptions {
 	prompts: Pick<PromptDocuments, "list" | "get" | "set" | "revert" | "history">;
@@ -122,7 +134,7 @@ export class PromptApi {
 		}
 		if (!action && method === "PUT") {
 			const speaker = await owner();
-			const body = await bodyOf(request, MAX_PROMPT_BYTES);
+			const body = await bodyOf(request, bodyLimit(document));
 			const { text, base } = body;
 			if (typeof text !== "string") throw bad("text must be text.");
 			if (typeof base !== "string")
@@ -133,7 +145,7 @@ export class PromptApi {
 		}
 		if (action === "revert" && method === "POST" && parts.length === 4) {
 			const speaker = await owner();
-			const body = await bodyOf(request, MAX_PROMPT_BYTES);
+			const body = await bodyOf(request, bodyLimit(document));
 			if (typeof body.base !== "string")
 				throw bad("base must be the text the prompt was reverted from.");
 			const revert: PromptRevert = { base: body.base };

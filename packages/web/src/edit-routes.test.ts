@@ -448,6 +448,25 @@ describe("api/prompts", () => {
 		expect(calls).toEqual([]);
 	});
 
+	test("the largest body follows the document's maxChars: a long text of a roomy document is saved, a body past the limit is a 413", async () => {
+		const server = setup();
+		// 60,000 characters of three bytes each is 180 KB, more than the 20,000-character default allows for.
+		documents.set("roomy", document("roomy", { maxChars: 60_000 }));
+		const long = "字".repeat(60_000);
+		const saved = await call(server, "PUT", "prompts/roomy", {
+			body: { text: long, base: "File text." },
+		});
+		expect(saved.status).toBe(200);
+		expect(((await saved.json()) as PromptView).text).toBe(long);
+		expect(calls).toEqual(["set roomy by Riley"]);
+		// A document that keeps the default limit refuses a body far past what its texts can fill.
+		const past = await call(server, "PUT", "prompts/shared", {
+			body: { text: "x".repeat(300_000), base: "File text." },
+		});
+		expect(past.status).toBe(413);
+		expect(calls).toEqual(["set roomy by Riley"]);
+	});
+
 	test("reverting returns to the file version and is kept under the owner's name; a document without an override is a 400", async () => {
 		const server = setup();
 		const response = await call(server, "POST", "prompts/guest/revert", {
