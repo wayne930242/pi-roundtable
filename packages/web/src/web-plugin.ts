@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
 	AGENTS,
 	CONVERSATIONS,
@@ -22,6 +22,7 @@ import {
 import { ConsoleApi } from "./console-api.ts";
 import { ConsoleServer } from "./console-server.ts";
 import {
+	protectedDirs,
 	type ResolvedOptions,
 	resolveOptions,
 	type WebConsoleOptions,
@@ -100,7 +101,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		(pane) => pane !== "workspace" || workspaceRoots.length > 0,
 	);
 	if (workspaceRoots.length > 0)
-		checkRoots(workspaceRoots, [resolve(settings.dataDir)]);
+		checkRoots(workspaceRoots, protectedDirs(settings.dataDir));
 	const workspace =
 		panes.includes("workspace") && rooms
 			? new WorkspaceFiles({ roots: workspaceRoots, logger })

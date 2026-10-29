@@ -731,26 +731,36 @@ export class WorkspaceFiles {
 				/['()*]/g,
 				(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
 			);
-			const stream = handle.createReadStream({ start: 0, autoClose: true });
-			return new Response(
-				Readable.toWeb(stream) as ReadableStream<Uint8Array>,
-				{
-					headers: {
-						"content-type": image
-							? IMAGE_TYPES[image]
-							: asText
-								? "text/plain; charset=utf-8"
-								: "application/octet-stream",
-						"content-disposition": inline
-							? "inline"
-							: `attachment; filename*=UTF-8''${encoded}`,
-						"content-security-policy": "sandbox; default-src 'none'",
-						"x-content-type-options": "nosniff",
-						"cache-control": "no-store",
-						"content-length": String(info.size),
-					},
+			// The size is what the open handle says now, and the stream stops there, so a file that
+			// grows while it is sent cannot make the body longer than its `content-length`.
+			if (info.size > DOWNLOAD_MAX_BYTES)
+				throw new WorkspaceRefusal(413, "too-large");
+			let body: ReadableStream<Uint8Array> | null = null;
+			if (info.size === 0) await handle.close();
+			else
+				body = Readable.toWeb(
+					handle.createReadStream({
+						start: 0,
+						end: info.size - 1,
+						autoClose: true,
+					}),
+				) as ReadableStream<Uint8Array>;
+			return new Response(body, {
+				headers: {
+					"content-type": image
+						? IMAGE_TYPES[image]
+						: asText
+							? "text/plain; charset=utf-8"
+							: "application/octet-stream",
+					"content-disposition": inline
+						? "inline"
+						: `attachment; filename*=UTF-8''${encoded}`,
+					"content-security-policy": "sandbox; default-src 'none'",
+					"x-content-type-options": "nosniff",
+					"cache-control": "no-store",
+					"content-length": String(info.size),
 				},
-			);
+			});
 		} catch (error) {
 			await handle.close().catch(() => undefined);
 			throw error;
@@ -952,7 +962,19 @@ export class WorkspaceFiles {
 		kind: "file" | "other",
 	): Promise<void> {
 		if (kind === "file") {
-			await link(from, to);
+			try {
+				await link(from, to);
+			} catch (error) {
+				// A file system without hard links falls back to the check made just before.
+				if (
+					!["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS"].includes(
+						errno(error) ?? "",
+					)
+				)
+					throw error;
+				await rename(from, to);
+				return;
+			}
 			await unlink(from);
 			return;
 		}

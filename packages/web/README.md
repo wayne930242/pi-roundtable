@@ -193,7 +193,7 @@ It is for reading a file an agent wrote, fixing a line, and keeping a note besid
 **What it shows.** Two places are on without being named when the agent server is present, from `AGENTS.workspace`: `agents`, the shared working directory every agent's shell and file tools run in, and `scratch`, the agents' scratch directory when the host sets one.
 Both are writable, which adds nothing the agents lack: they write there without a hold.
 `workspace.roots` adds more, each `{ id, label, dir, writable? }` with `writable` false unless said, and `workspace.agents: false` or `workspace.scratch: false` leaves one of the two out.
-A root is refused at the start when it is, or contains, the host's `dataDir` (sessions, the session key and the VAPID keys live there), once symlinks are resolved.
+A root is refused at the start when it is, or contains, the host's `dataDir` (sessions, the session key and the VAPID keys live there) or Pi's agent directory in its default place, `<dataDir>/pi` (`auth.json`), once symlinks are resolved.
 A root whose directory does not exist yet lists as empty and is never created by the app.
 The pane is in the default list only when there is a place to show; a list that names `workspace` without one stops the start and says so.
 
@@ -215,7 +215,7 @@ The page then opens a dialog: Copy my text, Reload (discard my edits), and Save 
 While a file is open the page looks at it again on focus and every 5 seconds; in read mode it reloads silently, and in edit mode a banner says a partner is changing the file.
 A save writes a temporary file beside the original, with the original's mode, flushes it, checks again that the directory is still the one inside the root and the file is still a regular file, and renames it over the original.
 It keeps the file's line separator (`\r\n` or `\n`), a leading byte order mark and whether the file ends with a newline.
-A rename gives the file a new inode, so a hard link to the old file keeps the old text.
+A rename gives the file a new inode and the server's user as its owner, so a hard link to the old file keeps the old text, and agents that run as another user (`shellUser`) may need the directory's group to keep writing the file.
 
 **Making and removing.** New file, New folder and Rename never replace something that exists (a clash is `409 exists`).
 Delete moves the file or folder into `.rt-trash` at the top of its place, which the tree does not list; Trash lists what is there with Restore, which never overwrites, and Delete for good.

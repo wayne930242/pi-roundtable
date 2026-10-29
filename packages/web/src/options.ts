@@ -329,6 +329,14 @@ function checkPanes(panes: readonly PaneName[] | undefined): PaneName[] {
 	return [...panes];
 }
 
+/**
+ * What no place of the files pane may be or contain: the host's data directory, and Pi's agent
+ * directory in its default place beside the sessions (`auth.json` lives there).
+ */
+export function protectedDirs(dataDir: string): string[] {
+	return [resolve(dataDir), resolve(dataDir, "pi")];
+}
+
 function checkWorkspace(
 	options: WebConsoleOptions,
 	dataDir: string,
@@ -367,7 +375,7 @@ function checkWorkspace(
 			fail(
 				`workspace.roots may not use the id ${reserved}, which names the agents' own directory`,
 			);
-	checkRoots(roots, [resolve(dataDir)]);
+	checkRoots(roots, protectedDirs(dataDir));
 	return {
 		roots,
 		agents: given.agents !== false,

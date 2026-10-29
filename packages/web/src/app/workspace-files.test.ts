@@ -775,6 +775,19 @@ describe("raw downloads", () => {
 		await forced.text();
 	});
 
+	test("an empty file downloads as an empty body, and the body is never longer than the size read", async () => {
+		writeFileSync(join(root, "empty.txt"), "");
+		const empty = await files().raw("agents", "empty.txt", true);
+		expect(empty.headers.get("content-length")).toBe("0");
+		expect(await empty.text()).toBe("");
+		writeFileSync(join(root, "grow.txt"), "12345");
+		const response = await files().raw("agents", "grow.txt", true);
+		// The file grows after the headers were decided.
+		writeFileSync(join(root, "grow.txt"), "1234567890");
+		expect(response.headers.get("content-length")).toBe("5");
+		expect(await response.text()).toBe("12345");
+	});
+
 	test("a file over 50 MiB is refused", async () => {
 		const path = join(root, "big.bin");
 		writeFileSync(path, "");

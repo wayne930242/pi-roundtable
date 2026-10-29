@@ -459,6 +459,10 @@ describe("the workspace options", () => {
 			expect(() =>
 				roots([{ id: "x", label: "A", dir: join(dir, "data") }]),
 			).toThrow(/data/);
+			// Pi's agent directory in its default place holds the credentials.
+			expect(() =>
+				roots([{ id: "x", label: "A", dir: join(dir, "data", "pi") }]),
+			).toThrow(/data/);
 			expect(() => roots([{ id: "x", label: " ", dir }])).toThrow(/roots\[0\]/);
 			expect(() => roots("nope")).toThrow(/list/);
 		} finally {
