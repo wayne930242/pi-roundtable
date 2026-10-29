@@ -114,7 +114,11 @@ async function build(settings: ResolvedOptions, context: Context) {
 	if (workspaceRoots.length > 0) checkRoots(workspaceRoots, guarded);
 	const workspace =
 		panes.includes("workspace") && rooms
-			? new WorkspaceFiles({ roots: workspaceRoots, logger })
+			? new WorkspaceFiles({
+					roots: workspaceRoots,
+					logger,
+					protectedDirs: guarded,
+				})
 			: undefined;
 	const connection = services.find(DISCORD)?.connection;
 	// Absent on a host without the registry: the console then lists conversations found by name only.

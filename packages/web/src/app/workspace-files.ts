@@ -61,10 +61,11 @@ const HEAD_BYTES = 8192;
 export const TRASH_DIR = ".rt-trash";
 const GIT_DIR = ".git";
 
-/** The guarded names are compared without case: a volume that ignores it takes `.GIT` for `.git`. */
-const isGitDir = (name: string): boolean => name.toLowerCase() === GIT_DIR;
+/** The guarded names are compared without case and in compatibility form (`ſ` is `s` on some volumes): a volume that ignores it takes `.GIT` for `.git`. */
+const isGitDir = (name: string): boolean =>
+	name.normalize("NFKC").toLowerCase() === GIT_DIR;
 const isTrashDir = (name: string | undefined): boolean =>
-	name?.toLowerCase() === TRASH_DIR;
+	name?.normalize("NFKC").toLowerCase() === TRASH_DIR;
 const TRASH_ID =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ROOT_ID = /^[a-z][a-z0-9-]{0,31}$/;
@@ -127,6 +128,8 @@ export class WorkspaceConflictError extends Error {
 export interface WorkspaceFilesOptions {
 	roots: readonly WorkspaceRoot[];
 	logger: Logger;
+	/** The host's own directories (data, keys): a root that first appears as a link to one is refused. */
+	protectedDirs?: readonly string[];
 	/** For tests: runs after a save's temporary file is written and before the checks that precede the rename. */
 	hooks?: {
 		beforeReplace?: (tmp: string, target: string) => void | Promise<void>;
@@ -417,9 +420,9 @@ const ACTIVE = new Set(["html", "htm", "xhtml", "xml", "xsl", "mht"]);
  * because the browser's viewer does not run under a sandbox.
  */
 const MEDIA_POLICY =
-	"sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'";
+	"sandbox; frame-ancestors 'self'; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'";
 const PDF_POLICY =
-	"default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+	"frame-ancestors 'self'; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
 
 // The byte order mark is stripped by hand, once: a second one is text and stays.
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -534,10 +537,12 @@ export class WorkspaceFiles {
 	readonly #hooks: NonNullable<WorkspaceFilesOptions["hooks"]>;
 	/** Where each root really was when it was first seen; a root that resolves elsewhere later is refused. */
 	readonly #pinned = new Map<string, string>();
+	readonly #guarded: readonly string[];
 	readonly #speaker = new AsyncLocalStorage<string>();
 
 	constructor(options: WorkspaceFilesOptions) {
 		this.#roots = new Map(options.roots.map((root) => [root.id, root]));
+		this.#guarded = (options.protectedDirs ?? []).map(realish);
 		for (const root of options.roots) {
 			try {
 				this.#pinned.set(root.id, realpathSync(root.dir));
@@ -599,8 +604,13 @@ export class WorkspaceFiles {
 			return "missing";
 		}
 		const pinned = this.#pinned.get(root.id);
-		if (pinned === undefined) this.#pinned.set(root.id, real);
-		else if (pinned !== real) throw this.#refuse(root.id, raw, 403, "outside");
+		if (pinned === undefined) {
+			// A root missing at the start is pinned where it first appears, under the start-time rule.
+			if (this.#guarded.some((dir) => real === dir || within(real, dir)))
+				throw this.#refuse(root.id, raw, 403, "outside");
+			this.#pinned.set(root.id, real);
+		} else if (pinned !== real)
+			throw this.#refuse(root.id, raw, 403, "outside");
 		return { root, real, segments };
 	}
 
@@ -914,7 +924,9 @@ export class WorkspaceFiles {
 			// grows while it is sent cannot make the body longer than its `content-length`.
 			if (info.size > DOWNLOAD_MAX_BYTES)
 				throw new WorkspaceRefusal(413, "too-large");
-			const etag = `W/"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`;
+			// Strong, so that `If-Range` may match it: the inode and the time to the nanosecond.
+			const exact = await handle.stat({ bigint: true });
+			const etag = `"${exact.ino.toString(16)}-${exact.size.toString(16)}-${exact.mtimeNs.toString(16)}"`;
 			const headers: Record<string, string> = {
 				"content-type": media
 					? media.type
@@ -928,13 +940,13 @@ export class WorkspaceFiles {
 					? media.kind === "pdf"
 						? PDF_POLICY
 						: MEDIA_POLICY
-					: "sandbox; default-src 'none'",
+					: "sandbox; frame-ancestors 'self'; default-src 'none'",
 				"x-content-type-options": "nosniff",
 				"accept-ranges": "bytes",
 			};
 			if (media && inline) {
 				// A preview may be asked for again, in pieces: it is checked each time, never kept as is.
-				headers["cache-control"] = "private, no-cache";
+				headers["cache-control"] = "no-store";
 				headers.etag = etag;
 				headers["last-modified"] = new Date(info.mtimeMs).toUTCString();
 			} else headers["cache-control"] = "no-store";
@@ -1303,7 +1315,11 @@ export class WorkspaceFiles {
 			);
 		} catch (error) {
 			// The item goes back first; the folder is removed only when it did, or the only copy would be lost.
-			const back = await rename(join(itemDir, "item"), parent.path).then(
+			const back = await this.#moveNew(
+				join(itemDir, "item"),
+				parent.path,
+				kind === "file" ? "file" : "other",
+			).then(
 				() => true,
 				() => false,
 			);
@@ -1311,6 +1327,18 @@ export class WorkspaceFiles {
 				await rm(itemDir, { recursive: true, force: true }).catch(
 					() => undefined,
 				);
+			else {
+				// Left in the trash with a note of its own, so that Restore and Purge can reach it.
+				await writeFile(
+					join(itemDir, "meta.json"),
+					JSON.stringify({ v: 1, ...item, by }),
+					{ mode: 0o600 },
+				).catch(() => undefined);
+				this.#logger.warn(
+					{ by, root: root.id, path: raw, trash: id },
+					"workspace entry could not be moved back; it stays in the trash",
+				);
+			}
 			return mapFs(error);
 		}
 		this.#logger.info(
