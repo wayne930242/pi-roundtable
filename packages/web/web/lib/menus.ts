@@ -37,3 +37,6 @@ export const fileMenuOf = (file: RoomFile): Promise<MenuSpec> =>
 /** Opens the "+" menu under a button: a new agent, a new group, and the archive. */
 export const openAddMenu = (button: HTMLElement, leave?: Leave): void =>
 	void items().then((one) => one.openAddMenu(button, leave));
+/** A folder's header menu; its code is the placement menus', loaded with the first menu. */
+export const folderMenuOf = (id: string): Promise<MenuSpec | undefined> =>
+	import("./placement-items.ts").then((one) => one.folderMenu(id));

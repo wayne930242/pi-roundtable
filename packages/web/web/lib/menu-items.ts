@@ -15,6 +15,7 @@ import { quoteInto } from "./drafts.ts";
 import { translate as t } from "./messages.ts";
 import { changeMode } from "./modes.ts";
 import { setRoomMuted } from "./mute.ts";
+import { placementItems } from "./placement-items.ts";
 import { askRoomConfirm } from "./room-confirm.ts";
 import { fileUrl } from "./rooms.ts";
 import { openTeamSheet } from "./team-sheet.ts";
@@ -63,7 +64,8 @@ export function roomMenu(
 	const view = room?.view;
 	if (!view || view.kind === "thread") return undefined;
 	const mode = room.mode;
-	const items: MenuItem[] = [];
+	// Home stays at the top; every other room can be pinned or put in a folder.
+	const items: MenuItem[] = view.home ? [] : placementItems(key, leave);
 	if (view.kind === "agent") {
 		const name = view.name;
 		items.push(

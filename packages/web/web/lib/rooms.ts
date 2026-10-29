@@ -2,6 +2,7 @@ import type {
 	ActivityPhase,
 	CardAnswer,
 	ClosedCard,
+	FolderView,
 	PromptFrame,
 	PromptOutcome,
 	RefusalCode,
@@ -12,6 +13,7 @@ import type {
 	ServerFrame,
 	UploadView,
 } from "../../src/api-types.ts";
+import { drawerGroups } from "./sections.ts";
 
 // The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
 // what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
@@ -103,6 +105,10 @@ export interface RoomsState {
 	rooms: Record<string, RoomState>;
 	/** The room keys as the server listed them: Home first. */
 	order: string[];
+	/** The owners' pinned rooms, in their order; shared by every device. */
+	pins: string[];
+	/** The owners' folders and what is in them, in their order. */
+	folders: FolderView[];
 	/** Which agents work now, anywhere, as the last `presence` frame said. */
 	presence: Record<string, { busy: boolean }>;
 	/** Whether the list was fetched at least once. */
@@ -126,7 +132,15 @@ export interface RoomsState {
 export type LocalAction =
 	| { type: "connection"; status: RoomsState["connection"] }
 	| { type: "forbidden" }
-	| { type: "rooms_loaded"; rooms: RoomView[] }
+	| {
+			type: "rooms_loaded";
+			rooms: RoomView[];
+			/** The shared arrangement; absent keeps the one held. */
+			pins?: string[];
+			folders?: FolderView[];
+	  }
+	/** The arrangement of the list changed: the page's own edit, optimistic, or the server's answer. */
+	| { type: "layout_loaded"; pins: string[]; folders: FolderView[] }
 	/** The server took a room's mute or unmute. */
 	| { type: "room_muted"; room: string; muted: boolean }
 	| {
@@ -168,6 +182,8 @@ export function initialState(): RoomsState {
 		connection: "connecting",
 		rooms: {},
 		order: [],
+		pins: [],
+		folders: [],
 		presence: {},
 		listed: false,
 		cards: {},
@@ -437,8 +453,17 @@ function withTurn(
 	};
 }
 
-function onRooms(state: RoomsState, rooms: readonly RoomView[]): RoomsState {
-	let next: RoomsState = { ...state, listed: true };
+function onRooms(
+	state: RoomsState,
+	rooms: readonly RoomView[],
+	layout: { pins?: string[] | undefined; folders?: FolderView[] | undefined },
+): RoomsState {
+	let next: RoomsState = {
+		...state,
+		listed: true,
+		pins: layout.pins ?? state.pins,
+		folders: layout.folders ?? state.folders,
+	};
 	for (const view of rooms)
 		next = withRoom(next, view.key, (room) => ({
 			...withTurn(room, view),
@@ -598,7 +623,9 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "presence":
 			return { ...state, presence: action.agents };
 		case "rooms_loaded":
-			return onRooms(state, action.rooms);
+			return onRooms(state, action.rooms, action);
+		case "layout_loaded":
+			return { ...state, pins: action.pins, folders: action.folders };
 		case "room_muted": {
 			const held = state.rooms[action.room]?.view;
 			if (!held || (held.muted === true) === action.muted) return state;
@@ -675,32 +702,23 @@ export function waitingCards(state: RoomsState, room: string): number {
 	}).length;
 }
 
+/** When the room last said something, in epoch ms; a number below any real one for a room that has not. */
+export function activityAt(state: RoomsState, room: string): number {
+	const at = Date.parse(lastMessage(state, room)?.at ?? "");
+	return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
+}
+
 /**
- * The rooms the switcher lists: those with a card waiting for an answer first, then the rest, each
- * group by its newest message (a room without one last, in the server's order). Dispatch threads
- * are reached from their room and are not listed.
+ * The rooms the switcher lists, flat: those with a card waiting for an answer first, then the owners'
+ * pinned rooms and folders in their order, then the rest by newest message (a room without one last,
+ * in the server's order). Dispatch threads are reached from their room and are not listed.
  */
 export function switcherOrder(state: RoomsState): string[] {
-	const rooms = state.order.flatMap((key, index) => {
-		const view = state.rooms[key]?.view;
-		if (!view || view.kind === "thread") return [];
-		const at = Date.parse(lastMessage(state, key)?.at ?? "");
-		return [
-			{
-				key,
-				index,
-				waiting: waitingCards(state, key) > 0,
-				at: Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at,
-			},
-		];
-	});
-	return rooms
-		.sort(
-			(a, b) =>
-				Number(b.waiting) - Number(a.waiting) ||
-				(a.at === b.at ? a.index - b.index : b.at - a.at),
-		)
-		.map((room) => room.key);
+	return drawerGroups(
+		state,
+		(key) => activityAt(state, key),
+		(key) => waitingCards(state, key) > 0,
+	).flatMap((group) => group.keys);
 }
 
 /** The banner a room shows while a mode is on; none when both are off. */
