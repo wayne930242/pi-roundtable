@@ -13,11 +13,11 @@ import type {
 	ChannelContextOptions,
 } from "pi-roundtable/discord";
 import { fakeDiscord, servicePair, testPlugin } from "pi-roundtable/testing";
+import { promptText } from "../worker/agent.ts";
 import type { SandboxChannelContext } from "./channel-context.ts";
 import { SandboxChannelStore } from "./channel-store.ts";
 import { sandboxClaim } from "./claim.ts";
 import { HISTORY_ENTRY_BYTES, userHistoryContent } from "./history.ts";
-import { promptText } from "../worker/agent.ts";
 import { sandbox } from "./plugin.ts";
 import { CURRENT_MESSAGE_MAX_BYTES, type SandboxTurn } from "./protocol.ts";
 
