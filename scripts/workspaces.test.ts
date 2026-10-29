@@ -107,6 +107,23 @@ test("a public compactor environment name is allowed only in its integration tes
 	}
 });
 
+test("a name inside another word is not the name, at a word's start it is", () => {
+	const dir = mkdtempSync(resolve(tmpdir(), "roundtable-scan-"));
+	// Built at run time, so this file does not trip the scan it tests.
+	const name = ["no", "ul"].join("");
+	try {
+		writeFileSync(resolve(dir, "keywords.js"), `const k="ber${name}li";\n`);
+		expect(scanTree(dir)).toEqual([]);
+		writeFileSync(resolve(dir, "person.js"), `const a="${name}",b="${name}Bot";\n`);
+		expect(scanTree(dir).map(({ file, kind }) => `${file} ${kind}`)).toEqual([
+			"person.js name",
+			"person.js name",
+		]);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 // CI scans a fresh checkout; locally only tracked files count, so build output and scratch notes do not.
 const trackedFindings = () => {
 	const tracked = new Set(

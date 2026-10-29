@@ -146,7 +146,8 @@ const NAMES = new RegExp(
 		spell("(?<![a-z])", "j", "ev"),
 		spell("phoe", "nix"),
 		spell("context", "forge"),
-		spell("no", "ul"),
+		// As a word or a camelCase head, not inside another word such as a mathematician's name in a SQL keyword list.
+		spell("(?<![a-z])", "no", "ul"),
 		spell("aaa", "av"),
 		// The name is split across two pieces so this file does not contain it.
 		spell("\\bmel", "ody\\b"),
