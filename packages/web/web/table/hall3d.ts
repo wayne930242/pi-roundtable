@@ -247,7 +247,7 @@ export function buildHall(hall: Hall, count: number, toon: Toon): Built {
 
 	// windows: a lancet in each bay, the round moon window in the bay behind the camera's far side
 	const lancetGeo = own.geometry(new PlaneGeometry(2.6, 5.2));
-	const roseGeo = own.geometry(new PlaneGeometry(6.4, 6.4));
+	const roseGeo = own.geometry(new PlaneGeometry(4.6, 4.6));
 	const lancetMat = decal(own.texture(windowCanvas(hall, "lancet")), {
 		alphaTest: 0.3,
 		depthWrite: true,
@@ -270,7 +270,7 @@ export function buildHall(hall: Hall, count: number, toon: Toon): Built {
 		const az = (TAU * k) / BAYS;
 		const far = k === BAYS / 2;
 		const w = new Mesh(far ? roseGeo : lancetGeo, far ? roseMat : lancetMat);
-		around(az, wall - 0.12, far ? 7.4 : 6.2, w);
+		around(az, wall - 0.12, far ? 7.1 : 6.2, w);
 		const shaft = new Mesh(beamGeo, beamMat);
 		const inward = wall - 4.4;
 		shaft.position.set(Math.sin(az) * inward, 4.4, Math.cos(az) * inward);

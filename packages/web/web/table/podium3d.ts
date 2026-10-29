@@ -195,7 +195,7 @@ export class Podium {
 			gradientMap: toon.steps,
 		});
 		const panel = new Mesh(kit.panelPlane, this.panelMaterial);
-		panel.position.set(0, 0.68, 0.585);
+		panel.position.set(0, 0.68, 0.64);
 		this.group.add(panel);
 
 		const [pw, ph] = PLATE_PX;
@@ -207,12 +207,12 @@ export class Podium {
 			fog: false,
 		});
 		const front = new Mesh(kit.platePlane, this.plateMaterial);
-		front.position.set(0, 1.07, 0.6);
-		front.rotation.x = -0.12;
+		front.position.set(0, 1.06, 0.68);
+		front.rotation.x = -0.16;
 		const back = new Mesh(kit.platePlane, this.plateMaterial);
-		back.position.set(0, 1.07, -0.6);
+		back.position.set(0, 1.06, -0.68);
 		back.rotation.y = Math.PI;
-		back.rotation.x = -0.12;
+		back.rotation.x = -0.16;
 		this.group.add(hit(front), hit(back));
 
 		const boardMaterial = new MeshBasicMaterial({

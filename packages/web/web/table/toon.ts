@@ -21,7 +21,7 @@ import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 /** A gradient of three steps; shade falls on the lowest, light on the highest. */
 export function toneSteps(): DataTexture {
-	const data = new Uint8Array([88, 170, 255]);
+	const data = new Uint8Array([125, 195, 255]);
 	const tex = new DataTexture(data, 3, 1, RedFormat, UnsignedByteType);
 	tex.minFilter = NearestFilter;
 	tex.magFilter = NearestFilter;

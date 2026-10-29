@@ -99,29 +99,29 @@ export function overviewShot(az: number, count: number): Shot {
 	const ring = ringRadius(count);
 	return {
 		az,
-		r: ring + 4.2 + ring * 0.12,
-		y: 5.6 + ring * 0.3,
+		r: ring + 5.2 + ring * 0.12,
+		y: 4.6 + ring * 0.12,
 		aim: 0,
 		lookR: 0,
-		lookY: 0.7,
+		lookY: 2.6,
 		roll: 0,
-		fov: 42,
+		fov: 50,
 	};
 }
 
 /** The speaker large in the frame from just inside the ring, a little low, off to a side, tilted. */
 export function closeupShot(seatAz: number, count: number): Shot {
 	const ring = ringRadius(count);
-	const side = 0.15;
+	const side = 0.2;
 	return {
 		az: normalizeAngle(seatAz + side),
-		r: Math.max(ring - 3.5, 0.8),
-		y: 1.3,
+		r: Math.max(ring - 4.1, 0.8),
+		y: 1.75,
 		aim: -side,
 		lookR: ring + 0.1,
-		lookY: 2.05,
-		roll: -0.07,
-		fov: 56,
+		lookY: 1.95,
+		roll: -0.1,
+		fov: 47,
 	};
 }
 

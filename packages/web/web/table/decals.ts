@@ -463,10 +463,10 @@ export function badgeCanvas(hall: Hall): HTMLCanvasElement {
 	disc(1, hall.gold);
 	g.fillStyle = hall.ink;
 	g.beginPath();
-	g.moveTo(52, 26);
-	g.lineTo(76, 26);
-	g.lineTo(71, 74);
-	g.lineTo(57, 74);
+	g.moveTo(128 + 52, 26);
+	g.lineTo(128 + 76, 26);
+	g.lineTo(128 + 71, 74);
+	g.lineTo(128 + 57, 74);
 	g.closePath();
 	g.fill();
 	g.beginPath();
