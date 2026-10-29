@@ -113,11 +113,12 @@ afterEach(async () => {
 	Reflect.deleteProperty(navigator, "canShare");
 });
 
-const rightClick = (target: Element | null, opens = true) => {
+const rightClick = async (target: Element | null, opens = true) => {
 	if (!target) throw new Error("nothing to click");
 	// The menu's builders load on demand, so the menu is there a moment after the click: the first
-	// one waits for the chunk, however busy the machine is.
-	return page.act(async () => {
+	// one waits for the chunk, however busy the machine is. The wait is outside `act`, which holds
+	// React's updates back until it returns, so the loop would never see the menu inside it.
+	await page.act(async () => {
 		target.dispatchEvent(
 			new MouseEvent("contextmenu", {
 				bubbles: true,
@@ -127,14 +128,16 @@ const rightClick = (target: Element | null, opens = true) => {
 			}),
 		);
 		await settle(30);
-		const stop = Date.now() + 3000;
-		while (
-			opens &&
-			!document.querySelector('[role^="menuitem"]') &&
-			Date.now() < stop
-		)
-			await settle(20);
 	});
+	const stop = Date.now() + 3000;
+	while (
+		opens &&
+		!document.querySelector('[role^="menuitem"]') &&
+		Date.now() < stop
+	)
+		await page.act(async () => {
+			await settle(20);
+		});
 };
 const menuItems = (): HTMLElement[] => [
 	...document.querySelectorAll<HTMLElement>('[role^="menuitem"]'),
