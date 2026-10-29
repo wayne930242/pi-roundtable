@@ -11,6 +11,7 @@ The plugin is a chat surface of its own (`app`), so a team of agents can live in
 - **Cards.** Approvals, questions, questionnaires and the card at a turn's time limit appear in the room, and any owner's device can answer them.
 - **Modes.** Yolo mode approves the held actions a rule allows without asking; long-running mode lets a turn go past its time limit. Each is a switch per room, and a banner shows while one is on.
 - **An app.** A web app manifest, a service worker and Web Push make it installable and let a card wake the phone.
+- **Files.** The owner browses the agents' workspace, reads files with syntax highlighting, and edits, creates, renames and deletes them (to a restorable trash), with a check on every save that a partner did not change the file meanwhile.
 - **Looks.** Agents are drawn as characters; the page has a Modern and a Camelot look, light and dark, and a round table that seats the whole team.
 
 Who may enter is the host's `access` configuration plus an authentication mode you choose: `none`, `password` or `verifier` (see [Authentication](#authentication)), and the plugin refuses to start without one.
@@ -19,7 +20,7 @@ Then only a person whose principal holds the owner role gets in.
 ## Contents
 
 - [Requirements](#requirements) and [Install](#install)
-- [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table)
+- [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table), [the files pane](#the-files-pane)
 - [Install on a device](#install-on-a-device) and [Notifications](#notifications)
 - [Authentication](#authentication) and the [threat model](#threat-model)
 - [Options](#options), [the console's panes](#the-consoles-panes) and [host feature ports](#host-feature-ports)
@@ -109,6 +110,7 @@ The page is built for a phone first: a bottom tab bar under 720 px, a side rail 
 | **Agent profile** | Display name, prompt, model and thinking level, and the character creator (see [Characters in the page](#characters-in-the-page)). |
 | **Schedules** | Every schedule of the team, labelled by room or channel, with a confirmed cancel. |
 | **Table** | The round table (see [The round table](#the-round-table)). |
+| **Files** | The agents' workspace: a tree, highlighted files and an editor (see [The files pane](#the-files-pane)). |
 | **Settings** | Color scheme and look, install, notifications for this device, and Log out (password mode). |
 
 **Sending and stopping.** A message goes to the agent as the owner's. **Stop** ends the turn.
@@ -183,12 +185,66 @@ The `table` pane seats every active agent at a round table, the coordinator firs
 - **`?nogl`.** Adding `nogl` to the page address (`/console/?nogl`, or `#/table?nogl`) draws the SVG table on a browser that has WebGL, to try that path; `nogl=0` and `nogl=false` leave the choice to the browser. The camera starts high enough for the ring to fill the canvas and pinch zooms; "Reset view" brings it back.
 - **Group rooms.** A group room's header has a "Table" button that opens the table of its members only, in a sheet on a phone and in a panel beside the room elsewhere. Under the Camelot look a compact strip of the members also stands under the header with the speaker lit; under Modern it stays collapsed.
 
+### The files pane
+
+The `workspace` pane (called Files) shows the directories the agents work in and lets the owner edit what they find there, from a phone or a desktop.
+It is for reading a file an agent wrote, fixing a line, and keeping a note beside the work, not for running code.
+
+**What it shows.** Two places are on without being named when the agent server is present, from `AGENTS.workspace`: `agents`, the shared working directory every agent's shell and file tools run in, and `scratch`, the agents' scratch directory when the host sets one.
+Both are writable, which adds nothing the agents lack: they write there without a hold.
+`workspace.roots` adds more, each `{ id, label, dir, writable? }` with `writable` false unless said, and `workspace.agents: false` or `workspace.scratch: false` leaves one of the two out.
+A root is refused at the start when it is, or contains, the host's `dataDir` (sessions, the session key and the VAPID keys live there), once symlinks are resolved.
+A root whose directory does not exist yet lists as empty and is never created by the app.
+The pane is in the default list only when there is a place to show; a list that names `workspace` without one stops the start and says so.
+
+**On a desktop** (720 px and wider) the tree stands on the left, resizable and remembering which folders were open per place, and the file or folder on the right, under a header with a place picker and breadcrumbs.
+**On a phone** the pane drills down one level at a time: the places, then a folder, then a file, with the breadcrumbs as a row of chips that scrolls sideways and a Back button.
+A file opens in read mode, so no keyboard rises; Edit switches to the editor, whose bottom bar sits above the keyboard with Save, Undo, Redo, Find and Tab, the font is 16 px so the page does not zoom on focus, and lines wrap.
+Cmd/Ctrl+S saves, Cmd/Ctrl+F finds, and Esc leaves the editor (and asks first when there are unsaved edits).
+`.git` and `node_modules` are listed but dimmed.
+
+**Highlighting and editing** are CodeMirror 6, one engine for both, so the read view and the editor look the same and switching is instant.
+The editor and each language are separate chunks that load the first time they are needed (the editor about 100 KB gzipped, a language 1 to 70 KB), so none of it is in the page's first download, and the service worker caches them when they are fetched and never precaches them.
+TypeScript and JavaScript, JSON, Markdown, CSS, HTML, Python, YAML, Go, Rust, SQL, XML, shell, TOML and Dockerfile are highlighted; any other file is plain text.
+The colors are CSS variables (`--code-*` in `tokens.css`, set again for Camelot), each at least 4.5:1 on the editor's background, so the Modern and Camelot looks and light and dark recolor an open editor with nothing rebuilt.
+There is no autocomplete and no auto-closing of brackets, which fight phone keyboards, and Tab inserts indentation.
+
+**Saving.** A file is read with its SHA-256 hash, and a save carries it back as `baseHash`.
+The server reads the file again and compares just before it replaces it, and a mismatch answers `409` with the file as it is now and writes nothing; so does a file that was deleted meanwhile.
+The page then opens a dialog: Copy my text, Reload (discard my edits), and Save mine anyway, which asks a second time and then writes with the hash the conflict named.
+While a file is open the page looks at it again on focus and every 5 seconds; in read mode it reloads silently, and in edit mode a banner says a partner is changing the file.
+A save writes a temporary file beside the original, with the original's mode, flushes it, checks again that the directory is still the one inside the root and the file is still a regular file, and renames it over the original.
+It keeps the file's line separator (`\r\n` or `\n`), a leading byte order mark and whether the file ends with a newline.
+A rename gives the file a new inode, so a hard link to the old file keeps the old text.
+
+**Making and removing.** New file, New folder and Rename never replace something that exists (a clash is `409 exists`).
+Delete moves the file or folder into `.rt-trash` at the top of its place, which the tree does not list; Trash lists what is there with Restore, which never overwrites, and Delete for good.
+A link is deleted as a link, never as what it points to.
+
+**What it refuses.** Every call, a read too, needs an owner, whose tier is read again, and a change needs the console's own `Origin` like every write.
+The client names a place by id and a path relative to it; a NUL byte, a leading `/`, a `.` or `..` or empty segment, or more than 4,096 bytes is `400`.
+Each directory on the way is resolved with `realpath` and must be inside the place's real directory.
+A symlink is listed with whether its target is inside; inside it opens as its target, outside it is shown and neither read nor written, and a save never writes through one.
+A pipe, socket or device is listed as other and never opened; a file is opened without following a link and its handle compared with what was checked.
+`.git` is read-only everywhere, because a hook or a config there runs code the next time an agent uses `git`; a place that is not writable refuses every change.
+A file over 2 MiB gives its metadata and a download only, over 1 MiB it is shown and not edited, a download is at most 50 MiB and streamed, a directory lists 2,000 entries and says so, and a saved text is at most 1 MiB (`413`).
+A file with a NUL byte in its first 8 KiB, or that is not valid UTF-8, is read-only.
+A PNG, JPEG, WebP or GIF (recognised by its bytes) previews as a picture; SVG, HTML and XML are always downloads and are never rendered, since they can carry script; text is served as `text/plain`.
+Each save and each rename, deletion, creation and restore is logged with who, the place, the path and short hashes, never the contents; each refused escape is logged as a warning.
+
+**Holds do not apply.** A hold asks the owner before an agent's tool call; here the owner is the one acting and is already authenticated, and the places are those where the agents may write without a hold.
+Under `auth: none` or `password` an agent with a shell can call this API as the owner, as it can for cards and yolo already; within the default places that grants nothing it lacks.
+A host that adds a root the agents cannot reach should authenticate with a verifier (`cloudflareAccess`), as the [threat model](#threat-model) advises for anything an agent's shell must not reach.
+
+The REST is `GET api/workspace`, `GET api/workspace/<place>/list?path=`, `file?path=` (the text, `hash`, `editable` and, when not, `reason`), `raw?path=` (bytes, `no-store`, `&download=1` forces a download), `PUT file?path=` (`{ text, baseHash }`), `POST new?path=` (`{ kind: "file" | "dir", text? }`), `POST rename` (`{ from, to }`), `DELETE entry?path=`, `GET trash`, `POST trash/<id>/restore` and `DELETE trash/<id>`.
+The service worker never caches `api/workspace`.
+
 ## Install on a device
 
 The app is a progressive web app, installable on a phone, tablet or desktop and opened in its own window.
 
 - `<mount>/manifest.webmanifest` is generated for the mount: its `id`, `start_url` and `scope` are all `<mount>/`, `display` is `standalone`, the name is `title`, and the theme and splash colors follow `appearance.look`. The page links it with `crossorigin="use-credentials"`, so a proxy such as Cloudflare Access that sets a cookie sees it.
-- `<mount>/sw.js` is the service worker, served `no-cache` and scoped to the mount. It precaches the page's hashed assets and `index.html`, serves assets cache-first and navigations network-first with the cached shell as the offline fallback. It never touches `api/`, `auth/`, `login`, `files/` or `avatars/`, and returns a redirect (a proxy's login) as it came. It caches the shell only, never data, so a shared device keeps nothing after you log out. The round table's 3D scene is fetched the first time that view opens and is not precached.
+- `<mount>/sw.js` is the service worker, served `no-cache` and scoped to the mount. It precaches the page's hashed assets and `index.html`, serves assets cache-first and navigations network-first with the cached shell as the offline fallback. It never touches `api/`, `auth/`, `login`, `files/` or `avatars/`, and returns a redirect (a proxy's login) as it came. It caches the shell only, never data, so a shared device keeps nothing after you log out. The round table's 3D scene and the files pane's editor and languages are fetched the first time they are needed and are not precached.
 - `<mount>/icons/` serves `192.png`, `512.png`, `maskable-512.png`, `apple-180.png` and `badge-96.png`. The package ships a set; `icons.dir` replaces it with a directory that has the same five names.
 
 To install: open the page over HTTPS in Chrome, Edge or Safari and use the browser's Install option, or press **Install the app** in Settings where the browser offers it.
@@ -473,7 +529,8 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `mountPath` | `/console` | The path the app is served under: one or more segments of letters, digits, `.`, `_`, `~`, and `-`. |
 | `listener` | `public` | The id of the listener whose address serves the app. |
 | `routing` | `hash` | `path` retains links such as `/console/skills`, with history navigation and an authenticated page fallback. |
-| `panes` | `rooms`, `table`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `schedules` and `table` need `rooms`. Disabled panes answer 404. `skills` and `connectors` require their feature ports at setup. An explicit list is kept as written, so a host that listed its panes before 0.23 adds `rooms`, `table` and `schedules` by hand. |
+| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes` | Ordered subset of those panes plus `skills` and `connectors`. `schedules`, `table` and `workspace` need `rooms`, and `workspace` needs a place to show (below). Disabled panes answer 404. `skills` and `connectors` require their feature ports at setup. An explicit list is kept as written, so a host that listed its panes before 0.23 adds `rooms`, `table` and `schedules` by hand, and one that listed them before 0.24 adds `workspace`. |
+| `workspace` | the agents' directories | What the [files pane](#the-files-pane) shows: `workspace.roots` adds places, each with an `id` (`workspace.roots.id`, a lower-case word other than `agents` and `scratch`), a `label` (`workspace.roots.label`), an absolute `dir` (`workspace.roots.dir`) and `writable` (`workspace.roots.writable`, false unless set), and `workspace.agents` / `workspace.scratch` set to `false` leave the agents' working directory or scratch directory out. A `dir` that is or contains `dataDir` stops the start. |
 | `surface` | `app` | The key prefix of the app's rooms, a lower-case word that is not `discord`. Rooms keep their conversations under it, so changing it starts every room over. |
 | `cardGraceSeconds` | `120` | How long a turn waits on an approval or question card before it goes on without the answer, above 0 and at most 3600. The card stays open for a day. |
 | `uploadMaxBytes` | `104857600` (100 MiB) | The most bytes of one file a person may upload, from 1 to 4 GiB; the agent takes files up to it too. It raises the listener's request body limit. See [Uploads](#uploads). |
@@ -507,14 +564,14 @@ The `push` keys:
 | `push.endpointHosts` | none | Push services to post to besides the browsers' own (Google, Mozilla, Apple, Microsoft), as host names; a leading `*.` allows every subdomain. Endpoints must still be `https`. |
 | `push.subject` | `origin`, when it is `https` | The contact a push service may use about this server (the VAPID `sub`): a `mailto:` or `https:` URL. With an `http` origin push stays off until it is set. |
 
-The bad settings that stop the host at startup are: no `auth` or `verifier`, both of them, an unknown `auth.mode`, a password shorter than 12 characters, `none` on a listener that reaches beyond the machine, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, `schedules` or `table` without `rooms`, a `surface` that is not a lower-case word or is `discord`, an empty `ownerId`, a `uploadMaxBytes` out of range, and a `push.subject` that is neither a `mailto:` address nor an `https:` URL, and a `push.quietHours` that is neither `false` nor two different `HH:MM` times.
+The bad settings that stop the host at startup are: no `auth` or `verifier`, both of them, an unknown `auth.mode`, a password shorter than 12 characters, `none` on a listener that reaches beyond the machine, an `origin` with a path, a `mountPath` of `/` or with `..` in it, an unknown or repeated pane, `schedules`, `table` or `workspace` without `rooms`, a `workspace` pane with no place to show, a `workspace.roots` entry that is malformed, reuses an id, or is or contains `dataDir`, a `surface` that is not a lower-case word or is `discord`, an empty `ownerId`, a `uploadMaxBytes` out of range, and a `push.subject` that is neither a `mailto:` address nor an `https:` URL, and a `push.quietHours` that is neither `false` nor two different `HH:MM` times.
 
-The plugin needs, for the panes you serve: the agent server (`AGENTS`) for Overview and Rooms, the modes service (`MODES`) for Rooms, the schedule store (`SCHEDULES`) for Schedules, and the memory addon for Notes.
+The plugin needs, for the panes you serve: the agent server (`AGENTS`) for Overview and Rooms (and for the files pane's default places), the modes service (`MODES`) for Rooms, the schedule store (`SCHEDULES`) for Schedules, and the memory addon for Notes.
 The host refuses to start with a message naming the missing service when one of them is absent.
 
 ## The console's panes
 
-The page has eight panes; `panes` chooses which ones a host serves.
+The page has nine panes; `panes` chooses which ones a host serves.
 Rooms and Schedules belong to the [owner app](#the-owner-app), and the Round table to [its own section](#the-round-table); the rest are the console that came first, which reads what the host already stores: the conversation files under the data directory, the memory addon, and the agent team.
 
 | Pane | What it shows |
@@ -526,6 +583,7 @@ Rooms and Schedules belong to the [owner app](#the-owner-app), and the Round tab
 | Notes | A principal's memory in three tabs, core, notes, and events, with search: the signed-in owner's own by default, and any principal's the host knows through a picker that appears when there is more than one. The owner can add a note, edit its text, kind, and date, and delete it after a confirmation, in whichever memory is shown. The memory addon's own validation applies, so a refusal shows its reason and saves nothing. |
 | Skills | The full host catalog, source, groups and carriers; each available skill opens its ordered frontmatter and Markdown body. |
 | Connectors | Upstream gateway enabled/reachable/tool status, virtual-server tool lists, and the agents or profiles that use them; an optional administration link. |
+| Files | The agents' workspace: a tree, highlighted files, an editor with conflict-checked saves, and a restorable trash (see [The files pane](#the-files-pane)). Needs `rooms` and a place to show. |
 | Round table | Every active agent seated at one round table, the coordinator first, each in the state its room is in; a seat opens that agent's room (see [The round table](#the-round-table)). Needs `rooms`. |
 
 Opening a conversation shows its **transcript**: the user's and the assistant's messages, the tools the assistant called with a short preview of their arguments, and each tool's result (collapsed).
@@ -606,7 +664,7 @@ The `rooms` pane's page and any client of your own talk to the host in this prot
 
 - Page to server: `hello {visible, focus?}`, `visibility`, `focus {room?}`, `send {id, room, text, uploads?}`, `stop {room}`, `approval {prompt, approved}`, `answer {prompt, answer}`, `answers {prompt, answers, note?}`, `cancel {prompt}`.
 - Server to page: `ready {protocol, principal, name, uploads: {perMessage, maxBytes}}` (then every open card), `accepted`, `refused {id?, prompt?, code}` (`id` names a refused `send`, `prompt` a refused answer to a card), `message`, `progress` (only for the focused room), `activity {room, typing, stoppable, phase?, agent?, outcome?}` (`phase` is `working` during a tool call and `thinking` otherwise; `agent` names the member speaking in a group round; `outcome` is `done` or `failed` and comes only on the frame where `typing` turns false), `presence {agents: {<name>: {busy}}}` (after `ready` and when it changes; `busy` includes work in Discord channels), `edited` (a stored message changed its text, such as a thread's start line once the thread exists), `prompt`, `prompt_closed {prompt, outcome, note?, by?, answer?, closedAt?}`, `mode`, `auto_approved`, `changed`.
-- REST under `<mount>/api/`: `session`, `rooms`, `rooms/<key>/messages?before=&limit=` (`{messages, more, cards}`: the cards of the room that opened within the page's span, from the first message's time on, or from the beginning when `more` is false, and before the first message of the next page), `PUT rooms/<key>/mode`, `PUT rooms/<key>/mute` (body `{muted: boolean}`; the room's push is off for every owner while true; a waiting card still pushes), `POST rooms/<key>/start-over`, `POST uploads`, `DELETE uploads/<id>`, `files/<id>`, `schedules` (`GET`, and `DELETE schedules/<id>`), `agents/<name>` (`GET`, `PATCH`), `PUT agents/<name>/character` (body `{character}`, at most 4 KiB; `400 {error, field}` for a look that is not a character), `models`, and for push `GET push/key`, `GET`, `POST` and `DELETE push/subscriptions` and `DELETE push/subscriptions/<id>`. The agents' pictures are at `<mount>/avatars/<hash>.png`.
+- REST under `<mount>/api/`: `session`, `rooms`, `rooms/<key>/messages?before=&limit=` (`{messages, more, cards}`: the cards of the room that opened within the page's span, from the first message's time on, or from the beginning when `more` is false, and before the first message of the next page), `PUT rooms/<key>/mode`, `PUT rooms/<key>/mute` (body `{muted: boolean}`; the room's push is off for every owner while true; a waiting card still pushes), `POST rooms/<key>/start-over`, `POST uploads`, `DELETE uploads/<id>`, `files/<id>`, `schedules` (`GET`, and `DELETE schedules/<id>`), `agents/<name>` (`GET`, `PATCH`), `PUT agents/<name>/character` (body `{character}`, at most 4 KiB; `400 {error, field}` for a look that is not a character), `models`, `workspace` (the [files pane](#the-files-pane)'s calls), and for push `GET push/key`, `GET`, `POST` and `DELETE push/subscriptions` and `DELETE push/subscriptions/<id>`. The agents' pictures are at `<mount>/avatars/<hash>.png`.
 - Beside the API: `<mount>/manifest.webmanifest`, `<mount>/sw.js`, `<mount>/icons/<name>.png`, `<mount>/theme-init.js`, and in password mode `<mount>/login`, `POST <mount>/auth/login` and `POST <mount>/auth/logout`.
 
 A room key from a page must be one of the app's rooms whose agent or group exists; every other key, Discord's included, is refused. Every write needs an owner, whose tier is read again, and REST writes also need the console's `Origin`. A card can be answered by any owner, except a card that is the speaker's alone, which only the speaker's principal answers. After `cardGraceSeconds` (default 120) a turn goes on without the answer and the card stays open for a day; an answer then starts a new turn in the room. The types are in `src/api-types.ts`.

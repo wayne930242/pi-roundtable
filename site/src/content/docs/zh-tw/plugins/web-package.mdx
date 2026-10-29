@@ -51,7 +51,10 @@ export default {
 | Agent 檔案 | 名稱、提示詞、模型、思考程度，以及角色編輯器。 |
 | Schedules | 團隊的排程，取消前會先確認。 |
 | Table | 圓桌，讓每個 agent 入座，點一下就進它的房間。 |
+| 檔案 | 夥伴的工作區：檔案樹、CodeMirror 語法高亮的檔案，以及編輯器；存檔時會檢查夥伴有沒有同時改過，也能新增、重新命名、刪除（刪除會進可還原的垃圾桶）。 |
 | Settings | 色彩模式與外觀、安裝、這台裝置的通知，以及登出。 |
+
+檔案頁只給 owner 看夥伴的工作目錄、暫存目錄（以及你用 `workspace.roots` 加的位置）。每次存檔都會對照讀取時的雜湊值，`.git` 一律唯讀，指到位置外的符號連結不會被開啟，編輯器的程式碼要到開啟檔案時才載入。完整規則見 README。
 
 圓桌在有 WebGL 的瀏覽器上是 3D 場景，沒有時是 SVG 圓桌；在頁面網址加上 `?nogl` 就能看 SVG 版。
 座位名稱至少畫成 11 px；畫布小到做不到時，圓桌下方會把座位列成按鈕。
@@ -100,7 +103,8 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `mountPath` | `/console` | route prefix。 |
 | `listener` | `public` | 提供 app 的 HTTP listener。 |
 | `routing` | `hash` | `path` 保留 mount 下的頁面路徑與 history 導航。 |
-| `panes` | `rooms`、`table`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules` 和 `table` 需要 `rooms`。明確列出的清單照寫的為準。 |
+| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules`、`table` 和 `workspace` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。 |
+| `workspace` | 夥伴的目錄 | 檔案頁顯示什麼。`workspace.roots` 加入更多位置，每個有 `workspace.roots.id`、`workspace.roots.label`、`workspace.roots.dir` 和 `workspace.roots.writable`（沒設就是唯讀）；`workspace.agents`、`workspace.scratch` 設為 `false` 就不顯示夥伴的工作目錄或暫存目錄。`dir` 是 `dataDir` 或包含它時會無法啟動。 |
 | `surface` | `app` | app 房間的 key 前綴。改了它，所有房間都會重新開始。 |
 | `cardGraceSeconds` | `120` | 一輪執行等卡片的秒數，大於 0、最多 3600。 |
 | `uploadMaxBytes` | 100 MiB | 一個人能上傳的單檔上限，1 byte 到 4 GiB。 |
