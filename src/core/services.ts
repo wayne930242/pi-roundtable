@@ -308,9 +308,11 @@ export interface AgentTeam {
 	/**
 	 * Deletes an archived agent or group for good and frees its name. Throws AgentError for an
 	 * unknown name, for an active one (archive it first), and for an agent the host's seeds name,
-	 * which the next start would seed again.
+	 * which the next start would seed again. `cleanup` is a surface's own part of the delete (what
+	 * it kept under the name): it runs once the checks have passed and before anything is deleted,
+	 * and one that throws leaves the agent or group in place, so the delete can be tried again.
 	 */
-	remove(name: string): Promise<string>;
+	remove(name: string, cleanup?: () => Promise<void>): Promise<string>;
 	/** Creates a group of 2 to 6 agents; the host is the first member unless given. */
 	createGroup(input: {
 		name: string;

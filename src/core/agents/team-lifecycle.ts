@@ -282,7 +282,7 @@ export class TeamLifecycle {
 	 * never asked to delete one. An active agent or group is refused: archive it first, and so is an
 	 * agent the host's seeds name, since the next start would seed it again.
 	 */
-	async remove(name: string): Promise<string> {
+	async remove(name: string, cleanup?: () => Promise<void>): Promise<string> {
 		const { store, skills, seeds, logger } = this.#ctx.options;
 		const agent = store.agent(name);
 		const group = agent ? undefined : store.group(name);
@@ -298,6 +298,7 @@ export class TeamLifecycle {
 			throw new AgentError(
 				`"${name}" is active; archive it before deleting it.`,
 			);
+		await cleanup?.();
 		if (agent) {
 			await store.deleteAgent(name);
 			const carried = skills?.carriedNames(name) ?? [];

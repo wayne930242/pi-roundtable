@@ -190,6 +190,32 @@ describeDb("an owner's operations on the team (Discord)", () => {
 			await expect(fx.team.remove("nobody")).rejects.toThrow(AgentError);
 		});
 
+		test("remove runs a surface's cleanup after its checks, and a cleanup that throws deletes nothing", async () => {
+			await fx.team.createAgent(OWNER_SPEAKER, NOTES);
+			let ran = 0;
+			const cleanup = async () => {
+				ran += 1;
+			};
+			// Refused before the cleanup: an active agent and an unknown one.
+			await expect(fx.team.remove("notes", cleanup)).rejects.toThrow(
+				/archive it/,
+			);
+			await expect(fx.team.remove("nobody", cleanup)).rejects.toThrow(
+				AgentError,
+			);
+			expect(ran).toBe(0);
+			await fx.team.archive(undefined, "notes");
+			await expect(
+				fx.team.remove("notes", async () => {
+					throw new Error("the app's database is gone");
+				}),
+			).rejects.toThrow(/database is gone/);
+			expect(fx.store.agent("notes")?.status).toBe("archived");
+			await fx.team.remove("notes", cleanup);
+			expect(ran).toBe(1);
+			expect(fx.store.agent("notes")).toBeUndefined();
+		});
+
 		test("remove refuses an agent the configuration seeds, which the next start would seed again", async () => {
 			await fx.team.archive(undefined, "doctor");
 			await expect(fx.team.remove("doctor")).rejects.toThrow(

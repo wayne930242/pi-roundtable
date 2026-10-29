@@ -117,8 +117,10 @@ export class TeamApi {
 		}
 		if (!action && method === "DELETE") {
 			const speaker = await owner();
-			await this.#options.team.remove(name);
-			await this.#forget(agentRoomKey(this.#options.surface, name), speaker);
+			// The app's part runs inside the delete, after its checks and before the row goes: a
+			// cleanup that fails leaves the agent there to delete again.
+			const room = agentRoomKey(this.#options.surface, name);
+			await this.#options.team.remove(name, () => this.#forget(room, speaker));
 			this.#options.changed();
 			return json({ ok: true });
 		}
@@ -332,8 +334,8 @@ export class TeamApi {
 		}
 		if (!action && method === "DELETE") {
 			const speaker = await owner();
-			await team.remove(name);
-			await this.#forget(groupRoomKey(this.#options.surface, name), speaker);
+			const room = groupRoomKey(this.#options.surface, name);
+			await team.remove(name, () => this.#forget(room, speaker));
 			this.#options.changed();
 			return json({ ok: true });
 		}

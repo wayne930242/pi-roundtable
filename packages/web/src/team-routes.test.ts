@@ -39,6 +39,8 @@ let carried: Map<string, string[]>;
 let changes: number;
 let who: { id: string; tier: Tier };
 let speakers: Speaker[];
+/** Makes the app's cleanup of a deleted room fail, as a database error would. */
+let cleanupFails: boolean;
 
 const CATALOG: SkillView[] = [
 	{
@@ -140,8 +142,9 @@ function setup(withSkills = true) {
 			calls.push(`restore ${name}`);
 			return "Restored";
 		},
-		remove: async (name: string) => {
+		remove: async (name: string, cleanup?: () => Promise<void>) => {
 			need(name, "archived");
+			await cleanup?.();
 			agents.delete(name);
 			groups.delete(name);
 			calls.push(`remove ${name}`);
@@ -185,6 +188,7 @@ function setup(withSkills = true) {
 		rooms: { avatarOf: () => "/console/avatars/x.png" } as never,
 		log: {
 			removeRoom: async (room: string) => {
+				if (cleanupFails) throw new Error("the database is gone");
 				calls.push(`forget log ${room}`);
 				return 0;
 			},
@@ -281,6 +285,7 @@ beforeEach(() => {
 	calls = [];
 	changes = 0;
 	speakers = [];
+	cleanupFails = false;
 	who = { id: "owner", tier: "owner" };
 	agents = new Map([
 		["boss", agent({ name: "boss", displayName: "Boss" })],
@@ -549,13 +554,27 @@ describe("agent archive, restore and delete", () => {
 		expect(await response.json()).toEqual({ ok: true });
 		expect(agents.has("old")).toBe(false);
 		expect(calls).toEqual([
-			"remove old",
 			"forget log app:agent.old",
 			"forget cards app:agent.old",
 			"mute app:agent.old false",
 			"modes reset app:agent.old",
+			"remove old",
 		]);
 		expect(changes).toBe(1);
+	});
+
+	test("a cleanup that fails halfway leaves the agent deletable, and the retry finishes", async () => {
+		const server = setup();
+		cleanupFails = true;
+		const failed = await call(server, "DELETE", "agents/old");
+		expect(failed.status).toBe(500);
+		expect(agents.has("old")).toBe(true);
+		expect(calls).toEqual([]);
+		cleanupFails = false;
+		const retried = await call(server, "DELETE", "agents/old");
+		expect(retried.status).toBe(200);
+		expect(agents.has("old")).toBe(false);
+		expect(calls.at(-1)).toBe("remove old");
 	});
 
 	test("a group's name is no agent's", async () => {
@@ -831,11 +850,11 @@ describe("groups", () => {
 		expect(calls).toEqual([
 			"archive crew caller=none",
 			"restore past",
-			"remove crew",
 			"forget log app:group.crew",
 			"forget cards app:group.crew",
 			"mute app:group.crew false",
 			"modes reset app:group.crew",
+			"remove crew",
 		]);
 	});
 

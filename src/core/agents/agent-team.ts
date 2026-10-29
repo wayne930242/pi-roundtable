@@ -306,8 +306,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	}
 
 	/** Deletes an archived agent or group for good; see `AgentTeam.remove`. */
-	remove(name: string): Promise<string> {
-		return this.#lifecycle.remove(name);
+	remove(name: string, cleanup?: () => Promise<void>): Promise<string> {
+		return this.#lifecycle.remove(name, cleanup);
 	}
 
 	// ── Turns, run by TeamTurns ────────────────────────────────────────────
