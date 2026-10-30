@@ -56,6 +56,13 @@ const GroupScene = lazy(() =>
 // The read marks and the divider of new messages load beside the log; until they do the log shows as it is.
 const ReadLog = lazy(() => hostUi().then((ui) => ({ default: ui.ReadLog })));
 
+// The composer's @AI switch, and the styles it brings, are read only in a room that takes notes.
+const ModeToggle = lazy(() =>
+	import("../components/mode-toggle.tsx").then((m) => ({
+		default: m.ModeToggle,
+	})),
+);
+
 // The room's menu is read only when it is opened.
 const RoomMenu = lazy(() =>
 	import("../components/room-menu.tsx").then((m) => ({ default: m.RoomMenu })),
@@ -134,6 +141,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	/** Under the header: where a group's table strip and panel go. */
 	const [tableSlot, setTableSlot] = useState<HTMLDivElement | null>(null);
 	const [dropped, setDropped] = useState<File[]>();
+	/** The room where the person turned @AI off, to leave notes; every room opens with it on. */
+	const [noting, setNoting] = useState<string>();
 	const [scene, setScene] = useTableMode(roomKey);
 	const inScene = view?.kind === "group" && scene;
 	const menuButton = useRef<HTMLButtonElement>(null);
@@ -249,6 +258,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const agentName = view?.kind === "agent" ? view.name : undefined;
 	const groupName = view?.kind === "group" ? view.name : undefined;
 	const parent = view?.kind === "thread" ? view.parent : undefined;
+	// Where more than one person reads the room, a message can be a note for them that the agent does not get.
+	const note = view?.notes === true && noting === roomKey;
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: dropping files on the room attaches them; the paperclip is the keyboard path
 		<section
@@ -447,10 +458,28 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 							key={roomKey}
 							draftKey={roomKey}
 							name={name}
+							{...(view?.notes
+								? {
+										placeholder: note
+											? t("Write an internal note…")
+											: t("Ask AI…"),
+										above: (
+											<Suspense fallback={null}>
+												<ModeToggle
+													on={!note}
+													label={t("@AI")}
+													onChange={(next) =>
+														setNoting(next ? undefined : roomKey)
+													}
+												/>
+											</Suspense>
+										),
+									}
+								: {})}
 							limits={limits}
 							stoppable={Boolean(room?.stoppable)}
 							onSend={(text, files) => {
-								connection.say(roomKey, text, files);
+								connection.say(roomKey, text, files, note ? "note" : undefined);
 								toEnd(true);
 							}}
 							onStop={() => connection.send({ type: "stop", room: roomKey })}

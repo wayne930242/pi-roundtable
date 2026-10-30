@@ -1055,6 +1055,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"@AI": "@AI",
 	"Write an internal note…": "寫一則內部備註…",
 	"Ask AI…": "問 AI…",
+	"Internal note": "內部備註",
 	"Earlier cards ({count})": "先前的卡片（{count}）",
 	Replaced: "已被取代",
 	Image: "圖片",
