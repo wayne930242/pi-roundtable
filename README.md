@@ -128,6 +128,7 @@ test("hello greets", async () => {
 
 The [plugin guide](docs/plugins.md) explains every part a plugin can add (tools, prompt sections, agents, events, services, migrations, providers, slash commands, HTTP routes, and more), the order things start and stop in, and every startup error with its fix.
 Its examples live in [`examples/`](examples), and the test suite runs each of them.
+A plugin can also listen without owning a channel: `context.observe` hears guild messages whichever claim owns them, a claim hears of deleted and edited messages, and `OpsAlerts` can tell a sink which kind an alert is and when its fault is over.
 `pi-roundtable/kit` supplies claim, tool and presentation helpers and type-only names for the context’s existing services.
 `pi-roundtable/discord` supplies the slash-command registrar, owner-command and panel helpers, and the agent panel.
 It is the entry that names discord.js types (`pi-roundtable/testing` names a few, through `testHost`'s composed commands).

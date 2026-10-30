@@ -239,6 +239,25 @@ export interface ChannelClaim {
 	backgroundRefusal?(
 		turn: BackgroundTurn & { speaker: Speaker },
 	): string | undefined;
+	/**
+	 * A message in an owned channel was deleted, as its surface reports it (Discord does; a
+	 * surface that cannot tell never does). It carries only the id, and also arrives for the
+	 * assistant's own messages, since the surface cannot tell whose an uncached message was: a
+	 * claim ignores an id it does not know. Delivered as it comes, not inside the channel's queue,
+	 * so it is not held up behind a running turn; a throw or rejection is logged and isolated.
+	 */
+	onMessageDeleted?(
+		channel: ChannelKey,
+		messageId: string,
+	): Promise<void> | void;
+	/**
+	 * A message in an owned channel was edited, as it reads now. The assistant's own edits are
+	 * never reported, as its own messages never reach `admit`; an edit that changes neither the
+	 * text, the embeds nor the attachments, such as a pin, is not either. The message carries no
+	 * `speaker` and no `peerBot`, since an edit is never admitted and resolves nobody, and the
+	 * router applies no peer rule to it. Delivered like `onMessageDeleted`.
+	 */
+	onMessageEdited?(message: InboundMessage): Promise<void> | void;
 	/** Starts the channel's conversation over, saying whose it was. */
 	startFresh(channel: ChannelKey): Promise<string>;
 	/**
@@ -293,7 +312,41 @@ export interface ConversationPort {
 	takesBackground(channel: ChannelKey): boolean;
 	/** Whether the claim that owns the channel takes the host's own turns; false when none owns it. */
 	takesSystemReports(channel: ChannelKey): boolean;
+	/**
+	 * Tells the claim that owns the channel a message was deleted (`ChannelClaim.onMessageDeleted`);
+	 * never rejects. Optional so a port written before 0.27 still type-checks; the host's has it.
+	 */
+	messageDeleted?(
+		channel: ChannelKey,
+		messageId: string,
+		space?: string,
+	): Promise<void>;
+	/** Tells the claim that owns the channel a message was edited (`ChannelClaim.onMessageEdited`); never rejects. */
+	messageEdited?(message: InboundMessage): Promise<void>;
 }
+
+/**
+ * Which inbound messages an observer hears. Every field narrows; an empty filter hears every
+ * message in a channel some claim owns, in a server or workspace, never in a direct conversation.
+ */
+export interface ObserveFilter {
+	/** Only this surface's channels, by its key prefix, such as "discord". */
+	surface?: string;
+	/** Only this server or workspace, in the surface's own id. */
+	space?: string;
+	/** Only these channels. */
+	channels?: readonly ChannelKey[];
+	/**
+	 * Also hear direct conversations. Off by default: a direct message is private to its two
+	 * sides, and an observer that sees it must be one the people there would expect.
+	 */
+	includeDirect?: boolean;
+}
+
+/** Hears a message; a return is not read, and a throw or rejection is logged and isolated. */
+export type MessageObserver = (
+	message: Readonly<InboundMessage>,
+) => Promise<void> | void;
 
 /** The host's channel queue, as plugins use it. */
 export interface QueuePort {

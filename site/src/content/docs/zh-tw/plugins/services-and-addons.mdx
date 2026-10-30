@@ -159,6 +159,10 @@ alerts.faults(); // 每個類型最後一次的故障，給狀態指令用
 告警在 raise 當下就發送；發送失敗（`sink` 丟出錯誤或回傳 `false`）會歸還 key，下一次 raise 會再試，而且 `raise` 永遠不會丟出錯誤。
 `info: true` 代表消息而不是故障：每個 key 只發一次，不計入類型的上限，也不列在 `faults()`。
 
+`sink` 也會拿到挑選圖片或路由所需的資訊：`sink(text, { kind, key, code?, info?, severity? })`，其中 `severity` 是 `"info"`、`"warning"` 或 `"critical"`，照 `raise` 給的值傳入。只接收文字的 `sink` 照常運作。
+故障結束時，`alerts.resolve("push:group-7")` 會歸還 key，並呼叫 `sink` 選用的 `resolved({ kind, key })`，讓它把已發出的告警標成已恢復（例如編輯那則訊息）；之後 `faults()` 會在該類型上顯示 `clearedAt`。
+對同一個 key 重複 resolve，或 resolve 一個從未發出的 key，什麼都不會發生。
+
 ### Codex 畫圖
 
 `pi-roundtable/kit` 的 `drawCodexImage` 和 `createCodexImages`，是官方 [`codex-images`](/zh-tw/plugins/official-plugins/#codex-images) 外掛背後的客戶端和外掛，給想自己畫圖、或想用它們組出自己 `images` provider 的專案。

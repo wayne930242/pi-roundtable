@@ -73,6 +73,18 @@ export interface SurfaceThreads {
 }
 
 /**
+ * What a surface tells the host about messages already delivered, so the claim that owns the
+ * channel hears of it (`ChannelClaim.onMessageDeleted`, `onMessageEdited`). A surface that cannot
+ * tell, such as a web chat that keeps every message, never calls them.
+ */
+export interface SurfaceMessageEvents {
+	/** A message was deleted; `space` is its server or workspace, when the surface has one. */
+	deleted(channel: ChannelKey, messageId: string, space?: string): void;
+	/** A message's text or attachments changed; the message is as it reads now. */
+	edited(message: InboundMessage): void;
+}
+
+/**
  * One chat network the host talks through. The host ships Discord's; a plugin may contribute
  * another with `surfaces`. A surface serves the channels whose key starts with its `surface`
  * prefix, and only those reach its methods.
@@ -123,7 +135,10 @@ export interface ChatSurface {
 	 * Connects and delivers every incoming message; the host passes its conversation router. A
 	 * message whose channel key has another prefix is logged and dropped.
 	 */
-	start(deliver: (message: InboundMessage) => void): Promise<void>;
+	start(
+		deliver: (message: InboundMessage) => void,
+		events?: SurfaceMessageEvents,
+	): Promise<void>;
 	/** Runs when the host stops, after the services started later have stopped. */
 	stop?(): Promise<void>;
 	sendReply(channel: ChannelKey, reply: OutboundReply): Promise<void>;

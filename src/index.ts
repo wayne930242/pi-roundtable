@@ -85,6 +85,8 @@ export type {
 	ConversationKind,
 	ConversationPort,
 	InboundMessage,
+	MessageObserver,
+	ObserveFilter,
 	QueuePort,
 	ScheduledOutcome,
 } from "./core/contract/channels.ts";
@@ -108,6 +110,7 @@ export type { ServiceKey, Services } from "./core/contract/services.ts";
 export { serviceKey } from "./core/contract/services.ts";
 export type {
 	ChatSurface,
+	SurfaceMessageEvents,
 	SurfacePort,
 	SurfaceThreads,
 } from "./core/contract/surface.ts";

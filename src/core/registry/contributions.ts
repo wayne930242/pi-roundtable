@@ -34,6 +34,7 @@ import {
 import { TIERS } from "../speakers.ts";
 import type { ToolTierTable } from "../tool-tiers.ts";
 import { ServiceRegistry } from "./services.ts";
+import { surfaceService } from "./surface-service.ts";
 
 /** Everything the plugins contributed, in contribution order. */
 export interface Registry {
@@ -271,32 +272,6 @@ function checkSurfacePrefix(plugin: string, prefix: unknown): void {
 		throw new PluginError(
 			`plugin ${plugin}: a surface is named by the prefix of its channel keys, a non-empty word without a colon or space, such as discord; got ${JSON.stringify(prefix)}.`,
 		);
-}
-
-/**
- * The surface as a service: it starts with the router's `handle` as its delivery, which drops
- * and logs a message that belongs to another prefix, and stops with the surface.
- */
-function surfaceService(
-	surface: ChatSurface,
-	context: Pick<PluginContext, "logger" | "conversations">,
-): Service {
-	const { logger, conversations } = context;
-	return {
-		name: `surface:${surface.surface}`,
-		start: () =>
-			surface.start((message) => {
-				if (!message.channel.startsWith(`${surface.surface}:`)) {
-					logger.error(
-						{ surface: surface.surface, channel: message.channel },
-						"a surface delivered a message of another prefix; dropped",
-					);
-					return;
-				}
-				void conversations.handle(message);
-			}),
-		...(surface.stop ? { stop: () => surface.stop?.() } : {}),
-	};
 }
 
 /**

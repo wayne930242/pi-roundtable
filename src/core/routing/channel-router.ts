@@ -24,7 +24,9 @@ import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
+import { tellDeleted, tellEdited } from "./claim-events.ts";
 import { ForwardJoin } from "./forward-join.ts";
+import type { MessageObservers } from "./message-observers.ts";
 import type { PeerBots } from "./peer-bots.ts";
 import { isSystemTurn } from "./system-turns.ts";
 
@@ -48,6 +50,8 @@ export interface ChannelRouterOptions {
 	forwardJoinMs?: number;
 	/** The other bots whose messages are answered like a guest's, with the rounds they get; without it, no bot's. */
 	peerBots?: PeerBots;
+	/** The plugins' passive listeners; each message that reaches routing in an owned channel is handed to them. */
+	observers?: MessageObservers;
 }
 
 /** Claims by descending priority, keeping registration order among equals; refuses a repeated name. */
@@ -122,6 +126,9 @@ export class ChannelRouter implements ConversationPort {
 			return;
 		const claim = this.#owner(message.channel, message.space);
 		if (!claim) return;
+		// A bot nobody lists is not heard, as it is not answered; a listed peer is, rounds or not.
+		if (!message.authorIsBot || message.peerBot || message.integration)
+			this.#options.observers?.notify(message);
 		const started = await this.#inOrder(message.channel, async () => {
 			if (listed && peers?.exhausted(message.channel)) {
 				this.#options.logger.info(
@@ -316,6 +323,29 @@ export class ChannelRouter implements ConversationPort {
 				);
 			});
 		return { done };
+	}
+
+	/** Tells the claim that owns the channel a message was deleted; never rejects, never waits for the channel's queue. */
+	messageDeleted(
+		channel: ChannelKey,
+		messageId: string,
+		space?: string,
+	): Promise<void> {
+		return tellDeleted(
+			this.#owner(channel, space),
+			channel,
+			messageId,
+			this.#options.logger,
+		);
+	}
+
+	/** Tells the claim that owns the channel a message was edited; never rejects, never waits for the channel's queue. */
+	messageEdited(message: InboundMessage): Promise<void> {
+		return tellEdited(
+			this.#owner(message.channel, message.space),
+			message,
+			this.#options.logger,
+		);
 	}
 
 	target(name: string): BackgroundTarget | undefined {

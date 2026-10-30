@@ -39,6 +39,7 @@ import {
 	type ConversationTurns,
 	conversationTurns,
 } from "./routing/conversation-turns.ts";
+import { MessageObservers } from "./routing/message-observers.ts";
 import { PeerBots } from "./routing/peer-bots.ts";
 import { surfacePort } from "./routing/surface-port.ts";
 import { refuseHostAccess } from "./runtime/chat-only.ts";
@@ -86,6 +87,8 @@ export interface Linked {
  */
 export class Linkage {
 	readonly queue = new ChannelQueue();
+	/** The plugins' passive message observers, shared by the router and `context.observe`. */
+	readonly observers: MessageObservers;
 	readonly events: EventBus;
 	readonly tiers: ToolTierTable;
 	registry: Registry = emptyRegistry();
@@ -114,6 +117,7 @@ export class Linkage {
 		this.#plugins = plugins;
 		this.tiers = options.toolTiers ?? toolTiers();
 		this.events = new EventBus(options.logger);
+		this.observers = new MessageObservers(options.logger);
 	}
 
 	/** Applies the host's environment to the process and returns what plugins read of it. */
@@ -207,6 +211,7 @@ export class Linkage {
 						);
 					return this.registry.dashboard;
 				},
+				observe: (filter, observer) => this.observers.add(filter, observer),
 				apiKey: async (provider) => this.#options.apiKey?.(provider),
 				listener: (id) => listenerAddress(listeners, id),
 			},
@@ -227,6 +232,7 @@ export class Linkage {
 			queue: this.queue,
 			surfaces: this.#surfaces(),
 			logger,
+			observers: this.observers,
 			...(this.#options.peerBots
 				? { peerBots: new PeerBots(this.#options.peerBots) }
 				: {}),
@@ -263,6 +269,9 @@ export class Linkage {
 		};
 		return {
 			handle: (message) => router().handle(message),
+			messageDeleted: (channel, id, space) =>
+				router().messageDeleted(channel, id, space),
+			messageEdited: (message) => router().messageEdited(message),
 			background: (turn) => router().background(turn),
 			runsAs: (turn) => router().runsAs(turn),
 			target: (name) => router().target(name),
