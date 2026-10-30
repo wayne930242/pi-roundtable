@@ -5,8 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `ChatSurface.groupRound(channel, round)` (and `SurfacePort.groupRound`): a surface that hosts group rooms is told where a group round stands, with the new `RoundProgress` and `RoundEnd` types: the round is planned, a member's turn starts and ends, a handoff is appended, and the round ends as `done`, `limit` or `stopped`. Discord does not implement it and is unchanged.
+
 ### Changed
 
+- Stop ends a group's whole round, on Discord and in the web app alike: the member speaking is stopped and the members still waiting do not speak (it used to end only the running member's turn, and the rest of the round went on). A group round now shows the stop control for the round, and a stopped round with members still waiting posts a short notice. `AgentClaim` stops a group round through the team's new `stopRound`.
 - A group holds 2 to 8 members (it was 2 to 6): `group_create`, `group_update`, the stores and the group editor of `pi-roundtable-web` all take the new range. A round still holds at most 8 replies. No stored group exceeds the old range, so none needs trimming.
 - `pi-roundtable-web`: the round table is a council, one agent group at the podiums; mute only stops push and no longer decides who sits; the table seats at most 8 and shows no "+N" podium; the owners' table no longer seats host rooms. See that package's changelog.
 

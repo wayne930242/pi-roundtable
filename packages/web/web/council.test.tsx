@@ -534,3 +534,66 @@ test("the last two members cannot be taken out: the council is offered for archi
 		update.mockRestore();
 	}
 });
+
+test("a running round lights who speaks, turns the camera there, marks the seats and fills the strip above the box", async () => {
+	load([...everyone, group("crew", ["guide", "scout", "mason"])]);
+	await show();
+	const crewRoom = "app:group.crew";
+	await page.act(() => {
+		store.dispatch({
+			type: "activity",
+			room: crewRoom,
+			typing: true,
+			stoppable: true,
+		});
+		store.dispatch({
+			type: "round",
+			room: crewRoom,
+			round: {
+				id: 3,
+				state: "running",
+				current: "scout",
+				next: ["mason"],
+				spoken: ["guide"],
+				replies: 1,
+				limit: 8,
+			},
+		});
+	});
+	for (
+		let tries = 0;
+		tries < 30 && all("g.seat[data-focus]").length === 0;
+		tries += 1
+	)
+		await settle();
+	// the member the round names speaks, though no line of theirs has come yet
+	const states = Object.fromEntries(
+		all("g.seat").map((seat) => [
+			seat.getAttribute("data-seat"),
+			seat.getAttribute("data-state"),
+		]),
+	);
+	expect(states).toEqual({
+		guide: "idle",
+		scout: "speaking",
+		mason: "idle",
+	});
+	expect(
+		all("g.seat[data-focus]").map((seat) => seat.getAttribute("data-seat")),
+	).toEqual(["scout"]);
+	// the seats wear the same signs as the strip
+	const plate = (name: string) =>
+		all<SVGTextElement>(`g.seat[data-seat="${name}"] text`).at(0)?.textContent;
+	expect(plate("guide")).toBe("✓ guide");
+	expect(plate("mason")).toBe("① mason");
+	expect(plate("scout")).toBe("scout");
+	expect(q(".scene-box .order-strip .order-chip")?.textContent).toBe(
+		"Reply 2 of 8",
+	);
+	// Stop ends the whole round, and says so
+	expect(
+		q<HTMLButtonElement>(".composer-stop")?.getAttribute("aria-label"),
+	).toBe("Stop the round");
+	await page.click(q<HTMLButtonElement>(".composer-stop"));
+	expect(sent).toContainEqual({ type: "stop", room: crewRoom });
+});

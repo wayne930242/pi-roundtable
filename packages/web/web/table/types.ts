@@ -127,6 +127,8 @@ export interface TableHandle {
 	setTheme(theme: ThemeName, scheme: Scheme): void;
 	setSeats(seats: SeatInit[]): void;
 	setState(id: string, state: SeatState): void;
+	/** A short sign before a seat's name that says where it stands in a round (a check for who has spoken, a number for who is next); `null` takes it away. */
+	setMark(id: string, mark: string | null): void;
 	/** The seam for the composed characters: replace one seat's picture. */
 	setAvatar(id: string, svg: string): Promise<void>;
 	setReducedMotion(reduced: boolean): void;

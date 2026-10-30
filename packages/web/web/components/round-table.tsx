@@ -9,6 +9,7 @@ import { useHostedTable, useHostSeats } from "../lib/host-seats.ts";
 import { useKit } from "../lib/kit.ts";
 import { useCharacterStyle, useLook } from "../lib/look.ts";
 import { translate as t, wording } from "../lib/messages.ts";
+import { marksOf, speakerOfRound } from "../lib/round-view.ts";
 import { navigate } from "../lib/router.ts";
 import { cancelDive, diveInto } from "../lib/seat-dive.ts";
 import {
@@ -93,7 +94,11 @@ export function useAgents(): RoomView[] {
 	);
 }
 
-/** The rounds of the group rooms that count for this table: one group's, or every group's. */
+/**
+ * The rounds of the group rooms that count for this table: one group's, or every group's. The member
+ * a running round says speaks is the speaker, since the room's `agent` only names the author of the
+ * last reply.
+ */
 function useRounds(groupRoom: string | undefined): GroupRound[] {
 	return useSelector(
 		(state) =>
@@ -101,10 +106,24 @@ function useRounds(groupRoom: string | undefined): GroupRound[] {
 				.filter((room) =>
 					groupRoom ? room.key === groupRoom : room.view?.kind === "group",
 				)
-				.map((room) => ({
-					typing: room.typing,
-					...(room.agent === undefined ? {} : { agent: room.agent }),
-				})),
+				.map((room) => {
+					const speaking = speakerOfRound(room.round);
+					const agent = speaking ?? room.agent;
+					return {
+						typing: room.typing || speaking !== undefined,
+						...(agent === undefined ? {} : { agent }),
+					};
+				}),
+		groupRoom ?? "",
+	);
+}
+
+/** The signs the seats of a group's table wear for its round: who has spoken, who is next. */
+function useRoundMarks(
+	groupRoom: string | undefined,
+): Readonly<Record<string, string>> {
+	return useSelector(
+		(state) => marksOf(groupRoom ? state.rooms[groupRoom]?.round : undefined),
 		groupRoom ?? "",
 	);
 }
@@ -146,6 +165,7 @@ export function RoundTable(props: RoundTableProps) {
 	const roster = useRoster(props.members);
 	const agentStates = useRoomStates(roster.map((view) => view.key));
 	const rounds = useRounds(props.groupRoom);
+	const marks = useRoundMarks(props.groupRoom);
 	const attention = useHostSeats().attention;
 	const hosted = useHostedTable();
 	const hostedRef = useRef(hosted);
@@ -336,6 +356,15 @@ export function RoundTable(props: RoundTableProps) {
 		for (const seat of seats)
 			swaps.current?.seed(seat.id, current[seat.id] ?? "idle");
 	}, [seats, mounted]);
+
+	// The seats wear the round's signs, the same as the strip over the box.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `mounted` says the handle exists
+	useEffect(() => {
+		const table = handle.current;
+		if (!table) return;
+		for (const seat of seatsRef.current)
+			table.setMark(seat.id, marks[seat.id] ?? null);
+	}, [marks, seats, mounted]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `mounted` says the handle exists, which may be after the theme changed
 	useEffect(() => {

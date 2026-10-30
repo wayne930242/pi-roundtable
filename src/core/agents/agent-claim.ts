@@ -55,6 +55,7 @@ export interface AgentClaimOptions {
 		| "owns"
 		| "answerOwner"
 		| "answerGroup"
+		| "stopRound"
 		| "answerBackground"
 		| "startFresh"
 	>;
@@ -256,7 +257,13 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 				),
 			);
 		},
-		stop: (channel) => runtime.stop(channel),
+		stop: (channel) => {
+			// A group's round ends whole: the member speaking is stopped, and the ones waiting do not speak.
+			const sessions = team.stopRound(channel);
+			if (!sessions) return runtime.stop(channel);
+			for (const session of sessions) runtime.stop(session);
+			return true;
+		},
 		startFresh: async (channel) => {
 			await team.startFresh(channel);
 			return "agent";

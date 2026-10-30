@@ -334,6 +334,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#turns.answerBackground(...args);
 	}
 
+	/** Ends the group channel's running round on Stop: the sessions to stop, or undefined when none runs. */
+	readonly stopRound = (channel: ChannelKey) => this.#turns.stopRound(channel);
 	/** One owner message in a group channel, answered by a round of members; call inside the queue. */
 	answerGroup(
 		channel: ChannelKey,

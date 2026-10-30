@@ -1,6 +1,7 @@
 import type { TurnAttachments } from "../domain/attachment.ts";
-import type { ChannelKey } from "../domain/conversation.ts";
+import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
+import type { RoundEnd, RoundProgress } from "../domain/round.ts";
 import { messages } from "../i18n/index.ts";
 import type { Speaker } from "../speakers.ts";
 import { groupTurnText } from "./agent-prompt.ts";
@@ -24,12 +25,43 @@ import {
 	type TurnHost,
 } from "./team-turn-types.ts";
 
+/** A running round, as Stop reaches it: the flag it ends on, and the sessions whose turns it is running. */
+interface RunningRound {
+	stopped: boolean;
+	sessions: Set<ChannelKey>;
+}
+
 /** A group channel's rounds: scoring, then the chosen members answer one at a time. */
 export class GroupTurns {
 	readonly #host: TurnHost;
+	/** The round each channel runs now; a channel runs one at a time, inside its queue. */
+	readonly #running = new Map<ChannelKey, RunningRound>();
 
 	constructor(host: TurnHost) {
 		this.#host = host;
+	}
+
+	/** Tells the channel's surface where the round stands; a surface that shows no rounds hears nothing, and a refusal only reaches the log. */
+	#tell(channel: ChannelKey, round: RoundProgress): void {
+		const { surfaces, logger } = this.#host.options;
+		// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
+		surfaces
+			?.groupRound?.(channel, round)
+			.catch((error: unknown) =>
+				logger.warn({ channel, err: error }, "round not shown"),
+			);
+	}
+
+	/**
+	 * Ends the channel's running round: the member speaking is stopped, and the members still waiting
+	 * do not speak. Returns the sessions whose turns the caller must stop, or undefined when no round runs
+	 * in the channel.
+	 */
+	stopRound(channel: ChannelKey): ChannelKey[] | undefined {
+		const round = this.#running.get(channel);
+		if (!round) return undefined;
+		round.stopped = true;
+		return [...round.sessions];
 	}
 
 	/** The active group whose Discord channel or room the key is. */
@@ -63,7 +95,7 @@ export class GroupTurns {
 			.map((name) => store.agent(name))
 			.filter((m): m is Agent => m?.status === "active");
 		const recent = await store.recentGroupMessages(log, RECENT_FOR_SCORING);
-		await store.appendGroupMessage(log, {
+		const openedBy = await store.appendGroupMessage(log, {
 			author: speaker.tier === "owner" ? "owner" : `human:${speaker.id}`,
 			authorName:
 				speaker.tier === "owner" ? this.#host.options.owner.name : speaker.name,
@@ -103,48 +135,107 @@ export class GroupTurns {
 		const chain: Chain = { messages: 0, speaker };
 		const queued = [...order];
 		const spoken = new Set<string>();
+		const control: RunningRound = { stopped: false, sessions: new Set() };
+		this.#running.set(channel, control);
+		// The stop button belongs to the round, which ends whole: it is shown until the round ends.
+		const hideStop = this.#host.options.showStop(channel);
+		const share = (
+			state: RoundProgress["state"],
+			current: string | undefined,
+			ended?: RoundEnd,
+		) => {
+			// The owner's messages waiting in the channel's queue, not counting this round's own task.
+			const waiting = Math.max(this.#host.options.queue.size(channel) - 1, 0);
+			this.#tell(channel, {
+				id: openedBy,
+				state,
+				...(current === undefined ? {} : { current }),
+				next: [...queued],
+				spoken: [...spoken],
+				replies,
+				limit: MAX_ROUND_REPLIES,
+				...(ended === undefined ? {} : { ended }),
+				...(waiting > 0 ? { queued: waiting } : {}),
+			});
+		};
 		let last: Agent | undefined;
 		let replies = 0;
-		while (queued.length > 0 && replies < MAX_ROUND_REPLIES) {
-			// A member may archive the group during the round.
-			if (store.group(group.name)?.status !== "active") return;
-			const name = queued.shift() as string;
-			const member = store.agent(name);
-			if (member?.status !== "active") continue;
-			const first = !spoken.has(name);
-			spoken.add(name);
-			const backlog = await store.backlog(log, name, BACKLOG_LIMIT);
-			// Delivered once the session has the text, so a message never comes twice.
-			if (backlog.lastId !== undefined)
-				await store.advanceCursor(log, name, backlog.lastId);
-			// Attachments and a confirmation belong to a member's first turn of the round only.
-			const extra: TurnExtra = { interactive: true, byMessage: true };
-			if (first) {
-				extra.attachments = attachments;
-				if (approvals.get(name)) extra.confirmed = true;
+		let end: RoundEnd = "done";
+		try {
+			share("running", undefined);
+			while (queued.length > 0 && replies < MAX_ROUND_REPLIES) {
+				if (control.stopped) {
+					end = "stopped";
+					break;
+				}
+				// A member may archive the group during the round.
+				if (store.group(group.name)?.status !== "active") {
+					queued.length = 0;
+					break;
+				}
+				const name = queued.shift() as string;
+				const member = store.agent(name);
+				if (member?.status !== "active") continue;
+				const first = !spoken.has(name);
+				const backlog = await store.backlog(log, name, BACKLOG_LIMIT);
+				// Delivered once the session has the text, so a message never comes twice.
+				if (backlog.lastId !== undefined)
+					await store.advanceCursor(log, name, backlog.lastId);
+				// Attachments and a confirmation belong to a member's first turn of the round only.
+				const extra: TurnExtra = { interactive: true, byMessage: true };
+				if (first) {
+					extra.attachments = attachments;
+					if (approvals.get(name)) extra.confirmed = true;
+				}
+				const scope = groupScope(member, group, channel);
+				control.sessions.add(scope.session);
+				share("running", name);
+				let result: TurnResult;
+				try {
+					result = await this.#host.turn(
+						member,
+						scope,
+						channel,
+						groupTurnText(group, member, backlog),
+						chain,
+						extra,
+					);
+				} finally {
+					control.sessions.delete(scope.session);
+				}
+				spoken.add(name);
+				replies += 1;
+				last = member;
+				if (control.stopped || (!result.ok && result.stopped)) {
+					end = "stopped";
+					break;
+				}
+				if (result.ok) {
+					await store.appendGroupMessage(log, {
+						author: name,
+						authorName: this.#host.current(member).displayName,
+						text: result.text,
+					});
+					for (const handoff of mentionedMembers(result.text, members))
+						if (handoff !== name && !queued.includes(handoff))
+							queued.push(handoff);
+				}
+				share("running", undefined);
 			}
-			const result = await this.#host.turn(
-				member,
-				groupScope(member, group, channel),
-				channel,
-				groupTurnText(group, member, backlog),
-				chain,
-				extra,
-			);
-			replies += 1;
-			last = member;
-			if (!result.ok) continue;
-			await store.appendGroupMessage(log, {
-				author: name,
-				authorName: this.#host.current(member).displayName,
-				text: result.text,
-			});
-			for (const handoff of mentionedMembers(result.text, members))
-				if (handoff !== name && !queued.includes(handoff)) queued.push(handoff);
+			if (end !== "stopped" && queued.length > 0) end = "limit";
+			if (queued.length > 0 && last)
+				await this.#host.post(channel, this.#host.current(last), {
+					chunks: [
+						end === "stopped"
+							? messages().roundStoppedNotice
+							: messages().roundLimitNotice,
+					],
+				});
+			if (end === "stopped") queued.length = 0;
+		} finally {
+			hideStop();
+			this.#running.delete(channel);
+			share("ended", undefined, end);
 		}
-		if (queued.length > 0 && last)
-			await this.#host.post(channel, this.#host.current(last), {
-				chunks: [messages().roundLimitNotice],
-			});
 	}
 }

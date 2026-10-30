@@ -15,6 +15,7 @@ import type {
 } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import type { TurnRequest } from "../domain/ports.ts";
+import type { RoundProgress } from "../domain/round.ts";
 import type { IdentityService } from "../identity/identity-port.ts";
 import { silentLogger } from "../log.ts";
 import { StoredSkillRegistry as SkillRegistry } from "../modules/skills/skill-registry.ts";
@@ -140,6 +141,13 @@ class FakeSurfaces {
 	replies: { channel: ChannelKey; reply: OutboundReply }[] = [];
 	/** Interim posts as `channel name/agent: text`, edits included. */
 	interims: string[] = [];
+	/** What each round told the surface, in order. */
+	rounds: { channel: ChannelKey; round: RoundProgress }[] = [];
+	async groupRound(channel: ChannelKey, round: RoundProgress) {
+		// A surface hears of the rounds of its own rooms only; Discord's channels are not any room's.
+		if (this.rooms.includes(channel.slice(0, channel.indexOf(":"))))
+			this.rounds.push({ channel, round });
+	}
 	roomSurfaces() {
 		return this.rooms;
 	}

@@ -80,6 +80,15 @@ export class Names {
 		}
 	}
 
+	/** A sign before the seat's name, or none: the plate keeps the name itself. */
+	mark(podium: Podium, mark: string | null): void {
+		const item = this.items.get(podium);
+		if (item)
+			item.el.textContent = mark
+				? `${mark} ${podium.init.name}`
+				: podium.init.name;
+	}
+
 	relabel(podium: Podium, state: SeatState): void {
 		const item = this.items.get(podium);
 		if (item && podium.init.kind === "agent")

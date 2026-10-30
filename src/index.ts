@@ -163,6 +163,7 @@ export type {
 } from "./core/domain/interim.ts";
 export type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
 export type { HoldRefusal, TurnProgress } from "./core/domain/progress.ts";
+export type { RoundEnd, RoundProgress } from "./core/domain/round.ts";
 export {
 	type TurnLimit,
 	type TurnTimeout,

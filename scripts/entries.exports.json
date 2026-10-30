@@ -258,6 +258,8 @@
 			"ResolvedSkill",
 			"RoleGrant",
 			"RoleSource",
+			"RoundEnd",
+			"RoundProgress",
 			"RoundtableConfig",
 			"RoundtableOptions",
 			"RoundtablePlugin",

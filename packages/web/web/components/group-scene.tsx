@@ -1,22 +1,34 @@
 import { useState } from "react";
+import { useSelector } from "../lib/app-store.ts";
 import { followFocus, speakerOf } from "../lib/dialogue.ts";
+import { speakerOfRound } from "../lib/round-view.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
 import { DialogueBox, useRoomLine } from "./dialogue-box.tsx";
+import { OrderStrip } from "./order-strip.tsx";
 import { RoundTable } from "./round-table.tsx";
 
 /**
- * Where the camera of a group scene is: on whoever said the newest line, or on the member a person
- * turned it to by hand, until the next line comes. `look` turns it (null: the whole ring).
+ * Where the camera of a group scene is: on the member the round says speaks now, else on whoever
+ * said the newest line, or on the member a person turned it to by hand, until the next line or the
+ * next speaker comes. `look` turns it (null: the whole ring).
  */
 export function useGroupFocus(roomKey: string, members: readonly string[]) {
 	const { line } = useRoomLine(roomKey);
+	const speaking = useSelector((state) =>
+		speakerOfRound(state.rooms[roomKey]?.round),
+	);
 	const [manual, setManual] = useState<{
 		lineId: string | undefined;
 		member: string | null;
 	}>();
-	const focus = followFocus(speakerOf(line, members), line?.id, manual);
-	const look = (member: string | null) =>
-		setManual({ lineId: line?.id, member });
+	// A hand-turned camera stays for the beat it was turned in: the newest line and the one who speaks.
+	const beat = `${line?.id ?? ""}|${speaking ?? ""}`;
+	const speaker =
+		speaking !== undefined && members.includes(speaking)
+			? speaking
+			: speakerOf(line, members);
+	const focus = followFocus(speaker, beat, manual);
+	const look = (member: string | null) => setManual({ lineId: beat, member });
 	return { focus, look };
 }
 
@@ -48,7 +60,12 @@ export function GroupStage(props: {
 				{...(props.onHandle ? { onHandle: props.onHandle } : {})}
 				{...(props.onSeatMenu ? { onSeatMenu: props.onSeatMenu } : {})}
 			/>
-			<DialogueBox roomKey={roomKey} open streams={props.streams ?? false} />
+			<DialogueBox
+				roomKey={roomKey}
+				open
+				streams={props.streams ?? false}
+				strip={<OrderStrip roomKey={roomKey} />}
+			/>
 		</div>
 	);
 }

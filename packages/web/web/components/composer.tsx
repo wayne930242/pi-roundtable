@@ -61,6 +61,8 @@ export function Composer(props: {
 	/** `addressed`: the person typed `@AI` at the start of the text (see `Composer`'s note on what counts). */
 	onSend(text: string, files: UploadView[], addressed: boolean): void;
 	onStop(): void;
+	/** What the stop button is called; "Stop" when absent. A group's reads "Stop the round", since it ends the whole round. */
+	stopLabel?: string;
 	/** Hears whether the person is addressing the agent with a leading `@AI`, as it starts and stops. */
 	onAddressed?(addressed: boolean): void;
 	/** Files dropped on the room come here as the composer's own. */
@@ -429,7 +431,8 @@ export function Composer(props: {
 					<button
 						type="button"
 						className="icon-button composer-stop"
-						aria-label={t("Stop")}
+						aria-label={props.stopLabel ?? t("Stop")}
+						title={props.stopLabel}
 						onClick={props.onStop}
 					>
 						<Icon name="stop" size={18} />

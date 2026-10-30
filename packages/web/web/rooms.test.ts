@@ -959,3 +959,59 @@ describe("the gate", () => {
 		expect(after).toEqual(before);
 	});
 });
+
+describe("a group's round", () => {
+	const CREW = "app:group.crew";
+	const crew = (over: Partial<RoomView> = {}) =>
+		view(CREW, { kind: "group", members: ["guide", "scout"], ...over });
+	const running = {
+		id: 4,
+		state: "running" as const,
+		current: "guide",
+		next: ["scout"],
+		spoken: [],
+		replies: 0,
+		limit: 8,
+	};
+	const ended = {
+		...running,
+		state: "ended" as const,
+		next: [],
+		spoken: ["guide", "scout"],
+		replies: 2,
+		ended: "done" as const,
+	};
+
+	test("a round frame is kept on its room and replaced by the next one", () => {
+		const state = run([
+			{ type: "rooms_loaded", rooms: [view(GUIDE), crew()] },
+			{ type: "round", room: CREW, round: running },
+		]);
+		expect(state.rooms[CREW]?.round).toEqual(running);
+		const after = reduce(state, { type: "round", room: CREW, round: ended });
+		expect(after.rooms[CREW]?.round).toEqual(ended);
+		expect(after.rooms[GUIDE]?.round).toBeUndefined();
+	});
+
+	test("the room list brings a round already running; one that ended stays in the page, and a running one the list no longer has goes", () => {
+		const opened = run([
+			{ type: "rooms_loaded", rooms: [view(GUIDE), crew({ round: running })] },
+		]);
+		expect(opened.rooms[CREW]?.round).toEqual(running);
+		// the server has none running now: the page's memory of a running round was stale
+		const stale = reduce(opened, {
+			type: "rooms_loaded",
+			rooms: [view(GUIDE), crew()],
+		});
+		expect(stale.rooms[CREW]?.round).toBeUndefined();
+		// a round that ended is only in the page, so the next list leaves it
+		const done = run(
+			[
+				{ type: "round", room: CREW, round: ended },
+				{ type: "rooms_loaded", rooms: [view(GUIDE), crew()] },
+			],
+			opened,
+		);
+		expect(done.rooms[CREW]?.round).toEqual(ended);
+	});
+});

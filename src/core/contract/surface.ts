@@ -1,6 +1,7 @@
 import type { OutboundReply, PostAuthor } from "../domain/conversation.ts";
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnProgress } from "../domain/progress.ts";
+import type { RoundProgress } from "../domain/round.ts";
 import { PluginError } from "../errors.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { ChannelKey } from "../sessions.ts";
@@ -186,6 +187,13 @@ export interface ChatSurface {
 	 * turn goes on. Absent = the surface shows only the final reply.
 	 */
 	progress?(channel: ChannelKey, event: TurnProgress): Promise<void> | void;
+	/**
+	 * Shows where a group's round stands: who speaks now, who is next, who has spoken. Called when
+	 * the round is planned, before and after each member's turn, on a handoff, and when it ends;
+	 * each call carries the whole state. A rejection is logged and the round goes on. Absent = the
+	 * surface shows no rounds, as Discord does not.
+	 */
+	groupRound?(channel: ChannelKey, round: RoundProgress): Promise<void> | void;
 }
 
 /**
@@ -222,4 +230,6 @@ export interface SurfacePort {
 	 * type-checks, and a turn run over one without it shows no progress.
 	 */
 	progress?(channel: ChannelKey, event: TurnProgress): Promise<void>;
+	/** Shows where a group's round stands; a no-op when no surface serves the channel or its surface shows none. */
+	groupRound?(channel: ChannelKey, round: RoundProgress): Promise<void>;
 }

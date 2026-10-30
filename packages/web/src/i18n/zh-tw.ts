@@ -306,6 +306,14 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Private chat": "私下對話",
 	"Remove from the council": "移出評議會",
 	"{name} left the council": "{name}已移出評議會",
+	"Speaking order": "發言順序",
+	"has spoken": "已發言",
+	"Reply {n} of {limit}": "第 {n}／{limit} 則",
+	"{count} of {limit} replies": "{count}／{limit} 則回覆",
+	"Limit reached": "已達上限",
+	"Round stopped": "本輪已停止",
+	"Stop the round": "停止本輪",
+	"Your message waits for the next round": "你的訊息排在下一輪",
 
 	// 通知
 	"A file is no longer available. Attach it again.":

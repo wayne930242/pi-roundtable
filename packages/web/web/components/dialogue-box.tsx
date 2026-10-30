@@ -1,5 +1,6 @@
 import {
 	type CSSProperties,
+	type ReactNode,
 	useEffect,
 	useReducer,
 	useRef,
@@ -163,6 +164,8 @@ export interface DialogueBoxProps {
 	onBack?: (() => void) | undefined;
 	/** Opens the box's menu from its ⋯ button, given the button; no button when absent. */
 	onMenu?: ((anchor: HTMLElement) => void) | undefined;
+	/** What stands under the nameplate, over the line: a group's order strip. */
+	strip?: ReactNode;
 }
 
 /**
@@ -286,6 +289,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 					</button>
 				</span>
 			</header>
+			{props.strip}
 			<div className="scene-body">
 				<div
 					className="scene-line"
@@ -333,6 +337,9 @@ export function DialogueBox(props: DialogueBoxProps) {
 						name={view?.displayName ?? roomKey}
 						limits={limits}
 						stoppable={Boolean(room?.stoppable)}
+						{...(view?.kind === "group"
+							? { stopLabel: t("Stop the round") }
+							: {})}
 						onSend={(text, files) => connection.say(roomKey, text, files)}
 						onStop={() => connection.send({ type: "stop", room: roomKey })}
 					/>

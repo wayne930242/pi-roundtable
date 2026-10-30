@@ -69,6 +69,7 @@ export function createTable2D(
 	let seats: SeatInit[] = [];
 	const svgs = new Map<string, string>();
 	const states = new Map<string, SeatState>();
+	const marks = new Map<string, string>();
 	let focusId: string | null = opts.focus ?? null;
 
 	const root = document.createElement("div");
@@ -355,7 +356,11 @@ export function createTable2D(
 				},
 				g,
 			);
-			label.textContent = fitLabel(s.name, (plateW - 8) / fs);
+			const mark = marks.get(s.id);
+			label.textContent = fitLabel(
+				mark ? `${mark} ${s.name}` : s.name,
+				(plateW - 8) / fs,
+			);
 			// badges
 			const badge = el(
 				"g",
@@ -590,6 +595,12 @@ export function createTable2D(
 		setState(id, state) {
 			if (states.get(id) === state) return;
 			states.set(id, state);
+			draw();
+		},
+		setMark(id, mark) {
+			if ((marks.get(id) ?? null) === mark) return;
+			if (mark === null) marks.delete(id);
+			else marks.set(id, mark);
 			draw();
 		},
 		setAvatar(id, s) {

@@ -171,6 +171,7 @@ export function createTable3D(
 	let scheme: Scheme = opts.scheme;
 	let seats: SeatInit[] = [];
 	const states = new Map<string, SeatState>();
+	const marks = new Map<string, string>();
 	const svgs = new Map<string, string>();
 	let world: World | undefined;
 	let building = 0;
@@ -379,6 +380,10 @@ export function createTable3D(
 		moveTo(targetShot(), glide === undefined);
 		names.paint(hall);
 		names.set(podiums, (p) => states.get(p.init.id ?? "") ?? "idle");
+		for (const p of podiums) {
+			const mark = marks.get(p.init.id ?? "");
+			if (mark) names.mark(p, mark);
+		}
 		loop.wake();
 	};
 
@@ -977,6 +982,14 @@ export function createTable3D(
 				applyState(p, state);
 				names.relabel(p, state);
 			}
+			loop.wake();
+		},
+		setMark(id, mark) {
+			if (mark === null) marks.delete(id);
+			else marks.set(id, mark);
+			const slot = world?.slotOf.get(id);
+			const p = slot === undefined ? undefined : world?.podiums[slot];
+			if (p) names.mark(p, mark);
 			loop.wake();
 		},
 		async setAvatar(id, svg) {

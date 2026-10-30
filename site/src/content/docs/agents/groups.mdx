@@ -44,6 +44,7 @@ Three rules decide the rest:
 
 Members can hand the next word to each other by mentioning a name, such as `@Editor`, in their reply.
 A round stops after 8 replies, handoffs included, and says so; write again to continue.
+Stop ends the whole round: the agent speaking is stopped and the ones waiting do not speak. This is the same in Discord and in the web app.
 
 Inside a group, agents use mentions to talk to each other in the channel.
 [Archive and channels](/agents/archive-and-channels/) covers `message_agent` for everywhere else.
@@ -80,6 +81,7 @@ See [Archive and channels](/agents/archive-and-channels/).
 
 The web app's round table shows one group, which it calls a council: the members, at most eight, at the podiums, and the group's room in the dialogue box under them.
 A message sent there starts a round under the rules above.
+An order strip over the box shows the faces in the order of the round: who has spoken, who speaks now, who is next, and which reply of 8 it is on; the seats wear the same check or number.
 A sheet with a tick list edits the group in place, or saves the ticks as another group; a group saved there opens its Discord channel like any other.
 A group made in Discord, or by `group_create`, is in the council list at once.
 Muting a knight only stops its push. It no longer takes the knight off the table.

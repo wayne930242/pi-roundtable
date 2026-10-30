@@ -2937,11 +2937,12 @@ The agent server claims `discord:` keys, and, only on a surface that declares `a
 | `maxAttachmentBytes` | The most bytes of one attachment a turn takes from this surface, for a ref, a file, a stream or a download alike; a positive integer, so a surface that keeps large uploads can raise it past 25 MiB. See [files from outside a turn](#contextattachments-files-from-outside-a-turn) | 25 MiB, as Discord's |
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
-| `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)` | none is shown |
+| `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)`. A group's round shows it for the whole round, and stopping ends the round: the member speaking is stopped and the members still waiting do not speak | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
 | `prompts(channel, scope?)` | How those the turn's `PromptScope` names approve a held action or answer `ask_user` inside a running turn, as `Prompts`: `confirm` and `ask`, and, where the surface declares `asks`, `questionnaire` ([several questions on one card](#several-questions-on-one-card-questionnaire-and-asksupport)); without a scope, the owners | the action is held until a message approves it |
 | `interim(channel, as?)` | Where a running turn posts the text it writes before its final answer, as `InterimPosts`: `post(text)` sends one message of at most 2000 characters and resolves to an `InterimMessage` whose `edit(text)` changes it in place. `as` is a `PostAuthor` (`{ name, agent? }`) when an agent of the team speaks, as `OutboundReply.author` is for the final reply | only the final reply is posted |
 | `progress(channel, event)` | Shows a turn run through `context.turns` as it goes, such as a live preview in a web chat. `event` is a `TurnProgress`: `{ type: "text", delta }` (the reply's text, joined over 250 ms and always sent before a tool event, never the thinking), `{ type: "tool_start", id, tool, preview? }` (a one-line preview of the arguments, at most 80 characters, never their full text), or `{ type: "tool_end", id, tool, ok, refused? }` (`refused`, only on a failed end that a hold refused, says how: `declined` on its approval card, `expired` when a card was shown and went unanswered, `pending` while the card stays open, or `held` when no card could be shown (no one may approve it, or it could not be posted); it is absent for a success and for a real failure). The final reply still comes through `sendReply`; a rejection is logged and the turn goes on | only the final reply is shown |
+| `groupRound(channel, round)` | Shows where a group room's round stands: a `RoundProgress`, `{ id, state, current?, next, spoken, replies, limit, ended?, queued? }`, with `id` the group message that opened the round, `state` `running` or `ended`, `current` the member speaking, `next` those still to speak in order (a handoff appended), `spoken` those who replied, `ended` (once it ended) `done`, `limit` or `stopped`, and `queued` the owner's messages waiting for the next round. Called when the round is planned, before and after each member's turn, and when it ends; each call carries the whole state. Called for the room keys of a surface that hosts rooms, never for a Discord channel; a rejection is logged and the round goes on | the surface shows no rounds |
 
 #### Agent rooms on any surface
 
@@ -4391,6 +4392,8 @@ Import from the entries listed below; source area files are internal.
 | `ResolvedSkill` | `pi-roundtable` | type |
 | `RoleGrant` | `pi-roundtable` | type |
 | `RoleSource` | `pi-roundtable` | type |
+| `RoundEnd` | `pi-roundtable` | type |
+| `RoundProgress` | `pi-roundtable` | type |
 | `Roundtable` | `pi-roundtable` | value |
 | `ReplyFile` | `pi-roundtable` | type |
 | `ReplyFileError` | `pi-roundtable` | value |
