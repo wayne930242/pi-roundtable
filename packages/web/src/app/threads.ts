@@ -105,6 +105,26 @@ export class WebThreads {
 		return rows.length;
 	}
 
+	/** Puts a dismissed thread back on the room list; asking again changes nothing. */
+	async restore(id: string): Promise<"restored" | "missing"> {
+		const rows: unknown[] = await this.#sql`
+			UPDATE web_threads SET dismissed_at = NULL WHERE id = ${id} RETURNING 1`;
+		return rows.length ? "restored" : "missing";
+	}
+
+	/** Puts back the dismissed threads of `ids` that hang under `parent`; returns how many were dismissed. */
+	async restoreFinished(
+		parent: string,
+		ids: readonly string[],
+	): Promise<number> {
+		if (ids.length === 0) return 0;
+		const rows: unknown[] = await this.#sql`
+			UPDATE web_threads SET dismissed_at = NULL
+			WHERE parent = ${parent} AND id IN ${this.#sql([...ids])}
+				AND dismissed_at IS NOT NULL RETURNING 1`;
+		return rows.length;
+	}
+
 	async get(id: string): Promise<WebThread | undefined> {
 		const [row]: Row[] = await this
 			.#sql`SELECT * FROM web_threads WHERE id = ${id}`;

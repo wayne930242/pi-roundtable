@@ -124,6 +124,32 @@ describeDb("dispatch threads of the app", () => {
 		await threads.removeUnder("app:agent.slots");
 	});
 
+	test("a dismissed thread is restored to the list, alone or with the rest of its sweep", async () => {
+		const one = await threads.open("app:agent.undo", "One");
+		const two = await threads.open("app:agent.undo", "Two");
+		const other = await threads.open("app:agent.undo-too", "Other");
+		for (const t of [one, two, other]) await threads.close(t.id);
+		await threads.dismiss(one.id);
+		expect(await threads.restore(one.id)).toBe("restored");
+		// Asking again changes nothing, and a thread that is not stored is missing.
+		expect(await threads.restore(one.id)).toBe("restored");
+		expect(await threads.restore("thread.nobody")).toBe("missing");
+		expect((await threads.list()).map((t) => t.id)).toContain(one.id);
+		await threads.dismissFinished("app:agent.undo");
+		await threads.dismiss(other.id);
+		// Only the named ones that hang under the room come back, and only the dismissed count.
+		expect(
+			await threads.restoreFinished("app:agent.undo", [one.id, other.id]),
+		).toBe(1);
+		const listed = (await threads.list()).map((t) => t.id);
+		expect(listed).toContain(one.id);
+		expect(listed).not.toContain(two.id);
+		expect(listed).not.toContain(other.id);
+		expect(await threads.restoreFinished("app:agent.undo", [])).toBe(0);
+		await threads.removeUnder("app:agent.undo");
+		await threads.removeUnder("app:agent.undo-too");
+	});
+
 	test("dismissing the finished threads of a room leaves its open ones and other rooms' alone", async () => {
 		const open = await threads.open("app:agent.sweep", "Running");
 		const done = await threads.open("app:agent.sweep", "Done");

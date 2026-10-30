@@ -148,50 +148,6 @@ const RoomRow = memo(function RoomRow(
 	return <RoomRowView {...props} press={press} />;
 });
 
-/** A dispatch thread under its room: one line with its title, what it is doing, and when it last said something. */
-const ThreadRow = memo(function ThreadRow(
-	props: Omit<RowData, "key"> & {
-		active: boolean;
-		now: number;
-		timeZone: string;
-	},
-) {
-	const { view } = props;
-	return (
-		<li className={view.closed ? "thread-item" : undefined}>
-			<a
-				className="thread-row"
-				href={hrefFor("room", view.key)}
-				data-closed={view.closed || undefined}
-				aria-current={props.active ? "page" : undefined}
-			>
-				<Icon name="conversations" size={16} className="thread-row-icon" />
-				<span className="thread-row-title">{view.displayName}</span>
-				{props.typing ? <Typing /> : null}
-				{props.waiting ? <WaitingBadge count={props.waiting} /> : null}
-				<span className="room-row-time">
-					{props.at ? ago(props.at, props.now, props.timeZone) : ""}
-				</span>
-			</a>
-			{view.closed ? (
-				<button
-					type="button"
-					className="thread-dismiss"
-					aria-label={t("Remove {name}", { name: view.displayName })}
-					title={t("Remove")}
-					onClick={() =>
-						import("../lib/thread-actions.ts").then((m) =>
-							m.dismissThread(view.key),
-						)
-					}
-				>
-					<Icon name="close" size={16} />
-				</button>
-			) : null}
-		</li>
-	);
-});
-
 /** The rows for rooms, each with what the list shows of it; rooms the list does not know are left out. */
 export function useRowData(keys: readonly string[]): RowData[] {
 	const rows = useSelector(
@@ -215,69 +171,24 @@ export function useRowData(keys: readonly string[]): RowData[] {
 	return rows.flatMap((row) => (row.view ? [{ ...row, view: row.view }] : []));
 }
 
-/** The threads of a room: the open ones, then the finished ones folded away until asked for. */
-export function ThreadList(props: {
+// The threads' cards, their menu and their gestures load beside the first room that has a thread.
+const ThreadCards = lazy(() => import("./thread-list.tsx"));
+
+export interface ThreadListProps {
 	open: string[];
 	closed: string[];
 	active: string | undefined;
-	/** The room the threads hang under; with it the finished ones can be cleared at once. */
+	/** The room the threads hang under; absent for threads whose room the list no longer has. */
 	parent?: string;
-}) {
-	const { now } = useLive();
-	const { timeZone } = useConfig();
-	const open = useRowData(props.open);
-	const closed = useRowData(props.closed);
-	if (open.length === 0 && closed.length === 0) return null;
-	const row = ({ key, ...rest }: RowData) => (
-		<ThreadRow
-			key={key}
-			{...rest}
-			active={key === props.active}
-			now={now}
-			timeZone={timeZone}
-		/>
-	);
+}
+
+/** The threads of a room as cards: the open ones, then the finished ones folded away until asked for, with a way to clear them. */
+export function ThreadList(props: ThreadListProps) {
+	if (props.open.length + props.closed.length === 0) return null;
 	return (
-		<div className="thread-group">
-			{open.length ? (
-				<ul className="thread-list" aria-label={t("Dispatch threads")}>
-					{open.map(row)}
-				</ul>
-			) : null}
-			{closed.length ? (
-				<details
-					className="thread-closed"
-					{...(closed.some((one) => one.key === props.active)
-						? { open: true }
-						: {})}
-				>
-					<summary>
-						{plural(
-							closed.length,
-							"{count} finished thread",
-							"{count} finished threads",
-						)}
-					</summary>
-					<ul className="thread-list">{closed.map(row)}</ul>
-					{props.parent ? (
-						<button
-							type="button"
-							className="thread-clear"
-							onClick={() =>
-								import("../lib/thread-actions.ts").then((m) =>
-									m.dismissThreads(
-										props.parent as string,
-										closed.map((one) => one.key),
-									),
-								)
-							}
-						>
-							{t("Clear all")}
-						</button>
-					) : null}
-				</details>
-			) : null}
-		</div>
+		<Suspense fallback={null}>
+			<ThreadCards {...props} />
+		</Suspense>
 	);
 }
 

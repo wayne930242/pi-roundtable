@@ -217,7 +217,7 @@ test("a group row has the modes and restart but no agent edit; a thread row has 
 		"Archive group",
 	]);
 	await page.act(() => closeMenu());
-	await rightClick(q(".thread-row"), false);
+	await rightClick(q(".thread-card"), false);
 	expect(labels()).toEqual([]);
 });
 

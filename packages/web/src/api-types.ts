@@ -573,6 +573,11 @@ export interface ThreadsDismissed {
 	dismissed: number;
 }
 
+/** What taking dismissed threads back onto the room list restored. */
+export interface ThreadsRestored {
+	restored: number;
+}
+
 export interface RoomsView extends LayoutView {
 	rooms: RoomView[];
 }

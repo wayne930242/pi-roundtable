@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { closeAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
-import { translate as t } from "../lib/messages.ts";
+import { plural, translate as t } from "../lib/messages.ts";
 import {
 	clearRoomConfirm,
 	type RoomConfirm,
@@ -111,6 +111,36 @@ export function ArchiveConfirm(props: ConfirmProps) {
 	);
 }
 
+/** Clearing many finished threads at once: they leave the list for every owner, and Undo brings them back. */
+export function ClearThreadsConfirm(
+	props: ConfirmProps & { threads: readonly string[] },
+) {
+	return (
+		<Confirm
+			open={props.open}
+			title={plural(
+				props.threads.length,
+				"Clear {count} finished thread?",
+				"Clear {count} finished threads?",
+			)}
+			confirmLabel={t("Clear all finished")}
+			tone="danger"
+			{...(props.restoreFocus ? { restoreFocus: props.restoreFocus } : {})}
+			onClose={props.onClose}
+			onConfirm={async () => {
+				const { dismissThreads } = await import("../lib/thread-actions.ts");
+				await dismissThreads(props.room || undefined, props.threads);
+			}}
+		>
+			<p>
+				{t(
+					"They leave the list for every owner. Each one stays readable by its address, and Undo brings them back.",
+				)}
+			</p>
+		</Confirm>
+	);
+}
+
 /** Draws the question that `askRoomConfirm` asks, wherever in the page it was asked, and the folder dialogs. */
 export function RoomConfirmHost() {
 	return (
@@ -138,6 +168,11 @@ function RoomConfirms() {
 			<YoloConfirm open={ask?.kind === "yolo"} {...common} />
 			<StartOverConfirm open={ask?.kind === "start-over"} {...common} />
 			<ArchiveConfirm open={ask?.kind === "archive"} {...common} />
+			<ClearThreadsConfirm
+				open={ask?.kind === "clear-threads"}
+				{...common}
+				threads={shown.threads ?? []}
+			/>
 		</>
 	);
 }

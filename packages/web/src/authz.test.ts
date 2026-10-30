@@ -74,6 +74,8 @@ const EXPECTED: [string, string, Record<string, Outcome>][] = [
 	["GET", "api/rooms/app%3Athread.0b5e7c1a", HIDDEN],
 	["POST", "api/rooms/app%3Athread.0b5e7c1a/dismiss", HIDDEN],
 	["POST", "api/rooms/app%3Aagent.guide/dismiss-threads", HIDDEN],
+	["POST", "api/rooms/app%3Athread.0b5e7c1a/undismiss", HIDDEN],
+	["POST", "api/rooms/app%3Aagent.guide/undismiss-threads", HIDDEN],
 	["POST", "api/folders", O],
 	["PATCH", "api/folders/folder.x", O],
 	["PUT", "api/folders/folder.x/mute", O],
