@@ -7,10 +7,10 @@
 
 一個建立在 [Pi](https://github.com/earendil-works/pi) 上的智慧體（agent）伺服器，可以透過 Discord 或網頁聊天跟它對話。
 在 Discord 裡，每個 AI 智慧體在你的伺服器有自己的頻道和對話，共用工具與記憶。
-在網頁上，經你的 OpenID Connect 供應商登入的人，透過 [pi-roundtable-webchat](packages/webchat) 在各自的私人對話裡跟助理聊天。
+在網頁上，經你的 OpenID Connect 供應商登入的人，透過 [pi-roundtable-webchat](packages/webchat) 在各自的私人對話裡跟騎士聊天。
 想加功能，就用 TypeScript 寫外掛（plugin）。
 
-- 為一位擁有者設計。Discord 和網頁聊天都能用，也可以讓其他人跟助理對話，但開放給多人使用的風險由營運者自行承擔：請先讀[威脅模型](#威脅模型)。
+- 為一位擁有者設計。Discord 和網頁聊天都能用，也可以讓其他人跟騎士對話，但開放給多人使用的風險由營運者自行承擔：請先讀[威脅模型](#威脅模型)。
 - 只支援 Bun。套件直接發佈 TypeScript 原始碼，不需要建置步驟。
 - MIT 授權。
 
@@ -132,7 +132,7 @@ test("hello greets", async () => {
 
 套件 [pi-roundtable-webchat](packages/webchat) 是以外掛形式提供的聊天管道：在主機的 listener 上的 `/chat` 底下提供 WebSocket 和 REST API。
 經你的 OpenID Connect 供應商登入的人，可以用你列出的人格（persona）開私人對話，在每一輪執行時看到它寫的文字和用的工具，也能回答暫緩呼叫的核准卡。
-設定裡沒有 `discord`、`plugins` 列了 `webChat({ ... })` 的主機，就是只有網頁的助理；`roundtable init --adapter web` 會建立這種專案。
+設定裡沒有 `discord`、`plugins` 列了 `webChat({ ... })` 的主機，就是只有網頁的騎士；`roundtable init --adapter web` 會建立這種專案。
 
 ```sh
 npx pi-roundtable init my-desk --adapter web
@@ -195,7 +195,7 @@ export default {
 | `coordinator` | `agents` 的第一位 | 沒有 `discord` 時，接手主人一般請求的 agent，不能被封存。有 `discord` 時設它會出錯：由入口頻道的 agent 協調 |
 | `skills` | 有 `agents` 時開啟 | 技能 addon；沒有 `discord` 時，只有 `agents` 列了 agent 才會開 |
 
-有人在 agent 的頻道對助理說話時，那一輪也會讀進助理上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
+有人在 agent 的頻道對騎士說話時，那一輪也會讀進騎士上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
 用 `discord.channelContext` 調整，或設 `channelContext: false` 關閉：
 
 | `discord.channelContext` | 預設 | 說明 |
@@ -205,10 +205,10 @@ export default {
 | `similarity` | `0.8` | 同一作者相鄰兩則訊息相似到什麼程度算同一則 |
 | `messageChars` | `500` | 訊息截斷的長度 |
 | `botMessageChars` | `80` | 其他 bot 訊息截斷的長度 |
-| `foreignWebhook` | 無 | `(webhookId) => boolean \| "skip"`：回傳 true 的 webhook 所發的貼文視為別人的訊息，不是助理自己的；回傳 `"skip"` 則把該 webhook 的貼文當作不存在，不納入也不截斷範圍（只能用程式碼設定） |
+| `foreignWebhook` | 無 | `(webhookId) => boolean \| "skip"`：回傳 true 的 webhook 所發的貼文視為別人的訊息，不是騎士自己的；回傳 `"skip"` 則把該 webhook 的貼文當作不存在，不納入也不截斷範圍（只能用程式碼設定） |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`：替這一輪抓取保留訊息中的幾張圖片，最多 4 張 |
 
-在伺服器頻道或討論串裡重新開始對話時，助理會在那裡貼一條簡短的分隔線，讓下一輪不讀之前的內容；私訊不貼。
+在伺服器頻道或討論串裡重新開始對話時，騎士會在那裡貼一條簡短的分隔線，讓下一輪不讀之前的內容；私訊不貼。
 
 | `discord.freshMarker` | 預設 | 說明 |
 | --- | --- | --- |
@@ -230,14 +230,14 @@ agent 頻道裡訊息的附件，整則訊息（連同它回覆的那則）要�
 
 ## 威脅模型
 
-pi-roundtable 為一位擁有者執行一個助理。
+pi-roundtable 為一位擁有者執行騎士。
 0.9 加入以 principal 為範圍的記憶和私人對話隔離，但模型憑證與主機執行權限仍然共用，還不是完整的多使用者服務；開放給別人使用的風險仍由營運者承擔。
 
 - **信任誰。** 營運者掌控主機、設定和憑證。principal 代表主機服務的人，identity 是連到這個人的帳號或憑證。擁有者只能由 `access.owners` 或 `roundtable principal` 授予，不能來自 token claim。其他人的 `member` 或 `admin` tier 由核心 `access` 依驗證過的身分與帶 surface 前綴的角色判斷；外掛不能自行指定發言者的權限。
 - **一輪能做什麼。** 一輪只拿得到發言者的 tier 允許的工具；沒有外掛給 tier 的工具只有擁有者能用。工具在主機的行程裡執行，用的是主機的檔案和網路：`web_search` 和 `fetch_content` 連得到內部位址，所以網頁人格要在 `selection` 裡寫明它的工具。外掛也在同一個行程裡執行，權限一樣。
 - **核准。** 暫緩的呼叫只由當輪暫緩它的發言者核准，而且當下 tier 仍要足夠；在共用對話裡，擁有者也可以在卡片上或用確認訊息核准。私人對話裡別人都不能核准，高於發言者 tier 的呼叫在那裡也不會被核准。
 - **對話。** Discord 裡智慧體的頻道和群組房間是共用的：在那裡發言的每個人，都會寫進智慧體讀取的同一段對話。網頁聊天的對話屬於開啟它的人：在網頁聊天裡只有開啟者本人能讀、能發言、能回答它的提問，但擁有者可以透過擁有者主控台（[pi-roundtable-web](packages/web)）讀取，營運者也能從資料庫和資料目錄讀到。
-- **記憶隔離。** 記憶依 principal 分開，不依擁有者 tier 判斷。私人對話讀本人的，共用對話讀當輪發言者的；連結 Discord 與網頁身分後，同一個人共用一份記憶。在共用對話送給模型的請求和摘要裡，記憶工具與載入記憶的 worker 的呼叫（參數和結果成對）會對其他發言者隱藏，先前回合的 reasoning 則依 provider 清除。其他工具的參數和公開的助理回覆仍是公開內容，即使模型在裡面重述私人記憶；這不是一般的秘密流向防護。第三方摘要器必須先使用 `privateCompaction`，才能摘要共用歷史。`claude-bridge` 的共用回合只在原始讀者紀錄（含已壓縮的回合）顯示另一位讀者的私人記憶（連只放進 prompt 的記憶與其 reasoning 也算），或某個呼叫已對當前讀者隱藏時才被拒絕。沒有私人記憶的回合不會擋其他讀者，關掉之後的記憶也繞不過先前的私人歷史；開放其他人進來只會在開機和 doctor 裡警告。SYSTEM 只在這項核心防護裡算作主要擁有者，所以它能讀取並公開重述擁有者保留的呼叫與 reasoning；0.9 之前、第一筆範圍紀錄之前未標記的內建記憶結果，仍歸屬擁有者。沙盒的全場共用 prompt 區塊必須明確使用 `memory.visibility: "shared"`，私人回合需要 worker 能力。Bridge 會在這些投影之外重播未過濾的歷史；見[確切規則與剩餘風險](docs/migration-0.9.md#claude-bridge-guard)。
+- **記憶隔離。** 記憶依 principal 分開，不依擁有者 tier 判斷。私人對話讀本人的，共用對話讀當輪發言者的；連結 Discord 與網頁身分後，同一個人共用一份記憶。在共用對話送給模型的請求和摘要裡，記憶工具與載入記憶的 worker 的呼叫（參數和結果成對）會對其他發言者隱藏，先前回合的 reasoning 則依 provider 清除。其他工具的參數和公開的騎士回覆仍是公開內容，即使模型在裡面重述私人記憶；這不是一般的秘密流向防護。第三方摘要器必須先使用 `privateCompaction`，才能摘要共用歷史。`claude-bridge` 的共用回合只在原始讀者紀錄（含已壓縮的回合）顯示另一位讀者的私人記憶（連只放進 prompt 的記憶與其 reasoning 也算），或某個呼叫已對當前讀者隱藏時才被拒絕。沒有私人記憶的回合不會擋其他讀者，關掉之後的記憶也繞不過先前的私人歷史；開放其他人進來只會在開機和 doctor 裡警告。SYSTEM 只在這項核心防護裡算作主要擁有者，所以它能讀取並公開重述擁有者保留的呼叫與 reasoning；0.9 之前、第一筆範圍紀錄之前未標記的內建記憶結果，仍歸屬擁有者。沙盒的全場共用 prompt 區塊必須明確使用 `memory.visibility: "shared"`，私人回合需要 worker 能力。Bridge 會在這些投影之外重播未過濾的歷史；見[確切規則與剩餘風險](docs/migration-0.9.md#claude-bridge-guard)。
 - **模型憑證。** 每一輪不論誰發言，都用主機的模型登入執行、由它計費。每個人自己的憑證預計在之後的版本加入。
 - **資料。** 對話、記憶和排程以未加密的形式存在 PostgreSQL 和資料目錄裡。
 
