@@ -60,6 +60,7 @@ export class TeamLifecycle {
 		if (added.length > 0) logger.info({ added }, "seed agents added");
 		if (channels) await this.#startChannels(channels);
 		this.#ctx.changed();
+		await this.helpers.reconcile();
 		this.helpers.startSweeper();
 		void this.#dressMissing().then(async (dressed) => {
 			if (this.#stopped.signal.aborted) return;

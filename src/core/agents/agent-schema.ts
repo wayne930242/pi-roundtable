@@ -21,6 +21,7 @@ export interface AgentRow {
 	status: AgentStatus;
 	parent: string | null;
 	finished_at: Date | null;
+	origin: string | null;
 }
 
 export interface GroupRow {
@@ -47,6 +48,7 @@ export const toAgent = (row: AgentRow): Agent => {
 		status: row.status,
 		...(row.parent ? { parent: row.parent } : {}),
 		...(row.finished_at ? { finishedAt: row.finished_at } : {}),
+		...(row.origin ? { origin: row.origin } : {}),
 	};
 };
 
@@ -147,6 +149,13 @@ export function agentMigrations(guildId: string): Migration[] {
 				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS parent text`;
 				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS finished_at timestamptz`;
 				await sql`CREATE INDEX IF NOT EXISTS agents_parent ON agents (guild_id, parent)`;
+			},
+		},
+		// The conversation a temp knight was made from, which alone may message it.
+		{
+			name: "agents-helper-origin",
+			up: async (sql) => {
+				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS origin text`;
 			},
 		},
 		// The change history of the agents' prompts; the prompts plugin creates the same table for its documents.

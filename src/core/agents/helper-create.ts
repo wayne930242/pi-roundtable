@@ -4,6 +4,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Speaker } from "../speakers.ts";
+import { toolTiers } from "../tool-tiers.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import { keysOf } from "./team-keys.ts";
@@ -11,7 +12,14 @@ import type { TeamContext } from "./team-options.ts";
 
 /** The team's way of making an agent, which `createHelper` uses to make a temp knight. */
 export type MakeAgent = (
-	who: { speaker: Speaker; by: string; creator: Agent; parent: Agent },
+	who: {
+		speaker: Speaker;
+		by: string;
+		creator: Agent;
+		parent: Agent;
+		/** The conversation the temp knight is made from; only it and the owners may message the temp knight. */
+		origin?: string;
+	},
 	fields: {
 		name: string;
 		displayName: string;
@@ -59,21 +67,42 @@ export async function createHelper(
 			`You are a temp knight of "${parent.parent}" and cannot make temp knights; ask it to.`,
 		);
 	const { task, name: given, model, thinking, ...rest } = input;
+	// A temp knight never gets more than its parent unless the speaker could grant it by hand.
+	const tiers = ctx.options.toolTiers ?? toolTiers();
+	if (!tiers.allows(speaker.tier, "agent_update") && (model || thinking))
+		throw new AgentError(
+			"A temp knight runs your model and thinking level; choosing others needs a higher tier.",
+		);
+	if (rest.skills?.length && !tiers.allows(speaker.tier, "agent_skills")) {
+		const own = new Set(ctx.options.skills?.carriedNames(parent.name) ?? []);
+		const extra = rest.skills.filter((skill) => !own.has(skill));
+		if (extra.length > 0)
+			throw new AgentError(
+				`A temp knight can carry only skills you carry; not allowed: ${extra.join(", ")}.`,
+			);
+	}
 	const name = given ?? nextName(ctx, parent.name);
 	// Everything that can be refused is checked before anything is made or archived.
 	store.checkNewName(name);
 	const said = await makeRoom(ctx, parent, limits);
 	const made = await make(
-		{ speaker, by: caller.name, creator: parent, parent },
+		{
+			speaker,
+			by: caller.name,
+			creator: parent,
+			parent,
+			origin: ctx.turns.turnChannel(caller),
+		},
 		{ ...rest, name },
 		{ model, thinking },
 	);
 	const helper = made.agent;
-	await inheritLongRunning(ctx, caller, speaker, helper);
 	try {
+		await inheritLongRunning(ctx, caller, speaker, helper);
 		ctx.turns.message(caller, helper.name, task);
 	} catch (error) {
-		// The task could not be handed over (a chain at its cap): the temp knight is not left idle.
+		// The long-running mode or the task could not be handed over (a chain at its cap): the temp
+		// knight is not left idle, and its thread is closed.
 		await ctx.archiveHelpers([helper.name]);
 		throw error;
 	}

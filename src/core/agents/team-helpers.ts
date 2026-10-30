@@ -158,6 +158,27 @@ export class TeamHelpers {
 		this.#ctx.changed();
 	}
 
+	/**
+	 * Stamps every temp knight still marked working as finished. Nothing runs when the team starts,
+	 * so one marked working was cut off by a stop or a crash and would hold its cap slot for good;
+	 * a replayed message makes it work again.
+	 */
+	async reconcile(): Promise<string[]> {
+		const { store } = this.#ctx.options;
+		const stale = store
+			.agents()
+			.filter(
+				(agent) =>
+					isHelper(agent) &&
+					agent.status === "active" &&
+					agent.finishedAt === undefined,
+			);
+		const stamped: string[] = [];
+		for (const agent of stale)
+			if (await store.setFinished(agent.name, true)) stamped.push(agent.name);
+		return stamped;
+	}
+
 	/** Archives the temp knights that have been finished for longer than the host keeps them. */
 	async sweepFinished(now: Date = new Date()): Promise<string[]> {
 		const limits = helpersOf(this.#ctx.options.helpers);

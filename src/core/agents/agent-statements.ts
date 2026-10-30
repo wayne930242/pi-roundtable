@@ -42,12 +42,14 @@ export class AgentStatements {
 		character: CharacterSpec | null;
 		/** The knight that made it as a temp knight, which starts out working. */
 		parent: string | null;
+		/** The conversation a temp knight was made from. */
+		origin: string | null;
 	}): Promise<AgentRow[]> {
 		return this.#sql`
-			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character, parent)
+			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character, parent, origin)
 			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName}, ${agent.prompt}, ${agent.avatarPrompt},
 				${agent.channelId}, ${agent.avatarHash},
-				${agent.character}::jsonb, ${agent.parent})
+				${agent.character}::jsonb, ${agent.parent}, ${agent.origin})
 			RETURNING *`;
 	}
 

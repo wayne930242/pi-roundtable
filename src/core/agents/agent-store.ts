@@ -161,6 +161,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		channelId?: string;
 		/** Makes it a temp knight of this active, permanent knight. */
 		parent?: string;
+		origin?: string; // the conversation a temp knight was made from
 	}): Promise<Agent> {
 		return this.#serial(async () => {
 			checkAgentName(agent.name);
@@ -179,6 +180,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 				avatarHash: agent.avatarHash ?? null,
 				character: agent.character ?? null,
 				parent: agent.parent ?? null,
+				origin: agent.origin ?? null,
 			});
 			return this.keepAgent(rows[0]);
 		});

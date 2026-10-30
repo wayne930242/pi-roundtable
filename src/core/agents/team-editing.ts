@@ -123,17 +123,37 @@ export class TeamEditing {
 		return made.text;
 	}
 
+	#helperChain: Promise<void> = Promise.resolve();
+
+	/** Closes the thread of a temp knight whose row was never written, logging a failure. */
+	async #closeOrphan(threadId?: string): Promise<void> {
+		const { channels, logger } = this.#ctx.options;
+		await channels
+			?.closeThread?.(threadId ?? "")
+			.catch((err: unknown) =>
+				logger.warn({ err }, "orphan thread not closed"),
+			);
+	}
+
 	/** The agent tool: a knight makes a temp knight for one task; see `createHelper`. */
 	createHelper(
 		caller: AgentTurnScope,
 		input: Parameters<typeof createHelper>[3],
 	): Promise<string> {
-		return createHelper(
-			this.#ctx,
-			(who, fields, settings) => this.#create(who, fields, settings),
-			caller,
-			input,
+		// One at a time: parallel calls cannot overshoot a cap or pick one name.
+		const run = this.#helperChain.then(() =>
+			createHelper(
+				this.#ctx,
+				(who, fields, settings) => this.#create(who, fields, settings),
+				caller,
+				input,
+			),
 		);
+		this.#helperChain = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
 	}
 
 	/**
@@ -202,6 +222,8 @@ export class TeamEditing {
 			openIn?: string | undefined;
 			/** Makes the agent a temp knight of this knight: its place is a thread of the parent's channel, and it settles on the parent's model. */
 			parent?: Agent | undefined;
+			/** The conversation a temp knight is made from. */
+			origin?: string | undefined;
 		},
 		input: {
 			name: string;
@@ -268,20 +290,32 @@ export class TeamEditing {
 					input.displayName,
 					categoryName,
 				);
-		let agent = await store.createAgent({
-			...fields,
-			character,
-			avatarHash,
-			...(channelId ? { channelId } : {}),
-			...(who.parent ? { parent: who.parent.name } : {}),
-		});
-		if (model || thinking)
-			agent = await store.updateAgent(agent.name, {
-				...(model ? { model } : {}),
-				...(thinking ? { thinking } : {}),
+		let agent: Agent;
+		try {
+			agent = await store.createAgent({
+				...fields,
+				character,
+				avatarHash,
+				...(channelId ? { channelId } : {}),
+				...(who.parent ? { parent: who.parent.name } : {}),
+				...(who.parent && who.origin ? { origin: who.origin } : {}),
 			});
-		if (skills && carried.length > 0)
-			await skills.attach(agent.name, carried, []);
+		} catch (error) {
+			await this.#closeOrphan(channelId);
+			throw error;
+		}
+		try {
+			if (model || thinking)
+				agent = await store.updateAgent(agent.name, {
+					...(model ? { model } : {}),
+					...(thinking ? { thinking } : {}),
+				});
+			if (skills && carried.length > 0)
+				await skills.attach(agent.name, carried, []);
+		} catch (error) {
+			if (who.parent) await this.#ctx.archiveHelpers([agent.name]);
+			throw error;
+		}
 		logger.info(
 			{ agent: agent.name, by: who.by, class: character.class },
 			"agent created",

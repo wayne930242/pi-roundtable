@@ -216,8 +216,6 @@
 				"edit",
 				"group_create",
 				"group_update",
-				"helper_create",
-				"helper_end",
 				"read",
 				"skill_create",
 				"skill_delete",

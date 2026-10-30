@@ -34,6 +34,8 @@ export interface Agent {
 	parent?: string;
 	/** A temp knight's moment of going quiet; absent while it works and for a permanent knight. */
 	finishedAt?: Date;
+	/** The conversation (channel key) a temp knight was made from; only it and the owners may message the temp knight. */
+	origin?: string;
 }
 
 /** Whether the agent is a temp knight: one a knight made to do a task, which has a parent. */

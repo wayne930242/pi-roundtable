@@ -230,6 +230,7 @@ describe("the agent server's runtime", () => {
 			"agent-groups-channel-optional",
 			"agents-character",
 			"agents-helpers",
+			"agents-helper-origin",
 			"agent-prompt-history",
 			"agent-outbox",
 			"agent-latest-conversation",

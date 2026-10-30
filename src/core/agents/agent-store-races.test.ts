@@ -39,6 +39,7 @@ function fakeDatabase() {
 				status: "active",
 				parent: null,
 				finished_at: null,
+				origin: null,
 			};
 			agents.set(name, row);
 			return [row];

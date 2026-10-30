@@ -26,7 +26,7 @@ export function teamSelection(
 	const kept = (tool: string): boolean =>
 		!(helper && WITHHELD_FROM_HELPERS.includes(tool)) &&
 		!(
-			options.helpers === false &&
+			(options.helpers === false || scope?.group) &&
 			(HELPER_TOOLS as readonly string[]).includes(tool)
 		);
 	return {
