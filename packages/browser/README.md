@@ -11,7 +11,7 @@ The browser runs in a Docker container that is started for the task and removed 
 
 ## Requirements
 
-- Bun 1.4.4 or later and pi-roundtable `>=0.26.0 <0.27.0`, which provides the `WORKER_SESSIONS` service the plugin runs its worker on.
+- Bun 1.4.4 or later and pi-roundtable `>=0.27.0 <0.28.0`, which provides the `WORKER_SESSIONS` service the plugin runs its worker on.
 - A native Linux host with a local Docker daemon, and a non-root service account permitted to run Docker. The container runs as that account; root is refused.
 - The Docker image, built once on that host (below).
 

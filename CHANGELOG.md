@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-31
+
 ### Added
 
 - Temp knights: a knight can make helper agents for one self-contained task with `helper_create` (`display_name`, `prompt`, `task`, and optional `name`, `class`, `color`, `model`, `thinking`, `skills`) and clear them with `helper_end` (`names`, or `"finished"`). A temp knight is a real agent with its own prompt, picture and sessions, listed under its knight; it starts at once and its answer returns to the knight's conversation as a new turn. It runs its knight's model unless told otherwise, takes no group seat, and has no agent, group, archive, channel or schedule tools. Both tools are on the `member` tier and are offered to every agent that is not itself a temp knight. Whether a temp knight is *finished* is derived (nothing runs, queued, held for the owner or unanswered), never set by the knight.

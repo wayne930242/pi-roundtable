@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-31
+
 ### Added
 
 - Temp knights in the owner app. A knight's temp knights (see the core changelog) hang under it in the room list, in the plain and the arranged list alike, each with a small face, its name and a state: a pulsing dot while it works, the card badge while it waits for you, and a dimmed "Ended" with the time once finished. They follow the knight's pin and folder and have no drag handle; the group of them is unfolded while one is at work and folded when all have ended, per device. `RoomView.helper` (`{ parent, parentName, finished? }`) marks them, on the agent view and the profile too; the round table, the council tick list, the group editor and the switcher leave them out, and their push is held back by default since their answers reach the knight's room (a card still pushes).
@@ -16,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The core peer range moves to `>=0.27.0 <0.28.0`.
 - Stop in a group room ends the whole round (see the core changelog), and its button reads **Stop the round**.
 - A group holds 2 to 8 members (it was 2 to 6), on the web and on Discord. A round still holds at most 8 replies.
 - A tap on a seat turns the camera to that knight and no longer opens the knight's room; the address stays as it was. Hold the seat for the private chat.

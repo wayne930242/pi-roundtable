@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-31
+
 ### Added
 
 - `replyCard(text, { channel, space })`: draws a PNG card for a successful reply on the host, after `replyText` and on the text that is posted; it is set as the reply's `card`, which Discord posts before the text. `undefined` posts none; a throw or rejection is logged and the reply is posted without a card. Failure texts get no card.
 - `peerBots: true`: answers the bots the host lists under `discord.peerBots` when they mention the bot or reply to it, like a person, within the host's round cap. Off by default; `isSandboxAddress(message, peerBots?)` takes the same flag. Needs pi-roundtable with `discord.peerBots` and `answersAuthor` (`pi-roundtable/kit`): the core peer range moves with the release.
+
+### Changed
+
+- The core peer range moves to `>=0.27.0 <0.28.0`; the package imports `answersAuthor` from the 0.27 kit.
 
 ## [0.26.3] - 2026-10-30
 
