@@ -161,23 +161,79 @@ See [Access tiers](/configure/access-tiers/).
 Without Discord, `http` is optional: leave it out when no plugin serves HTTP, and the host opens no listener.
 The web chat needs it.
 
+## Where work lands (`routing`)
+
+Most of what an agent does starts with a person and ends where that person is: a message is answered in the conversation it came in, a card waits there, a schedule fires in the conversation it was made in. The optional `routing` key governs only what has no person present: a foreign webhook's post in an agent's place, a `message_agent` call that names no conversation, an agent's opening task, and the process's own error reports. Leave `routing` out and every one lands where it did before the key existed.
+
+The words used here, and in the code:
+
+- **Surface**: one chat adapter, named by its key prefix: `discord`, `app` (pi-roundtable-web), `webchat`, `line`. A host may have several.
+- **Place**: an agent's conversation on one surface: its channel on Discord, its room `<surface>:agent.<name>` on a surface that hosts rooms. `web` stands for the one surface that hosts rooms when exactly one does.
+- **Primary place**: the one place where an agent's unprompted work lands. It is `auto` unless you name a surface: the agent's Discord channel when it has one, else its room on the first surface that hosts rooms.
+- **Named place**: a host-level destination with a name. The core declares `ops`, the error reports; it is a conversation key, or an agent whose primary place it is.
+- **Mirror** (reserved): a place that would get a read-only copy of what the agent posts in its primary place. **Answerer** (reserved): the claim that answers a surface's conversations. Both have a position in the block and neither is built: setting one stops the start, naming the key. Claim priorities still decide who answers.
+
+| Key | Values | Default | What it routes |
+| --- | --- | --- | --- |
+| `routing.agents.<name>.primary` | `auto`, or a surface name | `auto` | The agent's primary place. `"*"` instead of a name sets the default of every agent; an agent's own key wins, key by key. A name applies to an agent created later too. |
+| `routing.agents.<name>.integration` | `origin`, `primary`, or a surface name | `origin` | Where the report turn of a foreign webhook's post in the agent's channel runs. The post itself stays where it was posted; the turn names the place it came from. If the destination has vanished, the turn runs where the post was made, with a warning, and is never dropped. |
+| `routing.agents.<name>.agentMessage` | `latest`, `primary`, or a surface name | `latest` | The conversation `message_agent` reaches when the call names none. `latest` is the one the agent last ran a turn in, which a message from a room never follows out to Discord, falling back to the sender's room surface and then the primary place. `primary` pins messages to the primary place, even from a room into Discord. Naming a conversation in the call beats every rule. |
+| `routing.agents.<name>.opening` | `origin-surface`, `primary` | `origin-surface` | Where an agent's opening task (`agent_create`'s `task`) runs: the agent's place on the surface the creation came from, else its primary place; or always its primary place. |
+| `routing.agents.<name>.mirror` | list of surface names | none | Reserved; a non-empty list stops the start. |
+| `routing.places.ops` | `"<surface>:<id>"`, or `{ agent }` | none | Where the process's own errors are reported, as `ops.conversation` and `ops.agent` did. The agent form lands in the agent's primary place and needs the agent server, not Discord. The top-level `ops` is a deprecated alias that goes away in 1.0; set only one of them. |
+| `routing.surfaces.<name>.agentPlaces` | `all` | `all` | Whether every agent has a place on the surface, which every surface does today. `none` is reserved and stops the start. |
+| `routing.surfaces.<name>.answeredBy` | claim name | none | Reserved; setting it stops the start. |
+
+Alerts handled in the web app, with the raw posts left in Discord: Infra's primary place is its web room, its webhook reports run there, and the host's error reports land there too. The other agents keep Discord.
+
+```ts
+routing: {
+	agents: { infra: { primary: "app", integration: "primary" } },
+	places: { ops: { agent: "infra" } },
+},
+```
+
+A host that is not built around Discord, such as a support desk with LINE customers and Slack, can route every agent into web rooms and name conversations for the rest:
+
+```ts
+routing: {
+	agents: {
+		"*": { primary: "app" },
+		triage: { integration: "primary", agentMessage: "primary" },
+	},
+	places: { ops: "slack:C0OPS" },
+},
+```
+
+Every mistake stops the start with a `ConfigError` naming the key and the fix:
+
+- a surface that no plugin registered, or that holds no agent places (a surface that hosts no rooms, or `discord` where the agents have no Discord channels), named by `primary`, `integration` or `agentMessage`; the message lists the registered surfaces. This is checked after every plugin has registered its own;
+- a value that belongs to another key, such as `latest` for `integration` or `origin` for `agentMessage`;
+- an agent key that is not an agent name or `"*"`, and a `places` name nobody declares (the declared names are listed);
+- a place that is neither a conversation key `<surface>:<id>` nor `{ agent }`;
+- the top-level `ops` set together with `routing.places.ops`;
+- `routing.agents`, `routing.surfaces` or an agent place on a host that runs no agent server;
+- the reserved keys above.
+
+An agent the rules name that the team does not have yet is only a warning in the log: its rules apply once it exists. Code reads the table through `AGENTS.routes` (`primary`, `placeOn`, `of`, `place`).
+
 ## Addons and operations
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `skills` | `false`, or `{ builtinDir?, reposDir?, packages? }` | on, with `builtinDir` the skills bundled with the package and `reposDir` set to `<dataDir>/repos` | `false` leaves the `skills` addon out: agents carry no skills and no skill tools exist. Stored skills stay in their tables. `packages` lists npm packages the host installed: every skill in their `pi.skills` folders is offered, read-only, and carried and grouped like any other. Startup fails with a message naming the fix when a package is missing, ships no skills, or holds a skill whose name another skill already has. |
 | `memory` | boolean | `true` | `false` leaves the `memory` addon out: no memory tools and no memory prompt block. The table stays as it is. |
-| `ops.agent` | string | none | The name of the agent that investigates the process's own errors. Needs Discord. |
-| `ops.conversation` | string | none | Instead of an agent, the key `<surface>:<id>` of a conversation the errors are reported to. A chat surface must serve it, a plugin's claim that takes background turns must own it, and a plugin must contribute the `owner` background target (the agent server does, with Discord), or the host does not start; the web chat takes no error reports. Set one of `ops.agent` and `ops.conversation`. |
+| `ops.agent` | string | none | Deprecated alias of `routing.places.ops: { agent }`, going away in 1.0. The name of the agent that investigates the process's own errors. Needs Discord. |
+| `ops.conversation` | string | none | Deprecated alias of `routing.places.ops: "<surface>:<id>"`, going away in 1.0. Instead of an agent, the key of a conversation the errors are reported to. A chat surface must serve it, a plugin's claim that takes background turns must own it, and a plugin must contribute the `owner` background target (the agent server does, with Discord), or the host does not start; the web chat takes no error reports. Set one of `ops.agent` and `ops.conversation`. |
 | `drainSeconds` | integer from 1 to 3600 | `180` | How many seconds a shutdown waits for running turns before it stops them. Give the service manager a stop timeout a minute longer, such as systemd's `TimeoutStopSec`. |
 | `interimText` | `"on"` or `"off"` | `"on"` | Whether a turn posts the text it writes before its final answer as it goes. `"off"` posts only the final reply. |
 | `interimPrimaryChars` | integer from 1 to 100000 | `400` | An intermediate text this long or longer is posted as an ordinary message; shorter narration goes into one small progress message. |
 | `plugins` | list of plugin objects | `[]` | Your plugins. They start in the order listed, after the built-in ones. |
 
-With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel; with `ops.conversation`, to that conversation, whose claim answers the report turn.
+With `ops.agent` (or an agent in `routing.places.ops`) set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its primary place; with `ops.conversation` (or a conversation key in `routing.places.ops`), to that conversation, whose claim answers the report turn.
 The same error goes at most once an hour, and at most five reports go out per hour.
 
-A webhook's post in an agent's channel, such as a CI bot's notice, starts a report turn for that agent with the post's text. A post that is only an embed counts too: its title, description, fields, footer and link are read as plain text, at most 4,000 characters, so an alert that arrives with no message text is still answered.
+A webhook's post in an agent's channel, such as a CI bot's notice, starts a report turn for that agent with the post's text, in that channel unless `routing` sends it to the agent's primary place. A post that is only an embed counts too: its title, description, fields, footer and link are read as plain text, at most 4,000 characters, so an alert that arrives with no message text is still answered.
 
 For what the addons add and how plugins start, see [Services and addons](/plugins/services-and-addons/).
 

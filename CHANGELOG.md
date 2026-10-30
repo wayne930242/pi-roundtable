@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `routing`: one declared table for where work lands that no person is waiting on, instead of a Discord-first choice written in each feature. The optional config block `routing: { agents, places, surfaces }` sets, per agent (`"*"` is every agent's default), its `primary` place (`auto`, or a surface name), where a foreign webhook's report turn runs (`integration`: `origin`, `primary` or a surface), where `message_agent` goes when the call names no conversation (`agentMessage`: `latest`, `primary` or a surface), and where an opening task runs (`opening`: `origin-surface` or `primary`). `routing.places.ops` names where the process's error reports go: a conversation key, or `{ agent }` for that agent's primary place, which needs the agent server and no longer Discord. Leave `routing` out and everything lands where it did before. A message, a card, a schedule's firing place and a message exchange's answer back are never routed: they stay where their person is. A webhook report moved away from where it was posted says so in the turn text (`Webhook "X" posted in your discord place (discord:…)`), the raw post stays, and a destination that has vanished sends the report to where it was posted with a warning, never dropping it.
+- `AGENTS.routes` (`RoutingTable`: `primary`, `placeOn`, `of`, `place`) reads the table from code; the agent team's turns, `agent_create`, `schedule_list`, the error reporter and the webhook claim all ask it, replacing the three copies of "Discord first". `SurfacePort.names()` lists the registered surfaces. `RoutingConfig`, `AgentRoutes`, `SurfaceRouting`, `PlaceTarget`, `RoutingTable` and `RouteKind` are exported.
+- `routing` mistakes stop the start with a `ConfigError` naming the key and the fix: a surface nobody registered or that holds no agent places (checked once every plugin has registered its surfaces, listing the registered ones), a value of another key (`latest` for `integration`), a bad agent key or place name, a place that is not a conversation key or `{ agent }`, `ops` and `routing.places.ops` together, and routing on a host with no agent server. An agent the rules name before it exists is only a warning. `mirror`, `routing.surfaces.<name>.answeredBy` and `agentPlaces: "none"` are defined positions that are not built yet and stop the start when set.
+
+### Deprecated
+
+- The top-level `ops` is an alias of `routing.places.ops` and logs a deprecation at start; it goes away in 1.0. Setting both stops the start. Its error messages name `routing.places.ops` when that is the key in use.
+
 ## [0.26.3] - 2026-10-30
 
 ### Added

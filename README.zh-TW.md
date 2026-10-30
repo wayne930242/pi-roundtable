@@ -195,6 +195,20 @@ export default {
 | `coordinator` | `agents` 的第一位 | 沒有 `discord` 時，接手主人一般請求的 agent，不能被封存。有 `discord` 時設它會出錯：由入口頻道的 agent 協調 |
 | `skills` | 有 `agents` 時開啟 | 技能 addon；沒有 `discord` 時，只有 `agents` 列了 agent 才會開 |
 
+沒有人在等的工作（外部 webhook 在 agent 頻道的貼文、沒指定對話的 `message_agent` 呼叫、agent 的開場任務、錯誤回報）照舊落在原本的地方，除非選填的 `routing` 區塊另有指定。
+它指定每個 agent 的 primary place、每種事件送到哪個 surface，以及 host 的具名 place（例如 `ops`）；訊息、卡片、排程的觸發不會被改道，一律留在當事人所在的地方。
+例如讓 Infra 的警報在網頁 app 處理，Discord 保留原始貼文：
+
+```ts
+routing: {
+	agents: { infra: { primary: "app", integration: "primary" } },
+	places: { ops: { agent: "infra" } }, // 取代已棄用的最上層 `ops`
+},
+```
+
+寫錯會讓啟動中止，並指出鍵與修法。
+每個鍵、它的值與檢查項目見[設定頁](https://pi-roundtable.wayneh.tw/zh-tw/configure/settings/)。
+
 有人在 agent 的頻道對助理說話時，那一輪也會讀進助理上次在該頻道發言之後的頻道訊息（頻道脈絡；見[外掛指南](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)）。
 用 `discord.channelContext` 調整，或設 `channelContext: false` 關閉：
 
