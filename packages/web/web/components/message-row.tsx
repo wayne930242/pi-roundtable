@@ -17,6 +17,11 @@ import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 // An internal note's row and its styles are read when the first note is shown.
 const NoteRow = lazy(() => import("./note-row.tsx"));
 
+// Another owner's picture, and the styles it brings, are read when a room shows one.
+const OwnerPicture = lazy(() =>
+	import("./host-picture.tsx").then((m) => ({ default: m.HostPicture })),
+);
+
 const YOLO_LINE = /^Yolo mode approved: ([\s\S]*)$/;
 
 /** A line the server wrote into the room, in the page's words. */
@@ -33,6 +38,21 @@ export function systemLine(text: string): {
 			text: t("Yolo mode approved: {action}", { action: yolo[1] ?? "" }),
 		};
 	return { icon: "list", text };
+}
+
+/**
+ * Whether the viewer wrote an owner message: its author's principal is theirs. A message stored
+ * without one (an old row) is the viewer's only where one person reads the room; where several do,
+ * it belongs to an owner nobody can name, never to the viewer.
+ */
+function isMine(
+	message: RoomMessage,
+	me: string | undefined,
+	shared: boolean,
+): boolean {
+	if (message.kind !== "owner") return false;
+	if (message.principalId === undefined) return !shared;
+	return message.principalId === me;
 }
 
 /** A file of a message: a picture that opens, or a chip that downloads; a long press offers both ways to keep it. */
@@ -96,6 +116,10 @@ export const MessageRow = memo(function MessageRow(props: {
 }) {
 	const { message } = props;
 	const surface = useContext(ConfigContext)?.app?.surface;
+	const me = useSelector((state) => state.principal?.id);
+	const shared = useSelector(
+		(state) => state.rooms[message.room]?.view?.notes === true,
+	);
 	const press = useMenuPress(
 		(source) => messageMenuOf(message, source, props.quotable),
 		{ selectable: true },
@@ -129,7 +153,8 @@ export const MessageRow = memo(function MessageRow(props: {
 			</li>
 		);
 	}
-	const mine = message.kind === "owner";
+	const mine = isMine(message, me, shared);
+	const owner = message.kind === "owner";
 	return (
 		<li
 			{...press}
@@ -147,12 +172,25 @@ export const MessageRow = memo(function MessageRow(props: {
 					{...(props.header && agent ? avatarPress : {})}
 				>
 					{props.header ? (
-						<PageCharacter
-							spec={props.character}
-							name={message.agent ?? message.author}
-							size={32}
-							live={false}
-						/>
+						owner ? (
+							<Suspense fallback={null}>
+								<OwnerPicture
+									picture={
+										message.principalId === undefined
+											? undefined
+											: { principal: message.principalId }
+									}
+									name={message.author}
+								/>
+							</Suspense>
+						) : (
+							<PageCharacter
+								spec={props.character}
+								name={message.agent ?? message.author}
+								size={32}
+								live={false}
+							/>
+						)
 					) : null}
 				</span>
 			)}
