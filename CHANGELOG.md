@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Agent messages (`message_agent`) and their answers no longer get lost when the host stops: a message sent while the host shuts down, and the follow-up turn that carries a target's answer back to the sender, used to be refused by the stopping queue and only logged, so after the restart the sender waited for an answer that never came. They are now written to the new table `agent_outbox` (additive migration `agent-outbox`, in the agent server's migrations) when the queue refuses them, and the next start delivers them oldest first through the conversation they addressed, once: an entry leaves the table when its turn starts, so a second start or another host reading the same table does not run it again. The normal path writes nothing and is as fast as before; the shutdown waits for the write. An entry whose agent was archived or moved to another channel meanwhile is dropped with a warning. A request's thread is closed when it is refused, so the replayed answer returns to the sender's room.
+
 ## [0.26.1] - 2026-10-30
 
 ### Added

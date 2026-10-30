@@ -387,6 +387,7 @@ export function agentServerPlugin(
 					{
 						name: AGENT_TEAM_SERVICE,
 						stop: () => built.stop(),
+						busy: () => built.busy(),
 						// The dashboard shows the team, so it starts once the team has; the error
 						// reporter connects whether or not the team did, since it reports the failure.
 						startInBackground: async () => {
