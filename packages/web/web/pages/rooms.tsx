@@ -15,7 +15,7 @@ import type { PressProps } from "../lib/long-press.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
-import { lastMessage, waitingCards } from "../lib/rooms.ts";
+import { activityAt, lastMessage, waitingCards } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 
 /** What a message reads as in a list, on one line. */
@@ -374,6 +374,14 @@ function PlainRoomsPage(props: RoomsPageProps) {
 			else if (view.kind === "agent") groups.agents.push(key);
 			else groups.groups.push(key);
 		}
+		// The rooms that spoke last come first, as in the arranged list; a tie keeps the server's order.
+		const newest = (a: string, b: string) => {
+			const x = activityAt(state, a);
+			const y = activityAt(state, b);
+			return x === y ? 0 : y - x;
+		};
+		groups.agents.sort(newest);
+		groups.groups.sort(newest);
 		return JSON.stringify({ listed: state.listed, groups, threads, orphans });
 	});
 	const { listed, groups, threads, orphans } = useMemo(

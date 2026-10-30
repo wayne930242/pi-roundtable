@@ -29,9 +29,9 @@ const folderLifting = (id: string): Lifting => ({
 });
 
 /**
- * A folder of the room list: a header with the name, how many rooms, a fold button and a menu, and
- * under it the rooms. A folded folder still shows what in it needs the owner (`summary`), so a card
- * waiting there does not hide behind the fold. The folder that holds the open room shows open,
+ * A folder of the room list: a light section header with the name, how many rooms, a fold button and
+ * a menu, and under it the rooms. A folded folder shows a stack of the pictures of its rooms (`stack`)
+ * and what in it needs the owner (`summary`), so a card waiting there does not hide behind the fold. The folder that holds the open room shows open,
  * without changing the fold kept for this device. Long-pressing or dragging the header moves the folder.
  */
 export function FolderBlock(props: {
@@ -43,6 +43,8 @@ export function FolderBlock(props: {
 	muted: MuteState;
 	/** What waits or works inside, shown while folded. */
 	summary: ReactNode;
+	/** The pictures of the rooms inside, stacked, shown while folded. */
+	stack: ReactNode;
 	children: ReactNode;
 }) {
 	const { id, name } = props;
@@ -93,11 +95,11 @@ export function FolderBlock(props: {
 						className="folder-chevron"
 						data-open={open || undefined}
 					/>
-					<Icon name="folder" size={18} />
 					<strong>{name}</strong>
 					<span className="meta">
 						{plural(props.count, "{count} room", "{count} rooms")}
 					</span>
+					{open ? null : props.stack}
 				</button>
 				{props.muted === "none" ? null : (
 					<Icon

@@ -778,6 +778,12 @@ export function lastMessage(
 		: (seen ?? listed);
 }
 
+/** When the room last said something, in epoch ms; a number below any real one for a room that has not. */
+export function activityAt(state: RoomsState, room: string): number {
+	const at = Date.parse(lastMessage(state, room)?.at ?? "");
+	return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
+}
+
 /**
  * Whether a card opened before a message was stored. Both carry the server's clock, which is what
  * places a card the server sent again after a reload; a card without a time stands after the

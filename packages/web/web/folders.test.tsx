@@ -12,6 +12,7 @@ import type {
 	ConfigView,
 	LayoutView,
 	PromptFrame,
+	RoomMessage,
 	RoomView,
 } from "../src/api-types.ts";
 import { ActionMenuHost } from "./components/action-menu.tsx";
@@ -195,6 +196,51 @@ test("with no pin and no folder the page is as it was: Home, Agents, Groups, no 
 	expect(q(".arrange-bar")).toBeNull();
 });
 
+/** A message the room said at `at`, as the server's frame brings it. */
+const said = (room: string, id: number, at: string): RoomMessage => ({
+	id,
+	room,
+	kind: "agent",
+	agent: room.slice(room.indexOf(".") + 1),
+	author: "x",
+	text: "hi",
+	files: [],
+	at,
+});
+const names = () => all(".room-row strong").map((one) => one.textContent);
+/** Rooms of their own, so what they said does not reach the other tests through the store. */
+const LIVE = ["app:agent.alpha", "app:agent.beta", "app:group.gamma"];
+const loadLive = (layout: Partial<LayoutView> = {}) =>
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [view(HOME, { home: true }), ...LIVE.map((key) => view(key))],
+		pins: layout.pins ?? [],
+		folders: layout.folders ?? [],
+	});
+const say = (room: string, id: number, at: string) =>
+	page.act(() => {
+		store.dispatch({ type: "message", room, message: said(room, id, at) });
+	});
+
+test("a message in a room lower in the plain list moves it up at once, with no reload", async () => {
+	loadLive();
+	await show(<List />);
+	expect(names()).toEqual(["guide", "alpha", "beta", "gamma"]);
+	await say("app:agent.beta", 1, "2026-10-30T10:00:00.000Z");
+	// Agents and groups stay apart, each by latest activity.
+	expect(names()).toEqual(["guide", "beta", "alpha", "gamma"]);
+	await say("app:agent.alpha", 1, "2026-10-30T10:05:00.000Z");
+	expect(names()).toEqual(["guide", "alpha", "beta", "gamma"]);
+});
+
+test("a message in a room lower in Ungrouped moves it up at once, with no reload", async () => {
+	loadLive({ folders: [{ id: F1, name: "Work", rooms: [] }] });
+	await show(<List />);
+	expect(names()).toEqual(["guide", "alpha", "beta", "gamma"]);
+	await say("app:group.gamma", 1, "2026-10-30T11:00:00.000Z");
+	expect(names()).toEqual(["guide", "gamma", "alpha", "beta"]);
+});
+
 test("Home leads, then the pinned rooms, the folders in order, and the rest as Ungrouped", async () => {
 	load({
 		pins: [BUILD],
@@ -246,6 +292,57 @@ test("the arranged styles hide a folded folder's body even though they set its d
 	// `.folder-body { display: flex }` would beat the `hidden` attribute's own rule.
 	expect(ARRANGED_CSS).toMatch(
 		/\.folder-body\[hidden\]\s*\{[^}]*display:\s*none/,
+	);
+});
+
+test("a folded folder shows a small stack of its rooms' pictures, and how many more; an open one shows none", async () => {
+	const names = ["a", "b", "c", "d", "e", "f"];
+	const keys = names.map((name) => `app:agent.${name}`);
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [view(HOME, { home: true }), ...keys.map((key) => view(key))],
+		pins: [],
+		folders: [{ id: F1, name: "Work", rooms: keys }],
+	});
+	await show(<List />);
+	expect(all(".folder-stack")).toEqual([]);
+	await page.click(q(".folder-toggle"));
+	expect(all(".folder-stack .folder-stack-item").length).toBe(4);
+	expect(q(".folder-stack-more")?.textContent).toBe("+2");
+	// The stack is decoration: the count the button already says is what a reader hears.
+	expect(q(".folder-stack")?.getAttribute("aria-hidden")).toBe("true");
+	expect(q(".folder-toggle")?.contains(q(".folder-stack"))).toBe(true);
+	await page.click(q(".folder-toggle"));
+	expect(all(".folder-stack")).toEqual([]);
+});
+
+test("a folded folder with four rooms or fewer shows them all and no count", async () => {
+	load({ folders: [WORK] });
+	stored.set(COLLAPSED_KEY, JSON.stringify([F1]));
+	reloadCollapsed();
+	await show(<List />);
+	expect(all(".folder-stack .folder-stack-item").length).toBe(1);
+	expect(q(".folder-stack-more")).toBeNull();
+});
+
+test("an ordinary folder's header is a light label, not the boxed card, and its fold button keeps readable text on hover, press and focus", () => {
+	const rule = (selector: string) =>
+		ARRANGED_CSS.match(
+			new RegExp(`${selector.replace(/[.:()]/g, "\\$&")}\\s*\\{([^}]*)\\}`),
+		)?.[1] ?? "";
+	// No border and no fill on the header itself: that card is for the archive.
+	const head = rule(".folder-head");
+	expect(head).not.toMatch(/border|background/);
+	// The base rule `button:hover:not(:disabled)` (an accent fill) out-specifies a plain `.folder-toggle`,
+	// so the states are named under the header and set the fill and the text together.
+	const states = ARRANGED_CSS.match(
+		/\.folder-head \.folder-toggle:hover:not\(:disabled\),\s*\.folder-head \.folder-toggle:active:not\(:disabled\),\s*\.folder-head \.folder-toggle:focus-visible\s*\{([^}]*)\}/,
+	)?.[1];
+	expect(states).toMatch(/background:/);
+	expect(states).toMatch(/color: var\(--text\)/);
+	expect(states).not.toMatch(/accent/);
+	expect(rule(".folder-head .folder-toggle")).toMatch(
+		/justify-content: flex-start/,
 	);
 });
 
@@ -716,6 +813,37 @@ function pointer(
 	});
 	target.dispatchEvent(event);
 }
+
+test("a row that can be lifted has a non-passive touchmove listener on the page before any finger is down, so iOS lets the lift stop the scroll", async () => {
+	const added: [string, unknown][] = [];
+	const removed: string[] = [];
+	const add = window.addEventListener.bind(window);
+	const remove = window.removeEventListener.bind(window);
+	window.addEventListener = ((type: string, run: never, options?: never) => {
+		added.push([type, options]);
+		return add(type, run, options);
+	}) as typeof window.addEventListener;
+	window.removeEventListener = ((type: string, run: never, options?: never) => {
+		removed.push(type);
+		return remove(type, run, options);
+	}) as typeof window.removeEventListener;
+	try {
+		load({ folders: [WORK] });
+		await show(<List />);
+		expect(
+			added.filter(
+				([type, options]) =>
+					type === "touchmove" &&
+					(options as { passive?: boolean } | undefined)?.passive === false,
+			).length,
+		).toBe(1);
+		await page.render(null);
+		expect(removed).toContain("touchmove");
+	} finally {
+		window.addEventListener = add;
+		window.removeEventListener = remove;
+	}
+});
 
 test("a finger that rests on a row lifts it, and letting go without moving opens its menu", async () => {
 	load({ folders: [WORK] });

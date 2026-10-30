@@ -2,14 +2,8 @@
 
 import type { LayoutView } from "../../src/api-types.ts";
 import { store } from "./app-store.ts";
-import { lastMessage, type RoomsState } from "./rooms.ts";
+import { activityAt } from "./rooms.ts";
 import { type Sections, sections } from "./sections.ts";
-
-/** When the room last said something, in epoch ms; a number below any real one for a room that has not. */
-export function activityAt(state: RoomsState, room: string): number {
-	const at = Date.parse(lastMessage(state, room)?.at ?? "");
-	return Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
-}
 
 /** The layout the page holds now. */
 export const layoutNow = (): LayoutView => {
