@@ -570,6 +570,16 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Dispatch threads": "派工討論串",
 	"Find a room": "尋找聊天室",
 	"Switch rooms": "切換聊天室",
+	"Keyboard shortcuts": "鍵盤快速鍵",
+	"Previous room": "上一個聊天室",
+	"Next room": "下一個聊天室",
+	"Previous room with unread messages": "上一個有未讀訊息的聊天室",
+	"Next room with unread messages": "下一個有未讀訊息的聊天室",
+	"Close the open menu or sheet, or leave the message box":
+		"關閉開啟的選單或面板；都沒有時離開訊息輸入框",
+	"Show these shortcuts": "顯示這份快速鍵清單",
+	"In a message box the arrow shortcuts switch rooms only when it is empty or the caret is at its very start (up) or very end (down).":
+		"在訊息輸入框裡，方向鍵快速鍵只在框內沒有文字，或游標在最開頭（上）、最結尾（下）時才會切換聊天室。",
 	Group: "群組",
 	Groups: "群組",
 	Home: "首頁",

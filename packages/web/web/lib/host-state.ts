@@ -49,6 +49,9 @@ function set(change: Partial<HostState>): void {
 export const useHost = <T>(select: (current: HostState) => T): T =>
 	use(() => select(state));
 
+/** How many messages of a room the person has not read, as the page last counted them. */
+export const unreadOf = (room: string): number => state.unread[room] ?? 0;
+
 /** Every room's unread messages together, for the tab's title and icon. */
 export const totalUnread = (): number =>
 	Object.values(state.unread).reduce((sum, count) => sum + count, 0);

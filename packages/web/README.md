@@ -192,6 +192,18 @@ Until the owners arrange something, the page is the plain list it always was; th
 
 The layout lives in three additive tables created by the plugin's migration `web-room-layout`: `web_room_folders`, `web_room_folder_rooms` and `web_room_pins`. Every write takes one advisory lock and rewrites the positions densely, so two devices editing at once leave no gap and no duplicate.
 
+### Keyboard shortcuts
+
+| Keys (Mac / elsewhere) | What they do |
+|---|---|
+| ⌥↑ / ⌥↓, Alt+↑ / Alt+↓ | The previous or next room, in the order the room list shows: Home, the pinned rooms, the folders (a folded folder is skipped unless it holds the open room), the rest, with a room's open threads after it and its finished threads only while their fold is open. The run does not wrap. On a page that shows no list, such as a room open full screen on a phone, the same order applies; from a page that is no room, the first key press opens the first or the last room. Hosts' own room kinds are not in the run. |
+| ⌥⇧↑ / ⌥⇧↓, Alt+Shift+↑ / Alt+Shift+↓ | The previous or next room with unread messages, in the same order; folded folders and finished threads are searched too. |
+| ⌘K, Ctrl+K | Find a room (the search sheet), from anywhere, a message box included. |
+| Esc | Closes the topmost menu or sheet; with none open, the message box lets go of focus. Typed text is never discarded. |
+| ? | Opens the list of these shortcuts, a sheet that loads on the first press. Typing `?` in a text field types it. |
+
+Switching goes through the same router as a click on the row, so it adds a history entry, uses the same view transition, and scrolls the open room's row into view in the list. Nothing here acts while an input method is composing. In a text field Option/Alt with the up and down arrows is paragraph navigation on a Mac, so the room keys act only when the field is empty or the caret rests at its very start (up) or very end (down) with nothing selected; Shift, Ctrl/Cmd and plain arrows are never taken. While a menu, sheet or the room drawer is open the room keys leave the page alone.
+
 ### Uploads
 
 An owner may send a file of any kind in a room, up to four to a message: the button, a paste (a copied image, say) or a drop. `POST <mount>/api/uploads` takes one file as `multipart/form-data` (field `file`) and answers `{id, name, type, size}`; the message then names it in `uploads`. A long text goes as a file too: the page turns a paste of 4,000 characters or more into a `pasted-text-<n>.txt` chip, and a message over 32,000 characters into `message.txt` with the line "(long text attached)"; the server still refuses a text over 32,000 characters.

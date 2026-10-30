@@ -40,6 +40,9 @@ function keep(next: ReadonlySet<string>): void {
 /** The folders folded on this device. A device starts with every folder open. */
 export const useCollapsed = (): ReadonlySet<string> => use(held);
 
+/** The folders folded on this device now, for code outside a component. */
+export const collapsedNow = (): ReadonlySet<string> => held();
+
 export function toggleCollapsed(id: string): void {
 	const next = new Set(held());
 	if (!next.delete(id)) next.add(id);
