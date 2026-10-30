@@ -123,6 +123,18 @@ test("the manifest and the icons answer without a session; the worker and the pa
 	expect(write.status).toBe(403);
 });
 
+test("only the icons the page links answer without a session: another file of a host's icon directory stays behind it", async () => {
+	const custom = mkdtempSync(join(tmpdir(), "web-pwa-public-icons-"));
+	const png = readFileSync(join(DEFAULT_ICONS_DIR, "192.png"));
+	writeFileSync(join(custom, "192.png"), png);
+	writeFileSync(join(custom, "team-photo.png"), png);
+	const out = serverOver(real, false, custom);
+	expect((await get(out, "/app/icons/192.png")).status).toBe(200);
+	expect((await get(out, "/app/icons/team-photo.png")).status).toBe(403);
+	const signedIn = serverOver(real, true, custom);
+	expect((await get(signedIn, "/app/icons/team-photo.png")).status).toBe(200);
+});
+
 test("the served page names the round-table mark as its icon, and carries a title, a description and a link preview", async () => {
 	const server = serverOver(real, true, undefined, undefined, {
 		origin: "https://rt.example.test",

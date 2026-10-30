@@ -36,10 +36,21 @@ export const DEFAULT_ICONS_DIR = fileURLToPath(
 
 const ICON_FILE = /^[A-Za-z0-9-]+\.(png|svg)$/;
 
-/** The icon files and the manifest answer without a session: a sign-in page and a link preview have none. */
+/** The icon files the page, the manifest and the sign-in pages link. */
+const PUBLIC_ICONS: ReadonlySet<string> = new Set([
+	"192.png",
+	"512.png",
+	"maskable-512.png",
+	"apple-180.png",
+	"badge-96.png",
+	"mark.svg",
+	"mark-maskable.svg",
+]);
+
+/** The manifest and the linked icons answer without a session: a sign-in page and a link preview have none. Any other file of a host's icon directory stays behind it. */
 export const isPublicStatic = (rest: string): boolean =>
 	rest === "manifest.webmanifest" ||
-	(rest.startsWith("icons/") && ICON_FILE.test(rest.slice("icons/".length)));
+	(rest.startsWith("icons/") && PUBLIC_ICONS.has(rest.slice("icons/".length)));
 
 /** Whether the icon directory has the round-table mark as an SVG, which a tab shows crisper than a PNG. */
 export const hasMarkSvg = (iconsDir: string | undefined): boolean =>
