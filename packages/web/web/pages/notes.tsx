@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type {
 	NoteInput,
 	NoteKind,
@@ -6,6 +6,7 @@ import type {
 	PrincipalsView,
 } from "../../src/api-types.ts";
 import { Dialog } from "../components/dialog.tsx";
+import { Select } from "../components/select.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
@@ -249,10 +250,12 @@ export function Whose(props: {
 	choose(principal: string | undefined): void;
 }) {
 	const { people } = props;
+	const id = useId();
 	return (
-		<label className="inline">
+		<label className="inline" htmlFor={id}>
 			{t("Whose notes")}{" "}
-			<select
+			<Select
+				id={id}
 				value={props.shown ?? people.self}
 				onChange={(event) =>
 					props.choose(
@@ -269,7 +272,7 @@ export function Whose(props: {
 								: person.name}
 					</option>
 				))}
-			</select>
+			</Select>
 		</label>
 	);
 }

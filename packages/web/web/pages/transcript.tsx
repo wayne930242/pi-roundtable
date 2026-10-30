@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { TranscriptEntry } from "../../src/api-types.ts";
+import { Select } from "../components/select.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
@@ -14,6 +15,7 @@ export function TranscriptPage({
 	conversationKey: string;
 }) {
 	const [archive, setArchive] = useState<string>();
+	const archiveId = useId();
 	const scrolled = useRef(false);
 	const { data: view, error } = useFetched(
 		() => api.transcript(conversationKey, archive),
@@ -56,9 +58,10 @@ export function TranscriptPage({
 					) : null}
 				</div>
 				{view.archives.length > 0 ? (
-					<label className="inline">
+					<label className="inline" htmlFor={archiveId}>
 						{t("Showing")}{" "}
-						<select
+						<Select
+							id={archiveId}
 							value={archive ?? ""}
 							onChange={(event) => {
 								scrolled.current = false;
@@ -71,7 +74,7 @@ export function TranscriptPage({
 									{t("Archived {name}", { name })}
 								</option>
 							))}
-						</select>
+						</Select>
 					</label>
 				) : null}
 				{error ? <Failure message={error} /> : null}

@@ -9,6 +9,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `pi-roundtable-web`: opening a room from a seat of the round table is a dive: the view zooms toward the seat that was tapped, creeping at first and then rushing in (`cubic-bezier(0.7, 0, 0.84, 0)`, about 380 ms), and the room settles in already at full size, with no blank frame. A mouse click, a tap and a key press on a seat all do it, and the camera of the 3D table dives into a seat from the whole ring the same way. It uses transform and opacity only, a second tap during the zoom is dropped, Back or leaving the table mid-zoom gives the view back and opens nothing, and `prefers-reduced-motion: reduce` switches at once. The code is part of the round table's lazy chunk, not the first load.
 
+### Fixed
+
+- `pi-roundtable-web`: the Files page no longer flashes when you switch folders. Every move re-mounted the whole page: the tree collapsed to a "...", the list turned into grey skeletons and the whole screen cross-faded. The page now keeps one name across places and a move inside it skips the view transition. A folder that was listed before shows at once and is fetched again behind it, a folder not seen yet leaves the old rows in place, dimmed after a beat, until its own rows arrive, a branch of the tree opened a second time keeps its rows, and a new folder opens at its top while a refetch of the same one does not move it. The files' stylesheet now loads with the Files page instead of with every visit, which makes the first load about 1 KB gzipped smaller and pays for the drop-down style.
+- `pi-roundtable-web`: the drop-downs (the Files page's workspace picker, the model, archive and notes pickers, and the host forms) have one look: the inputs' height, radius, border and focus ring and one chevron of the icon set, in place of the system's inset control. The workspace picker is a pill of the breadcrumb chips' height and tint, and under a coarse pointer a drop-down's text is 16px so iOS Safari does not zoom in when it takes focus.
+- `pi-roundtable-web`: the round table's message box had a vertical three-dot button at its end that hid the box and gave no hint of it. It is now a chevron that points where the box goes (down to tuck it away, up to bring it back), with a tooltip, so it no longer reads as a second "more" beside the three horizontal dots.
+
 ## [0.26.1] - 2026-10-30
 
 ### Added

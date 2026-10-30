@@ -6,6 +6,7 @@ import type {
 } from "../../src/api-types.ts";
 import { messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
+import { Select } from "./select.tsx";
 import { Failure } from "./states.tsx";
 
 type Values = Record<string, string | string[]>;
@@ -69,7 +70,7 @@ function Choice(props: {
 		return (
 			<>
 				{search}
-				<select
+				<Select
 					id={props.id}
 					value={String(value)}
 					required={field.required === true}
@@ -83,7 +84,7 @@ function Choice(props: {
 							{option.label}
 						</option>
 					))}
-				</select>
+				</Select>
 			</>
 		);
 	const chosen = new Set(Array.isArray(value) ? value : []);

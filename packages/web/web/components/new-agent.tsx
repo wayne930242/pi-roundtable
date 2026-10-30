@@ -11,6 +11,7 @@ import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
+import { Select } from "./select.tsx";
 import { Failure, Loading } from "./states.tsx";
 
 // The creator is a page's worth of picking; it loads when the look is first chosen.
@@ -187,7 +188,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 			</label>
 			<label htmlFor={ids[4]}>
 				{t("Model")}
-				<select
+				<Select
 					id={ids[4]}
 					value={model}
 					onChange={(event) => setModel(event.target.value)}
@@ -210,7 +211,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 							</optgroup>
 						),
 					)}
-				</select>
+				</Select>
 			</label>
 			<label htmlFor={ids[3]}>
 				{t("Opening task")}

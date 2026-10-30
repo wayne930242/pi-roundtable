@@ -12,7 +12,7 @@ import type {
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { navigate } from "./lib/router.ts";
-import { WorkspacePage } from "./pages/workspace.tsx";
+import { forgetListings, WorkspacePage } from "./pages/workspace.tsx";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -33,6 +33,8 @@ let calls: { method: string; url: string; body?: Record<string, unknown> }[];
 let conflictOnSave: WorkspaceConflict | undefined;
 /** While set, a save waits for it: keys can be typed while the request is out. */
 let holdSave: Promise<void> | undefined;
+/** While set, a folder listing waits for it: what the pane shows while the next folder is on its way. */
+let holdList: Promise<void> | undefined;
 
 const config = {
 	title: "Test",
@@ -120,6 +122,8 @@ function fakeFetch(
 			}),
 		);
 	const action = parts[3];
+	if (action === "list" && holdList)
+		return holdList.then(() => fakeFetch(input, init));
 	if (action === "list")
 		return Promise.resolve(
 			answer({ path, entries: entriesOf(path), truncated: false }),
@@ -240,6 +244,8 @@ async function show(hash: string, width = 1280) {
 	calls = [];
 	conflictOnSave = undefined;
 	holdSave = undefined;
+	holdList = undefined;
+	forgetListings();
 	localStorage.clear();
 	viewport(width);
 	window.location.hash = hash;
@@ -268,7 +274,7 @@ async function editorView(): Promise<EditorView> {
 test("on a desktop the tree stands beside the folder, and the breadcrumbs link to each level", async () => {
 	await show("#/workspace/agents%3Asrc%2F");
 	// The first root is chosen, its tree is listed and the open folder's rows are shown.
-	expect(query("select.ws-root-picker")).not.toBeNull();
+	expect(query(".ws-root-picker > select")).not.toBeNull();
 	// The folders on the way to the open place are open in the tree.
 	const tree = all(".ws-tree .ws-tree-row a").map((one) => one.textContent);
 	expect(tree).toEqual(["data", "src", "main.ts", "util.ts", "README.md"]);
@@ -674,4 +680,96 @@ test("the editor's theme names no color of its own: every one is a CSS variable"
 				`--${name}:`,
 			);
 	}
+});
+
+/** Goes to another place the way a link does, and lets the page settle. */
+async function go(hash: string) {
+	window.location.hash = hash;
+	await page.act(async () => {
+		window.dispatchEvent(new HashChangeEvent("hashchange"));
+	});
+	await settle(60);
+}
+
+test("switching folders keeps the pane: the old rows stay, dimmed, until the new ones arrive, and no loading state shows in between", async () => {
+	await show("#/workspace/agents%3Asrc%2F");
+	const tree = query(".ws-tree");
+	const names = () => all(".ws-row-link strong").map((one) => one.textContent);
+	expect(names()).toEqual(["main.ts", "util.ts"]);
+	// Every state the pane passes through is watched for the loading skeletons and the empty note.
+	const blank: string[] = [];
+	const watch = new MutationObserver(() => {
+		if (query(".skeleton, .empty"))
+			blank.push(brief(query(".skeleton, .empty")) ?? "");
+	});
+	watch.observe(page.container, { childList: true, subtree: true });
+	let release = () => {};
+	holdList = new Promise<void>((done) => {
+		release = done;
+	});
+	await go("#/workspace/agents%3Adata%2F");
+	// The new place is named at once; its rows are on their way, and the old ones hold the room.
+	expect(query(".ws-crumbs a[aria-current='page']")?.textContent).toBe("data");
+	expect(names()).toEqual(["main.ts", "util.ts"]);
+	expect(query(".ws-listing")?.hasAttribute("data-pending")).toBe(true);
+	expect(query(".ws-listing")?.hasAttribute("inert")).toBe(true);
+	expect(query(".ws-tree")).toBe(tree);
+	holdList = undefined;
+	release();
+	await settle(60);
+	expect(names()).toEqual(["blob.bin", "huge.log"]);
+	expect(query(".ws-listing")?.hasAttribute("data-pending")).toBe(false);
+	expect(query(".ws-tree")).toBe(tree);
+	watch.disconnect();
+	expect(blank).toEqual([]);
+});
+
+test("a folder that was shown before shows at once on a return, and a branch of the tree opened again lists no placeholder", async () => {
+	await show("#/workspace/agents%3Asrc%2F");
+	await go("#/workspace/agents%3Adata%2F");
+	// The listing for src is held back, as a slow connection would: it is on show from what was fetched before.
+	let release = () => {};
+	holdList = new Promise<void>((done) => {
+		release = done;
+	});
+	await go("#/workspace/agents%3Asrc%2F");
+	expect(all(".ws-row-link strong").map((one) => one.textContent)).toEqual([
+		"main.ts",
+		"util.ts",
+	]);
+	expect(query(".ws-listing")?.hasAttribute("data-pending")).toBe(false);
+	// Shut and open src in the tree: its rows are there on the same render, with no "…" note.
+	holdList = undefined;
+	release();
+	await settle(60);
+	const twist = () => all(".ws-tree .ws-twist")[1] as HTMLElement;
+	await page.click(twist());
+	await settle(60);
+	holdList = new Promise<void>((done) => {
+		release = done;
+	});
+	await page.click(twist());
+	await page.click(twist());
+	expect(query(".ws-tree .ws-tree-note")).toBeNull();
+	expect(
+		all(".ws-tree .ws-tree-row a").map((one) => one.textContent),
+	).toContain("main.ts");
+	holdList = undefined;
+	release();
+	await settle(60);
+});
+
+test("a folder opens at its top, and the same folder fetched again does not move it", async () => {
+	await show("#/workspace/agents%3Asrc%2F");
+	const main = query<HTMLElement>(".ws-main");
+	let scrolls = 0;
+	if (main) main.scrollTo = (() => scrolls++) as typeof main.scrollTo;
+	await go("#/workspace/agents%3Adata%2F");
+	expect(scrolls).toBe(1);
+	// A change that lists the folder again (a new file, the page regaining focus) leaves it where it is.
+	await page.act(async () => {
+		window.dispatchEvent(new Event("focus"));
+	});
+	await settle(60);
+	expect(scrolls).toBe(1);
 });
