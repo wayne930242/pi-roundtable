@@ -154,11 +154,18 @@ export class WebSessions {
 		return { ...found, lastSeenAt: now, expiresAt: expires };
 	}
 
-	/** Whether the session still stands, without moving its limit; for the recheck of an open socket. */
-	async alive(id: string): Promise<boolean> {
+	/**
+	 * Whether the session still stands, without moving its limit; for the recheck of an open socket.
+	 * With `reauthHours`, a session the provider has not vouched for within that many hours does not
+	 * stand, as on a request.
+	 */
+	async alive(id: string, reauthHours?: number): Promise<boolean> {
+		const now = this.#now();
 		const [row]: { n: number }[] = await this.#sql`
 			SELECT count(*)::int AS n FROM web_sessions
-			WHERE id_hash = ${Buffer.from(id, "hex")} AND expires_at > ${this.#now()}`;
+			WHERE id_hash = ${Buffer.from(id, "hex")} AND expires_at > ${now}
+			AND (${reauthHours ?? null}::float8 IS NULL
+				OR verified_at >= ${now}::timestamptz - make_interval(secs => ${(reauthHours ?? 0) * 3600}))`;
 		return (row?.n ?? 0) > 0;
 	}
 

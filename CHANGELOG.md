@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `pi-roundtable-web`: `auth.reauthHours` now holds on an open socket, not only on HTTP. The socket's 30-second recheck used to look only at the session's own idle limit (`sessionDays`), so a person removed at the provider who kept a tab open kept receiving room frames, and kept firing `auth.onSessionVerified`, until that limit. Past `reauthHours` the recheck now closes the socket with the code the page already handles for an ended session, so it shows sign-in again, and `onSessionVerified` is reported only for a session inside `reauthHours` on both the socket and HTTP paths. With `reauthHours` unset nothing changes. The check is one extra column comparison in the recheck's existing session query.
+
 ## [0.26.1] - 2026-10-30
 
 ### Added

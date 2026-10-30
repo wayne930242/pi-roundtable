@@ -882,6 +882,36 @@ describe("an oidc session reports itself as verified", () => {
 		]);
 	});
 
+	test("recheck hands reauthHours to the session lookup, and a lapsed session is signed out without a report", async () => {
+		const verified: [string, string][] = [];
+		const seen: (number | undefined)[] = [];
+		const authenticator = createAuthenticator({
+			auth: { mode: "oidc" } as unknown as AuthenticatorOptions["auth"],
+			identify: async () => ({ visitor: OWNER }),
+			origin: HTTPS_ORIGIN,
+			mount: "/console",
+			title: "Test console",
+			logger: recordingLogger().logger,
+			dataDir: tempDir(),
+			listener: { id: "public", address: loopback },
+			oidc: {
+				...fakeOidc(verified),
+				reauthHours: 24,
+				sessions: {
+					alive: async (_id: string, hours?: number) => {
+						seen.push(hours);
+						return false;
+					},
+				},
+			},
+		});
+		expect(
+			await authenticator.recheck({ actor: undefined, session: "s-1" }),
+		).toMatchObject({ status: 401, login: true });
+		expect(seen).toEqual([24]);
+		expect(verified).toEqual([]);
+	});
+
 	test("a refused person is not reported", async () => {
 		const verified: [string, string][] = [];
 		const authenticator = createAuthenticator({

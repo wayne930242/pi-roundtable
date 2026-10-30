@@ -80,6 +80,8 @@ export interface AuthenticatorOptions {
 	oidc?: {
 		login: Pick<OidcLogin, "open" | "credential" | "verified">;
 		sessions: Pick<WebSessions, "alive">;
+		/** Hours the provider's word holds for one session; unset for no limit. */
+		reauthHours?: number | undefined;
 	};
 	/** Where the password is read from; default `process.env`. */
 	env?: Readonly<Record<string, string | undefined>>;
@@ -217,7 +219,12 @@ export function createAuthenticator(
 		async recheck(held) {
 			if (held.session) {
 				try {
-					if (!(await options.oidc?.sessions.alive(held.session)))
+					if (
+						!(await options.oidc?.sessions.alive(
+							held.session,
+							options.oidc?.reauthHours,
+						))
+					)
 						return signedOut("session ended");
 				} catch {
 					return denied("session lookup failed");
