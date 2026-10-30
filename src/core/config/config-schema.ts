@@ -8,6 +8,7 @@ import { discordShape } from "./adapters.ts";
 import { attachmentsShape } from "./attachments.ts";
 import type { Pronouns } from "./config.ts";
 import { conversationsShape } from "./conversations.ts";
+import { helpersField } from "./helpers.ts";
 import { limitsShape } from "./limits.ts";
 import { profilesShape } from "./profiles.ts";
 import { routingShape } from "./routing.ts";
@@ -144,6 +145,7 @@ export const configSchema = shape({
 	memory: optional(bool),
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
 	routing: routingShape,
+	helpers: optional(helpersField),
 	drainSeconds: optional(integer(1, 3_600)),
 	...limitsShape,
 	interimText: optional(oneOf<InterimTextMode>("on", "off")),

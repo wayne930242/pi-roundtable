@@ -22,6 +22,7 @@ import type { ToolTiers } from "../tool-tiers.ts";
 import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import type { RelevanceScorer } from "./group-round.ts";
+import type { HelperWork } from "./helper-work.ts";
 import type { Routes } from "./routes.ts";
 
 /** Agent messages without an owner message in between (spec behavior 13). */
@@ -158,4 +159,6 @@ export interface TurnHost {
 	turnChannel(scope: AgentTurnScope): ChannelKey;
 	/** The routing table. */
 	readonly routes: Routes;
+	/** What keeps a temp knight working; a turn or a message to one brackets itself with it. */
+	readonly helpers: Pick<HelperWork, "begin" | "end">;
 }

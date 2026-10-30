@@ -2,6 +2,7 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { CharacterInput, CharacterSpec } from "../characters/index.ts";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
 import type { AvatarMode } from "./agents/agent-tools.ts";
+import type { HelperTeam } from "./agents/helper-ops.ts";
 import type { RoutingTable } from "./agents/routes.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
 import type { ChannelContexts } from "./contract/channel-context.ts";
@@ -242,9 +243,8 @@ export interface NewAgent {
 	/** Its opening task; without it the agent only exists. */
 	task?: string;
 	/**
-	 * The surface whose room the opening task runs in, so the person who asked sees it start
-	 * there. Without it, or for a surface that hosts no rooms, the task runs where `agent_create`
-	 * runs it: the agent's Discord channel, else its first room.
+	 * The surface whose room the opening task runs in, so the person who asked sees it start there;
+	 * without it, or for a surface with no rooms, where `agent_create` runs it: the agent's Discord channel, else its first room.
 	 */
 	openIn?: string;
 	category?: string;
@@ -263,7 +263,7 @@ export interface AgentChange {
 }
 
 /** The agent team as plugins use it: who is in it, what model they run, and their channels. */
-export interface AgentTeam {
+export interface AgentTeam extends HelperTeam {
 	/** The team's id: the Discord guild, or `"local"` on a host without Discord. */
 	readonly guildId: string;
 	/** Called when a turn starts or ends and when an agent or group changes. */

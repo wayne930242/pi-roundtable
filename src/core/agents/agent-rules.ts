@@ -30,7 +30,15 @@ export interface Agent {
 	/** Unset follows the assistant's thinking level. */
 	thinking?: ThinkingLevel;
 	status: AgentStatus;
+	/** The knight that made this one as a temp knight; absent for a permanent knight. */
+	parent?: string;
+	/** A temp knight's moment of going quiet; absent while it works and for a permanent knight. */
+	finishedAt?: Date;
 }
+
+/** Whether the agent is a temp knight: one a knight made to do a task, which has a parent. */
+export const isHelper = (agent: Pick<Agent, "parent"> | undefined): boolean =>
+	agent?.parent !== undefined;
 
 export interface AgentGroup {
 	name: string;

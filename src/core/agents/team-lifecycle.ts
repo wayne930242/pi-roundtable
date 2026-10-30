@@ -8,9 +8,10 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
 import type { AgentChannels } from "./agent-ports.ts";
-import { overBase } from "./agent-rules.ts";
+import { isHelper, overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { refreshAvatars } from "./avatar-refresh.ts";
+import { TeamHelpers } from "./team-helpers.ts";
 import {
 	agentOfChannel,
 	coordinatorOf,
@@ -30,14 +31,18 @@ import type { TeamContext } from "./team-options.ts";
 export class TeamLifecycle {
 	readonly #ctx: TeamContext;
 	readonly #stopped = new AbortController();
+	/** The temp knights: their archive, restore and sweep, which archiving a parent calls. */
+	readonly helpers: TeamHelpers;
 
 	constructor(ctx: TeamContext) {
 		this.#ctx = ctx;
+		this.helpers = new TeamHelpers(ctx, (agent) => this.#archiveAgent(agent));
 	}
 
 	/** Ends the background avatar refresh: nothing is rendered, written or logged after it. */
 	stop(): void {
 		this.#stopped.abort();
+		this.helpers.stop();
 	}
 
 	// ── Startup ────────────────────────────────────────────────────────────
@@ -55,6 +60,7 @@ export class TeamLifecycle {
 		if (added.length > 0) logger.info({ added }, "seed agents added");
 		if (channels) await this.#startChannels(channels);
 		this.#ctx.changed();
+		this.helpers.startSweeper();
 		void this.#dressMissing().then(async (dressed) => {
 			if (this.#stopped.signal.aborted) return;
 			if (dressed) this.#ctx.changed();
@@ -81,6 +87,8 @@ export class TeamLifecycle {
 		const { store, logger } = this.#ctx.options;
 		for (const agent of store.agents()) {
 			if (agent.status !== "active") continue;
+			// A temp knight of a parent without a channel lives in rooms only.
+			if (!agent.channelId && isHelper(agent)) continue;
 			if (!agent.channelId) {
 				const id = await channels.createChannel(
 					agent.name,
@@ -216,6 +224,11 @@ export class TeamLifecycle {
 		if (agent && name === caller?.name)
 			throw new AgentError("You cannot archive yourself; ask another agent.");
 		const { channelId } = target;
+		// A temp knight's place is a thread of its parent's channel, closed rather than moved.
+		if (agent && isHelper(agent)) {
+			await this.helpers.archiveOne(agent);
+			return `Archived "${target.displayName}"; its history stays readable, and it no longer answers.`;
+		}
 		if (agent) await this.#archiveAgent(agent);
 		else if (group) await this.#archiveGroup(group);
 		if (!channelId || !channels)
@@ -253,6 +266,10 @@ export class TeamLifecycle {
 			);
 		if (target.status === "active")
 			throw new AgentError(`"${name}" is not archived.`);
+		if (agent && isHelper(agent)) {
+			await this.helpers.restoreOne(agent);
+			return `Restored "${target.displayName}"; it answers again.`;
+		}
 		if (group) store.checkRestorableGroup(name);
 		// The store checks again when it restores. A member archived, or a second restore of the
 		// same name, between the two checks leaves the channel moved or made with no owner; it
@@ -304,6 +321,10 @@ export class TeamLifecycle {
 				`"${name}" is active; archive it before deleting it.`,
 			);
 		await cleanup?.();
+		// A parent's archived temp knights go with it; none is left naming a parent that is gone.
+		if (agent)
+			for (const helper of store.helpersOf(name))
+				await this.remove(helper.name);
 		// What a name keeps in the runtime would be picked up by the next agent or group made under it.
 		const runtime = this.#ctx.options.runtime();
 		const rooms = this.#rooms();
@@ -326,6 +347,9 @@ export class TeamLifecycle {
 		const { store, schedules, logger } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
 		const rooms = this.#rooms();
+		// A parent's temp knights are archived first: they have no place of their own once it is gone.
+		for (const helper of store.helpersOf(agent.name, "active"))
+			await this.helpers.archiveOne(helper);
 		const left = await store.archiveAgent(agent.name);
 		// The agent's Discord channel and each of its rooms are conversations of their own.
 		for (const key of keysOf(store, agent.name, rooms)) {

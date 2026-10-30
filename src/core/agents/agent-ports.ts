@@ -66,6 +66,16 @@ export interface AgentChannels {
 		topic: string,
 		category: AgentCategory,
 	): Promise<string>;
+	/**
+	 * Opens a thread under a channel to be a temp knight's place, with no start message; returns its
+	 * id. Posts to that id speak through the parent channel's webhook into the thread. Absent: a
+	 * temp knight lives in rooms only.
+	 */
+	createThread?(parentChannelId: string, name: string): Promise<string>;
+	/** Archives and locks a temp knight's thread (locked only when permitted); its history stays. */
+	closeThread?(threadId: string): Promise<void>;
+	/** Opens a temp knight's archived thread again, unlocked. */
+	openThread?(threadId: string): Promise<void>;
 	/** Moves a channel into the category when it sits elsewhere; true when it moved. */
 	placeIn(channelId: string, category: AgentCategory): Promise<boolean>;
 	/** Every category of the server in order, each with its channels in order. */

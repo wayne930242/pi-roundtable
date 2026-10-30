@@ -10,13 +10,13 @@ import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
 import type { AgentChange, AgentTeam } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
-import { agentSystemPrompt, placeOf } from "./agent-prompt.ts";
 import type { Agent } from "./agent-store.ts";
 import {
 	type AgentOps,
 	type AvatarMode,
 	agentToolsExtension,
 } from "./agent-tools.ts";
+import type { HelperTeam } from "./helper-ops.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import {
@@ -32,6 +32,7 @@ import {
 } from "./team-layout.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";
 import type { AgentTeamOptions, TeamContext } from "./team-options.ts";
+import { teamSystemPrompt } from "./team-prompt.ts";
 import { teamSelection } from "./team-selection.ts";
 import { type TeamStatus, teamStatus } from "./team-status.ts";
 import {
@@ -78,6 +79,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			},
 			modelOf: (name) => this.modelOf(name),
 			retitle: (group) => this.#lifecycle.retitle(group),
+			archiveHelpers: (names) => this.#lifecycle.helpers.archive(names),
 		};
 		this.#lifecycle = new TeamLifecycle(this.#context);
 		this.#editing = new TeamEditing(this.#context);
@@ -140,60 +142,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/** The system prompt addition of an agent session, read before each of its runs. */
 	systemPrompt(scope: AgentTurnScope): string {
-		const {
-			store,
-			workDir,
-			sharedPrompt,
-			guestPrompt,
-			owner,
-			shellUser,
-			scratchDir,
-			agentTools,
-			surfaces,
-			channels,
-		} = this.#options;
-		const agent = store.agent(scope.name);
-		if (!agent) throw new AgentError(`no agent ${scope.name}`);
-		const shared =
-			typeof sharedPrompt === "function" ? sharedPrompt() : sharedPrompt;
-		const guest =
-			typeof guestPrompt === "function" ? guestPrompt() : guestPrompt;
-		const group = scope.group ? store.group(scope.group) : undefined;
-		const coordinator = coordinatorOf(store, this.#options);
-		const speaker = this.#turns.speakerOf(scope);
-		const base = agentSystemPrompt({
-			agent,
-			...(speaker ? { speaker } : {}),
-			...(coordinator ? { coordinator } : {}),
-			shared,
-			...(guest ? { guestShared: guest } : {}),
-			workDir,
-			owner,
-			shellUser,
-			...(scratchDir ? { scratchDir } : {}),
-			images: this.#images(),
-			...(agentTools ? { agentTools } : {}),
-			...placeOf(this.#turns.turnChannel(scope), surfaces, !!channels),
-			...(group
-				? {
-						group: {
-							group,
-							members: group.members
-								.map((m) => store.agent(m))
-								.filter((m): m is Agent => m !== undefined),
-						},
-					}
-				: {}),
-		});
-		const added = (this.#options.promptSections?.() ?? []).flatMap(
-			(section) =>
-				section.build({
-					agent: { name: agent.name, displayName: agent.displayName },
-					speaker,
-					scope,
-				}) ?? [],
-		);
-		return [base, ...added.filter((text) => text.trim() !== "")].join("\n\n");
+		return teamSystemPrompt(this.#options, this.#turns, this.#images(), scope);
 	}
 
 	/** The model and thinking setting of an agent's next run: its own, or the assistant's. */
@@ -456,6 +405,52 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		input: Parameters<TeamEditing["create"]>[1],
 	): Promise<string> {
 		return this.#editing.create(caller, input);
+	}
+
+	/** A knight makes a temp knight for one task; see `AgentOps.helperCreate`. */
+	helperCreate(
+		caller: AgentTurnScope,
+		input: Parameters<TeamEditing["createHelper"]>[1],
+	): Promise<string> {
+		return this.#editing.createHelper(caller, input);
+	}
+
+	/** A knight archives its own temp knights; the pages that show the parent are told. */
+	helperEnd(
+		caller: AgentTurnScope,
+		names: readonly string[] | "finished",
+	): Promise<string> {
+		return this.#lifecycle.helpers.end(caller, names);
+	}
+
+	helpersOf(parent: string): Agent[] {
+		return this.#lifecycle.helpers.of(parent);
+	}
+
+	finishedHelpers(parents?: readonly string[]): Agent[] {
+		return this.#lifecycle.helpers.finished(parents);
+	}
+
+	async archiveHelpers(
+		names: readonly string[],
+		by: string,
+	): Promise<string[]> {
+		const archived = await this.#lifecycle.helpers.archive(names);
+		this.#options.logger.info({ by, archived }, "temp knights archived");
+		return archived;
+	}
+
+	restoreHelpers(names: readonly string[]): Promise<string[]> {
+		return this.#lifecycle.helpers.restore(names);
+	}
+
+	/** Archives the temp knights finished for longer than the host keeps them; runs hourly by itself. */
+	sweepFinished(now?: Date): Promise<string[]> {
+		return this.#lifecycle.helpers.sweepFinished(now);
+	}
+
+	onHelpersEnded(listener: Parameters<HelperTeam["onHelpersEnded"]>[0]): void {
+		this.#lifecycle.helpers.onEnded(listener);
 	}
 
 	/** An owner creates an agent outside any agent turn; see `AgentTeam.createAgent`. */

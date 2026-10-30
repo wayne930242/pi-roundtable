@@ -19,6 +19,8 @@ export interface AgentRow {
 	model: string | null;
 	thinking: ThinkingLevel | null;
 	status: AgentStatus;
+	parent: string | null;
+	finished_at: Date | null;
 }
 
 export interface GroupRow {
@@ -43,6 +45,8 @@ export const toAgent = (row: AgentRow): Agent => {
 		...(row.model ? { model: row.model } : {}),
 		...(row.thinking ? { thinking: row.thinking } : {}),
 		status: row.status,
+		...(row.parent ? { parent: row.parent } : {}),
+		...(row.finished_at ? { finishedAt: row.finished_at } : {}),
 	};
 };
 
@@ -134,6 +138,15 @@ export function agentMigrations(guildId: string): Migration[] {
 			name: "agents-character",
 			up: async (sql) => {
 				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS character jsonb`;
+			},
+		},
+		// Temp knights: who made an agent, and when a temp knight last went quiet. Both are null for a permanent knight.
+		{
+			name: "agents-helpers",
+			up: async (sql) => {
+				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS parent text`;
+				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS finished_at timestamptz`;
+				await sql`CREATE INDEX IF NOT EXISTS agents_parent ON agents (guild_id, parent)`;
 			},
 		},
 		// The change history of the agents' prompts; the prompts plugin creates the same table for its documents.

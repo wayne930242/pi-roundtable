@@ -17,6 +17,7 @@ test("Discord posts text and files through the same agent webhook identity, neve
 		channels: {
 			fetch: async () => ({
 				type: ChannelType.GuildText,
+				isThread: () => false,
 				fetchWebhooks: async () => ({ find: () => undefined }),
 				createWebhook: async () => webhook,
 				send: async () => {

@@ -8,7 +8,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her agent server. This conversation is in Discord (discord). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her agent server. This conversation is in Discord (discord). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nA task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -1851,6 +1851,160 @@
 						"host": {
 							"type": "string",
 							"description": "An agent's name (lowercase, from agent_list), not its display name."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_create",
+				"description": "Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"display_name",
+						"prompt",
+						"task"
+					],
+					"properties": {
+						"display_name": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 32,
+							"description": "The name shown on its messages; any language."
+						},
+						"prompt": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The agent's role prompt, in English: its job, sources, boundaries, and how it reports. Short and stated positively."
+						},
+						"task": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The task, self-contained: what to do, what to read, and what to answer with."
+						},
+						"name": {
+							"type": "string",
+							"pattern": "^[a-z0-9-]{1,32}$",
+							"description": "Permanent name: lowercase letters, digits, and dashes. Left out, it is <your name>-<number>."
+						},
+						"class": {
+							"type": "string",
+							"enum": [
+								"wizard",
+								"knight",
+								"scholar",
+								"smith",
+								"ranger",
+								"bard",
+								"alchemist",
+								"healer",
+								"steward",
+								"navigator",
+								"seer",
+								"scribe",
+								"engineer",
+								"druid",
+								"innkeeper",
+								"sentinel",
+								"envoy",
+								"rogue",
+								"monk",
+								"falconer",
+								"shipwright",
+								"jester",
+								"paladin",
+								"archivist"
+							],
+							"description": "The agent's character class, which sets its outfit, hat, and prop. wizard: coordinator, planner, main assistant; knight: reviewer, QA gate, guardian; scholar: researcher, literature review; smith: coder, builder, refactorer; ranger: scout, web search, crawler; bard: writer, announcer, copywriter; alchemist: data analyst, ETL, transformer; healer: debugger, fixer, support; steward: ops, billing, access keys; navigator: planner, routing, roadmap; seer: forecaster, monitoring, analytics; scribe: documentation, notes, minutes; engineer: devops, infra, CI; druid: cleanup, data hygiene, maintenance; innkeeper: concierge, onboarding, scheduler; sentinel: security, on-call, alerts; envoy: email, partner comms, notifications; rogue: pen-tester, auditor, intel; monk: long-running jobs, batch, patience; falconer: retrieval, fetch, RAG lookup; shipwright: release, build pipeline, packaging; jester: brainstorm, ideation, humor; paladin: compliance, policy, approvals; archivist: knowledge base, indexing, memory."
+						},
+						"color": {
+							"type": "string",
+							"enum": [
+								"azure",
+								"gules",
+								"vert",
+								"purpure",
+								"amber",
+								"sable",
+								"teal",
+								"rose"
+							],
+							"description": "The agent's color palette. Pick one unlike the other agents' (agent_get shows each look)."
+						},
+						"model": {
+							"type": "string",
+							"description": "The model to run on, as <provider>/<model>; left out, yours. An unusable one is refused with the usable list."
+						},
+						"thinking": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "off"
+								},
+								{
+									"type": "string",
+									"const": "minimal"
+								},
+								{
+									"type": "string",
+									"const": "low"
+								},
+								{
+									"type": "string",
+									"const": "medium"
+								},
+								{
+									"type": "string",
+									"const": "high"
+								},
+								{
+									"type": "string",
+									"const": "xhigh"
+								},
+								{
+									"type": "string",
+									"const": "default"
+								}
+							],
+							"description": "Its thinking level; left out, yours."
+						},
+						"skills": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Skills it carries, from skill_list; pick those the task needs."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_end",
+				"description": "Archive your own temp knights when you are done with them: the names you list, or \"finished\" for every one that has finished. Their history stays readable under the archive, and the owner can restore them. You cannot end anyone else's.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"names"
+					],
+					"properties": {
+						"names": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
+									"minItems": 1,
+									"maxItems": 50
+								},
+								{
+									"type": "string",
+									"const": "finished"
+								}
+							],
+							"description": "Their names, or \"finished\" for every finished one."
 						}
 					}
 				}
@@ -2426,7 +2580,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her agent server. This conversation is in Discord (discord). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nYou are now speaking in the group chat \"Council\" with Ada and \"Archivist\". Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her agent server. This conversation is in Discord (discord). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Librarian\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nA task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with.\n\nYou are now speaking in the group chat \"Council\" with Ada and \"Archivist\". Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -4269,6 +4423,160 @@
 						"host": {
 							"type": "string",
 							"description": "An agent's name (lowercase, from agent_list), not its display name."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_create",
+				"description": "Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"display_name",
+						"prompt",
+						"task"
+					],
+					"properties": {
+						"display_name": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 32,
+							"description": "The name shown on its messages; any language."
+						},
+						"prompt": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The agent's role prompt, in English: its job, sources, boundaries, and how it reports. Short and stated positively."
+						},
+						"task": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The task, self-contained: what to do, what to read, and what to answer with."
+						},
+						"name": {
+							"type": "string",
+							"pattern": "^[a-z0-9-]{1,32}$",
+							"description": "Permanent name: lowercase letters, digits, and dashes. Left out, it is <your name>-<number>."
+						},
+						"class": {
+							"type": "string",
+							"enum": [
+								"wizard",
+								"knight",
+								"scholar",
+								"smith",
+								"ranger",
+								"bard",
+								"alchemist",
+								"healer",
+								"steward",
+								"navigator",
+								"seer",
+								"scribe",
+								"engineer",
+								"druid",
+								"innkeeper",
+								"sentinel",
+								"envoy",
+								"rogue",
+								"monk",
+								"falconer",
+								"shipwright",
+								"jester",
+								"paladin",
+								"archivist"
+							],
+							"description": "The agent's character class, which sets its outfit, hat, and prop. wizard: coordinator, planner, main assistant; knight: reviewer, QA gate, guardian; scholar: researcher, literature review; smith: coder, builder, refactorer; ranger: scout, web search, crawler; bard: writer, announcer, copywriter; alchemist: data analyst, ETL, transformer; healer: debugger, fixer, support; steward: ops, billing, access keys; navigator: planner, routing, roadmap; seer: forecaster, monitoring, analytics; scribe: documentation, notes, minutes; engineer: devops, infra, CI; druid: cleanup, data hygiene, maintenance; innkeeper: concierge, onboarding, scheduler; sentinel: security, on-call, alerts; envoy: email, partner comms, notifications; rogue: pen-tester, auditor, intel; monk: long-running jobs, batch, patience; falconer: retrieval, fetch, RAG lookup; shipwright: release, build pipeline, packaging; jester: brainstorm, ideation, humor; paladin: compliance, policy, approvals; archivist: knowledge base, indexing, memory."
+						},
+						"color": {
+							"type": "string",
+							"enum": [
+								"azure",
+								"gules",
+								"vert",
+								"purpure",
+								"amber",
+								"sable",
+								"teal",
+								"rose"
+							],
+							"description": "The agent's color palette. Pick one unlike the other agents' (agent_get shows each look)."
+						},
+						"model": {
+							"type": "string",
+							"description": "The model to run on, as <provider>/<model>; left out, yours. An unusable one is refused with the usable list."
+						},
+						"thinking": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "off"
+								},
+								{
+									"type": "string",
+									"const": "minimal"
+								},
+								{
+									"type": "string",
+									"const": "low"
+								},
+								{
+									"type": "string",
+									"const": "medium"
+								},
+								{
+									"type": "string",
+									"const": "high"
+								},
+								{
+									"type": "string",
+									"const": "xhigh"
+								},
+								{
+									"type": "string",
+									"const": "default"
+								}
+							],
+							"description": "Its thinking level; left out, yours."
+						},
+						"skills": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Skills it carries, from skill_list; pick those the task needs."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_end",
+				"description": "Archive your own temp knights when you are done with them: the names you list, or \"finished\" for every one that has finished. Their history stays readable under the archive, and the owner can restore them. You cannot end anyone else's.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"names"
+					],
+					"properties": {
+						"names": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
+									"minItems": 1,
+									"maxItems": 50
+								},
+								{
+									"type": "string",
+									"const": "finished"
+								}
+							],
+							"description": "Their names, or \"finished\" for every finished one."
 						}
 					}
 				}
@@ -6527,7 +6835,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Archivist\" (agent name `archivist`), one of Ada's agents in her agent server. This conversation is in Discord (discord). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Archivist\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou file the notes.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Archivist\" (agent name `archivist`), one of Ada's agents in her agent server. This conversation is in Discord (discord). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nThe team's coordinator is the agent in the server's entry channel. You are a specialist: speak of yourself only as \"Archivist\", never as the coordinator. Team work Ada asks of you directly, such as creating agents or groups, archiving, or arranging channels, you do in your own name. When your role below is empty or only a placeholder, ask her what your job is before taking on other work.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nA task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with.\n\nmessage_agent hands a self-contained request to another agent; it answers later, and its answer comes back to you as a new turn.\n\n## Your role\nYou file the notes.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -8375,6 +8683,160 @@
 				}
 			},
 			{
+				"name": "helper_create",
+				"description": "Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"display_name",
+						"prompt",
+						"task"
+					],
+					"properties": {
+						"display_name": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 32,
+							"description": "The name shown on its messages; any language."
+						},
+						"prompt": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The agent's role prompt, in English: its job, sources, boundaries, and how it reports. Short and stated positively."
+						},
+						"task": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The task, self-contained: what to do, what to read, and what to answer with."
+						},
+						"name": {
+							"type": "string",
+							"pattern": "^[a-z0-9-]{1,32}$",
+							"description": "Permanent name: lowercase letters, digits, and dashes. Left out, it is <your name>-<number>."
+						},
+						"class": {
+							"type": "string",
+							"enum": [
+								"wizard",
+								"knight",
+								"scholar",
+								"smith",
+								"ranger",
+								"bard",
+								"alchemist",
+								"healer",
+								"steward",
+								"navigator",
+								"seer",
+								"scribe",
+								"engineer",
+								"druid",
+								"innkeeper",
+								"sentinel",
+								"envoy",
+								"rogue",
+								"monk",
+								"falconer",
+								"shipwright",
+								"jester",
+								"paladin",
+								"archivist"
+							],
+							"description": "The agent's character class, which sets its outfit, hat, and prop. wizard: coordinator, planner, main assistant; knight: reviewer, QA gate, guardian; scholar: researcher, literature review; smith: coder, builder, refactorer; ranger: scout, web search, crawler; bard: writer, announcer, copywriter; alchemist: data analyst, ETL, transformer; healer: debugger, fixer, support; steward: ops, billing, access keys; navigator: planner, routing, roadmap; seer: forecaster, monitoring, analytics; scribe: documentation, notes, minutes; engineer: devops, infra, CI; druid: cleanup, data hygiene, maintenance; innkeeper: concierge, onboarding, scheduler; sentinel: security, on-call, alerts; envoy: email, partner comms, notifications; rogue: pen-tester, auditor, intel; monk: long-running jobs, batch, patience; falconer: retrieval, fetch, RAG lookup; shipwright: release, build pipeline, packaging; jester: brainstorm, ideation, humor; paladin: compliance, policy, approvals; archivist: knowledge base, indexing, memory."
+						},
+						"color": {
+							"type": "string",
+							"enum": [
+								"azure",
+								"gules",
+								"vert",
+								"purpure",
+								"amber",
+								"sable",
+								"teal",
+								"rose"
+							],
+							"description": "The agent's color palette. Pick one unlike the other agents' (agent_get shows each look)."
+						},
+						"model": {
+							"type": "string",
+							"description": "The model to run on, as <provider>/<model>; left out, yours. An unusable one is refused with the usable list."
+						},
+						"thinking": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "off"
+								},
+								{
+									"type": "string",
+									"const": "minimal"
+								},
+								{
+									"type": "string",
+									"const": "low"
+								},
+								{
+									"type": "string",
+									"const": "medium"
+								},
+								{
+									"type": "string",
+									"const": "high"
+								},
+								{
+									"type": "string",
+									"const": "xhigh"
+								},
+								{
+									"type": "string",
+									"const": "default"
+								}
+							],
+							"description": "Its thinking level; left out, yours."
+						},
+						"skills": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Skills it carries, from skill_list; pick those the task needs."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_end",
+				"description": "Archive your own temp knights when you are done with them: the names you list, or \"finished\" for every one that has finished. Their history stays readable under the archive, and the owner can restore them. You cannot end anyone else's.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"names"
+					],
+					"properties": {
+						"names": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
+									"minItems": 1,
+									"maxItems": 50
+								},
+								{
+									"type": "string",
+									"const": "finished"
+								}
+							],
+							"description": "Their names, or \"finished\" for every finished one."
+						}
+					}
+				}
+			},
+			{
 				"name": "memory_add",
 				"description": "Remember one fact about the speaker for future conversations, when the speaker asks you to or when it will clearly matter later. Search first and do not store what is already there. kind core: a stable fact about who the speaker is or how the speaker wants things done; it is shown in every conversation, so keep core facts few and short. kind note: projects, people, references, and other details worth finding later with memory_search. kind event: something happening on a date, shown until that date passes. Whoever is speaking has a memory of their own, shared by every agent; this reads and changes theirs, not someone else's.",
 				"parameters": {
@@ -8954,7 +9416,7 @@
 					"tools": "<tools>\n- bash: Execute bash commands (ls, grep, find, etc.)\n- read: Read file contents\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- compact_session: Compact this session's own context (queued, runs after the current turn ends; `resume` continues the work in the next turn).\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n</tools>",
 					"rules": "<rules>\n- Use bash for file operations like ls, rg, find\n- You can inspect PI_* environment variables for current model and session details.\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Be concise in your responses\n- Show file paths clearly when working with files\n</rules>",
 					"docs": "<docs>\nPi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):\n- Main documentation: <checkout>/node_modules/@earendil-works/pi-coding-agent/README.md\n- Additional docs: <checkout>/node_modules/@earendil-works/pi-coding-agent/docs\n- Examples: <checkout>/node_modules/@earendil-works/pi-coding-agent/examples (extensions, custom tools, SDK)\n- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md), codemode scripts and non-LLM models such as classifiers and image models (docs/codemode.md)\n- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing\n- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)\n</docs>",
-					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her agent server. This conversation is in the web app (app). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nYou are the team's coordinator: Ada's general requests come to you, and you hand specialist work to the agent that owns it.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nYou are now speaking in the group chat \"Council\" with Ada and \"Archivist\". Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
+					"addendum": "<addendum>\nYou are an agent working for the owner of this agent server. You talk with them in channels, rooms and threads.\n\nReply in the language they write in. Be warm, direct, and brief.\n\nYour context holds only their core facts and upcoming events. When a request touches their projects, people, tools, or past, search memory first. When they ask you to remember or forget something, use the memory tools.\n\nWhen you need their decision to continue, ask with ask_user instead of ending your turn with a question; they answer on buttons in the channel and your turn goes on.\n\nCite the source links of web information you use.\n\nYou are \"Librarian\" (agent name `librarian`), one of Ada's agents in her agent server. This conversation is in the web app (app). Each agent owns one channel and one conversation; you all share her tools and her memory.\n\nYou are the team's coordinator: Ada's general requests come to you, and you hand specialist work to the agent that owns it.\n\nThe team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not Ada; only Ada approves held actions.\n\nYour shell and file tools run on her VPS as the user <user>, in the shared workspace <tmp>. Write temporary files under the scratch dir <tmp>/roundtable-scratch ($TMPDIR), not elsewhere in /tmp; make them with `mktemp -p \"$TMPDIR\"`, since a bare `mktemp` ignores $TMPDIR on some systems. Commands that are destructive or change the system, and writes outside the workspace and the scratch dir, are held for her confirmation: tell her exactly what will run and ask her to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.\n\nA task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with.\n\nYou are now speaking in the group chat \"Council\" with Ada and \"Archivist\". Each of your turns shows the group messages since your last turn. Speak only for yourself and add what your role brings; do not repeat what others said. To hand the next word to a member, mention them as @display name.\n\n## Your role\nYou keep the reading list.\n\n## Owner memory\n\nToday in UTC is <date>. What is stored right now, including anything you added earlier in this conversation; each appears once.\n\n### Core facts\n- Ada drinks oolong tea\n\n### Upcoming events\n(none)\n\nNotes (projects, people, references, past events) are not listed here. Use memory_search when a request may depend on them.\n</addendum>",
 					"skills": "<skills>\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>writing-skills</name>\n    <description>Use when creating, editing, or reviewing a skill, or when a lesson from your work should become one.</description>\n    <location><checkout>/src/core/assets/skills/writing-skills/SKILL.md</location>\n  </skill>\n</available_skills>\n</skills>",
 					"cwd": "<cwd>\n<tmp>\n</cwd>"
 				}
@@ -9715,6 +10177,160 @@
 						"host": {
 							"type": "string",
 							"description": "An agent's name (lowercase, from agent_list), not its display name."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_create",
+				"description": "Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"display_name",
+						"prompt",
+						"task"
+					],
+					"properties": {
+						"display_name": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 32,
+							"description": "The name shown on its messages; any language."
+						},
+						"prompt": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The agent's role prompt, in English: its job, sources, boundaries, and how it reports. Short and stated positively."
+						},
+						"task": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 4000,
+							"description": "The task, self-contained: what to do, what to read, and what to answer with."
+						},
+						"name": {
+							"type": "string",
+							"pattern": "^[a-z0-9-]{1,32}$",
+							"description": "Permanent name: lowercase letters, digits, and dashes. Left out, it is <your name>-<number>."
+						},
+						"class": {
+							"type": "string",
+							"enum": [
+								"wizard",
+								"knight",
+								"scholar",
+								"smith",
+								"ranger",
+								"bard",
+								"alchemist",
+								"healer",
+								"steward",
+								"navigator",
+								"seer",
+								"scribe",
+								"engineer",
+								"druid",
+								"innkeeper",
+								"sentinel",
+								"envoy",
+								"rogue",
+								"monk",
+								"falconer",
+								"shipwright",
+								"jester",
+								"paladin",
+								"archivist"
+							],
+							"description": "The agent's character class, which sets its outfit, hat, and prop. wizard: coordinator, planner, main assistant; knight: reviewer, QA gate, guardian; scholar: researcher, literature review; smith: coder, builder, refactorer; ranger: scout, web search, crawler; bard: writer, announcer, copywriter; alchemist: data analyst, ETL, transformer; healer: debugger, fixer, support; steward: ops, billing, access keys; navigator: planner, routing, roadmap; seer: forecaster, monitoring, analytics; scribe: documentation, notes, minutes; engineer: devops, infra, CI; druid: cleanup, data hygiene, maintenance; innkeeper: concierge, onboarding, scheduler; sentinel: security, on-call, alerts; envoy: email, partner comms, notifications; rogue: pen-tester, auditor, intel; monk: long-running jobs, batch, patience; falconer: retrieval, fetch, RAG lookup; shipwright: release, build pipeline, packaging; jester: brainstorm, ideation, humor; paladin: compliance, policy, approvals; archivist: knowledge base, indexing, memory."
+						},
+						"color": {
+							"type": "string",
+							"enum": [
+								"azure",
+								"gules",
+								"vert",
+								"purpure",
+								"amber",
+								"sable",
+								"teal",
+								"rose"
+							],
+							"description": "The agent's color palette. Pick one unlike the other agents' (agent_get shows each look)."
+						},
+						"model": {
+							"type": "string",
+							"description": "The model to run on, as <provider>/<model>; left out, yours. An unusable one is refused with the usable list."
+						},
+						"thinking": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "off"
+								},
+								{
+									"type": "string",
+									"const": "minimal"
+								},
+								{
+									"type": "string",
+									"const": "low"
+								},
+								{
+									"type": "string",
+									"const": "medium"
+								},
+								{
+									"type": "string",
+									"const": "high"
+								},
+								{
+									"type": "string",
+									"const": "xhigh"
+								},
+								{
+									"type": "string",
+									"const": "default"
+								}
+							],
+							"description": "Its thinking level; left out, yours."
+						},
+						"skills": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Skills it carries, from skill_list; pick those the task needs."
+						}
+					}
+				}
+			},
+			{
+				"name": "helper_end",
+				"description": "Archive your own temp knights when you are done with them: the names you list, or \"finished\" for every one that has finished. Their history stays readable under the archive, and the owner can restore them. You cannot end anyone else's.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"names"
+					],
+					"properties": {
+						"names": {
+							"anyOf": [
+								{
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
+									"minItems": 1,
+									"maxItems": 50
+								},
+								{
+									"type": "string",
+									"const": "finished"
+								}
+							],
+							"description": "Their names, or \"finished\" for every finished one."
 						}
 					}
 				}

@@ -40,7 +40,11 @@ function agentState(agent: AgentStatus): string {
 	return agent.waiting > 0 ? text.dashQueued(agent.waiting) : text.dashIdle;
 }
 
-function agentBlock(agent: AgentStatus, now: Date): string {
+function agentBlock(
+	agent: AgentStatus,
+	now: Date,
+	helpers: readonly AgentStatus[],
+): string {
 	const channel = agent.channelId ? ` <#${agent.channelId}>` : "";
 	const text = messages();
 	const last = agent.lastActive
@@ -51,6 +55,15 @@ function agentBlock(agent: AgentStatus, now: Date): string {
 		`\`${agent.model}\` · thinking \`${thinkingLabel(agent.thinking)}\``,
 		`${agentState(agent)} · ${contextText(agent.context)}`,
 		text.dashAgentFooter(agent.schedules, last),
+		// Temp knights are counted under their parent, not listed one by one.
+		...(helpers.length > 0
+			? [
+					text.dashHelpers(
+						helpers.length,
+						helpers.filter((helper) => !helper.finished).length,
+					),
+				]
+			: []),
 	].join("\n");
 }
 
@@ -100,7 +113,15 @@ export function dashboardSections(
 		header,
 		listed(
 			"### Agents",
-			status.agents.map((agent) => agentBlock(agent, now)),
+			status.agents
+				.filter((agent) => agent.parent === undefined)
+				.map((agent) =>
+					agentBlock(
+						agent,
+						now,
+						status.agents.filter((other) => other.parent === agent.name),
+					),
+				),
 			budget,
 		),
 		listed(

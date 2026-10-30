@@ -19,6 +19,10 @@ export interface AgentStatus {
 	lastActive?: Date;
 	/** Its schedules, across its Discord channel and its rooms. */
 	schedules: number;
+	/** The knight that made it, for a temp knight. */
+	parent?: string;
+	/** A temp knight with nothing running, queued or waiting for the owner. */
+	finished?: true;
 }
 
 /** An active group as the dashboard shows it. */
@@ -74,6 +78,8 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 			...(context ? { context } : {}),
 			...(lastActive ? { lastActive } : {}),
 			schedules: scheduled,
+			...(agent.parent ? { parent: agent.parent } : {}),
+			...(agent.parent && agent.finishedAt ? { finished: true as const } : {}),
 		});
 	}
 	const groups: GroupStatus[] = store.groups().flatMap((group) => {

@@ -32,6 +32,10 @@ export function agentSystemPrompt(input: {
 	agentTools?: AgentTools;
 	/** Where this conversation is, and the other surfaces the agent has places on. */
 	surface?: { label: string; key: string; others: readonly string[] };
+	/** Whether the agent has the temp knight tools. */
+	helpers?: boolean;
+	/** The knight that made this agent, when it is a temp knight. */
+	parent?: Agent;
 }): string {
 	const { agent, coordinator, shared, workDir, owner, shellUser, group } =
 		input;
@@ -48,6 +52,14 @@ export function agentSystemPrompt(input: {
 			? `You have no shell or file tools and no workspace on ${o.his} machine: you work through the conversation and the tools listed to you.${input.images ? " To make a new picture, describe it to generate_image, which saves it and attaches it to your reply." : ""}`
 			: `Your shell and file tools run on ${o.his} VPS as the user ${shellUser}, in the shared workspace ${workDir}.${input.scratchDir ? ` Write temporary files under the scratch dir ${input.scratchDir} ($TMPDIR), not elsewhere in /tmp; make them with \`mktemp -p "$TMPDIR"\`, since a bare \`mktemp\` ignores $TMPDIR on some systems.` : ""} Commands that are destructive or change the system, and writes outside the workspace${input.scratchDir ? " and the scratch dir" : ""}, are held for ${w.his} confirmation: tell ${w.him} exactly what will run and ask ${w.him} to confirm. To show a file you have, attach it to your reply with attach_file or give its path to discord_send_message; never read an image or base64 a file to send it.${input.images ? " To make a new picture, describe it to generate_image, which saves it and attaches it to your reply." : ""}`,
 	];
+	if (input.parent)
+		parts.push(
+			`You are a temp knight of "${input.parent.displayName}" (\`${input.parent.name}\`), made for one task: do it, answer with what it asked for, and stop. Your answer goes back to "${input.parent.displayName}", which clears you when it is done. You cannot make knights, temp knights, groups, or schedules.`,
+		);
+	else if (input.helpers)
+		parts.push(
+			"A task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with.",
+		);
 	if (group) {
 		const others = group.members
 			.flatMap((m) => (m.name === agent.name ? [] : [`"${m.displayName}"`]))

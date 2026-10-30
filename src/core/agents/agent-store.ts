@@ -159,9 +159,12 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		avatarHash?: string;
 		/** Absent in a team without Discord, whose agents live in rooms. */
 		channelId?: string;
+		/** Makes it a temp knight of this active, permanent knight. */
+		parent?: string;
 	}): Promise<Agent> {
 		return this.#serial(async () => {
 			checkAgentName(agent.name);
+			if (agent.parent !== undefined) this.checkParent(agent.parent);
 			checkDisplayName(agent.displayName);
 			checkPrompt(agent.prompt);
 			const avatarPrompt = agent.avatarPrompt ?? "";
@@ -175,9 +178,19 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 				channelId: agent.channelId ?? null,
 				avatarHash: agent.avatarHash ?? null,
 				character: agent.character ?? null,
+				parent: agent.parent ?? null,
 			});
 			return this.keepAgent(rows[0]);
 		});
+	}
+
+	/** Marks an active temp knight finished now, or working again with `false`; says whether the stamp changed. */
+	setFinished(name: string, finished: boolean): Promise<boolean> {
+		return this.#writeOne(() =>
+			this.stampChanges(name, finished)
+				? this.#statements.setFinished(name, finished ? new Date() : null)
+				: Promise.resolve([]),
+		);
 	}
 
 	async updateAgent(
@@ -323,21 +336,14 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	 * Stores a character and picture only while the agent still has none, so a look chosen in the
 	 * meantime wins. Returns whether it was written.
 	 */
-	async dressIfUndressed(
+	dressIfUndressed(
 		name: string,
 		character: CharacterSpec,
 		avatarHash: string,
 	): Promise<boolean> {
-		return this.#serial(async () => {
-			const rows = await this.#statements.dressIfUndressed(
-				name,
-				character,
-				avatarHash,
-			);
-			if (!rows[0]) return false;
-			this.keepAgentRow(rows[0]);
-			return true;
-		});
+		return this.#writeOne(() =>
+			this.#statements.dressIfUndressed(name, character, avatarHash),
+		);
 	}
 
 	/**
@@ -345,20 +351,22 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	 * store's write queue, so a look saved meanwhile keeps its own picture. Returns whether it was
 	 * written.
 	 */
-	async setAvatarIfLook(
+	setAvatarIfLook(
 		name: string,
 		character: CharacterSpec,
 		avatarHash: string,
 	): Promise<boolean> {
+		return this.#writeOne(() =>
+			this.#statements.setAvatarIfLook(name, character, avatarHash),
+		);
+	}
+
+	/** Runs a conditional row write in the queue; true when it wrote a row, which joins the map. */
+	#writeOne(write: () => Promise<AgentRow[]>): Promise<boolean> {
 		return this.#serial(async () => {
-			const rows = await this.#statements.setAvatarIfLook(
-				name,
-				character,
-				avatarHash,
-			);
-			if (!rows[0]) return false;
-			this.keepAgentRow(rows[0]);
-			return true;
+			const [row] = await write();
+			if (row) this.keepAgentRow(row);
+			return row !== undefined;
 		});
 	}
 

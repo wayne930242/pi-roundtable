@@ -79,6 +79,8 @@ export class AgentMessages {
 				chainLimitReason(addressee(chain.speaker, this.#host.options.owner)),
 			);
 		chain.messages += 1;
+		// A temp knight is working from the moment a message is handed to it until it has answered.
+		this.#host.helpers.begin(target.name);
 		// The thread opens in the sender's turn channel, on its surface when that hosts threads; a
 		// surface that hosts none leaves the answer returning to the sender's conversation.
 		const exchange = this.#openExchange(parent, sender, target, text);
@@ -114,7 +116,8 @@ export class AgentMessages {
 					{ from: sender.name, to: target.name, err: error },
 					"agent message not delivered",
 				);
-			});
+			})
+			.finally(() => this.#host.helpers.end(target.name));
 		logger.info(
 			{
 				from: sender.name,
@@ -396,14 +399,19 @@ export class AgentMessages {
 			return;
 		}
 		// Its thread was closed when the host refused it, so the answer returns to the sender's conversation.
-		await this.#exchange(
-			sender,
-			target,
-			entry.text,
-			chain,
-			undefined,
-			entry.channel,
-			origin,
-		);
+		this.#host.helpers.begin(target.name);
+		try {
+			await this.#exchange(
+				sender,
+				target,
+				entry.text,
+				chain,
+				undefined,
+				entry.channel,
+				origin,
+			);
+		} finally {
+			this.#host.helpers.end(target.name);
+		}
 	}
 }

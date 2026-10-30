@@ -3,6 +3,7 @@ import type { Agent, AgentGroup } from "./agent-rules.ts";
 import {
 	checkAgentName,
 	checkDisplayName,
+	isHelper,
 	MAX_GROUP_MEMBERS,
 	MIN_GROUP_MEMBERS,
 } from "./agent-rules.ts";
@@ -51,6 +52,34 @@ export abstract class AgentBook {
 			if (agent.channelId === channelId && agent.status === "active")
 				return agent;
 		return undefined;
+	}
+
+	/** The temp knights `parent` made, active and archived, or only those of one `status`. */
+	helpersOf(parent: string, status?: Agent["status"]): Agent[] {
+		return this.agents().filter(
+			(agent) =>
+				agent.parent === parent &&
+				(status === undefined || agent.status === status),
+		);
+	}
+
+	/** Whether marking the agent finished (or working, with `false`) changes an active temp knight's stamp. */
+	protected stampChanges(name: string, finished: boolean): boolean {
+		const agent = this.agentMap.get(name);
+		return (
+			isHelper(agent) &&
+			agent?.status === "active" &&
+			(agent.finishedAt !== undefined) !== finished
+		);
+	}
+
+	/** A temp knight's parent must be an active permanent knight: depth is one. */
+	protected checkParent(parent: string): void {
+		const agent = this.activeAgent(parent);
+		if (isHelper(agent))
+			throw new AgentError(
+				`"${parent}" is a temp knight, and a temp knight cannot make temp knights.`,
+			);
 	}
 
 	groups(): AgentGroup[] {
@@ -118,7 +147,11 @@ export abstract class AgentBook {
 			throw new AgentError(
 				`A group has ${MIN_GROUP_MEMBERS} to ${MAX_GROUP_MEMBERS} different members.`,
 			);
-		for (const member of members) this.activeAgent(member);
+		for (const member of members)
+			if (isHelper(this.activeAgent(member)))
+				throw new AgentError(
+					`"${member}" is a temp knight and sits at no table; a group takes permanent knights only.`,
+				);
 		if (!members.includes(host))
 			throw new AgentError(`The host "${host}" must be one of the members.`);
 	}
