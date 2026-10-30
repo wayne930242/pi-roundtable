@@ -25,6 +25,8 @@ export interface NewRoomMessage {
 	reference?: string;
 	/** When it was written, for an import; the log's clock otherwise. Retention counts from it. */
 	at?: Date;
+	/** An internal note: shown to the room's readers, never handed to the agent. */
+	note?: true;
 }
 
 interface Row {
@@ -41,6 +43,7 @@ interface Row {
 	author_label: string | null;
 	picture: PictureRef | string | null;
 	edited_at: Date | null;
+	note: boolean | null;
 }
 
 /** The most messages one page of history holds. */
@@ -66,6 +69,7 @@ function messageOf(row: Row): RoomMessage {
 					picture: storedJson(row.picture, "picture"),
 				}),
 		...(row.edited_at === null ? {} : { edited: true as const }),
+		...(row.note ? { note: true as const } : {}),
 	};
 }
 
@@ -116,6 +120,14 @@ export class RoomLog {
 		},
 	};
 
+	/** The column that marks a message as an internal note, for the rooms more than one person reads. */
+	static readonly noteMigration: Migration = {
+		name: "web-room-messages-note",
+		up: async (sql) => {
+			await sql`ALTER TABLE web_room_messages ADD COLUMN IF NOT EXISTS note boolean NOT NULL DEFAULT false`;
+		},
+	};
+
 	async append(message: NewRoomMessage): Promise<RoomMessage> {
 		const [row] = await this.#insert(message, false);
 		if (!row) throw new Error("the room log stored nothing");
@@ -145,20 +157,20 @@ export class RoomLog {
 		return once
 			? await this.#sql`
 				INSERT INTO web_room_messages (room, kind, principal_id, agent, author_name, text, files,
-					author_kind, author_label, picture, reference, created_at)
+					author_kind, author_label, picture, reference, created_at, note)
 				VALUES (${message.room}, ${message.kind}, ${message.principalId ?? null},
 					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::jsonb,
 					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::jsonb,
-					${message.reference ?? null}, ${at})
+					${message.reference ?? null}, ${at}, ${message.note === true})
 				ON CONFLICT (room, reference) WHERE reference IS NOT NULL DO NOTHING
 				RETURNING *`
 			: await this.#sql`
 				INSERT INTO web_room_messages (room, kind, principal_id, agent, author_name, text, files,
-					author_kind, author_label, picture, reference, created_at)
+					author_kind, author_label, picture, reference, created_at, note)
 				VALUES (${message.room}, ${message.kind}, ${message.principalId ?? null},
 					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::jsonb,
 					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::jsonb,
-					${message.reference ?? null}, ${at})
+					${message.reference ?? null}, ${at}, ${message.note === true})
 				RETURNING *`;
 	}
 

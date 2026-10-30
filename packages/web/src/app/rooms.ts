@@ -45,6 +45,11 @@ export interface RoomsOptions {
 	activity(
 		room: ChannelKey,
 	): Pick<RoomView, "typing" | "stoppable" | "phase" | "agent">;
+	/**
+	 * Whether more than one person reads the agent and group rooms, so a message may be an
+	 * internal note. Absent: one person does, and a room takes only turns.
+	 */
+	readers?(): Promise<boolean>;
 }
 
 const THREAD_ID = /^thread\.[0-9a-f-]{36}$/;
@@ -111,6 +116,11 @@ export class Rooms {
 			: undefined;
 	}
 
+	/** Whether the agent and group rooms take internal notes: more than one person reads them. */
+	async notesOn(): Promise<boolean> {
+		return (await this.#options.readers?.()) === true;
+	}
+
 	/** The home room: the coordinator's, else the first active agent's. */
 	homeKey(): ChannelKey | undefined {
 		const { directory, team, surface } = this.#options;
@@ -162,6 +172,7 @@ export class Rooms {
 		const groups = directory.groups().filter((g) => g.status === "active");
 		const shown = await threads.list();
 		const muted = await mutes.all();
+		const notes = await this.notesOn();
 		const view = (
 			key: ChannelKey,
 			rest: Pick<RoomView, "kind" | "name" | "displayName"> & Partial<RoomView>,
@@ -172,6 +183,7 @@ export class Rooms {
 				readOnly: false,
 				mode: { yolo, longRunning },
 				...(muted.has(key) ? { muted: true as const } : {}),
+				...(notes && rest.kind !== "thread" ? { notes: true as const } : {}),
 				...activity(key),
 				...rest,
 				key,

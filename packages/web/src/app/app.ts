@@ -62,6 +62,7 @@ const SWEEP_EVERY_MS = 3_600_000;
 export const APP_MIGRATIONS: readonly Migration[] = [
 	RoomLog.migration,
 	RoomLog.hostMigration,
+	RoomLog.noteMigration,
 	HostCardLog.migration,
 	RoomReads.migration,
 	CardLog.migration,
@@ -332,6 +333,8 @@ export class OwnerApp {
 			modes,
 			mutes,
 			activity: (room) => surface.activityOf(room),
+			// The agent rooms are the owners'; where there are several, they can leave each other notes.
+			readers: async () => (await identity.owners()).length > 1,
 		});
 		hostApp = new HostApp({
 			surface: options.surface,
