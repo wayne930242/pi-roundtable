@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A card answered after its turn stopped waiting no longer leaves a release that any later identical call can spend. The release now expires an hour after the answer, is spent only in a turn whose speaker is the person who approved on the card (or an owner; a surface that does not say who approved leaves it to any speaker), and is dropped when the identical tool call runs without a hold, as that is the run the person approved. Before, it was kept for the life of the gate and spent by whichever turn made the identical call next, so an automatic turn could run a call on a stale approval with no card. A late approval still releases exactly one call, in the turn it starts. See [the plugin guide](docs/plugins.md).
+
 ## [0.26.1] - 2026-10-30
 
 ### Added
