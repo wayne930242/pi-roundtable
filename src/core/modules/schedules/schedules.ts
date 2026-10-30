@@ -68,6 +68,18 @@ function withAgentOption(spec: ScheduleToolSpec): ScheduleToolSpec {
 	};
 }
 
+/** The tools that reach every one of an agent's conversations say so, since they read "this channel's" otherwise. */
+function withAgentScope(spec: ScheduleToolSpec): ScheduleToolSpec {
+	if (
+		!["schedule_list", "schedule_update", "schedule_cancel"].includes(spec.name)
+	)
+		return spec;
+	return {
+		...spec,
+		description: `${spec.description} As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.`,
+	};
+}
+
 /**
  * Registers the schedule tools for one conversation; a schedule's runs speak for the person whose
  * turn set it up, and in a turn nobody is named for the tools refuse. With `agents`,
@@ -79,6 +91,11 @@ export function schedulesExtension(
 	agents?: AgentChannelLookup,
 	/** The person the running turn is for; their schedules run at their tier. */
 	speaker: () => Speaker | undefined = () => undefined,
+	/**
+	 * An agent's conversations, asked when a tool runs: its schedules in all of them are listed,
+	 * changed, and cancelled, `channel`'s among them; without it, `channel`'s alone.
+	 */
+	conversations?: () => readonly ChannelKey[],
 ): ExtensionFactory {
 	const {
 		store,
@@ -94,7 +111,8 @@ export function schedulesExtension(
 		timeZone: timeZone(),
 		precheckScripts: prechecks?.scriptRunner?.() !== undefined,
 	}).map((base) => {
-		const spec = agents ? withAgentOption(base) : base;
+		const named = agents ? withAgentOption(base) : base;
+		const spec = conversations ? withAgentScope(named) : named;
 		return {
 			...spec,
 			run: async (input: ToolInput) => {
@@ -108,10 +126,13 @@ export function schedulesExtension(
 						? agents(input.agent, channel)
 						: undefined;
 				const target = peer ?? (await channelFor(channel, author.principalId));
+				// Another agent's schedules are read in its one channel; an agent's own span its conversations.
+				const own = peer ? undefined : conversations?.();
 				const answer = await callScheduleTool(
 					{
 						store,
 						channel: target,
+						...(own ? { channels: [...new Set([target, ...own])] } : {}),
 						target: kept,
 						author: {
 							principalId: author.principalId,

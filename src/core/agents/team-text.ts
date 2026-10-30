@@ -57,12 +57,16 @@ export function agentDetails(
 	agent: Agent,
 	defaults: { model: string; thinking: ThinkingSetting },
 	skills: string | undefined,
+	conversations: readonly string[] = [],
 ): string {
 	return [
 		`Name: ${agent.name}`,
 		`Display name: ${agent.displayName}`,
 		`Status: ${agent.status}`,
 		`Channel: ${agent.channelId ? `<#${agent.channelId}>` : "none"}`,
+		...(conversations.length === 0
+			? []
+			: [`Conversations: ${conversations.join(", ")}`]),
 		`Model: ${agent.model ?? `${assistantName()}'s (${defaults.model})`}`,
 		`Thinking: ${agent.thinking ?? `${assistantName()}'s (${describeThinking(defaults.thinking)})`}`,
 		...(skills === undefined ? [] : [`Skills: ${skills}`]),

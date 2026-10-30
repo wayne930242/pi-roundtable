@@ -13,6 +13,7 @@ import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
 import { toolTiers } from "../tool-tiers.ts";
+import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, AgentGroup, PgAgentStore } from "./agent-store.ts";
 import { discordKey } from "./team-keys.ts";
@@ -48,6 +49,7 @@ const store = {
 	agentByChannel: (id: string) => AGENTS.find((a) => a.channelId === id),
 	group: (name: string) => (name === GROUP.name ? GROUP : undefined),
 	groupByChannel: (id: string) => (id === GROUP.channelId ? GROUP : undefined),
+	conversations: AgentConversations.memory(),
 } as unknown as PgAgentStore;
 
 const coordinator: AgentTurnScope = {

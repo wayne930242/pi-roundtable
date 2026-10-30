@@ -28,9 +28,9 @@ import {
 	coordinatorOf,
 	discordIdOf,
 	discordKey,
-	homeScope,
 	keysOf,
 	roomScope,
+	scopeOf,
 } from "./team-keys.ts";
 import {
 	type Chain,
@@ -38,6 +38,7 @@ import {
 	type TeamTurnsOptions,
 	type TurnExtra,
 	type TurnHost,
+	turnFlags,
 } from "./team-turn-types.ts";
 
 export { MAX_CHAIN_MESSAGES, type TeamTurnsOptions };
@@ -106,7 +107,7 @@ export class TeamTurns {
 		attachments: TurnAttachments,
 	): Promise<TurnResult> {
 		const agent = this.#agentOf(channel);
-		const scope = this.#scopeOf(agent, channel);
+		const scope = scopeOf(agent, channel);
 		const pending = await this.#options.runtime().heldActions(scope.session);
 		const confirmed =
 			pending !== undefined &&
@@ -141,7 +142,7 @@ export class TeamTurns {
 		const agent = this.#agentOf(channel);
 		return this.#turn(
 			agent,
-			this.#scopeOf(agent, channel),
+			scopeOf(agent, channel),
 			channel,
 			text,
 			{ messages: 0, speaker },
@@ -194,13 +195,6 @@ export class TeamTurns {
 		return agent;
 	}
 
-	/** The agent's own conversation in the channel: its Discord channel's, or its room's. */
-	#scopeOf(agent: Agent, channel: ChannelKey): AgentTurnScope {
-		return discordIdOf(channel) === undefined
-			? roomScope(agent, channel)
-			: homeScope(agent);
-	}
-
 	/**
 	 * Runs one agent turn and posts its reply, or a failure notice, in `postTo` under the
 	 * agent's name. Never rejects.
@@ -220,6 +214,9 @@ export class TeamTurns {
 		this.#chains.set(scope.session, chain);
 		this.#posting.set(scope.session, postTo);
 		this.#working.set(agent.name, postTo);
+		// A message to the agent lands where it last ran a turn; a group round is none.
+		if (!scope.group)
+			this.#options.store.conversations.keep(agent.name, postTo, logger);
 		this.#active(agent.name, scope.group);
 		const turn = {
 			agent: agent.name,
@@ -240,14 +237,7 @@ export class TeamTurns {
 							channel: postTo,
 							selection: this.#options.selection(scope),
 							text,
-							...(extra.attachments ? { attachments: extra.attachments } : {}),
-							...(extra.confirmed ? { confirmed: true } : {}),
-							...(extra.steerable ? { steerable: true } : {}),
-							...(extra.interactive ? { interactive: true } : {}),
-							...(extra.unattended ? { unattended: true } : {}),
-							...(extra.timeLimitMs === undefined
-								? {}
-								: { timeLimitMs: extra.timeLimitMs }),
+							...turnFlags(extra),
 							agent: scope,
 							speaker: chain.speaker,
 							...(interim ? { interim } : {}),
@@ -472,8 +462,8 @@ export class TeamTurns {
 		await this.#post(home, coordinator, { chunks: splitReply(text) });
 	}
 
-	message(caller: AgentTurnScope, to: string, text: string): string {
-		return this.#messages.message(caller, to, text);
+	message(...args: Parameters<AgentMessages["message"]>): string {
+		return this.#messages.message(...args);
 	}
 
 	/** Delivers the agent messages the last run kept while it stopped; never rejects. */

@@ -30,12 +30,12 @@ agent 平常是你寫了才回答。
 | 工具 | 作用 |
 | --- | --- |
 | `schedule_create` | 用 `title`、`prompt` 和一種時間設定建立排程，可另外指定 `precheck` 和 `time_limit_minutes`。 |
-| `schedule_list` | 列出這個頻道的排程、下次執行時間，以及 host 提供的預檢；給 `id` 則完整列出單一排程。agent 能用 `agent` 讀另一個 agent 的排程。 |
+| `schedule_list` | 列出這個頻道的排程、下次執行時間，以及 host 提供的預檢；給 `id` 則完整列出單一排程。agent 會看到自己在所有對話裡的排程，並標明各自在哪裡執行；也能用 `agent` 讀另一個 agent 的排程。 |
 | `schedule_update` | 修改單一排程的標題、提示詞、時間、預檢或時間上限（`precheck: null`、`time_limit_minutes: null` 會拿掉它們）。執行中的那一輪可以用它更新自己的提示詞。 |
-| `schedule_cancel` | 刪除一個排程。 |
+| `schedule_cancel` | 刪除一個排程；agent 可以取消自己在任何對話裡的排程。 |
 
 owner 和 admin 能建立、修改、取消排程。任何說話的人都能列出排程。
-agent 只能改自己的排程；要改別人的，請那個 agent 去改。
+agent 只能改自己的排程，不論是它的哪一段對話（Discord 或網頁 app）建立的；要改別人的，請那個 agent 去改。
 
 時間設定是下列其中一種：
 

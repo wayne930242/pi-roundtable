@@ -6,6 +6,7 @@ import { AgentError } from "../domain/errors.ts";
 import { silentLogger } from "../log.ts";
 import type { AgentTurnScope } from "../sessions.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent } from "./agent-store.ts";
 import { type AgentTeamOptions, DiscordAgentTeam } from "./agent-team.ts";
 import { type AgentOps, agentToolsExtension } from "./agent-tools.ts";
@@ -43,6 +44,7 @@ function memoryStore(initial: Agent[]) {
 		agentByChannel: (id: string) =>
 			[...rows.values()].find((a) => a.channelId === id),
 		group: () => undefined,
+		conversations: AgentConversations.memory(),
 		activeAgent: (name: string) => {
 			const found = rows.get(name);
 			if (!found) throw new AgentError(`There is no agent "${name}".`);

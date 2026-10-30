@@ -30,13 +30,13 @@ On Mondays and Thursdays at 17:30, ask me what I got done.
 | Tool | What it does |
 | --- | --- |
 | `schedule_create` | Makes a schedule from a `title`, a `prompt`, and one kind of timing, and optionally a `precheck` and a `time_limit_minutes`. |
-| `schedule_list` | Lists the channel's schedules with their next run and the prechecks the host offers, or one schedule in full with `id`. An agent can read another agent's schedules with `agent`. |
+| `schedule_list` | Lists the channel's schedules with their next run and the prechecks the host offers, or one schedule in full with `id`. An agent sees its own schedules from all its conversations, each with where it fires, and can read another agent's schedules with `agent`. |
 | `schedule_update` | Changes the title, the prompt, the timing, the precheck, or the time limit of one schedule (`precheck: null` and `time_limit_minutes: null` remove them). A run may use it to keep its own prompt current. |
-| `schedule_cancel` | Deletes one schedule. |
+| `schedule_cancel` | Deletes one schedule; an agent may cancel any of its own, in any conversation. |
 
 Owners and admins can create, change, and cancel schedules.
 Any speaker can list them.
-An agent can change only its own schedules; to change another's, ask that agent.
+An agent can change only its own schedules, whichever of its conversations (Discord or the web app) made them; to change another's, ask that agent.
 
 The timing is one of these:
 

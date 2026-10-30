@@ -18,8 +18,8 @@ export interface OutboxEntry {
 	channel: ChannelKey;
 	/** What the turn is given: the request, or the sender's follow-up text. */
 	text: string;
-	/** The surface of the room the exchange runs in; absent in a Discord channel. */
-	via?: string;
+	/** For a `message`, the sender's conversation, where the answer returns. */
+	origin?: ChannelKey;
 	speaker: Speaker;
 	/** The messages the chain had sent when the entry was stored. */
 	messages: number;

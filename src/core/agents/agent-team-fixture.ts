@@ -311,6 +311,7 @@ export function useTeamFixture(
 			"agent_group_messages",
 			"agent_group_cursors",
 			"agent_outbox",
+			"agent_latest_conversation",
 			"prompt_history",
 			"skills",
 			"skill_versions",

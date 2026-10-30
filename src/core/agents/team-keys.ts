@@ -147,6 +147,13 @@ export function roomScope(agent: Agent, room: ChannelKey): AgentTurnScope {
 	return { name: agent.name, session: room, home: room };
 }
 
+/** The agent's own conversation in the channel: its Discord channel's, or its room's. */
+export function scopeOf(agent: Agent, channel: ChannelKey): AgentTurnScope {
+	return discordIdOf(channel) === undefined
+		? roomScope(agent, channel)
+		: homeScope(agent);
+}
+
 /**
  * An agent's conversation inside a group: in a Discord group channel, or without a room, as
  * before; in a room, the room's seat, whose home is the agent's own room on that surface.

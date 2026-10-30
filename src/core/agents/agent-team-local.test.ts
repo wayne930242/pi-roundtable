@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
-import { describeDb } from "../testing/database.ts";
+import { describeDb, openTestStore, TEST_GUILD } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
+import { PgAgentStore } from "./agent-store.ts";
 import {
 	ENTRY,
 	fx,
@@ -10,6 +11,7 @@ import {
 	settle,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
+import { messageTarget } from "./message-target.ts";
 import { agentRoomKey, discordKey, groupRoomKey } from "./team-keys.ts";
 
 const room = (name: string) => agentRoomKey("app", name);
@@ -207,5 +209,40 @@ describeDb("schedule_list across the rooms of a team with Discord", () => {
 		);
 		// Its Discord channel holds one schedule and its room another.
 		expect(doctor?.schedules).toBe(2);
+	});
+
+	test("after a restart a message still lands in the web conversation the target last worked in", async () => {
+		fx.surfaces.rooms = ["app"];
+		await fx.team.answerOwner(
+			room("infra"),
+			OWNER_SPEAKER,
+			"hi",
+			"hi",
+			NO_ATTACHMENTS,
+		);
+		await settle();
+		// The host restarts: a store over the same database knows nothing but what was kept.
+		const restarted = await openTestStore(PgAgentStore, TEST_GUILD);
+		try {
+			expect(restarted.conversations.latest("infra")).toBe(room("infra"));
+			const infra = restarted.activeAgent("infra");
+			const from = discordKey(restarted.activeAgent("doctor").channelId ?? "");
+			expect(
+				messageTarget(
+					{
+						store: restarted,
+						roomSurfaces: ["app"],
+						latest: restarted.conversations.latest("infra"),
+						from,
+					},
+					infra,
+					undefined,
+				),
+			).toBe(room("infra"));
+			// An agent that has run nothing yet has no latest: the sender's surface decides.
+			expect(restarted.conversations.latest("doctor")).toBeUndefined();
+		} finally {
+			await restarted.close();
+		}
 	});
 });

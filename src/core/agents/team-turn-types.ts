@@ -102,6 +102,20 @@ export interface TurnExtra {
 	timeLimitMs?: number;
 }
 
+/** The fields of `extra` that a turn request carries, left out where unset. */
+export function turnFlags(extra: TurnExtra) {
+	return {
+		...(extra.attachments ? { attachments: extra.attachments } : {}),
+		...(extra.confirmed ? { confirmed: true } : {}),
+		...(extra.steerable ? { steerable: true } : {}),
+		...(extra.interactive ? { interactive: true } : {}),
+		...(extra.unattended ? { unattended: true } : {}),
+		...(extra.timeLimitMs === undefined
+			? {}
+			: { timeLimitMs: extra.timeLimitMs }),
+	};
+}
+
 /** What the team's message and group collaborators need of the turns that own their state. */
 export interface TurnHost {
 	readonly options: TeamTurnsOptions;

@@ -57,6 +57,7 @@ describe("the built-in zh-TW catalog", () => {
 		expect([...client.dynamic].sort()).toEqual(
 			[
 				"web/app.tsx: t(LABELS[pane])",
+				"web/components/agent-sheet.tsx: t(AUTOMATIC)",
 				"web/components/agent-sheet.tsx: t(THINKING_LABELS[level])",
 				"web/components/agent-sheet.tsx: t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value)",
 				"web/components/cards.tsx: t(OUTCOMES[outcome])",

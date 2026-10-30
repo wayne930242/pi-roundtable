@@ -368,8 +368,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#turns.announce(text);
 	}
 
-	message(caller: AgentTurnScope, to: string, text: string): string {
-		return this.#turns.message(caller, to, text);
+	message(...args: Parameters<TeamTurns["message"]>): string {
+		return this.#turns.message(...args);
 	}
 
 	async read(
@@ -432,6 +432,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			agent,
 			models.defaults,
 			skills?.describeCarried(agent.name),
+			store.conversations.mark(agent.name, this.roomsOf(name)),
 		);
 	}
 

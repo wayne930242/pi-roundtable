@@ -16,6 +16,7 @@ import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { FakeSurfaceThreads } from "../testing/surface-threads.ts";
 import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
 import { DispatchThreads } from "../threads/dispatch-threads.ts";
+import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import { agentRoomKey } from "./team-keys.ts";
@@ -51,6 +52,7 @@ const store = {
 	agentByChannel: (id: string) => AGENTS.find((a) => a.channelId === id),
 	group: () => undefined,
 	groupByChannel: () => undefined,
+	conversations: AgentConversations.memory(),
 } as unknown as PgAgentStore;
 
 /** A surface that hosts rooms and records what is sent to it. */

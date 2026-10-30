@@ -228,6 +228,7 @@ describe("the agent server's runtime", () => {
 			"agents-character",
 			"agent-prompt-history",
 			"agent-outbox",
+			"agent-latest-conversation",
 		]);
 	});
 });
