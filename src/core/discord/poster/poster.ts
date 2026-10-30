@@ -39,6 +39,17 @@ export interface WebhookPost {
 	mentions?: readonly string[];
 }
 
+/** A card a channel's webhook posts, under a name and picture the plugin chooses. */
+export interface WebhookCardPost {
+	/** The webhook that posts it; the same rule and meaning as `WebhookPost.webhook`. */
+	webhook: string;
+	/** The name shown for this message; the same rule as `WebhookPost.username`. */
+	username: string;
+	/** An `https` address of at most 2,048 characters for the picture beside the name; anything else is left out. */
+	avatarUrl?: string;
+	card: DiscordCard;
+}
+
 /** A message the poster posted, to edit, delete or pin later. */
 export interface PostedMessage {
 	channelId: string;
@@ -73,6 +84,14 @@ export interface RecentMessage {
 	referencedMessageId?: string;
 }
 
+/** A picture on a card: an address Discord fetches, and the text a screen reader gives for it. */
+export interface CardPicture {
+	/** An `https` address of at most 2,048 characters (`invalid` otherwise). */
+	url: string;
+	/** Alt text of 1 to 1,024 characters. */
+	description?: string;
+}
+
 /**
  * A card the bot posts: a Components V2 container with a heading, text sections, a quiet last line
  * and an optional colour bar. Plain data, so a fake can hold and compare it. It carries no
@@ -83,6 +102,10 @@ export interface DiscordCard {
 	accent?: number;
 	title: string;
 	sections: readonly string[];
+	/** A small picture beside the heading (a Section with a Thumbnail); the heading is the section's text. */
+	thumbnail?: CardPicture;
+	/** A picture under the text sections, above the quiet last line (a Media Gallery of one item). */
+	image?: CardPicture;
 	footer?: string;
 	/** Up to five buttons in one row under the text; a press comes to the Discord plugin's interactions by `customId`. */
 	buttons?: readonly CardButton[];
@@ -176,6 +199,24 @@ export interface DiscordPoster {
 		channelId: string,
 		messageId: string,
 		edit: { content: string; mentions?: readonly string[] },
+		webhooks: readonly string[],
+	): Promise<void>;
+	/**
+	 * Posts a card through the channel's webhook of that name, found or made on first use, so the
+	 * card shows the webhook's name and picture instead of the bot's. The webhook is the bot's own,
+	 * so the card's buttons and menus reach the Discord plugin's interactions as the bot's own cards'
+	 * do. It pings nobody.
+	 */
+	postCard(channelId: string, post: WebhookCardPost): Promise<PostedMessage>;
+	/**
+	 * Replaces a card a webhook posted, asking each named webhook in order (a webhook edits only its
+	 * own messages); makes none. `message_gone` when none of them posted it; a message that is not a
+	 * card cannot become one (`rejected`).
+	 */
+	editWebhookCard(
+		channelId: string,
+		messageId: string,
+		card: DiscordCard,
 		webhooks: readonly string[],
 	): Promise<void>;
 	/**

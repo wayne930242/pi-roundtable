@@ -1,6 +1,8 @@
 import {
+	type CardPicture,
 	DISCORD_LIMITS,
 	type DiscordCard,
+	type WebhookCardPost,
 	type WebhookPost,
 } from "./poster.ts";
 import { DiscordPosterError } from "./poster-errors.ts";
@@ -13,6 +15,9 @@ const AVATAR_URL_MAX = 2_048;
 
 /** The longest address Discord accepts on a link button. */
 const LINK_BUTTON_URL_MAX = 512;
+
+/** The longest alt text Discord takes for a thumbnail or a gallery item. */
+const PICTURE_DESCRIPTION_MAX = 1_024;
 
 /** Discord's style number for a button that opens an address. */
 const LINK_BUTTON_STYLE = 5;
@@ -93,6 +98,21 @@ export function checkedText(
 	};
 }
 
+/** The checked body of a webhook's card post or edit: the card, and for a post the name and picture it shows. */
+export function checkedWebhookCard(post: WebhookCardPost) {
+	const webhook = checkWebhookName(post.webhook);
+	const username = checkUsername(post.username);
+	const card = cardBody(post.card);
+	return {
+		webhook,
+		body: {
+			username,
+			...(isHttps(post.avatarUrl) ? { avatar_url: post.avatarUrl } : {}),
+			...card,
+		},
+	};
+}
+
 /** The checked body of a webhook post, its webhook name, and the files to send with it. */
 export function checkedPost(post: WebhookPost) {
 	const webhook = checkWebhookName(post.webhook);
@@ -117,6 +137,26 @@ export function checkedPost(post: WebhookPost) {
 			...checkedText(post.content, post.mentions),
 		},
 		files,
+	};
+}
+
+/** The checked wire form of a card's picture: an `https` address, and an alt text of 1 to 1,024 characters when given. */
+function checkPicture(label: string, picture: CardPicture) {
+	if (!(isHttps(picture.url) && picture.url === picture.url.trim()))
+		throw invalid(
+			`${label} has an https address of at most ${AVATAR_URL_MAX} characters`,
+		);
+	const { description } = picture;
+	if (
+		description !== undefined &&
+		(description === "" || [...description].length > PICTURE_DESCRIPTION_MAX)
+	)
+		throw invalid(
+			`${label} has a description of 1 to ${PICTURE_DESCRIPTION_MAX} characters`,
+		);
+	return {
+		media: { url: picture.url },
+		...(description === undefined ? {} : { description }),
 	};
 }
 
@@ -155,11 +195,9 @@ export function checkChannelName(label: string, name: string): void {
  */
 export function cardBody(card: DiscordCard) {
 	const heading = `### ${card.title}`;
-	const texts = [
-		heading,
-		...card.sections.filter((section) => section !== ""),
-		...(card.footer ? [`-# ${card.footer}`] : []),
-	];
+	const main = [heading, ...card.sections.filter((section) => section !== "")];
+	const footer = card.footer ? [`-# ${card.footer}`] : [];
+	const texts = [...main, ...footer];
 	const size = texts.reduce((sum, text) => sum + [...text].length, 0);
 	if (size > DISCORD_LIMITS.cardTextChars)
 		throw invalid(
@@ -167,7 +205,13 @@ export function cardBody(card: DiscordCard) {
 		);
 	if (texts.some((text) => text.trim() === ""))
 		throw invalid("a card has no empty text");
-	const [first, ...rest] = texts;
+	const [first, ...rest] = main;
+	const thumbnail = card.thumbnail
+		? checkPicture("a card's thumbnail", card.thumbnail)
+		: undefined;
+	const image = card.image
+		? checkPicture("a card's image", card.image)
+		: undefined;
 	const buttons = card.buttons ?? [];
 	const links = card.links ?? [];
 	if (buttons.length + links.length > DISCORD_LIMITS.cardButtons)
@@ -222,9 +266,19 @@ export function cardBody(card: DiscordCard) {
 				type: 17,
 				...(card.accent === undefined ? {} : { accent_color: card.accent }),
 				components: [
-					{ type: 10, content: first },
-					...(rest.length > 0 ? [{ type: 14, divider: true, spacing: 1 }] : []),
+					thumbnail
+						? {
+								type: 9,
+								components: [{ type: 10, content: first }],
+								accessory: { type: 11, ...thumbnail },
+							}
+						: { type: 10, content: first },
+					...(texts.length > 1
+						? [{ type: 14, divider: true, spacing: 1 }]
+						: []),
 					...rest.map((content) => ({ type: 10, content })),
+					...(image ? [{ type: 12, items: [image] }] : []),
+					...footer.map((content) => ({ type: 10, content })),
 					...selects.map((select) => ({
 						type: 1,
 						components: [

@@ -601,6 +601,7 @@
 			"AgentPanelOptions",
 			"CardButton",
 			"CardLink",
+			"CardPicture",
 			"CardSelect",
 			"CategoryChannel",
 			"ChannelContext",
@@ -638,6 +639,7 @@
 			"RootOption",
 			"ThreadCloser",
 			"ThreadState",
+			"WebhookCardPost",
 			"WebhookPost"
 		]
 	},
