@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A group holds 2 to 8 members (it was 2 to 6): `group_create`, `group_update`, the stores and the group editor of `pi-roundtable-web` all take the new range. A round still holds at most 8 replies. No stored group exceeds the old range, so none needs trimming.
+- `pi-roundtable-web`: the round table is a council, one agent group at the podiums; mute only stops push and no longer decides who sits; the table seats at most 8 and shows no "+N" podium; the owners' table no longer seats host rooms. See that package's changelog.
+
 ## [0.26.3] - 2026-10-30
 
 ### Added

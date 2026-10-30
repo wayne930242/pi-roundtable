@@ -14,7 +14,9 @@
 //                                 both open to notes and turns) and a host page, for trying the host rooms
 //   FIXTURE_OWNERS                `2` makes two owners, Ada and Bob, who sign in by the `fixture_owner` cookie (`ada`, the default, or `bob`),
 //                                 so the agent rooms have two readers and the composer offers @AI and notes
-//   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
+//   FIXTURE_AGENTS                how many agents the host has, 3 to 12 (default 3)
+//   FIXTURE_COUNCIL               how many members the group "crew", the council on the round table, has, 2 to 8
+//                                 (default 2): the scripted scout, archivist and guide, then the extra agents
 //   FIXTURE_TIER                  `member` (with FIXTURE_HOST=1) admits every request as a member of the host (admission
 //                                 access, the panes rooms and table), who lists only the "Support thread" room of the inbox
 //
@@ -233,6 +235,16 @@ const EXTRA = [
 	["diver", "Diver", "A brave diver"],
 	["actor", "Actor", "A dramatic actor"],
 ].slice(0, seats - 3);
+const councilSize = Math.min(
+	8,
+	Math.max(2, Number(process.env.FIXTURE_COUNCIL ?? 2)),
+);
+const councilMembers = [
+	"scout",
+	"archivist",
+	"guide",
+	...EXTRA.map(([name]) => name),
+].slice(0, councilSize);
 const dataDir = mkdtempSync(join(tmpdir(), "fixture-app-"));
 const workDir = join(dataDir, "work");
 // What the agents left in their workspace, for the files pane: code in several languages, a file with
@@ -719,7 +731,7 @@ for (let attempt = 0; ; attempt += 1) {
 		).createGroup({
 			name: "crew",
 			displayName: "Crew",
-			members: ["scout", "archivist"],
+			members: councilMembers,
 			host: "scout",
 		});
 		break;

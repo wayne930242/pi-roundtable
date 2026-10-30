@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
 import { partial } from "pi-roundtable/testing";
-import type { RoomView } from "../src/api-types.ts";
+import type { ConfigView, RoomView } from "../src/api-types.ts";
 import { GroupTable } from "./components/group-table.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
@@ -103,66 +103,138 @@ afterAll(async () => {
 /** The table mounts through a lazy chunk and a promise; give both time. */
 const settle = () =>
 	page.act(() => new Promise((done) => setTimeout(done, 60)));
+/** Waits until the 2D hall has drawn the seat of this agent: the first table of a run loads its chunk first. */
+const seatOf = async (name: string): Promise<SVGGElement | null> => {
+	for (let tries = 0; tries < 30; tries += 1) {
+		const found = query<SVGGElement>(`g.seat[aria-label^="${name}"]`);
+		if (found) return found;
+		await settle();
+	}
+	return null;
+};
+
+/** Waits, in steps of the table's own pace, until the 2D hall shows what a click asked of the camera. */
+const focused = async (): Promise<(string | null)[]> => {
+	const marked = () =>
+		all("g.seat[data-focus]").map((seat) => seat.getAttribute("aria-label"));
+	for (let tries = 0; tries < 30 && marked().length === 0; tries += 1)
+		await settle();
+	return marked();
+};
 const query = <T extends Element>(selector: string): T | null =>
 	page.container.querySelector<T>(selector);
 const all = <T extends Element>(selector: string): T[] => [
 	...page.container.querySelectorAll<T>(selector),
 ];
 
-test("clicking a seat turns the table to that agent: the address becomes #/table/<agent>", async () => {
-	load(agents(3));
-	await page.render(<TablePage />);
+/** The owner's table is a council: the agents are seated through a group, and its room answers in the box. */
+const CONFIG: ConfigView = {
+	title: "Console",
+	panes: ["table"],
+	timeZone: "UTC",
+	look: "modern",
+};
+const renderTable = () =>
+	page.render(
+		<ConfigContext.Provider value={CONFIG}>
+			<TablePage />
+		</ConfigContext.Provider>,
+	);
+
+const seatCouncil = async (count: number, over: Partial<RoomView> = {}) => {
+	const list = agents(count);
+	load([...list, group(NAMES.slice(0, count), over)]);
+	messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
+	setConnection(
+		partial<AppConnection>({
+			send: () => true,
+			focus: () => undefined,
+			say: () => undefined,
+		}),
+	);
+	await renderTable();
 	await settle();
-	const seat = query<SVGGElement>('g.seat[aria-label^="scout"]');
+};
+
+test("clicking a seat turns the camera to that knight and leaves the address as it was", async () => {
+	await seatCouncil(3);
+	const seat = await seatOf("scout");
 	expect(seat).not.toBeNull();
-	seat?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-	expect(decodeURIComponent(window.location.hash)).toBe("#/table/scout");
+	await page.act(() => {
+		seat?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+	});
+	expect(await focused()).toEqual(["scout (idle)"]);
+	expect(window.location.hash).toBe("");
 });
 
-test("the coordinator sits first in the seat list, whatever the list's order", async () => {
-	portrait = true;
-	load([...NAMES.slice(1, 12).map((n) => agent(n)), agent("guide")]);
-	await page.render(<TablePage />);
-	await settle();
-	const names = all<HTMLButtonElement>(".rt-table-list button").map(
-		(button) => button.textContent,
+test("a council seats its members, the coordinator first, and no more than eight, with no +N seat", async () => {
+	await seatCouncil(12);
+	const seats = all("g.seat").map((seat) => seat.getAttribute("aria-label"));
+	expect(seats).toHaveLength(8);
+	expect(seats[0]).toBe("guide (idle)");
+	expect(seats.some((label) => label?.startsWith("+"))).toBe(false);
+});
+
+test("an agent that is muted still sits when the council has it: mute only stops push", async () => {
+	const list = agents(3).map((one) =>
+		one.name === "scout" ? { ...one, muted: true as const } : one,
 	);
-	expect(names).toHaveLength(12);
-	expect(names[0]).toBe("guide (idle)");
+	load([...list, group(["guide", "scout", "mason"])]);
+	messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
+	setConnection(
+		partial<AppConnection>({
+			send: () => true,
+			focus: () => undefined,
+			say: () => undefined,
+		}),
+	);
+	await renderTable();
+	await settle();
+	expect(all("g.seat")).toHaveLength(3);
+});
+
+test("an agent that is not in the council is not drawn", async () => {
+	load([...agents(4), group(["guide", "scout"])]);
+	messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
+	setConnection(
+		partial<AppConnection>({
+			send: () => true,
+			focus: () => undefined,
+			say: () => undefined,
+		}),
+	);
+	await renderTable();
+	await settle();
+	expect(all("g.seat").map((seat) => seat.getAttribute("aria-label"))).toEqual([
+		"guide (idle)",
+		"scout (idle)",
+	]);
 });
 
 test("the seat pictures go in as data URIs, one per seat", async () => {
-	load(agents(3));
-	await page.render(<TablePage />);
-	await settle();
+	await seatCouncil(3);
 	const hrefs = all("image").map((image) => image.getAttribute("href") ?? "");
 	expect(hrefs).toHaveLength(3);
 	for (const href of hrefs) expect(href).toStartWith("data:image/svg+xml");
 	expect(new Set(hrefs).size).toBe(3);
 });
 
-test("portrait with 11 seats shows the seat list under the table", async () => {
+test("upright, even with eight seats, no seat list stands under the table", async () => {
 	portrait = true;
-	load(agents(11));
-	await page.render(<TablePage />);
-	await settle();
-	const buttons = all<HTMLButtonElement>(".rt-table-list button");
-	expect(buttons).toHaveLength(11);
-	buttons[1]?.click();
-	expect(decodeURIComponent(window.location.hash)).toBe("#/table/scout");
-});
-
-test("portrait with 10 seats, or landscape with 11, needs no list", async () => {
-	portrait = true;
-	load(agents(10));
-	await page.render(<TablePage />);
-	await settle();
-	expect(query(".rt-table-list")).toBeNull();
-	portrait = false;
-	await page.render(<></>);
-	load(agents(11));
-	await page.render(<TablePage />);
-	await settle();
+	await seatCouncil(8);
+	expect(all("g.seat")).toHaveLength(8);
 	expect(query(".rt-table-list")).toBeNull();
 });
 
@@ -236,9 +308,7 @@ test("in the scene a group's strip is gone: the camera is the table", async () =
 });
 
 test("a seat's picture is drawn again once its face changes, and not before 300 ms", async () => {
-	load(agents(3));
-	await page.render(<TablePage />);
-	await settle();
+	await seatCouncil(3);
 	const picture = () =>
 		query<SVGImageElement>('g.seat[aria-label^="scout"] image')?.getAttribute(
 			"href",
@@ -267,9 +337,7 @@ test("a seat's picture is drawn again once its face changes, and not before 300 
 
 test("under reduced motion the table stands still, and the seat pictures carry no live overlays", async () => {
 	calm = true;
-	load(agents(3));
-	await page.render(<TablePage />);
-	await settle();
+	await seatCouncil(3);
 	expect(query(".t2d")?.classList.contains("reduced")).toBe(true);
 	// Drawn still: the picture holds its one face, never the live character's overlays.
 	const href =
@@ -280,9 +348,7 @@ test("under reduced motion the table stands still, and the seat pictures carry n
 });
 
 test("the seat pictures are frameless figures and carry no id that two of them could share", async () => {
-	load(agents(4));
-	await page.render(<TablePage />);
-	await settle();
+	await seatCouncil(4);
 	const ids = all("image").flatMap((image) => {
 		const href = image.getAttribute("href") ?? "";
 		const svg = decodeURIComponent(href.slice(href.indexOf(",") + 1));
@@ -301,6 +367,7 @@ test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold p
 		agent("guide", { displayName: "\u9a0e\u58eb" }),
 		agent("scout"),
 		agent("mason"),
+		group(["guide", "scout", "mason"]),
 	]);
 	messages = spyOn(api, "messages").mockResolvedValue({
 		messages: [],
@@ -323,10 +390,14 @@ test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold p
 				look: "modern",
 			}}
 		>
-			<TablePage focus="scout" />
+			<TablePage />
 		</ConfigContext.Provider>,
 	);
-	await settle();
+	const seat = await seatOf("scout");
+	await page.act(() => {
+		seat?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+	});
+	expect(await focused()).toEqual(["scout (idle)"]);
 	expect(query(".t2d")).not.toBeNull();
 	expect(query("canvas")).toBeNull();
 	for (const image of all("image"))
@@ -341,8 +412,5 @@ test("without WebGL the ring is the 2D hall: standees cut out with a rim, gold p
 			(text.getAttribute("font-family") ?? "").includes("PingFang TC"),
 		),
 	).toBe(true);
-	expect(
-		all("g.seat[data-focus]").map((seat) => seat.getAttribute("aria-label")),
-	).toEqual(["scout (idle)"]);
 	expect(query(".t2d")?.classList.contains("focus")).toBe(true);
 });

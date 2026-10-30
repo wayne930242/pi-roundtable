@@ -9,7 +9,7 @@ import { THINKING_LEVELS, type ThinkingLevel } from "../models.ts";
 export const MAX_PROMPT_CHARS = 4_000;
 export const MAX_AVATAR_PROMPT_CHARS = 1_000;
 export const MIN_GROUP_MEMBERS = 2;
-export const MAX_GROUP_MEMBERS = 6;
+export const MAX_GROUP_MEMBERS = 8;
 
 export type AgentStatus = "active" | "archived";
 

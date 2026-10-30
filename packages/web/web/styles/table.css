@@ -618,3 +618,25 @@
 		transition: none;
 	}
 }
+
+/* The council sheet: the saved councils, and the tick list that edits the one on the table. */
+.council-chip {
+	max-width: 14rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.council-row {
+	width: 100%;
+	text-align: start;
+}
+.council-row[aria-current="true"] {
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.council-count {
+	display: block;
+}
+.council-sheet h3 {
+	margin: 0;
+	font-size: var(--text-sm);
+}

@@ -99,8 +99,6 @@ export interface TableOptions {
 	focus?: string | null;
 	/** The camera was turned by the person (a zoom, a swipe in a close-up), not by the page: the page follows it. `null` is back to the whole ring. */
 	onFocus?: (id: string | null) => void;
-	/** The "+N" podium was tapped: the page shows the agents the ring leaves out. */
-	onMore?: () => void;
 }
 
 export interface TableStats {

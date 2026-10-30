@@ -22,7 +22,7 @@ sidebar:
 | --- | --- |
 | `name` | 永久的名字，規則跟 agent 的名字一樣。不能跟任何 agent 或群組同名。 |
 | `display_name` | 群組顯示的名字，1 到 32 個字元。 |
-| `members` | 2 到 6 個不同的 agent，必須存在且未封存。 |
+| `members` | 2 到 8 個不同的 agent，必須存在且未封存。 |
 | `host` | 選填，必須是成員之一。沒指定的話，有叫 `coordinator` 的成員就由它擔任，否則由第一個成員擔任。 |
 | `category` | 選填。預設是 `Groups`，也可以是 `Groups-<suffix>`。類別不存在就會建立。 |
 
@@ -60,7 +60,7 @@ sidebar:
 
 使用的工具是 `group_update`，它能改顯示名稱、成員或主持人。
 
-- 新的成員清單會取代舊的，仍然要是 2 到 6 個不同的 agent。
+- 新的成員清單會取代舊的，仍然要是 2 到 8 個不同的 agent。
 - 主持人必須是成員。移除了主持人又沒指定新的，就由第一個成員接任。
 - 群組的 `name` 不能改。
 
@@ -70,5 +70,13 @@ sidebar:
 - 封存群組，成員維持原樣。
 
 見[封存與頻道](/zh-tw/agents/archive-and-channels/)。
+
+## 網頁 app 的圓桌
+
+網頁 app 的圓桌一次顯示一個群組，稱為評議會：成員（最多八位）站在座位上，群組的聊天室以對話框顯示在下方。
+在那裡送出的訊息會依上述規則開始一輪。
+用面板勾選成員，可以直接改寫這個群組，或把勾選的結果另存成另一個群組；在那裡存的群組會和其他群組一樣開一個 Discord 頻道。
+在 Discord 或用 `group_create` 建的群組，會立刻出現在評議會清單裡。
+靜音騎士只會停止它的推播，不再讓它離開圓桌。
 
 {/* Sources: src/core/agents/agent-tools.ts:92-96, src/core/agents/agent-tools.ts:218-262, src/core/agents/team-editing.ts:176-209, src/core/agents/agent-store.ts:241-326, src/core/agents/group-round.ts:1-60, src/core/agents/group-round.ts:68-100, src/core/agents/group-turns.ts:25-120, src/core/agents/agent-prompt.ts:41-47, src/core/agents/agent-prompt.ts:53-60, src/core/agents/team-lifecycle.ts:50-62, src/core/agents/team-layout.ts:44-55, src/core/i18n/conversation.ts:15-17 */}

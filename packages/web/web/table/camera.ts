@@ -7,8 +7,8 @@
 
 export const TAU = Math.PI * 2;
 
-/** The most agents the ring seats; more of them stand behind one "+N" podium that opens the list. */
-export const MAX_SEATED = 12;
+/** The most agents the ring seats: a council is at most this many, and a table never shows a "+N" seat. */
+export const MAX_SEATED = 8;
 
 export interface Shot {
 	/** Where the camera stands on the ring, in radians from the owner's podium (which is at 0). */
@@ -36,20 +36,17 @@ export function normalizeAngle(angle: number): number {
 export const shortestArc = (from: number, to: number): number =>
 	normalizeAngle(to - from);
 
-/** The slots of the ring: the owner's podium, the seated agents, and a "+N" podium when some are left out. */
+/** The slots of the ring: the owner's podium and the seated agents, at most `MAX_SEATED` of them. */
 export interface Slots {
 	/** Every podium, the owner's included. */
 	count: number;
 	/** The agents standing on the ring. */
 	seated: number;
-	/** How many agents are left out and stand behind the "+N" podium. */
-	more: number;
 }
 
 export function slotsFor(agents: number): Slots {
 	const seated = Math.min(Math.max(agents, 0), MAX_SEATED);
-	const more = Math.max(agents - MAX_SEATED, 0);
-	return { count: 1 + seated + (more > 0 ? 1 : 0), seated, more };
+	return { count: 1 + seated, seated };
 }
 
 /** The most the podiums of a small table stand apart, in radians: the agents sit as a council facing the owner, not spread over the whole ring. */

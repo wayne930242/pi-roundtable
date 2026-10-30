@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The round table is a council. The owners' table shows one agent group with its members (2 to 8) at the podiums and the group's room in the dialogue box, so a message sent there starts a round under the group's rules; there is no second store. A header chip (**Council: <name> ▾**) opens the council sheet: the saved councils (the groups), a tick list of the knights with a counter (**3 of 8 picked**; the ninth tick is refused), **Done** to save the ticks into the council on the table in place, and **Save as a new council** to make another group (which opens its Discord channel like every group). `#/table/<group>` is the council; without an address the table shows the council this device chose last, or the first group. With no group yet the table says *No council yet* and the sheet starts from the knights that were not muted. `FIXTURE_COUNCIL` sizes the fixture's group.
+- A seat's menu (long press, right click, Menu key) has **Private chat** and **Remove from the council** (it saves the group without the knight; the last two members cannot be removed, the council is offered for archiving).
+- A hosted table (a member or an admin) has an **All rooms** button in the header that opens the room list.
+
+### Changed
+
+- A group holds 2 to 8 members (it was 2 to 6), on the web and on Discord. A round still holds at most 8 replies.
+- A tap on a seat turns the camera to that knight and no longer opens the knight's room; the address stays as it was. Hold the seat for the private chat.
+- Mute only stops push. It no longer takes a knight off the table: who sits is the council's members. Owners who used mute to thin out the table see their first group, or the empty state, after this change.
+- The table seats at most 8 and never shows a "+N" podium, on the owners' table and on a hosted one (the hosted table seats the 8 newest rooms; the rest are in the room list).
+- The owners' table no longer seats host rooms (a support desk's tickets, say); they are in the room list and the notices. A hosted table is unchanged otherwise.
+
+### Removed
+
+- The **Who's at the table** sheet and the seat menu's **Leave the table**.
+
 ## [0.26.3] - 2026-10-30
 
 ### Added

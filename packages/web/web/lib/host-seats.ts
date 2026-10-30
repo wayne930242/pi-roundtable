@@ -10,11 +10,11 @@ import { useConnection } from "./socket.ts";
 
 // What the round table seats for a person who is not an owner. The agent rooms are the owners', so
 // their table seats the host rooms they may open: each kind's own list, which is the room list's
-// access and no rule of the table's. A seat is a room, not an agent; its state comes from the
+// access and no rule of the table's. An owner's table is a council's and seats no host room. A seat is a room, not an agent; its state comes from the
 // room's own frames, which reach the socket only once the person has subscribed to a room they may read.
 
-/** The most seats the scene draws before its "+N" podium; only these rooms are followed. */
-export const SEATS_SHOWN = 12;
+/** The most seats the scene draws; only these rooms are followed, and the rest are in the room list. */
+export const SEATS_SHOWN = 8;
 
 interface HostSeats {
 	/** The rooms of the kinds' lists, newest first, as the table's roster takes them. */
@@ -42,12 +42,6 @@ export function resetHostSeats(): void {
 export function useHostedTable(): boolean {
 	const tier = useContext(ConfigContext)?.tier;
 	return tier !== undefined && tier !== "owner";
-}
-
-/** Whether the table seats host rooms: a person below the owners always does, an owner where the host has kinds of room to list. */
-export function useSeatsHostRooms(): boolean {
-	const config = useContext(ConfigContext);
-	return useHostedTable() || (config?.kinds?.length ?? 0) > 0;
 }
 
 /** A host room as a seat: the room's key is its name's home, and its title is the plate. */
