@@ -330,7 +330,15 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const authenticator = createAuthenticator({
 		auth: settings.auth,
 		identify,
-		...(oidc && sessions ? { oidc: { login: oidc, sessions } } : {}),
+		...(oidc && sessions
+			? {
+					oidc: {
+						login: oidc,
+						sessions,
+						reauthHours: settings.auth.reauthHours,
+					},
+				}
+			: {}),
 		origin: settings.origin,
 		mount: settings.mount,
 		title: settings.title,

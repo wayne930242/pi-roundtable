@@ -423,6 +423,25 @@ describeDb("signing in with an OpenID Connect provider", () => {
 		).toBe("none");
 	});
 
+	test("an open socket's recheck applies reauthHours as a request does", async () => {
+		const t = await setup({ reauthHours: 12 });
+		const cookie = cookiesOf((await t.signIn()).callback);
+		const credential = await t.login.credential(
+			new Request(`${ORIGIN}${MOUNT}/api/session`, {
+				headers: { cookie },
+			}),
+		);
+		const id = (credential as { session: string }).session;
+		const liveId = async () => id;
+		expect(await sessions.alive(await liveId(), 12)).toBe(true);
+		clock += 11 * 3_600_000;
+		expect(await sessions.alive(await liveId(), 12)).toBe(true);
+		clock += 2 * 3_600_000;
+		// The session itself is far from its idle limit, yet the provider's word has lapsed.
+		expect(await sessions.alive(await liveId(), 12)).toBe(false);
+		expect(await sessions.alive(await liveId())).toBe(true);
+	});
+
 	test("storeClaims keeps only the named claims, replaced at each sign-in, and never logs them", async () => {
 		const t = await setup({ storeClaims: ["email"] });
 		t.idp.issue.claims = {
