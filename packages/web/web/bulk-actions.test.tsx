@@ -95,10 +95,16 @@ afterAll(async () => {
 	await page.unmount();
 	await releaseDom();
 });
+/** Zeroes every count: an earlier file's rooms may still hold some. */
+const clearUnread = () =>
+	seedUnread(
+		Object.fromEntries(Object.keys(unreadCounts()).map((k) => [k, 0])),
+	);
 beforeEach(() => {
 	window.innerWidth = 1280;
 	stored.clear();
 	reloadCollapsed();
+	clearUnread();
 });
 afterEach(async () => {
 	for (const spy of spies.splice(0)) spy.mockRestore();
@@ -112,9 +118,7 @@ afterEach(async () => {
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
 	// What the rooms carried is gone with them; the counts of other rooms are cleared by hand.
-	seedUnread(
-		Object.fromEntries(Object.keys(unreadCounts()).map((k) => [k, 0])),
-	);
+	clearUnread();
 });
 
 const settle = (ms = 40) =>
