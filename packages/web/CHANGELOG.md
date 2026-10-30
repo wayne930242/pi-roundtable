@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- README and the `Notices.raise` doc: a notice's `tag` is the dedupe key, the push tag and the acknowledgement key, visible to the people the notice is for; put no private id in it.
 - `HostRoomKind.buttons` may return a promise, for a host whose rights source is async.
 - README: `WebApp.rooms`, `.notices`, `.pages`, `.onboarding` and `.push` throw until the plugin started; `notices.onAck` is available only after start.
 - An ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).

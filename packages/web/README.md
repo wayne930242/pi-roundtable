@@ -381,6 +381,8 @@ Setup:
 
 A notice is something that waits on one person, such as a customer's message or a card to approve. A host raises one with `Notices.raise({ tag, people, title, open, urgency?, via? })` and takes it back with `Notices.resolve(tag)`; `renotify` adds people to an open one. `open` names exactly where a tap goes: `{ room, message? }` (the room, scrolled to that message) or `{ page, query? }`. A notice appears in the bell, with a count on the app icon where the device allows it, and is pushed according to its `urgency`: a normal one waits in the bell during the person's quiet hours, an urgent one rings and stays on screen until dealt with. `via` narrows a notice to named transports (see `push.transports`).
 
+The `tag` is the notice's dedupe key, the tag of its push and the key of its acknowledgement, so it is not secret from the people the notice is for: their browser sees it. Do not put an id that those people should not see in it (a customer's or a group's id); use a hash or a counter of your own instead.
+
 Tapping a notification or a bell row opens exactly that room or page, whether the app is open (its window comes forward and goes there) or closed (a new window opens at the address; a signed-out person signs in and lands there). A device reports when a notice arrived and when it was opened, which is how the app knows a test notification reached the device.
 
 The profile page (`profile`) shows the person's name, picture and tier, the accounts they linked and the ones they can link or unlink, **Shown as** (which linked account names them in the app, or Automatic), and their own quiet hours with a test notification. An account that the host's configuration links cannot be unlinked there.

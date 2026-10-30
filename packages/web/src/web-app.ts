@@ -295,7 +295,11 @@ export interface HostPage {
 /** Person-addressed notices with state: the bell, the badge, push. */
 export interface Notices {
 	raise(notice: {
-		/** The dedupe key: raising it again updates it and pushes again. */
+		/**
+		 * The dedupe key: raising it again updates it and pushes again. It is also the push tag
+		 * and the acknowledgement key, so the people the notice is for can see it: put no private
+		 * id in it.
+		 */
 		tag: string;
 		/** Principal ids. */
 		to: readonly string[];
