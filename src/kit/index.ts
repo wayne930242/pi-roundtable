@@ -2,6 +2,7 @@
 
 export type { ChannelQueue } from "./channels.ts";
 export {
+	answersAuthor,
 	attachmentsOf,
 	channelQueue,
 	channelSegment,

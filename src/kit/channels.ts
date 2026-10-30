@@ -18,4 +18,5 @@ export { attachmentsOf } from "../core/attachments/turn-attachments.ts";
 export type { ChannelQueue } from "../core/routing/channel-queue.ts";
 export { channelQueue } from "../core/routing/channel-queue.ts";
 export { withReference } from "../core/routing/message-text.ts";
+export { answersAuthor } from "../core/routing/peer-bots.ts";
 export { outcome, settleTurn } from "../core/routing/settle-turn.ts";

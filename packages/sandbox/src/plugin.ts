@@ -7,7 +7,11 @@ import {
 	type SandboxChannelContext,
 } from "./channel-context.ts";
 import { SandboxChannelStore } from "./channel-store.ts";
-import { type SandboxReplyText, sandboxClaim } from "./claim.ts";
+import {
+	type SandboxReplyCard,
+	type SandboxReplyText,
+	sandboxClaim,
+} from "./claim.ts";
 import { sandboxCommands } from "./commands.ts";
 import { SandboxRuntime, type SandboxRuntimeOptions } from "./runtime.ts";
 
@@ -33,6 +37,19 @@ export interface SandboxOptions
 	 * fails the turn.
 	 */
 	replyText?: SandboxReplyText;
+	/**
+	 * Draws a PNG card for each successful reply on the host, after `replyText`, from the text that
+	 * is posted; the card is posted before the text. Return undefined for none. A throw or a
+	 * rejection is logged and the reply is posted without a card. Failure texts get no card.
+	 */
+	replyCard?: SandboxReplyCard;
+	/**
+	 * Off by default. On, the bots the host lists under `discord.peerBots` are answered like a
+	 * person when they mention the bot or reply to it, within the host's round cap; any other bot
+	 * is still ignored. The host's allowlist decides who; this only opens the sandbox channels to
+	 * them, and the peer's text is as untrusted as a guest's.
+	 */
+	peerBots?: boolean;
 	/**
 	 * Off by default. On, a turn in a Discord server channel starts with what others said in that
 	 * channel since the assistant last posted, read through the Discord plugin's `channelContext`
@@ -100,6 +117,17 @@ export function sandbox(options: SandboxOptions) {
 						runtime,
 						surfaces: context.surfaces,
 						...(options.replyText ? { replyText: options.replyText } : {}),
+						...(options.replyCard
+							? {
+									replyCard: options.replyCard,
+									reportCardFailure: (channel: ChannelKey, error: unknown) =>
+										context.logger.warn(
+											{ channel, err: error },
+											"sandbox replyCard failed; the reply is posted without a card",
+										),
+								}
+							: {}),
+						...(options.peerBots ? { peerBots: true } : {}),
 						...(contextOptions && discord
 							? {
 									channelContext: (message) =>

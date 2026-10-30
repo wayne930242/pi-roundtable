@@ -356,6 +356,10 @@ export type {
 	ConversationTurns,
 } from "./core/routing/conversation-turns.ts";
 export type {
+	PeerBotEntry,
+	PeerBotsConfig,
+} from "./core/routing/peer-bots.ts";
+export type {
 	AgentChange,
 	AgentDirectory,
 	AgentServer,

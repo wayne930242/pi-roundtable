@@ -213,6 +213,13 @@ Tune it under `discord.channelContext`, or set `channelContext: false` to turn i
 | `foreignWebhook` | none | `(webhookId) => boolean \| "skip"`: posts through the webhooks it returns true for are read as other people's messages, not the assistant's; `"skip"` drops a webhook's posts as if absent, without ending the window (code only) |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`: how many images of the kept messages are fetched for the turn, at most 4 |
 
+By default the assistant ignores every other bot. To let separate bots talk, list the ones to answer by user id under `discord.peerBots`:
+
+| `discord.peerBots` | Default | What it is |
+| --- | --- | --- |
+| `allow` | none | Bot user ids, each as a string or `{ id, guilds?, channels? }` to limit it to servers or channels. Explicit ids only: there is no wildcard and no "all bots", and a bad id stops the start. A listed bot's mention or reply is answered like a guest's, as far as `access` serves it |
+| `maxRounds` | `3` | Messages from listed bots answered in a row in one channel; a person's message starts the count over |
+
 When a conversation is started over in a server channel or thread, the assistant posts a short divider there so the next turn does not read what came before; direct messages get none.
 
 | `discord.freshMarker` | Default | What it is |

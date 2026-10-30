@@ -56,6 +56,14 @@ export interface InboundMessage {
 	/** How the author appears in the channel, for example a server nickname. */
 	authorName: string;
 	authorIsBot: boolean;
+	/**
+	 * Set by the router when a bot wrote the message and the host lists that bot as a peer
+	 * (`discord.peerBots`) for this channel, with its rounds not used up. Such a message is
+	 * resolved to a `speaker` like a person's, and a claim that answers people may answer it too;
+	 * a claim that answers a peer should still ask for a mention or a reply to the bot. Only the
+	 * router sets it; a surface's own value is dropped.
+	 */
+	peerBot?: true;
 	/** The roles the author holds in the message's space; absent in direct messages. */
 	authorRoleIds?: readonly string[];
 	/**

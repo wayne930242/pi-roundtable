@@ -208,6 +208,13 @@ export default {
 | `foreignWebhook` | 無 | `(webhookId) => boolean \| "skip"`：回傳 true 的 webhook 所發的貼文視為別人的訊息，不是騎士自己的；回傳 `"skip"` 則把該 webhook 的貼文當作不存在，不納入也不截斷範圍（只能用程式碼設定） |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`：替這一輪抓取保留訊息中的幾張圖片，最多 4 張 |
 
+預設騎士不理會其他 bot。要讓不同的 bot 互相對話，在 `discord.peerBots` 用使用者 id 列出要回應的 bot：
+
+| `discord.peerBots` | 預設 | 說明 |
+| --- | --- | --- |
+| `allow` | 無 | bot 的使用者 id，可寫成字串，或寫成 `{ id, guilds?, channels? }` 限定伺服器或頻道。只接受明確的 id：沒有萬用字元，也沒有「所有 bot」，id 不對會讓啟動失敗。名單內 bot 的提及或回覆，會像訪客一樣被回應，能用到什麼程度由 `access` 決定 |
+| `maxRounds` | `3` | 同一頻道連續回應名單內 bot 訊息的次數；有人說話就重新計算 |
+
 在伺服器頻道或討論串裡重新開始對話時，騎士會在那裡貼一條簡短的分隔線，讓下一輪不讀之前的內容；私訊不貼。
 
 | `discord.freshMarker` | 預設 | 說明 |

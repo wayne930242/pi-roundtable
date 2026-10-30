@@ -334,6 +334,7 @@ export async function defineRoundtable(
 			judgeModel: judgeThrough(modelRuntime, config.judge.model),
 			apiKey: (provider) => registry.getApiKeyForProvider(provider),
 			drain: { limitMs: config.drainMs },
+			...(discord?.peerBots ? { peerBots: discord.peerBots } : {}),
 			...(overrides.aborted ? { aborted: overrides.aborted } : {}),
 		},
 		plugins: [

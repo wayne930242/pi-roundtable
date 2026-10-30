@@ -39,6 +39,7 @@ import {
 	type ConversationTurns,
 	conversationTurns,
 } from "./routing/conversation-turns.ts";
+import { PeerBots } from "./routing/peer-bots.ts";
 import { surfacePort } from "./routing/surface-port.ts";
 import { refuseHostAccess } from "./runtime/chat-only.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
@@ -226,6 +227,9 @@ export class Linkage {
 			queue: this.queue,
 			surfaces: this.#surfaces(),
 			logger,
+			...(this.#options.peerBots
+				? { peerBots: new PeerBots(this.#options.peerBots) }
+				: {}),
 			...(this.#options.conversations?.forwardJoinMs === undefined
 				? {}
 				: { forwardJoinMs: this.#options.conversations.forwardJoinMs }),

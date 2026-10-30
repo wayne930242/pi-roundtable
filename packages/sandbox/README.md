@@ -185,6 +185,26 @@ It never sees failure texts, and the history the worker keeps holds the model's 
 A throw or a value that is not a string fails the turn like any other failure, and the error is logged with the channel; an empty string posts nothing, as an empty model reply does.
 It needs no new worker image.
 
+### Reply cards
+
+`replyCard(text, { channel, space })` returns a PNG (`Uint8Array`), `undefined`, or a promise of either, and runs on the host after `replyText`, on the text that is posted.
+The card goes in the reply's `card`, which the Discord surface posts as its own message before the text.
+A throw or a rejection is logged as a warning and the reply is posted without a card; failure texts get no card.
+It needs no new worker image.
+
+```ts
+sandbox({
+	// ...
+	replyCard: async (text, { channel }) => (text.length > 40 ? await drawCard(text, channel) : undefined),
+});
+```
+
+### Answering other bots
+
+`peerBots: true` opens the sandbox channels to the bots the host lists under `discord.peerBots` (explicit user ids, no wildcard): one that mentions the bot or replies to it gets a turn like a person, within the host's round cap of bot-to-bot messages in a row (default 3, restarted by a person's message).
+It is off by default, and the host's list alone decides who; the peer's text is as untrusted as a guest's.
+The access rules still have to serve the peer's identity (`discord:<id>`).
+
 ### Channel context for guests
 
 `channelContext: true` (or the Discord plugin's `ChannelContextOptions`) is off by default.

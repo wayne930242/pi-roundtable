@@ -2770,6 +2770,51 @@ export function tavern(channelIds: readonly string[]) {
 ```
 <!-- /example -->
 
+### Peer bots: answering other bots
+
+Every bot's message is ignored by default, so two bots in one channel never talk to each other.
+A host opts in by listing the other bots it answers, by user id, in `discord.peerBots` (or the host option `peerBots`):
+
+```ts
+discord: {
+	// ...
+	peerBots: {
+		// Explicit ids only: there is no wildcard and no "all bots". Left out, no bot is answered.
+		allow: [
+			"800000000000000001",
+			{ id: "800000000000000002", guilds: ["900000000000000001"], channels: ["700000000000000001"] },
+		],
+		maxRounds: 3, // default 3
+	},
+},
+```
+
+An id that is not a Discord id (17 to 20 digits) stops the start with a `ConfigError` that names its place in the list.
+The router, not each claim, applies the list: for a message from a listed bot it sets `InboundMessage.peerBot` and resolves a `speaker` for it through the identity service as for a person, so the host's `access` rules still decide whether that bot is served and at which tier (`discord:<id>` under `access.members` or `access.admins`, or `everyone` and `provisioning: "admitted"`); a bot the rules do not serve gets no turn. A webhook is never a peer, and a surface's own `peerBot` is dropped.
+A channel answers at most `maxRounds` of the listed bots' messages in a row, counted when a claim takes the message; a person's message in the channel starts the count over, and the messages after the cap are ignored (logged at info).
+Channel context is unchanged: its window still starts after the assistant's last post and other bots' messages are still cut at `botMessageChars`.
+
+The agent server answers a peer that mentions the agent or replies to it, like a guest. A claim of your own opts in where it once checked `!message.authorIsBot`, with `answersAuthor(message)` from `pi-roundtable/kit`, which is true for a person and for a flagged peer that mentions the bot or replies to it:
+
+```ts
+import { answersAuthor } from "pi-roundtable/kit";
+
+// A status-board claim: people and the listed build bot may ask for the latest run.
+const statusClaim: ChannelClaim = {
+	name: "status-board",
+	priority: 50,
+	owns: (channel) => channel === "discord:700000000000000001",
+	admit: (message) =>
+		answersAuthor(message) && message.speaker
+			? { kind: "turn", run: () => answer(message), failure: "status turn failed" }
+			: undefined,
+	startFresh: async () => "status-board",
+};
+```
+
+A reply that contains `<@id>` of a peer pings it, since replies allow user mentions; without that the peer's `mentionsBot` stays false.
+In a test, `testPlugin({ peerBots: { allow: [...] } })` puts the same list on the test router.
+
 ### Posting through `DISCORD.poster`
 
 `DISCORD.poster` (`DiscordPoster`, from `pi-roundtable/discord`) is Discord's REST API for a plugin's own posts, over the Discord plugin's own client.
@@ -4353,6 +4398,8 @@ Import from the entries listed below; source area files are internal.
 | `OwnerAnswer` | `pi-roundtable` | type |
 | `OwnerPrompts` | `pi-roundtable` | type |
 | `OwnerQuestion` | `pi-roundtable` | type |
+| `PeerBotEntry` | `pi-roundtable` | type |
+| `PeerBotsConfig` | `pi-roundtable` | type |
 | `PendingConfirmation` | `pi-roundtable` | type |
 | `PerPrincipalLimits` | `pi-roundtable` | type |
 | `PersonDisplay` | `pi-roundtable` | type |
@@ -4638,6 +4685,7 @@ Import from the entries listed below; source area files are internal.
 | `VirtualServer` | `pi-roundtable/kit` | type |
 | `YesNoQuestion` | `pi-roundtable/kit` | type |
 | `activeToolsExtension` | `pi-roundtable/kit` | value |
+| `answersAuthor` | `pi-roundtable/kit` | value |
 | `approvalCard` | `pi-roundtable/kit` | value |
 | `approvalDetails` | `pi-roundtable/kit` | value |
 | `archiveSessions` | `pi-roundtable/kit` | value |

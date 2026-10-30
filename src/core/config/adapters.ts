@@ -1,5 +1,6 @@
 import type { ChannelContextOptions } from "../contract/channel-context.ts";
 import { ConfigError } from "../domain/errors.ts";
+import { type PeerBotsConfig, peerBotsShape } from "../routing/peer-bots.ts";
 import {
 	bool,
 	guarded,
@@ -52,6 +53,14 @@ export interface DiscordConfig {
 	 */
 	channelContext?: ChannelContextOptions | false;
 	/**
+	 * The other bots whose mentions and replies the host answers like a guest's, so separate bots
+	 * can talk to each other. Explicit Discord user ids only, each for every server or limited to
+	 * some; there is no wildcard and no "all bots", and left out, no bot is answered. A peer is
+	 * served only as far as `access` serves its identity (`discord:<id>`), and a channel answers at
+	 * most `maxRounds` (default 3) of their messages in a row until a person posts.
+	 */
+	peerBots?: PeerBotsConfig;
+	/**
 	 * The divider the assistant posts in a server channel or thread when its conversation starts
 	 * over (a new conversation by an owner's command), which ends the window channel context reads;
 	 * never in a direct message. Default `─── new conversation ───`; `false` posts none.
@@ -101,6 +110,7 @@ export interface ResolvedDiscord {
 	agentSpeakers?: "everyone" | "owners";
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
 	channelContext: NonNullable<DiscordConfig["channelContext"]>;
+	peerBots?: PeerBotsConfig;
 	freshMarker?: string | false;
 	formatting?: string | false;
 	cardGraceSeconds: number;
@@ -133,6 +143,7 @@ export function resolvedDiscord(
 			? {}
 			: { agentSpeakers: discord.agentSpeakers }),
 		channelContext: discord.channelContext ?? {},
+		...(discord.peerBots === undefined ? {} : { peerBots: discord.peerBots }),
 		...(discord.freshMarker === undefined
 			? {}
 			: { freshMarker: discord.freshMarker }),
@@ -180,6 +191,7 @@ export const discordShape = shape({
 	agentMemory: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 	agentSpeakers: optional(oneOf<"everyone" | "owners">("everyone", "owners")),
 	channelContext: optional(orOff(channelContextShape)),
+	peerBots: optional(peerBotsShape),
 	freshMarker: optional(orOff(text)),
 	formatting: optional(orOff(text)),
 	cardGraceSeconds: optional(integer(1, 86_400)),
