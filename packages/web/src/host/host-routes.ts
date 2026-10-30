@@ -1,4 +1,4 @@
-import type { HostCardView, RoomMessage } from "../api-types.ts";
+import type { HostCardView, RoomMessage, SendWording } from "../api-types.ts";
 import { bad, bodyOf, HttpError } from "../app/api-http.ts";
 import { PAGE_LIMIT } from "../app/room-log.ts";
 import { json } from "../http.ts";
@@ -244,20 +244,53 @@ async function open(
 		ctx.log.page(room, undefined, OPEN_LIMIT),
 		ctx.cards.list(room),
 	]);
-	const cards: HostCardView[] = stored.map((card) =>
-		cardView(viewer, found, access, card),
+	const cards: HostCardView[] = await Promise.all(
+		stored.map((card) => cardView(viewer, found, access, card)),
 	);
 	return {
 		room,
 		kind: found.kind.kind,
 		id: found.id,
 		access: { send: [...access.send], act: access.act },
+		...wordingOf(found.kind.sendWording),
 		header,
 		messages: withExpiredFiles(page.messages, ctx.files),
 		more: page.more,
 		cards,
 		reads: await readsOf(ctx.reads, room, viewer.principalId, ctx.nameOf),
 		...(cursor === undefined ? {} : { cursor }),
+	};
+}
+
+/** The longest label and placeholder a kind may give, in characters. */
+const LABEL_CHARS = 40;
+const PLACEHOLDER_CHARS = 100;
+
+const trimmed = (value: unknown, chars: number): string | undefined =>
+	typeof value === "string"
+		? Array.from(value.trim()).slice(0, chars).join("") || undefined
+		: undefined;
+
+/** The kind's wording of the two ways to write as the page may show it: text only, cut short; nothing when it gave none. */
+function wordingOf(wording: SendWording | undefined): {
+	wording?: SendWording;
+} {
+	const note = trimmed(wording?.note?.placeholder, PLACEHOLDER_CHARS);
+	const label = trimmed(wording?.turn?.label, LABEL_CHARS);
+	const turn = trimmed(wording?.turn?.placeholder, PLACEHOLDER_CHARS);
+	if (!note && !label && !turn) return {};
+	return {
+		wording: {
+			...(note ? { note: { placeholder: note } } : {}),
+			...(label || turn
+				? {
+						turn: {
+							...(label ? { label } : {}),
+							...(turn ? { placeholder: turn } : {}),
+						},
+					}
+				: {}),
+		},
 	};
 }
 

@@ -14,7 +14,7 @@ import {
 	SKILLS,
 } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
-import type { PaneName } from "./api-types.ts";
+import type { KindLinkView, PageLinkView, PaneName } from "./api-types.ts";
 import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
 import { APP_PROTOCOL } from "./app/protocol.ts";
 import { UPLOAD_FRAMING_BYTES } from "./app/uploads.ts";
@@ -44,7 +44,7 @@ import {
 } from "./options.ts";
 import { loadVapid } from "./push/vapid.ts";
 import { accessVisitors, consoleVisitors } from "./visitors.ts";
-import { viewerOf, WEB_APP, WebAppRegistry } from "./web-app.ts";
+import { hostIcon, viewerOf, WEB_APP, WebAppRegistry } from "./web-app.ts";
 
 /** How often sessions past their limit are deleted: daily. */
 const SESSION_SWEEP_MS = 86_400_000;
@@ -204,13 +204,14 @@ async function build(settings: ResolvedOptions, context: Context) {
 	// A broken page stops startup here, before anything connects.
 	const assets = loadAssets(settings.assetDir);
 	const gate = new Gate({ registry: webApp });
+	/** The `icon` of a link when the host named one of the console's icons. */
+	const iconOf = (name: unknown) => {
+		const icon = hostIcon(name);
+		return icon ? { icon } : {};
+	};
 	const hosted: ConsolePorts["hosted"] = async (visitor) => {
 		const viewer = viewerOf(visitor);
-		const pages: {
-			id: string;
-			label: string;
-			place: "main" | "settings" | "hidden";
-		}[] = [];
+		const pages: PageLinkView[] = [];
 		for (const page of webApp.hostPages()) {
 			try {
 				if (await page.visible(viewer))
@@ -218,6 +219,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 						id: page.id,
 						label: page.label,
 						place: page.place,
+						...iconOf(page.icon),
 					});
 			} catch (error) {
 				logger.warn(
@@ -226,11 +228,15 @@ async function build(settings: ResolvedOptions, context: Context) {
 				);
 			}
 		}
-		const kinds: { kind: string; label: string }[] = [];
+		const kinds: KindLinkView[] = [];
 		for (const kind of webApp.kinds()) {
 			try {
 				if ((await kind.list(viewer, {})) !== undefined)
-					kinds.push({ kind: kind.kind, label: kind.label });
+					kinds.push({
+						kind: kind.kind,
+						label: kind.label,
+						...iconOf(kind.icon),
+					});
 			} catch (error) {
 				logger.warn(
 					{ kind: kind.kind, err: error },

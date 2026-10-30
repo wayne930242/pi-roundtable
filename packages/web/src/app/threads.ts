@@ -60,6 +60,15 @@ export class WebThreads {
 		},
 	};
 
+	/** The mark of a finished thread the owners took off the room list; the thread itself stays. */
+	static readonly dismissedMigration: Migration = {
+		name: "web-threads-dismissed",
+		up: async (sql) => {
+			await sql`
+				ALTER TABLE web_threads ADD COLUMN IF NOT EXISTS dismissed_at timestamptz`;
+		},
+	};
+
 	/** Starts a thread under `parent`. */
 	async open(parent: string, title: string): Promise<WebThread> {
 		const id = `thread.${crypto.randomUUID()}`;
@@ -74,6 +83,26 @@ export class WebThreads {
 
 	async close(id: string): Promise<void> {
 		await this.#sql`UPDATE web_threads SET open = false WHERE id = ${id}`;
+	}
+
+	/**
+	 * Takes a finished thread off the room list. It stays readable by its address, and asking again
+	 * changes nothing. An open thread is refused: `open` says so, `missing` that there is none.
+	 */
+	async dismiss(id: string): Promise<"dismissed" | "open" | "missing"> {
+		const rows: unknown[] = await this.#sql`
+			UPDATE web_threads SET dismissed_at = COALESCE(dismissed_at, now())
+			WHERE id = ${id} AND NOT open RETURNING 1`;
+		if (rows.length) return "dismissed";
+		return (await this.get(id)) ? "open" : "missing";
+	}
+
+	/** Dismisses every finished thread under `parent` that is still listed; returns how many. */
+	async dismissFinished(parent: string): Promise<number> {
+		const rows: unknown[] = await this.#sql`
+			UPDATE web_threads SET dismissed_at = now()
+			WHERE parent = ${parent} AND NOT open AND dismissed_at IS NULL RETURNING 1`;
+		return rows.length;
 	}
 
 	async get(id: string): Promise<WebThread | undefined> {
@@ -98,14 +127,14 @@ export class WebThreads {
 
 	/**
 	 * The threads the room list shows, newest first: every open one, and the `closedLimit` newest
-	 * closed ones, which stay readable but are not kept in view for ever.
+	 * closed ones that were not dismissed. The rest stay readable but are not kept in view.
 	 */
 	async list(closedLimit = CLOSED_LISTED): Promise<WebThread[]> {
 		const rows: Row[] = await this.#sql`
 			SELECT * FROM (
 				SELECT * FROM web_threads WHERE open
 				UNION ALL
-				(SELECT * FROM web_threads WHERE NOT open
+				(SELECT * FROM web_threads WHERE NOT open AND dismissed_at IS NULL
 					ORDER BY created_at DESC, id LIMIT ${closedLimit})
 			) shown ORDER BY created_at DESC, id`;
 		return rows.map(threadOf);

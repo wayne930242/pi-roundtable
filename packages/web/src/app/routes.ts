@@ -19,11 +19,13 @@ import type {
 	CharacterRefusal,
 	MessagesView,
 	ModelsView,
+	RoomOneView,
 	RoomsView,
 	SchedulesView,
 	ScheduleView,
 	SessionView,
 	SkillView,
+	ThreadsDismissed,
 	WorkspaceConflict,
 	WorkspaceNew,
 	WorkspaceRefusalBody,
@@ -48,7 +50,7 @@ import type { LayoutStore } from "./layout.ts";
 import { LayoutRoutes } from "./layout-routes.ts";
 import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
-import type { Rooms } from "./rooms.ts";
+import type { ResolvedRoom, Rooms } from "./rooms.ts";
 import { SkillDocApi } from "./skill-doc-routes.ts";
 import type { AppSurface } from "./surface.ts";
 import { TeamApi } from "./team-routes.ts";
@@ -75,7 +77,10 @@ export interface AppApiOptions {
 	/** The rooms whose push the owners muted. */
 	mutes: Pick<PushMutes, "set" | "setMany">;
 	/** The dispatch threads, which go with the room they hang under. */
-	threads: Pick<WebThreads, "under" | "removeUnder">;
+	threads: Pick<
+		WebThreads,
+		"under" | "removeUnder" | "dismiss" | "dismissFinished"
+	>;
 	/** The owners' shared arrangement of the room list: pins and folders. */
 	layout: LayoutStore;
 	conversations: Pick<ConversationPort, "startFresh">;
@@ -496,6 +501,16 @@ export class AppApi {
 		}
 		const room = await rooms.resolve(key);
 		if (!room) throw notFound();
+		if (!action && method === "GET") {
+			// A thread dismissed from the list still opens by its address; the page asks for its view.
+			const view = await rooms.threadView(room.key);
+			if (!view) throw notFound();
+			return json({ room: view } satisfies RoomOneView);
+		}
+		if (action === "dismiss" && method === "POST" && parts.length === 4)
+			return this.#dismiss(room, admission);
+		if (action === "dismiss-threads" && method === "POST" && parts.length === 4)
+			return this.#dismissFinished(room, admission);
 		if (action === "messages" && method === "GET" && parts.length === 4) {
 			const params = new URL(request.url).searchParams;
 			const before = params.get("before");
@@ -571,6 +586,33 @@ export class AppApi {
 			return json({ muted });
 		}
 		throw new HttpError(404, "There is no such API.");
+	}
+
+	/** Takes one finished thread off the room list for every owner; an open one is refused. */
+	async #dismiss(
+		room: ResolvedRoom,
+		admission: Authenticated,
+	): Promise<Response> {
+		if (room.kind !== "thread") throw notFound();
+		await this.#owner(admission);
+		const outcome = await this.#options.threads.dismiss(room.name);
+		if (outcome === "missing") throw notFound();
+		if (outcome === "open")
+			throw new HttpError(409, "The thread is still open.");
+		this.#options.changed();
+		return json({ dismissed: 1 } satisfies ThreadsDismissed);
+	}
+
+	/** Takes every finished thread of a room off the room list; the open ones stay. */
+	async #dismissFinished(
+		room: ResolvedRoom,
+		admission: Authenticated,
+	): Promise<Response> {
+		if (room.kind === "thread") throw notFound();
+		await this.#owner(admission);
+		const dismissed = await this.#options.threads.dismissFinished(room.key);
+		if (dismissed) this.#options.changed();
+		return json({ dismissed } satisfies ThreadsDismissed);
 	}
 
 	async #file(id: string, admission: Authenticated): Promise<Response> {

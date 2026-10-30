@@ -313,7 +313,7 @@ export class HostRoomsService implements HostRooms {
 					{
 						type: "host_card",
 						room,
-						card: cardView(viewer, found, access, stored),
+						card: await cardView(viewer, found, access, stored),
 					},
 					{ connection, audience: { room } },
 				);

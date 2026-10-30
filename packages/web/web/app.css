@@ -216,6 +216,43 @@
 	white-space: nowrap;
 }
 
+.thread-item {
+	display: flex;
+	align-items: center;
+}
+
+.thread-item > .thread-row {
+	flex: 1;
+	min-width: 0;
+}
+
+.thread-dismiss,
+.thread-clear {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: var(--touch);
+	min-height: var(--touch);
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: var(--muted);
+	font: inherit;
+	font-size: var(--text-xs);
+	cursor: pointer;
+}
+
+.thread-clear {
+	padding: 0 var(--space-3);
+}
+
+.thread-dismiss:hover,
+.thread-clear:hover {
+	background: var(--surface);
+	color: var(--text);
+}
+
 .thread-closed > summary {
 	display: flex;
 	align-items: center;

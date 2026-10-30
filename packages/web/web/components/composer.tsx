@@ -1,6 +1,7 @@
 import {
 	type ClipboardEvent,
 	type KeyboardEvent,
+	type ReactNode,
 	useEffect,
 	useId,
 	useRef,
@@ -47,6 +48,10 @@ interface Attached {
  */
 export function Composer(props: {
 	name: string;
+	/** What the box says while it is empty and names it for a screen reader; default "Message <name>". */
+	placeholder?: string;
+	/** A control that belongs to the box, such as a host room's mode toggle; it stands above the bar. */
+	above?: ReactNode;
 	/** The room whose unsent text the box keeps: it comes back when the room is opened again. */
 	draftKey?: string;
 	limits: RoomsState["limits"];
@@ -282,6 +287,7 @@ export function Composer(props: {
 		area.current?.focus();
 	};
 
+	const hint = props.placeholder ?? t("Message {name}", { name: props.name });
 	return (
 		<form
 			className="composer"
@@ -290,6 +296,7 @@ export function Composer(props: {
 				send();
 			}}
 		>
+			{props.above}
 			{files.length ? (
 				<ul className="attached">
 					{files.map((one) => (
@@ -371,8 +378,8 @@ export function Composer(props: {
 					ref={area}
 					rows={1}
 					value={text}
-					placeholder={t("Message {name}", { name: props.name })}
-					aria-label={t("Message {name}", { name: props.name })}
+					placeholder={hint}
+					aria-label={hint}
 					enterKeyHint="send"
 					readOnly={sending}
 					onChange={(event) => setText(event.target.value)}

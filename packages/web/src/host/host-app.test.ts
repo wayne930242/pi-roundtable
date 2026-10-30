@@ -126,6 +126,15 @@ function inboxPlugin(state: Inbox) {
 			const kind: HostRoomKind = {
 				kind: "inbox",
 				label: "Inbox",
+				icon: "chat",
+				// Padding is trimmed, text only is kept, and a label is cut to forty characters.
+				sendWording: {
+					note: { placeholder: "  Write to the team…  " },
+					turn: {
+						label: "@Atlas".padEnd(60, "x"),
+						placeholder: 42 as unknown as string,
+					},
+				},
 				list: async (viewer) => {
 					const mine = state.grants.get(viewer.principalId);
 					if (!mine) return undefined;
@@ -194,7 +203,7 @@ function inboxPlugin(state: Inbox) {
 						open: { room: ROOM_B, message: 7 },
 					};
 				},
-				buttons: (viewer, _id, card) =>
+				buttons: async (viewer, _id, card) =>
 					nameOf(viewer) === "mel"
 						? (card.buttons ?? [])
 								.filter((button) => button.id === "reply")
@@ -205,6 +214,7 @@ function inboxPlugin(state: Inbox) {
 			web.registerPage({
 				id: "mailboxes",
 				label: "Mailboxes",
+				icon: "megaphone",
 				place: "main",
 				visible: (viewer) => viewer.tier === "owner",
 				view: async (_viewer, query) => ({
@@ -513,10 +523,12 @@ describeDb("the host rooms over a real host", () => {
 		const config = (await (
 			await rest(app, "config", { who: "mel" })
 		).json()) as {
-			kinds?: { kind: string; label: string }[];
+			kinds?: { kind: string; label: string; icon?: string }[];
 			pages?: { id: string }[];
 		};
-		expect(config.kinds).toEqual([{ kind: "inbox", label: "Inbox" }]);
+		expect(config.kinds).toEqual([
+			{ kind: "inbox", label: "Inbox", icon: "chat" },
+		]);
 		expect(config.pages ?? []).toEqual([]);
 		const zed = (await (await rest(app, "config", { who: "zed" })).json()) as {
 			kinds?: unknown[];
@@ -699,6 +711,10 @@ describeDb("the host rooms over a real host", () => {
 			},
 		});
 		expect(view.header.actions[0]?.id).toBe("assign");
+		expect(view.wording).toEqual({
+			note: { placeholder: "Write to the team…" },
+			turn: { label: "@Atlas".padEnd(40, "x") },
+		});
 		const kinds = view.messages.map((m) => [m.authorKind, m.text]);
 		expect(kinds).toContainEqual(["external", "Please call me"]);
 		expect(kinds).toContainEqual(["assistant", "I will ask them **now**"]);
@@ -1239,9 +1255,11 @@ describeDb("the host rooms over a real host", () => {
 
 	test("pages: the listed ones, the view with its query, the action, and a refresh to those the page is visible to", async () => {
 		const ada = (await (await rest(app, "config", { who: "ada" })).json()) as {
-			pages?: { id: string }[];
+			pages?: { id: string; icon?: string }[];
 		};
 		expect(ada.pages?.map((page) => page.id)).toEqual(["mailboxes"]);
+		// The icon the page named reaches the shell, which draws it in the navigation.
+		expect(ada.pages?.[0]?.icon).toBe("megaphone");
 		const view = (await (
 			await rest(app, "pages/mailboxes?q=hello", { who: "ada" })
 		).json()) as HostPageView;

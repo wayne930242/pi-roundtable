@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
+- The package entry exports the host-facing API: `WEB_APP` and the types `WebApp`, `HostRoomKind`, `HostPage`, `HostCard`, `Viewer`, `OpenTarget`, `ActionResult`, `LinkProver`, `OnboardingStep` and `Notices`, so a host plugin no longer mirrors them.
+- The `description` option, and `<meta name="description">`, `og:title`, `og:description` and `og:image` on the page, so a search result and a link preview have a title, a line and the mark. Without `description` a line is derived from `title`.
+- `<mount>/icons/mark.svg`, the round-table mark.
+
+### Changed
+
+- `HostRoomKind.buttons` may return a promise, for a host whose rights source is async.
+- README: `WebApp.rooms`, `.notices`, `.pages`, `.onboarding` and `.push` throw until the plugin started; `notices.onAck` is available only after start.
+- An ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).
+- An owner can take a finished dispatch thread off the room list: a remove button on each finished row, and "Clear all" in the fold of a room's finished threads. The thread leaves the list for every owner and every open page at once; it is hidden, not deleted, and stays readable by its address and through the links in its room. An open thread cannot be removed (409). The mark is the new column `web_threads.dismissed_at` (migration `web-threads-dismissed`, additive). Routes: `POST api/rooms/<thread>/dismiss`, `POST api/rooms/<room>/dismiss-threads`, and `GET api/rooms/<thread>` for the view of a thread the list does not carry (owners only, like the rest of `api/rooms`).
+- `HostPage.icon` and `HostRoomKind.icon`: an optional name from the console's own icon set (`HOST_ICONS`, type `HostIconName`, exported): `chat`, `link`, `activity`, `users`, `megaphone`, `qr`, `settings`, `bell`, `file`, `list`, `shield`, `lock`, `sparkle`. A page's icon shows in the navigation (the list icon stays the default), a kind's beside its section in the room list. A name outside the set is dropped and the default shows. `ConfigView.pages[].icon` and `.kinds[].icon` carry it. The new glyphs load only when a page names one.
+- A host room where a viewer may send both a note and a turn shows one `@AI` toggle over the composer's bar instead of the two chips "Note" and "Ask the agent": off sends a note for the room's people only, on sends a turn the agent answers, and the box's hint follows ("Write an internal note…" / "Ask AI…", never naming the room as a recipient; zh-TW 「寫一則內部備註…」 / 「問 AI…」). The toggle stands in the composer's column (it sat at the pane's edge on a wide screen) and is at least 44 px high. A room open to one way only shows that way's hint and no toggle. `Composer` takes `placeholder` and `above`, and `ModeToggle` is a piece of its own, for any room that offers the choice.
+- `HostRoomKind.sendWording`: a kind may word the toggle (`turn.label`) and each way's hint (`note.placeholder`, `turn.placeholder`); text only, a label cut to 40 characters and a placeholder to 100. `HostRoomView.wording` carries it.
+
 ### Fixed
 
 - A folder's header no longer turns into an unreadable light fill with white text when the pointer rests on it (on a phone the highlight stuck after a tap), and its title is left-aligned, not centered. The base rule `button:hover:not(:disabled)` out-specified the header's own style; its hover, press and keyboard focus now tint the label and keep its text colour in every look and scheme.
@@ -14,16 +31,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The page now has a tab icon: the round-table mark, linked as `rel="icon"` on the app, the sign-in page and the sign-in flow's pages, so a browser no longer asks the site root for `/favicon.ico` and gets a 404. A host's own `icons.dir` is kept (add a `mark.svg` to it to replace the SVG too).
 - The manifest and the icons answer without a session in `oidc` and `password` mode, so the sign-in page and a link preview have an icon. They were redirected to the sign-in. Nothing else below the mount is open.
 - The served page carries the host's `title` in `<title>` from the first byte; it said `Console` until the script ran.
-
-### Added
-
-- `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
-- The `description` option, and `<meta name="description">`, `og:title`, `og:description` and `og:image` on the page, so a search result and a link preview have a title, a line and the mark. Without `description` a line is derived from `title`.
-- `<mount>/icons/mark.svg`, the round-table mark.
-
-### Changed
-
-- An ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).
 
 ## [0.26.0] - 2026-10-30
 
