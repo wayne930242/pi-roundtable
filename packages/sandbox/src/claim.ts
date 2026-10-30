@@ -4,7 +4,7 @@ import type {
 	InboundMessage,
 	SurfacePort,
 } from "pi-roundtable";
-import { splitReply } from "pi-roundtable/kit";
+import { answersAuthor, splitReply } from "pi-roundtable/kit";
 import {
 	type ReadChannelContext,
 	readsChannelContext,
@@ -23,6 +23,16 @@ export type SandboxReplyText = (
 	context: { channel: ChannelKey; space?: string },
 ) => string | Promise<string>;
 
+/**
+ * Draws a PNG card for a successful reply, such as a picture that goes with its text. It runs on
+ * the host after `replyText`, on the text that is posted, and the surface posts the card before
+ * the text. Return undefined for no card; a throw or a rejection posts the reply without one.
+ */
+export type SandboxReplyCard = (
+	text: string,
+	context: { channel: ChannelKey; space?: string },
+) => Uint8Array | undefined | Promise<Uint8Array | undefined>;
+
 export interface SandboxClaimOptions {
 	/** `owns` adds channels in configured guilds; without it only `has` decides. */
 	channels: Pick<SandboxChannelStore, "has"> &
@@ -32,6 +42,15 @@ export interface SandboxClaimOptions {
 	/** Told of a failed turn, with what failed (a sandbox error, or replyText's own throw). */
 	reportFailure?: (channel: ChannelKey, error: unknown) => void;
 	replyText?: SandboxReplyText;
+	replyCard?: SandboxReplyCard;
+	/** Told when `replyCard` threw; the reply is then posted without a card. */
+	reportCardFailure?: (channel: ChannelKey, error: unknown) => void;
+	/**
+	 * Answers the bots the host lists as peers (`discord.peerBots`) when they mention the bot or
+	 * reply to it, as it answers a person; default false, so a sandbox channel stays closed to bots
+	 * even when the host answers peers elsewhere.
+	 */
+	peerBots?: boolean;
 	/**
 	 * Reads the context of the channel a message was posted in; set to opt in. It is called only for
 	 * a Discord server message, with that message, and what it returns goes before the message in
@@ -42,9 +61,12 @@ export interface SandboxClaimOptions {
 	reportContextFailure?: (channel: ChannelKey, error: unknown) => void;
 }
 
-export function isSandboxAddress(message: InboundMessage): boolean {
+export function isSandboxAddress(
+	message: InboundMessage,
+	peerBots = false,
+): boolean {
 	return (
-		!message.authorIsBot &&
+		(peerBots ? answersAuthor(message) : !message.authorIsBot) &&
 		!message.integration &&
 		!message.isDirect &&
 		(message.mentionsBot || message.repliesToBot)
@@ -84,6 +106,24 @@ async function rewriteReply(
 	return rewritten;
 }
 
+/** The card for a posted reply; none, reported, when `replyCard` throws. */
+async function cardFor(
+	options: Pick<SandboxClaimOptions, "replyCard" | "reportCardFailure">,
+	text: string,
+	message: InboundMessage,
+): Promise<Uint8Array | undefined> {
+	if (!options.replyCard) return undefined;
+	try {
+		return await options.replyCard(text, {
+			channel: message.channel,
+			...(message.space ? { space: message.space } : {}),
+		});
+	} catch (error) {
+		options.reportCardFailure?.(message.channel, error);
+		return undefined;
+	}
+}
+
 /** Outranks the agent server's priority 100; ignored messages never fall through to host agents. */
 export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 	const owns = (channel: ChannelKey, space?: string): boolean =>
@@ -102,7 +142,8 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 		postsInPlace: true,
 		owns,
 		admit: (message) => {
-			if (!admits(message) || !isSandboxAddress(message)) return undefined;
+			if (!admits(message) || !isSandboxAddress(message, options.peerBots))
+				return undefined;
 			// The router resolved the author; one the host's access rules serve no one by goes
 			// unanswered, as does a message whose author it could not resolve.
 			const { speaker } = message;
@@ -133,8 +174,12 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 						const posted = reply.ok
 							? await rewriteReply(options.replyText, reply.text, message)
 							: "The sandbox turn failed.";
+						const card = reply.ok
+							? await cardFor(options, posted, message)
+							: undefined;
 						await options.surfaces.sendReply(message.channel, {
 							chunks: splitReply(posted),
+							...(card ? { card } : {}),
 						});
 					} catch (error) {
 						// A stop or a full queue is the runtime working as designed, not a failure.
