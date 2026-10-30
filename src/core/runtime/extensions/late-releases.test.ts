@@ -36,7 +36,15 @@ async function lateApproved(
 	approvedBy?: ApprovedBy,
 ) {
 	const gate = new ConfirmationGate(holds, OWNER);
-	gate.beginTurn("workspace", false, undefined, speaker("p_asker"));
+	gate.beginTurn(
+		"workspace",
+		false,
+		undefined,
+		speaker("p_asker"),
+		false,
+		undefined,
+		true,
+	);
 	const waits: PromptWait[] = [];
 	const prompts: Prompts = {
 		confirm: async (_title, _message, _signal, _tier, wait) => {
@@ -61,32 +69,106 @@ afterEach(() => setSystemTime());
 describe("a late approval's release", () => {
 	test("is spent by a turn of the person who gave it, once", async () => {
 		const gate = await lateApproved(undefined, riley);
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 		expect(gate.hold(MAIL, send)).toContain("Held");
 	});
 
 	test("is spent by an owner's turn", async () => {
 		const gate = await lateApproved(undefined, riley);
-		gate.beginTurn("workspace", false, undefined, speaker("p_boss", "owner"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_boss", "owner"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
 
 	test("is not spent by another speaker's turn, and waits for the right one", async () => {
 		const gate = await lateApproved(undefined, riley);
-		gate.beginTurn("workspace", false, undefined, speaker("p_other"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_other"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toContain("Held");
 		gate.endTurn();
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
 
-	test("is not spent by a turn without a speaker, which shows the card; the approver's later turn spends it", async () => {
+	test("is not spent by an automatic turn of its giver (schedule, agent message, report), which shows the card again", async () => {
+		const gate = await lateApproved(undefined, riley);
+		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		expect(gate.hold(MAIL, send)).toContain("Held");
+		gate.endTurn();
+		gate.beginTurn("workspace", false, undefined, speaker("p_boss", "owner"));
+		expect(gate.hold(MAIL, send)).toContain("Held");
+		gate.endTurn();
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
+		expect(gate.hold(MAIL, send)).toBeUndefined();
+	});
+
+	test("is never spent by the system principal, even in a message-started turn", async () => {
+		const gate = await lateApproved();
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("system", "owner"),
+			false,
+			undefined,
+			true,
+		);
+		expect(gate.hold(MAIL, send)).toContain("Held");
+	});
+
+	test("is not spent by a turn without a speaker; the approver's later turn spends it", async () => {
 		const gate = await lateApproved(undefined, riley);
 		gate.beginTurn("workspace", false, undefined, undefined);
 		expect(gate.hold(MAIL, send)).toContain("Held");
 		gate.endTurn();
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
 
@@ -98,21 +180,45 @@ describe("a late approval's release", () => {
 
 	test("is anyone's when the surface does not say who gave it", async () => {
 		const gate = await lateApproved();
-		gate.beginTurn("workspace", false, undefined, speaker("p_other"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_other"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
 
 	test("is not spent after its time is up", async () => {
 		const gate = await lateApproved(undefined, riley);
 		setSystemTime(new Date(Date.now() + LATE_RELEASE_TTL_MS + 1_000));
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toContain("Held");
 	});
 
 	test("is spent within its time", async () => {
 		const gate = await lateApproved(undefined, riley);
 		setSystemTime(new Date(Date.now() + LATE_RELEASE_TTL_MS - 1_000));
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
 
@@ -127,17 +233,41 @@ describe("a late approval's release", () => {
 		]);
 		const gate = await lateApproved(holds, riley);
 		unheld = true;
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 		unheld = false;
 		gate.endTurn();
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold(MAIL, send)).toContain("Held");
 	});
 
 	test("is kept when a different call runs without a hold", async () => {
 		const gate = await lateApproved(undefined, riley);
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect(gate.hold("other-tool", send)).toBeUndefined();
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
@@ -154,14 +284,30 @@ describe("a late approval's release", () => {
 		]);
 		const gate = await lateApproved(holds, riley);
 		unheld = true;
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		const turn = { toolTurn: () => ({}) as ToolTurn };
 		expect(
 			(await gate.decide(MAIL, send, undefined, turn)).reason,
 		).toBeUndefined();
 		unheld = false;
 		gate.endTurn();
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		expect((await gate.decide(MAIL, send, undefined, turn)).reason).toContain(
 			"Held",
 		);
@@ -177,7 +323,15 @@ describe("a late approval's release", () => {
 			},
 			ask: async () => undefined,
 		};
-		gate.beginTurn("workspace", false, undefined, speaker("p_colleague"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_colleague"),
+			false,
+			undefined,
+			true,
+		);
 		const colleague = await gate.decide(MAIL, send, {
 			prompts,
 			asker: "infra",
@@ -187,7 +341,15 @@ describe("a late approval's release", () => {
 		expect(colleague.reason).toBeDefined();
 		gate.endTurn();
 		// The release is still Riley's, for the call it was granted for.
-		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			speaker("p_riley"),
+			false,
+			undefined,
+			true,
+		);
 		const rileys = await gate.decide(MAIL, send, { prompts, asker: "infra" });
 		expect(cards).toHaveLength(1);
 		expect(rileys.reason).toBeUndefined();

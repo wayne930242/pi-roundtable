@@ -4,6 +4,7 @@ import type { AgentDirectory } from "../services.ts";
 import type { Agent } from "./agent-store.ts";
 import {
 	agentRoomKey,
+	discordIdOf,
 	discordKey,
 	keysOf,
 	roomSurfaceOf,
@@ -26,8 +27,8 @@ const WEB = "web";
 /**
  * The conversation of `target` that a message is delivered into. With `ask` (a surface name such
  * as "discord", "web", or the surface of a room, or one of the target's conversation keys) that
- * one; otherwise the conversation the target used most recently, and, when it has run none yet,
- * the sender's own surface, so a message between rooms stays among the rooms.
+ * one; otherwise the conversation the target used most recently, except that a message from a room
+ * never follows it out to Discord, and, when it has run none yet, the sender's own surface, so a message between rooms stays among the rooms.
  */
 export function messageTarget(
 	ctx: MessageTargetContext,
@@ -37,9 +38,14 @@ export function messageTarget(
 	const keys = keysOf(ctx.store, target.name, ctx.roomSurfaces);
 	const has = keys.length > 0 ? keys.join(", ") : "none";
 	if (ask === undefined || ask.trim() === "") {
-		if (ctx.latest !== undefined && keys.includes(ctx.latest))
-			return ctx.latest;
 		const via = roomSurfaceOf(ctx.from);
+		// From a room, never out to Discord: its content may be for the owners alone.
+		const outward =
+			via !== undefined &&
+			ctx.latest !== undefined &&
+			discordIdOf(ctx.latest) !== undefined;
+		if (ctx.latest !== undefined && keys.includes(ctx.latest) && !outward)
+			return ctx.latest;
 		if (via === undefined) {
 			if (!target.channelId)
 				throw new AgentError(`${target.name} has no channel yet.`);

@@ -76,13 +76,12 @@ export class ConfirmationGate {
 	#selectionId: string | undefined;
 	/** The running turn's speaker, whom the actions it holds belong to, and who approves those a message confirmed. */
 	#speaker: SpeakerRef | undefined;
+	#lateSpender: SpeakerRef | undefined;
 	/** Whether the running turn's conversation is private to its speaker, who then alone answers its cards. */
 	#private = false;
-	/** The running turn's auto-approver, asked before any card opens. */
 	#auto: AutoApprover | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: Release[] = [];
-	/** Calls approved on their cards after the turn that asked stopped waiting; see `LateReleases`. */
 	readonly #late = new LateReleases();
 	/** Who approved each call that is running, and on which card, by tool call id, until its result is back. */
 	readonly #grants = new Grants();
@@ -168,7 +167,7 @@ export class ConfirmationGate {
 	 * the approver the calls' `run` sees; a call that named approvers is released only when the
 	 * speaker is one of them or an owner, and otherwise stays held. `isPrivate` says the turn's
 	 * conversation is private to its speaker: they alone then answer its cards. `auto` may approve
-	 * a call the turn makes without a card (yolo mode); it does not change a message's approval.
+	 * a call without a card (yolo mode). `byMessage`: a person's message started the turn.
 	 */
 	beginTurn(
 		selectionId: string,
@@ -177,9 +176,11 @@ export class ConfirmationGate {
 		speaker?: SpeakerRef,
 		isPrivate = false,
 		auto?: AutoApprover,
+		byMessage = false,
 	): void {
 		this.#selectionId = selectionId;
 		this.#speaker = speaker;
+		this.#lateSpender = byMessage ? speaker : undefined;
 		this.#private = isPrivate;
 		this.#auto = auto;
 		this.#addressee = addressee ?? this.#owner;
@@ -190,7 +191,6 @@ export class ConfirmationGate {
 			call,
 			...(by ? { by } : {}),
 		}));
-		// What the speaker could not release stays held for those who may.
 		const kept = (held?.calls ?? []).filter(
 			(call) => confirmed && !released?.calls.includes(call),
 		);
@@ -438,7 +438,7 @@ export class ConfirmationGate {
 		const spent = judged.supersede?.aborted
 			? undefined
 			: (spendApproval([this.#approved], call) ??
-				this.#late.spend(call, this.#speaker));
+				this.#late.spend(call, this.#lateSpender));
 		if (spent) {
 			this.#withdrawals.endCall(spent.call);
 			return { released: spent };

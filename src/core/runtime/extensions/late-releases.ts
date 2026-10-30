@@ -1,4 +1,5 @@
 import type { HeldCall } from "../../domain/conversation.ts";
+import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
 import type { Release, SpeakerRef } from "./gate-refusals.ts";
 import { sameCall } from "./held-calls.ts";
 
@@ -12,8 +13,8 @@ export const LATE_RELEASE_TTL_MS = 3_600_000;
 /**
  * The releases that cards answered after their turn stopped waiting earned. A release lets the
  * identical call run once, only while it is fresh and only in a turn spoken by the person who gave it
- * (or by an owner), never in a turn without a speaker, and it is dropped when the identical call runs without a hold, since that run
- * is the call the person approved.
+ * (or by an owner), only in a turn a person's message started, and it is dropped when the identical call
+ * runs without a hold, since that run is the call the person approved.
  */
 export class LateReleases {
 	#list: { release: Release; at: number }[] = [];
@@ -62,13 +63,12 @@ export class LateReleases {
 
 /**
  * Whether `speaker` may spend `release`: they gave it, or are an owner; any speaker, when its
- * giver is unknown. A turn without a speaker (an automatic, scheduled or agent-message turn)
- * spends nothing, so a card is shown again there. Every surface that resumes a turn for a late
- * answer (Discord, the web app) starts it as a message from whoever answered, so that turn has
- * a speaker and needs no exception.
+ * giver is unknown. The gate hands only the speaker of a turn a person's
+ * message started; every other turn (schedule, agent message, report, error report) has none and
+ * spends nothing, so a card is shown again there. The system principal never spends one.
  */
 function maySpend(release: Release, speaker: SpeakerRef | undefined): boolean {
-	if (!speaker) return false;
+	if (!speaker || speaker.principalId === SYSTEM_PRINCIPAL) return false;
 	if (!release.by) return true;
 	return (
 		speaker.tier === "owner" || speaker.principalId === release.by.principalId

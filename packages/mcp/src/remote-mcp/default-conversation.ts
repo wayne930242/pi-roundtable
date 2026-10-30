@@ -84,6 +84,7 @@ export function defaultConversation({
 							speaker,
 							conversation: { visibility: "private" },
 							confirmed,
+							byMessage: true,
 							// The outside agent polls for the answer; no surface posts it.
 							reply: async () => undefined,
 						});

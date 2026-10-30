@@ -18,6 +18,7 @@ import type {
 	ApprovalOptions,
 	ApprovedBy,
 	PromptScope,
+	PromptWait,
 } from "./core/interactions/prompts.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { Speaker } from "./core/speakers.ts";
@@ -29,6 +30,9 @@ const MEMBER: Speaker = {
 	tier: "member",
 	principalId: "7",
 };
+
+/** The sites each `deploy` that ran deployed. */
+const deployed: string[] = [];
 
 /** Who approved each `ship` that ran. */
 const shipped: (ApprovedBy | undefined)[] = [];
@@ -135,7 +139,10 @@ async function heldHost(
 						parameters: Type.Object({ site: Type.String() }),
 						minTier: "member",
 						hold: ({ site }) => `deploy ${site}`,
-						run: () => "deployed",
+						run: ({ site }) => {
+							deployed.push(site);
+							return "deployed";
+						},
 					}),
 					defineTool({
 						name: "ship",
@@ -450,4 +457,99 @@ test("a private conversation's person who cannot approve is told so, and a yes r
 	} finally {
 		await done();
 	}
+});
+
+const BETH: Speaker = {
+	id: "9",
+	name: "Beth",
+	tier: "member",
+	principalId: "p_beth",
+};
+
+/**
+ * A late approval by Beth waits for the identical `deploy`; `later` is a turn that makes the call
+ * again. Returns whether it ran.
+ */
+async function lateReleaseSpentBy(
+	later: Omit<
+		Parameters<
+			Awaited<ReturnType<typeof heldHost>>["harness"]["turns"]["run"]
+		>[0],
+		"channel" | "kind" | "text" | "selection"
+	>,
+): Promise<boolean> {
+	deployed.length = 0;
+	let wait: PromptWait | undefined;
+	const { harness, done } = await heldHost(2, () => ({
+		confirm: async (_t, _m, _s, _tier, given) => {
+			wait = given;
+			return "pending";
+		},
+		ask: async () => undefined,
+	}));
+	const base = {
+		channel: "fake:room" as const,
+		kind: "helper",
+		text: "deploy the docs",
+		selection: { id: "held", tools: ["deploy"], groups: [] },
+	};
+	try {
+		await harness.turns.run({
+			...base,
+			speaker: BETH,
+			interactive: true,
+			byMessage: true,
+		});
+		expect(deployed).toEqual([]);
+		wait?.late({
+			kind: "approval",
+			approved: true,
+			by: "Beth",
+			approvedBy: { principalId: "p_beth", speakerId: "9", name: "Beth" },
+		});
+		await harness.turns.run({ ...base, ...later });
+		return deployed.length > 0;
+	} finally {
+		await done();
+	}
+}
+
+test("a late release is spent in a turn its approver's message started", async () => {
+	expect(
+		await lateReleaseSpentBy({
+			speaker: BETH,
+			interactive: true,
+			byMessage: true,
+		}),
+	).toBe(true);
+});
+
+test("a late release is not spent in the approver's schedule turn", async () => {
+	expect(await lateReleaseSpentBy({ speaker: BETH, unattended: true })).toBe(
+		false,
+	);
+});
+
+test("a late release is not spent in an agent-message or report turn the approver started", async () => {
+	expect(await lateReleaseSpentBy({ speaker: BETH, interactive: true })).toBe(
+		false,
+	);
+	expect(await lateReleaseSpentBy({ speaker: BETH, unattended: true })).toBe(
+		false,
+	);
+});
+
+test("a late release is not spent in an owner-tier error-report turn of the system principal", async () => {
+	const system: Speaker = {
+		id: "system",
+		name: "System",
+		tier: "owner",
+		principalId: "system",
+	};
+	expect(await lateReleaseSpentBy({ speaker: system, interactive: true })).toBe(
+		false,
+	);
+	expect(await lateReleaseSpentBy({ speaker: system, unattended: true })).toBe(
+		false,
+	);
 });

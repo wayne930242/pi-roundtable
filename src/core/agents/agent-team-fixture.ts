@@ -15,6 +15,7 @@ import type {
 } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import type { TurnRequest } from "../domain/ports.ts";
+import type { IdentityService } from "../identity/identity-port.ts";
 import { silentLogger } from "../log.ts";
 import { StoredSkillRegistry as SkillRegistry } from "../modules/skills/skill-registry.ts";
 import { SkillStore } from "../modules/skills/skill-store.ts";
@@ -356,12 +357,14 @@ export function useTeamFixture(
 		script.guest = "";
 		queue = channelQueue();
 		removedSchedules.length = 0;
+		identity.current = undefined;
 		stops.length = 0;
 		eventLog.length = 0;
 		build = () =>
 			new AgentTeam({
 				owner: TEST_OWNER,
 				toolTiers: FIXTURE_TIERS,
+				principals: () => identity.current,
 				shellUser: "mcops",
 				guildId: local ? "local" : "1",
 				...(local
@@ -436,6 +439,9 @@ export function useTeamFixture(
 }
 
 /** Starts the team again over the same database, as a restarted host: a new queue, runtime and team. */
+/** The identity service the team's replay asks; none until a test sets one. */
+export const identity: { current?: Pick<IdentityService, "speakerFor"> } = {};
+
 export async function restart(): Promise<void> {
 	queue = channelQueue();
 	runtime = new FakeRuntime();

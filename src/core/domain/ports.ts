@@ -61,6 +61,11 @@ export interface TurnRequest {
 	/** The owner's own chat turn, which their next messages may steer. */
 	steerable?: boolean;
 	/**
+	 * A person's message started the turn, so the speaker is present: only such a turn spends a late
+	 * approval's release. Set by message ingest alone, never by a schedule, agent message, report or error turn.
+	 */
+	byMessage?: boolean;
+	/**
 	 * The owner started the turn by writing in its channel, or it delivers a dispatch's report,
 	 * so it may ask them there on cards: approvals of held actions and ask_user questions. A
 	 * schedule's turn is not.

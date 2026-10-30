@@ -891,6 +891,7 @@ export class WebChat {
 					...(pending.origin ? { origin: pending.origin } : {}),
 					...(client ? { client } : {}),
 					interactive: true,
+					byMessage: true,
 					...(pending.attachments ? { attachments: pending.attachments } : {}),
 					...(persona.selection
 						? {

@@ -118,7 +118,7 @@ export class GroupTurns {
 			if (backlog.lastId !== undefined)
 				await store.advanceCursor(log, name, backlog.lastId);
 			// Attachments and a confirmation belong to a member's first turn of the round only.
-			const extra: TurnExtra = { interactive: true };
+			const extra: TurnExtra = { interactive: true, byMessage: true };
 			if (first) {
 				extra.attachments = attachments;
 				if (approvals.get(name)) extra.confirmed = true;

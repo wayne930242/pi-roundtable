@@ -7,6 +7,7 @@ import type {
 	TurnResult,
 } from "../domain/conversation.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import type { IdentityService } from "../identity/identity-port.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
@@ -85,6 +86,12 @@ export interface TeamTurnsOptions {
 	changed(): void;
 	/** Where turns and team changes are reported for the plugins' handlers. */
 	events?: EventSink;
+	/**
+	 * The identity service, read when a kept agent message is replayed: its speaker runs again only
+	 * as a principal that still exists and is enabled, at no more than its tier now. Without one, the
+	 * stored speaker is kept.
+	 */
+	principals?: () => Pick<IdentityService, "speakerFor"> | undefined;
 	/** A thread for each message between agents; without it both go in the sender's channel. */
 	threads?: Pick<DispatchThreads, "open">;
 }
@@ -94,6 +101,8 @@ export interface TurnExtra {
 	attachments?: TurnAttachments;
 	confirmed?: boolean;
 	steerable?: boolean;
+	/** A person's message started it. */
+	byMessage?: boolean;
 	/** The owner started it by writing, or it delivers a report, so it may ask them on cards. */
 	interactive?: boolean;
 	/** No person waits on the answer, so an empty one is no failure. */
@@ -108,6 +117,7 @@ export function turnFlags(extra: TurnExtra) {
 		...(extra.attachments ? { attachments: extra.attachments } : {}),
 		...(extra.confirmed ? { confirmed: true } : {}),
 		...(extra.steerable ? { steerable: true } : {}),
+		...(extra.byMessage ? { byMessage: true } : {}),
 		...(extra.interactive ? { interactive: true } : {}),
 		...(extra.unattended ? { unattended: true } : {}),
 		...(extra.timeLimitMs === undefined

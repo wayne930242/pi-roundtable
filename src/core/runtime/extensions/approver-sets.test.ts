@@ -370,7 +370,15 @@ describe("approvedBy", () => {
 		};
 		expect(wait?.late(late)).toContain("Make this call now");
 		// The turn that answers a late card is the approver's: it runs the identical call once.
-		gate.beginTurn("workspace", false, undefined, ADA_SPEAKER);
+		gate.beginTurn(
+			"workspace",
+			false,
+			undefined,
+			ADA_SPEAKER,
+			false,
+			undefined,
+			true,
+		);
 		const second = handlers(gate, promptSlot());
 		expect(await second.call("c2")).toBeUndefined();
 		expect(gate.approvedBy("c2")).toEqual(ADA);
@@ -531,7 +539,15 @@ describe("a call that names approvers is refused outside them", () => {
 				by: "x",
 				...(by ? { approvedBy: by } : {}),
 			});
-			gate.beginTurn("workspace", false, undefined, speakerOf(by ?? BO));
+			gate.beginTurn(
+				"workspace",
+				false,
+				undefined,
+				speakerOf(by ?? BO),
+				false,
+				undefined,
+				true,
+			);
 			const second = (await handlers(gate, promptSlot()).call("c2"))?.block;
 			expect(second === undefined).toBe(runs);
 		}

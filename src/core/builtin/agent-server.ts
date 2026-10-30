@@ -26,6 +26,7 @@ import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
+	IDENTITY,
 	MODES,
 	PROMPTS,
 	RUNTIME,
@@ -318,6 +319,7 @@ export function agentServerPlugin(
 					: {}),
 				...(skills ? { skills } : {}),
 				modes: () => context.services.find(MODES),
+				principals: () => context.services.find(IDENTITY),
 				...(threads ? { threads } : {}),
 				logger,
 			});

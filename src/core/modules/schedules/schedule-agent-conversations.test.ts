@@ -162,6 +162,17 @@ describe("an agent's schedules span its conversations", () => {
 		expect(await infra.get("schedule_cancel")?.({ id: 1 })).toContain(
 			"no schedule #1",
 		);
+		// The undocumented `agent` argument is read by schedule_list alone (RV0262-F003).
+		expect(
+			await infra.get("schedule_cancel")?.({ id: 1, agent: "coder" }),
+		).toContain("no schedule #1");
+		expect(
+			await infra.get("schedule_update")?.({
+				id: 1,
+				title: "x",
+				agent: "coder",
+			}),
+		).toContain("no schedule #1");
 		expect(made.map((s) => s.title)).toEqual(["coder's"]);
 	});
 

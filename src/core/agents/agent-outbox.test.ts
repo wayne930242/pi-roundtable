@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
+import { IdentityError } from "../domain/errors.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import {
 	agentChannel,
 	ENTRY,
 	fx,
+	identity,
 	restart,
 	settle,
 	useTeamFixture,
@@ -132,6 +134,39 @@ describeDb("agent messages that survive a stop", () => {
 		await settle();
 		await restart();
 		expect(fx.runtime.turns).toHaveLength(0);
+	});
+
+	test("a kept message replays as its speaker stands now: dropped when disabled, capped when demoted", async () => {
+		const keep = async () => {
+			await coordinatorTurn(() => {
+				fx.queue.close();
+				fx.team.message(coordinator(), "infra", "check the disk");
+			});
+			await keptCount(1);
+		};
+		await keep();
+		identity.current = {
+			speakerFor: async () => {
+				throw new IdentityError("disabled");
+			},
+		};
+		await restart();
+		expect(fx.runtime.turns).toHaveLength(0);
+		expect(await fx.store.outbox.pending()).toEqual([]);
+
+		await keep();
+		identity.current = {
+			speakerFor: async (principalId) => ({
+				...OWNER_SPEAKER,
+				principalId,
+				tier: "member",
+			}),
+		};
+		await restart();
+		expect(fx.runtime.turns.map((t) => t.agent?.name)).toContain("infra");
+		expect(fx.runtime.turns.every((t) => t.speaker.tier === "member")).toBe(
+			true,
+		);
 	});
 
 	test("an entry is claimed once, so a second reader finds it gone", async () => {

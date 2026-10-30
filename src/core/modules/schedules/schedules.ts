@@ -122,7 +122,10 @@ export function schedulesExtension(
 						"schedules are kept only in a turn someone is named for, whose schedules they are",
 					);
 				const peer =
-					agents && typeof input.agent === "string" && input.agent
+					spec.name === "schedule_list" &&
+					agents &&
+					typeof input.agent === "string" &&
+					input.agent
 						? agents(input.agent, channel)
 						: undefined;
 				const target = peer ?? (await channelFor(channel, author.principalId));

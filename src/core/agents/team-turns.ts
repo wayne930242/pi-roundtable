@@ -96,8 +96,8 @@ export class TeamTurns {
 	}
 
 	/**
-	 * The owner's message in an agent's channel; call inside the channel's queue. `text`
-	 * carries the reference, `replyText` is what they typed.
+	 * The owner's message in an agent's channel; call inside its queue. `text` carries the
+	 * reference, `replyText` is what they typed.
 	 */
 	async answerOwner(
 		channel: ChannelKey,
@@ -123,15 +123,13 @@ export class TeamTurns {
 				attachments,
 				confirmed,
 				steerable: true,
+				byMessage: true,
 				interactive: true,
 			},
 		);
 	}
 
-	/**
-	 * A turn in an agent's channel that no owner message started; call inside its queue. A report
-	 * turn is interactive: it may ask the owner on cards there.
-	 */
+	/** A turn no owner message started; call inside its queue. A report turn is interactive. */
 	answerBackground(
 		channel: ChannelKey,
 		speaker: Speaker,

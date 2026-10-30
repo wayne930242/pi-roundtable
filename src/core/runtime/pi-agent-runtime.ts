@@ -216,6 +216,7 @@ export class PiAgentRuntime implements AgentRuntime {
 			request.speaker,
 			conversation.visibility === "private",
 			turnYolo(this.#options, request),
+			request.byMessage === true,
 		);
 		if (request.confirmed && pending && pending.calls.length > 0) {
 			logger.info(
@@ -226,7 +227,6 @@ export class PiAgentRuntime implements AgentRuntime {
 				"confirmed actions released",
 			);
 		}
-
 		// Collected as they end: a compaction during the turn shortens session.messages.
 		const turnMessages: TurnMessage[] = [];
 		const toolCalls: string[] = [];

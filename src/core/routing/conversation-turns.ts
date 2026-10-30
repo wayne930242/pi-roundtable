@@ -45,6 +45,8 @@ export interface ConversationTurnInput {
 	selection?: TurnSelection;
 	/** The owner's own chat turn, which their next messages may steer. */
 	steerable?: boolean;
+	/** The speaker's message started the turn (not a schedule or report): it may spend a late approval. */
+	byMessage?: boolean;
 	/** The turn may ask the owner on the surface's prompts, such as approvals of held actions. */
 	interactive?: boolean;
 	/**
@@ -212,6 +214,7 @@ export function conversationTurns(
 									: {}),
 								...(input.confirmed ? { confirmed: true } : {}),
 								...(input.steerable ? { steerable: true } : {}),
+								...(input.byMessage ? { byMessage: true } : {}),
 								...(input.interactive ? { interactive: true } : {}),
 								...(input.unattended ? { unattended: true } : {}),
 								...(input.timeLimitMs === undefined

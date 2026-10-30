@@ -1,11 +1,12 @@
 import type { ChannelKey } from "../domain/conversation.ts";
-import { AgentError } from "../domain/errors.ts";
+import { AgentError, IdentityError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { HostStoppingError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
-import { addressee } from "../speakers.ts";
+import { addressee, type Speaker } from "../speakers.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
@@ -340,6 +341,19 @@ export class AgentMessages {
 				});
 	}
 
+	/** The kept speaker as they stand now, like a background turn's author; undefined when gone or disabled. */
+	async #stillRunsAs(kept: Speaker): Promise<Speaker | undefined> {
+		const principals = this.#host.options.principals?.();
+		if (!principals || kept.principalId === SYSTEM_PRINCIPAL) return kept;
+		try {
+			const now = await principals.speakerFor(kept.principalId, kept.tier);
+			return { ...kept, tier: now.tier, principalId: now.principalId };
+		} catch (error) {
+			if (error instanceof IdentityError) return undefined;
+			throw error;
+		}
+	}
+
 	async #replayOne(entry: StoredOutboxEntry): Promise<void> {
 		const { store, logger } = this.#host.options;
 		if (!(await store.outbox.claim(entry.id))) return;
@@ -367,7 +381,15 @@ export class AgentMessages {
 			{ id: entry.id, kind: entry.kind, from: entry.sender, to: entry.target },
 			"replaying a kept agent message",
 		);
-		const chain: Chain = { messages: entry.messages, speaker: entry.speaker };
+		const speaker = await this.#stillRunsAs(entry.speaker);
+		if (!speaker) {
+			logger.warn(
+				{ id: entry.id, from: entry.sender },
+				"kept agent message dropped: its speaker may no longer run",
+			);
+			return;
+		}
+		const chain: Chain = { messages: entry.messages, speaker };
 		if (entry.kind === "reply") {
 			await this.#followUp(sender, entry.channel, entry.text, chain);
 			return;
