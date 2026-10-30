@@ -86,6 +86,7 @@ describe("the conversation retention sweep", () => {
 			deleted: 1,
 			busy: 0,
 			failed: 0,
+			kept: 0,
 		});
 		expect(run.asked).toEqual(["web:old"]);
 		expect(run.registry.kept()).toEqual(["web:fresh"]);
@@ -138,11 +139,67 @@ describe("the conversation retention sweep", () => {
 			deleted: 1,
 			busy: 0,
 			failed: 1,
+			kept: 0,
 		});
 		expect(run.registry.kept()).toEqual(["web:bad"]);
 		expect(run.warnings).toMatchObject([
 			{ channel: "web:bad", kind: "support" },
 		]);
+	});
+
+	test("a conversation the host's keep wants survives its days and is asked again at the next sweep", async () => {
+		const wanted = new Set(["web:open"]);
+		const run = setup([
+			record("web:open", "support", 500),
+			record("web:closed", "support", 500),
+			record("web:fresh", "support", 1),
+		]);
+		const seen: string[] = [];
+		const options = {
+			...run.options,
+			keep: async (one: ConversationRecord) => {
+				seen.push(one.key);
+				return wanted.has(one.key);
+			},
+		};
+		expect(await sweepConversations(options)).toEqual({
+			deleted: 1,
+			busy: 0,
+			failed: 0,
+			kept: 1,
+		});
+		// Only a conversation past its days is asked about.
+		expect(seen).toEqual(["web:open", "web:closed"]);
+		expect(run.asked).toEqual(["web:closed"]);
+		expect(run.registry.kept()).toEqual(["web:open", "web:fresh"]);
+		wanted.clear();
+		expect(await sweepConversations(options)).toMatchObject({
+			deleted: 1,
+			kept: 0,
+		});
+		expect(run.registry.kept()).toEqual(["web:fresh"]);
+	});
+
+	test("a keep that throws keeps the conversation for this sweep and is logged", async () => {
+		const run = setup([
+			record("web:a", "support", 500),
+			record("web:b", "support", 500),
+		]);
+		const options = {
+			...run.options,
+			keep: (one: ConversationRecord) => {
+				if (one.key === "web:a") throw new Error("ticket lookup down");
+				return false;
+			},
+		};
+		expect(await sweepConversations(options)).toEqual({
+			deleted: 1,
+			busy: 0,
+			failed: 1,
+			kept: 0,
+		});
+		expect(run.registry.kept()).toEqual(["web:a"]);
+		expect(run.warnings).toMatchObject([{ channel: "web:a" }]);
 	});
 
 	test("the service sweeps at start and stops cleanly", async () => {

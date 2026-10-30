@@ -189,8 +189,19 @@ describe("conversations.keepDays", () => {
 				refusal({ ...guest, conversations: { keepDays: { support: bad } } }),
 			).toContain("config conversations.keepDays.support");
 		}
-		expect(refusal({ ...guest, conversations: { keep: {} } })).toContain(
+		expect(refusal({ ...guest, conversations: { kept: {} } })).toContain(
 			"unknown key",
+		);
+	});
+
+	test("keep is a function and is carried to the resolved configuration; anything else is refused", () => {
+		const keep = () => true;
+		expect(
+			resolveConfig({ ...guest, conversations: { keepDays: { a: 1 }, keep } })
+				.conversations,
+		).toEqual({ keepDays: { a: 1 }, keep });
+		expect(refusal({ ...guest, conversations: { keep: {} } })).toContain(
+			"config conversations.keep",
 		);
 	});
 });

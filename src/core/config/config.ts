@@ -271,7 +271,10 @@ export interface ResolvedConfig extends ResolvedLimits {
 	/** Absent `retention`: used files live as long as their conversation. */
 	attachments: AttachmentsConfig;
 	/** Days to keep each conversation kind after its last activity; a kind not listed is kept. */
-	conversations: { keepDays: Readonly<Record<string, number>> };
+	conversations: {
+		keepDays: Readonly<Record<string, number>>;
+		keep?: ConversationsConfig["keep"];
+	};
 	agentDir: string;
 	model: ModelRef;
 	thinking: ThinkingLevel;
@@ -373,7 +376,12 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		attachments: config.attachments?.retention
 			? { retention: config.attachments.retention }
 			: {},
-		conversations: { keepDays: { ...config.conversations?.keepDays } },
+		conversations: {
+			keepDays: { ...config.conversations?.keepDays },
+			...(config.conversations?.keep
+				? { keep: config.conversations.keep }
+				: {}),
+		},
 		agentDir: config.agentDir ?? `${config.dataDir}/pi`,
 		model,
 		thinking,

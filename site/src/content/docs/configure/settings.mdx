@@ -99,6 +99,8 @@ The same settings may also come as an adapter, `adapters: [discord({ ... })]` wi
 | `agentDir` | string | `<dataDir>/pi` | Pi's agent directory, which holds the model logins. See [Models](/configure/models/). |
 | `scratchDir` | string | `<os temp dir>/<slug>-scratch`, the slug being `discord.rootCommand`, or the lowercase `name` without Discord | The agents' scratch directory: their shell runs with `TMPDIR` pointing to it, and writes and removals inside it run without a hold. |
 | `attachments.retention` | `{ maxAgeMs, sweepEveryMs? }` | none | Removes the files turns used once they are `maxAgeMs` old, and sweeps at start and every `sweepEveryMs` (default one hour). Left out, used files live as long as their conversation. |
+| `conversations.keepDays` | object of whole days by conversation kind | none | A daily sweep deletes a recorded conversation of a listed kind that was last active longer ago. A kind not listed is kept. |
+| `conversations.keep` | function from a conversation record to `true` or `false` | none | Asked for each conversation the sweep would delete; `true` keeps it for now (a support conversation whose ticket is still open), and it is asked again at the next sweep. A function that throws keeps the conversation and is logged. |
 
 ## Models
 

@@ -2,7 +2,10 @@ import type { SQL } from "bun";
 import type { RoundtablePlugin } from "../plugin.ts";
 import { CONVERSATIONS } from "../services.ts";
 import type { ConversationRegistry } from "./conversation-registry.ts";
-import { conversationRetentionService } from "./conversation-retention.ts";
+import {
+	type ConversationRetentionOptions,
+	conversationRetentionService,
+} from "./conversation-retention.ts";
 import { PgConversationRegistry } from "./conversation-store.ts";
 
 /** The name of the conversation registry's plugin, as the migration ledger names it. */
@@ -19,6 +22,8 @@ export function conversationsPlugin(
 		PgConversationRegistry.attach(sql),
 	/** Days to keep each conversation kind after its last activity (`conversations.keepDays`); none = keep them all. */
 	keepDays: Readonly<Record<string, number>> = {},
+	/** Asked before a conversation past its days is deleted (`conversations.keep`); true keeps it. */
+	keep?: ConversationRetentionOptions["keep"],
 ): RoundtablePlugin {
 	return {
 		name: CONVERSATIONS_PLUGIN,
@@ -35,6 +40,7 @@ export function conversationsPlugin(
 						registry,
 						conversations,
 						keepDays,
+						...(keep ? { keep } : {}),
 						now: () => env.now(),
 						logger,
 					}),

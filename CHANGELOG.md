@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `conversations.keep(record)` (config; `ResolvedConfig.conversations.keep`): asked for each conversation the retention sweep would delete after its kind's `keepDays`; `true` keeps it until the next sweep, so a host can hold a conversation it still wants, such as a support conversation whose ticket is open. A `keep` that throws keeps the conversation and is logged. `ConversationSweep` gains `kept`. See [Conversation retention](docs/plugins.md#conversation-retention-conversationskeepdays).
 - `pi-roundtable-web`: `WebApp.rooms.context(room, { limit?, messageChars? })`: a host room's recent messages as the channel-context block `CHANNEL_CONTEXT.read` gives a turn, for a host that starts a turn from a room's `send` hook and has no addressing message. It marks nothing handed over, so a retry reads the same.
 - `pi-roundtable-web`: `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
 

@@ -2223,6 +2223,17 @@ The key is a conversation's kind (`ConversationRecord.kind`) and the value a who
 A sweep runs when the host starts and once a day after: for each recorded conversation of a listed kind past its days, it calls `ConversationPort.deleteConversation`, which its claim carries out, and then forgets the record (`ConversationRegistry.remove`, optional on a hand-built registry).
 A conversation with a turn running or waiting (`"busy"`) is skipped and tried again at the next sweep; one whose claim cannot delete it is logged and kept.
 A kind not listed, and a host without the key, keeps its conversations as before.
+
+A conversation can be wanted for longer than its kind's days, such as a support conversation whose ticket is still open.
+`conversations.keep(record)` is asked for each conversation past its days, before it is deleted; answering `true` keeps it for now, and it is asked again at the next sweep, so the conversation goes once the host stops wanting it.
+A `keep` that throws or rejects keeps the conversation for this sweep and is logged.
+
+```ts
+conversations: {
+	keepDays: { support: 365 },
+	keep: async (conversation) => (await tickets.isOpen(conversation.key)),
+},
+```
 The agents' own channels are not recorded conversations and are not touched.
 
 ### `piPackages`: Pi extensions every session loads
