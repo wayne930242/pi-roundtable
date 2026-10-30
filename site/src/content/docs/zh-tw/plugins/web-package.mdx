@@ -50,7 +50,7 @@ export default {
 | 卡片 | 附細節的核准、問題、問卷，以及一輪執行碰到時間上限時的卡片，任何一位 owner 都能在房間裡回答。 |
 | Agent 檔案 | 名稱、提示詞、模型、思考程度，以及角色編輯器。 |
 | Schedules | 團隊的排程，取消前會先確認。 |
-| Table | 圓桌，讓每個 agent 入座，點一下就進它的房間。 |
+| Table | 圓桌，讓每個 agent 入座，點一下就進它的房間。成員或管理員只有在 host 為該層級列出它時才有；那時它讓他們能列出的 host 房間入座。 |
 | 檔案 | 夥伴的工作區：檔案樹、CodeMirror 語法高亮的檔案，以及編輯器；存檔時會檢查夥伴有沒有同時改過，也能新增、重新命名、刪除（刪除會進可還原的垃圾桶）。 |
 | Settings | 色彩模式與外觀、安裝、這台裝置的通知，以及登出。 |
 
@@ -105,7 +105,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `routing` | `hash` | `path` 保留 mount 下的頁面路徑與 history 導航。 |
 | `admission` | `owners` | `owners` 只讓 owner 進入；`access` 讓 `IDENTITY` 在這個 surface 上接納的所有人進入（owner、admin、成員）。見「成員與關卡」。 |
 | `modes` | 開啟 | 設為 `false` 就不提供 yolo 與長時間執行開關；`PUT api/rooms/<key>/mode` 回 404。 |
-| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules`、`table` 和 `workspace` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。`admission: "access"` 時預設會加上 `profile`，也可以用 `{ owner, admin?, member }` 依身分層級分別設定。 |
+| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules`、`table` 和 `workspace` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。`admission: "access"` 時預設會加上 `profile`，也可以用 `{ owner, admin?, member }` 依身分層級分別設定；owner 專屬的頁面裡，只有 `table` 能列給成員或管理員（該層級也要有 `rooms`）。 |
 | `workspace` | 夥伴的目錄 | 檔案頁顯示什麼。`workspace.roots` 加入更多位置，每個有 `workspace.roots.id`、`workspace.roots.label`、`workspace.roots.dir` 和 `workspace.roots.writable`（沒設就是唯讀）；`workspace.agents`、`workspace.scratch` 設為 `false` 就不顯示夥伴的工作目錄或暫存目錄。`dir` 是 `dataDir` 或包含它時會無法啟動。 |
 | `surface` | `app` | app 房間的 key 前綴。改了它，所有房間都會重新開始。 |
 | `cardGraceSeconds` | `120` | 一輪執行等卡片的秒數，大於 0、最多 3600。 |
@@ -173,6 +173,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 `src/authz.ts` 裡的一張表會在任何處理器看到請求之前先判定它，表裡沒有的路由對所有人都回 404。
 owner 能用夥伴房間、總覽與其他僅限 owner 的頁面；成員能用自己的對話、筆記與排程、host 的房間與頁面，以及自己的個人資料。
 成員的 socket 不會收到任何夥伴房間的內容，不論是即時發生的，還是連線當下補送的；卡片也只有它自己的對象能回應。
+成員或管理員的圓桌（host 有為該層級列出時）只讓他們能列出的 host 房間入座：座位亮不亮看那個房間自己的訊息，這些訊息只送到有權讀該房間的 socket；點座位會進那個房間的頁面，能寫什麼由房間種類的 `access` 決定。
 還有必要的設定步驟沒做完時，app 會停在那些步驟上：只有個人資料、設定，以及完成步驟的頁面能用，直到最後一步完成。
 連結可以帶 `?next=`，值可以是 `profile`、`notices`、`settings`、`room:<key>` 或 `p:<page>`；其他值一律捨棄。
 

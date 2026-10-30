@@ -6,6 +6,7 @@ import {
 	type ActorFacts,
 	CHANNEL_CONTEXT,
 	type ChannelKey,
+	type ConversationTurns,
 	definePlugin,
 	IDENTITY,
 	type InboundMessage,
@@ -92,6 +93,10 @@ interface Inbox {
 	/** When set, `access` answers only for viewers who carry this role. */
 	needRole: string | undefined;
 	web: WebApp | undefined;
+	/** Runs a turn on the host's runtime, which shows typing on the room; set when the plugin is set up. */
+	turns: ConversationTurns | undefined;
+	/** While set, the runtime's turn waits for it. */
+	hold: Promise<void> | undefined;
 }
 
 const READ_WRITE: RoomAccess = {
@@ -111,6 +116,8 @@ function inbox(): Inbox {
 		refuse: undefined,
 		needRole: undefined,
 		web: undefined,
+		turns: undefined,
+		hold: undefined,
 	};
 }
 
@@ -121,6 +128,7 @@ function inboxPlugin(state: Inbox) {
 		setup: (context) => {
 			const web = context.services.get(WEB_APP);
 			state.web = web;
+			state.turns = context.turns;
 			const principals = new Map<string, string>();
 			const nameOf = (viewer: Viewer) => viewer.name.toLowerCase();
 			const kind: HostRoomKind = {
@@ -283,10 +291,10 @@ async function boot(): Promise<Booted> {
 	writeFileSync(join(assets, "index.html"), "<html>app</html>");
 	const state = inbox();
 	const runtime = {
-		runTurn: async (request: TurnRequest): Promise<TurnResult> => ({
-			ok: true,
-			text: `echo ${request.text}`,
-		}),
+		runTurn: async (request: TurnRequest): Promise<TurnResult> => {
+			await state.hold;
+			return { ok: true, text: `echo ${request.text}` };
+		},
 		steer: async () => false,
 		stop: () => false,
 		startFresh: async () => undefined,
@@ -332,7 +340,8 @@ async function boot(): Promise<Booted> {
 				dataDir,
 				assetDir: assets,
 				cardGraceSeconds: 120,
-				panes: ["rooms"],
+				// The round table is named for the members too: it seats only what they may list.
+				panes: { owner: ["rooms", "table"], member: ["rooms", "table"] },
 			}),
 			inboxPlugin(state),
 		],
@@ -1494,6 +1503,123 @@ describeDb("the host rooms over a real host", () => {
 		await Bun.sleep(50);
 		expect(reply).toBeDefined();
 		app.state.script = undefined;
+		for (const client of [mel, ada, kim, zed]) client.close();
+	});
+
+	test("a member's round table seats only the rooms their kind lists, and its frames, running turns and writes follow the room's own access", async () => {
+		const { state } = app;
+		// The table is served to the member, and the owners' agent rooms and presence stay closed to them.
+		const config = (await (
+			await rest(app, "config", { who: "mel" })
+		).json()) as { panes: string[]; tier: string };
+		expect(config).toMatchObject({ tier: "member", panes: ["rooms", "table"] });
+		expect((await rest(app, "rooms", { who: "mel" })).status).toBe(404);
+		expect(
+			(await rest(app, `rooms/${AGENT_ROOM}`, { who: "mel" })).status,
+		).toBe(404);
+		// The seats: Mel's list is the room the kind grants, Kim's the same room, Zed has none.
+		const seats = async (who: Who) =>
+			(await rest(app, "host/inbox", { who })).status === 404
+				? []
+				: (
+						(await (
+							await rest(app, "host/inbox", { who })
+						).json()) as HostListView
+					).rooms.map((room) => room.key);
+		expect(await seats("mel")).toEqual([ROOM_A]);
+		expect(await seats("kim")).toEqual([ROOM_A]);
+		expect(await seats("zed")).toEqual([]);
+		// Mel follows the rooms the table seats; the other room and the agent room are refused.
+		const mel = await Client.open(app, "mel");
+		mel.send({ type: "subscribe", room: ROOM_B });
+		expect(await mel.take(ofType("refused"))).toMatchObject({
+			code: "unknown_room",
+		});
+		mel.send({ type: "subscribe", room: AGENT_ROOM });
+		expect(await mel.take(ofType("refused"))).toMatchObject({
+			code: "unknown_room",
+		});
+		// Nor can they write or stop where they may not: the agent room and the room that is not theirs.
+		mel.send({ type: "send", id: "a1", room: AGENT_ROOM, text: "hi" });
+		expect(await mel.take(ofType("refused"))).toMatchObject({
+			id: "a1",
+			code: "forbidden",
+		});
+		mel.send({
+			type: "send",
+			id: "b1",
+			room: ROOM_B,
+			text: "hi",
+			mode: "note",
+		});
+		expect(await mel.take(ofType("refused"))).toMatchObject({
+			id: "b1",
+			code: "unknown_room",
+		});
+		mel.send({ type: "stop", room: AGENT_ROOM });
+		expect(await mel.take(ofType("refused"))).toMatchObject({
+			code: "forbidden",
+		});
+		mel.send({ type: "stop", room: ROOM_B });
+		expect(await mel.take(ofType("refused"))).toMatchObject({
+			code: "unknown_room",
+		});
+		// A turn Ada starts in Room A runs while the others follow: its activity reaches the readers who follow
+		// it, also those who follow it only after it began, and no one else.
+		let release: () => void = () => undefined;
+		state.hold = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		state.script = async (message, speaker) => {
+			if (!speaker) return;
+			await state.turns?.run({
+				channel: message.channel,
+				kind: "inbox",
+				text: message.text,
+				speaker,
+				reply: async () => undefined,
+			});
+		};
+		const ada = await Client.open(app, "ada");
+		ada.send({ type: "subscribe", room: ROOM_A });
+		ada.send({ type: "subscribe", room: ROOM_B });
+		const kim = await Client.open(app, "kim");
+		const zed = await Client.open(app, "zed");
+		const busy = (room: string, typing: boolean) => (frame: ServerFrame) =>
+			frame.type === "activity" &&
+			frame.room === room &&
+			frame.typing === typing;
+		mel.send({ type: "subscribe", room: ROOM_A });
+		ada.send({ type: "send", id: "t1", room: ROOM_A, text: "work on it" });
+		await ada.take(ofType("accepted"));
+		await mel.take(busy(ROOM_A, true));
+		kim.send({ type: "subscribe", room: ROOM_A });
+		zed.send({ type: "subscribe", room: ROOM_A });
+		expect(await kim.take(busy(ROOM_A, true))).toMatchObject({ typing: true });
+		expect(await zed.take(ofType("refused"))).toMatchObject({
+			code: "unknown_room",
+		});
+		expect(await zed.sees((frame) => frame.type === "activity", 300)).toBe(
+			false,
+		);
+		// What happens in the room Mel does not read never reaches them, and the presence table is the owners'.
+		await web.rooms.post(ROOM_B, external("only for Ada"));
+		await ada.take(ofType("host_message"));
+		expect(
+			await mel.sees(
+				(frame) =>
+					("room" in frame && frame.room === ROOM_B) ||
+					frame.type === "presence",
+				300,
+			),
+		).toBe(false);
+		release();
+		state.hold = undefined;
+		await mel.take(busy(ROOM_A, false));
+		expect(await zed.sees((frame) => frame.type === "activity", 200)).toBe(
+			false,
+		);
+		state.script = undefined;
 		for (const client of [mel, ada, kim, zed]) client.close();
 	});
 

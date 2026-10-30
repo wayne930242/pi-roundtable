@@ -146,6 +146,13 @@ export function installFrames(ctx: HostContext): void {
 						connection,
 						audience: { room: frame.room },
 					});
+			// So is a turn already running: a seat at the round table shows it from the first frame, not after the next change.
+			const activity = ctx.app.activityOf(asRoom(frame.room));
+			if (activity.typing)
+				ctx.sockets.deliver(
+					{ type: "activity", room: frame.room, ...activity },
+					{ connection, audience: { room: frame.room } },
+				);
 		},
 	);
 

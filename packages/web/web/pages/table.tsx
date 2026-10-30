@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useContext, useEffect, useState } from "react";
 import { DialogueBox } from "../components/dialogue-box.tsx";
 import {
 	RoundTable,
@@ -7,7 +7,13 @@ import {
 } from "../components/round-table.tsx";
 import { openMenu } from "../lib/action-menu.ts";
 import { useSelector } from "../lib/app-store.ts";
+import { ConfigContext } from "../lib/config.ts";
 import { resolveFocus } from "../lib/dialogue.ts";
+import {
+	useHostedTable,
+	useHostSeats,
+	useHostSeatsSync,
+} from "../lib/host-seats.ts";
 import type { Via } from "../lib/long-press.ts";
 import { seatMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -58,11 +64,23 @@ function openSeatMenu(
 	);
 }
 
+/** Keeps the seats of a table whose person is not an owner: the rooms of the kinds they may list. */
+function HostSeatsSync() {
+	useHostSeatsSync(
+		(useContext(ConfigContext)?.kinds ?? []).map((kind) => kind.kind),
+	);
+	return null;
+}
+
 /**
  * Every agent of the room list whose room is not muted at the round table, each in the state its room is in. A seat turns the
  * camera to its agent and opens a dialogue box on the agent's own room; the address `#/table/<agent>`
  * is that view, so Back returns to the whole ring and a link opens the scene at an agent. `focus` is
  * the route's key: an agent's name or the key of its room.
+ *
+ * A person who is not an owner has no agent rooms. Their ring seats the host rooms their kinds list
+ * for them, and a seat opens the room's own page, where what they may write and press is decided as it
+ * is anywhere else; the table has no dialogue box, no seat menu and no sheet of who sits for them.
  */
 export function TablePage({ focus }: { focus?: string | undefined }) {
 	const [table, setTable] = useState<TableHandle>();
@@ -71,8 +89,12 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 	const [choosing, setChoosing] = useState(false);
 	// Mounted when first asked for and kept, so the sheet can slide away.
 	const [asked, setAsked] = useState(false);
-	const listed = useSelector((state) => state.listed);
-	const target = resolveFocus(focus, roster);
+	const hosted = useHostedTable();
+	const hostSeats = useHostSeats();
+	const ownerListed = useSelector((state) => state.listed);
+	const listed = hosted ? hostSeats.loaded : ownerListed;
+	// A hosted seat opens its room's page; the camera and the dialogue box are the owners'.
+	const target = hosted ? null : resolveFocus(focus, roster);
 	const view = roster.find((seat) => seat.name === target);
 	// An address that names nobody seated goes back to the whole ring, in place: Back does not return to it.
 	useEffect(() => {
@@ -81,6 +103,12 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 	}, [focus, listed, target]);
 	const arrived = useArrived(target !== null);
 	const go = (name: string | null) => {
+		if (hosted) {
+			// A hosted seat opens its room's own page; there is no close-up to turn the camera to.
+			const seated = roster.find((one) => one.name === name);
+			if (seated) navigate("room", seated.key);
+			return;
+		}
 		if (name === target) return;
 		// from the whole ring a push (Back returns to it); from one agent to another, or out, in place
 		navigate("table", name ?? undefined, { replace: target !== null });
@@ -90,7 +118,8 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 		setChoosing(true);
 	};
 	// Everyone is off the table, but there are agents to call back: say so, and offer the sheet.
-	const empty = roster.length === 0 && agents.length > 0;
+	const empty = !hosted && roster.length === 0 && agents.length > 0;
+	const noRooms = hosted && hostSeats.loaded && roster.length === 0;
 	return (
 		<div className="table-page" data-focused={target !== null || undefined}>
 			<header className="page-head">
@@ -105,7 +134,7 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 							{t("Reset view")}
 						</button>
 					) : null}
-					{agents.length > 0 ? (
+					{!hosted && agents.length > 0 ? (
 						<button
 							type="button"
 							className="secondary"
@@ -128,24 +157,36 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 							{t("Who's at the table")}
 						</button>
 					</div>
+				) : noRooms ? (
+					<div className="table-empty-state">
+						<strong>{t("The table is empty")}</strong>
+						<p className="meta">{t("There are no rooms to seat yet.")}</p>
+					</div>
 				) : (
 					<RoundTable
 						onHandle={setTable}
 						focus={target}
 						onFocus={go}
 						onSeat={go}
-						onSeatMenu={(request) => {
-							const seated = roster.find((one) => one.name === request.id);
-							if (seated)
-								openSeatMenu(
-									seated.key,
-									request.at,
-									request.via,
-									request.source,
-								);
-						}}
+						{...(hosted
+							? { onMore: () => navigate("rooms") }
+							: {
+									onSeatMenu: (request: SeatMenuRequest) => {
+										const seated = roster.find(
+											(one) => one.name === request.id,
+										);
+										if (seated)
+											openSeatMenu(
+												seated.key,
+												request.at,
+												request.via,
+												request.source,
+											);
+									},
+								})}
 					/>
 				)}
+				{hosted ? <HostSeatsSync /> : null}
 				{view ? (
 					<DialogueBox
 						key={view.key}

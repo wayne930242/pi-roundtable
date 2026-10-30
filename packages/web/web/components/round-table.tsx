@@ -4,6 +4,7 @@ import type { RoomView } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { suggestionFor } from "../lib/character-spec.ts";
 import { useCharacters, useRoomStates } from "../lib/characters.ts";
+import { useHostedTable, useHostSeats } from "../lib/host-seats.ts";
 import { useKit } from "../lib/kit.ts";
 import { useCharacterStyle, useLook } from "../lib/look.ts";
 import { useMedia } from "../lib/media.ts";
@@ -50,14 +51,17 @@ const LIST_ABOVE = 10;
 /**
  * The agents of the room list, the coordinator first; only `members` of them when the table is a
  * group's. The owner's own table seats the agents whose room is not muted; `all` lists the muted ones
- * too, for the sheet that says who sits. A group's members sit whether muted or not.
+ * too, for the sheet that says who sits. A group's members sit whether muted or not. A person below
+ * the owners has no agent rooms: the rooms their kinds list, newest first, sit instead.
  */
 export function useRoster(
 	members: readonly string[] | undefined,
 	options: { all?: boolean } = {},
 ): RoomView[] {
 	const all = options.all === true;
-	return useSelector(
+	const hosted = useHostedTable();
+	const { views: hostRooms } = useHostSeats();
+	const owned = useSelector(
 		(state) => {
 			const agents = state.order
 				.map((key) => state.rooms[key]?.view)
@@ -75,6 +79,7 @@ export function useRoster(
 		},
 		`${all}\n${members?.join("\n") ?? ""}`,
 	);
+	return hosted ? hostRooms : owned;
 }
 
 /** Every agent of the room list, seated or not. */
@@ -135,6 +140,7 @@ export function RoundTable(props: RoundTableProps) {
 	const roster = useRoster(props.members);
 	const agentStates = useRoomStates(roster.map((view) => view.key));
 	const rounds = useRounds(props.groupRoom);
+	const attention = useHostSeats().attention;
 	const upright = useMedia("(orientation: portrait)");
 	const listBelow =
 		variant === "full" &&
@@ -144,11 +150,20 @@ export function RoundTable(props: RoundTableProps) {
 		() =>
 			seatStates(
 				Object.fromEntries(
-					roster.map((view) => [view.name, agentStates[view.key] ?? "idle"]),
+					roster.map((view) => {
+						const state = agentStates[view.key] ?? "idle";
+						// A hosted room's list entry says it asks for something, which only an idle seat shows.
+						return [
+							view.name,
+							attention[view.key] && (state === "idle" || state === "sleepy")
+								? "waiting"
+								: state,
+						];
+					}),
 				),
 				rounds,
 			),
-		[roster, agentStates, rounds],
+		[roster, agentStates, rounds, attention],
 	);
 	const statesRef = useRef(states);
 	statesRef.current = states;

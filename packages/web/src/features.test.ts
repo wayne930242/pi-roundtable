@@ -369,4 +369,60 @@ describe("default panes", () => {
 			resolveOptions({ ...options, panes: ["rooms", "table"] } as never).panes,
 		).toEqual(["rooms", "table"]);
 	});
+
+	describe("per tier", () => {
+		const { auth: _none, ...named } = options;
+		const access = {
+			...named,
+			verifier: () => ({ refusal: "no" }),
+			admission: "access" as const,
+		};
+		const tiered = (member: string[], admin?: string[]) =>
+			resolveOptions({
+				...access,
+				panes: {
+					owner: ["rooms", "table", "overview", "workspace"],
+					member,
+					...(admin ? { admin } : {}),
+				},
+			} as never);
+
+		test("a member's and an admin's list may name the table, which seats the host rooms they may list", () => {
+			const { tierPanes } = tiered(["rooms", "table"], ["rooms", "table"]);
+			expect(tierPanes.member).toEqual(["rooms", "table"]);
+			expect(tierPanes.admin).toEqual(["rooms", "table"]);
+			expect(tiered(["rooms", "table"]).tierPanes.admin).toEqual([
+				"rooms",
+				"table",
+			]);
+		});
+
+		test("the default lists of the other tiers do not name it: the host has to", () => {
+			const { tierPanes } = resolveOptions(access as never);
+			expect(tierPanes.member).not.toContain("table");
+			expect(tierPanes.admin).not.toContain("table");
+		});
+
+		test("a tier's table needs that tier's rooms pane, and the owners' list must have the table", () => {
+			expect(() => tiered(["table"])).toThrow(
+				"panes.member names the table pane without the rooms pane",
+			);
+			expect(() => tiered(["rooms"], ["table"])).toThrow(
+				"panes.admin names the table pane without the rooms pane",
+			);
+			expect(() =>
+				resolveOptions({
+					...access,
+					panes: { owner: ["rooms"], member: ["rooms", "table"] },
+				} as never),
+			).toThrow("which the owners' panes do not have");
+		});
+
+		test("the panes that show the whole host stay the owners'", () => {
+			for (const pane of ["overview", "workspace", "skills", "connectors"])
+				expect(() => tiered(["rooms", pane])).toThrow(
+					`names the ${pane} pane, which only owners are served`,
+				);
+		});
+	});
 });
