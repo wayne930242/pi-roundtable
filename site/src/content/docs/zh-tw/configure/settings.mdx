@@ -177,6 +177,8 @@ export default {
 設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報；設了 `ops.conversation` 則回報到那段對話，由認領它的 claim 執行回報那一輪。
 同一個錯誤一小時內最多回報一次，每小時最多送出五筆回報。
 
+webhook 在 agent 頻道裡的貼文（例如 CI bot 的通知）會用貼文的文字替那個 agent 開始一輪回報。只有 embed 的貼文也算：它的標題、說明、欄位、頁尾和連結會當作純文字讀進來，最多 4,000 個字元，所以沒有訊息文字的警報一樣會被回應。
+
 addon 加了什麼、外掛怎麼啟動，見 [Services and addons](/zh-tw/plugins/services-and-addons/)。
 
 {/* Sources: src/core/config/config.ts:20-122, src/core/config/config.ts:124-326, src/core/config/schema.ts:156-200, src/core/define-roundtable.ts:121-217, src/core/discord/owner-command.ts:21-27, src/core/ops/error-reporter.ts:10-60, templates/roundtable.config.ts:1-24, src/cli/checks/environment.ts:1-27 */}

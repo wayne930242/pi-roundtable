@@ -250,6 +250,7 @@ test("a Discord message through the application's webhook carries the webhook's 
 			applicationId: null,
 			mentions: { users: new Map(), members: new Map() },
 			stickers: new Map(),
+			embeds: [],
 			attachments: new Map(),
 			...extra,
 		}) as never;

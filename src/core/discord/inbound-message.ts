@@ -2,6 +2,7 @@ import { type Message, MessageReferenceType } from "discord.js";
 import type { InboundMessage } from "../contract/channels.ts";
 import { channelKey } from "../contract/surface.ts";
 import type { AttachmentRef } from "../domain/attachment.ts";
+import { withEmbeds } from "./embed-text.ts";
 import type { LateTurn } from "./owner-cards.ts";
 
 /** Who the bot is on Discord, as far as the client knows it. */
@@ -25,7 +26,9 @@ function attachmentRefs(
 
 function referenceOf(referenced: Message, mention: RegExp) {
 	return {
-		text: referenced.content.replace(mention, "").trim(),
+		text: withEmbeds(referenced.content, referenced.embeds)
+			.replace(mention, "")
+			.trim(),
 		attachments: attachmentRefs(referenced),
 		...(referenced.webhookId
 			? { webhookName: referenced.author.username }
@@ -97,7 +100,9 @@ export async function toInbound(
 		...(message.guildId ? { space: message.guildId } : {}),
 		mentionsBot: message.mentions.users.has(botId),
 		repliesToBot: referenced?.author.id === botId,
-		text: message.content.replace(mention, "").trim(),
+		text: withEmbeds(message.content, message.embeds)
+			.replace(mention, "")
+			.trim(),
 		attachments: [
 			...attachmentRefs(message),
 			...(forward ? attachmentRefs(forward) : []),

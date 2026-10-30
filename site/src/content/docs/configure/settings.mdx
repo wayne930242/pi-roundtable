@@ -177,6 +177,8 @@ The web chat needs it.
 With `ops.agent` set, each `error` and `fatal` log entry is reported to that agent as a message and a report turn in its channel; with `ops.conversation`, to that conversation, whose claim answers the report turn.
 The same error goes at most once an hour, and at most five reports go out per hour.
 
+A webhook's post in an agent's channel, such as a CI bot's notice, starts a report turn for that agent with the post's text. A post that is only an embed counts too: its title, description, fields, footer and link are read as plain text, at most 4,000 characters, so an alert that arrives with no message text is still answered.
+
 For what the addons add and how plugins start, see [Services and addons](/plugins/services-and-addons/).
 
 {/* Sources: src/core/config/config.ts:20-122, src/core/config/config.ts:124-326, src/core/config/schema.ts:156-200, src/core/define-roundtable.ts:121-217, src/core/discord/owner-command.ts:21-27, src/core/ops/error-reporter.ts:10-60, templates/roundtable.config.ts:1-24, src/cli/checks/environment.ts:1-27 */}

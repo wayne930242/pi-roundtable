@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
+import { toInbound } from "../discord/inbound-message.ts";
 import type { AttachmentFailure } from "../domain/attachment.ts";
 import { setLocale } from "../i18n/index.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
@@ -337,6 +338,48 @@ test("a webhook post in an agent's channel is a report turn for the owner target
 	expect(admission?.kind === "background" && isSystemTurn(admission.turn)).toBe(
 		true,
 	);
+});
+
+test("an embed-only webhook post, as the Discord surface reads it, starts the report turn with the embed's text", async () => {
+	const { claim } = setup();
+	const inbound = await toInbound(
+		{
+			id: "m9",
+			channelId: "10",
+			guildId: "1",
+			content: "",
+			author: { id: "hook", bot: true, username: "Alertmanager" },
+			member: null,
+			webhookId: "hook",
+			applicationId: null,
+			reference: null,
+			messageSnapshots: { first: () => undefined },
+			mentions: { users: new Map() },
+			channel: { isDMBased: () => false },
+			attachments: new Map(),
+			embeds: [
+				{
+					title: "[FIRING:1] DiskFull",
+					description: "/var is at 97%",
+					url: null,
+					fields: [{ name: "host", value: "db-1", inline: false }],
+					footer: null,
+					author: null,
+				},
+			],
+		} as never,
+		{ botId: "900", applicationId: "app" },
+	);
+	if (!inbound) throw new Error("expected an inbound message");
+	const admission = claim.admit(inbound);
+	expect(admission).toMatchObject({
+		kind: "background",
+		turn: {
+			report: true,
+			channel: "discord:10",
+			text: 'Webhook "Alertmanager" posted in your channel:\n[FIRING:1] DiskFull\n/var is at 97%\nhost: db-1',
+		},
+	});
 });
 
 test("with owners-only speakers, an admin's and a member's message starts no turn in an agent's or group's channel, and the owner's does", async () => {

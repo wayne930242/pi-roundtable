@@ -34,6 +34,7 @@ function discordMessage(extra: Record<string, unknown> = {}) {
 		mentions: { users: new Map([[BOT, {}]]) },
 		channel: { isDMBased: () => false },
 		attachments: attachments(),
+		embeds: [],
 		...extra,
 	} as never;
 }
@@ -153,6 +154,7 @@ test("a reply to one of the bot's messages says so, and a replied-to webhook pos
 				content: `<@${BOT}> earlier`,
 				webhookId: "hook-2",
 				attachments: attachments(),
+				embeds: [],
 			}),
 		}),
 		identity,
@@ -163,4 +165,69 @@ test("a reply to one of the bot's messages says so, and a replied-to webhook pos
 		attachments: [],
 		webhookName: "Scout",
 	});
+});
+
+const alertEmbed = {
+	title: "[FIRING:2] HighLoad",
+	description: "load is above 8",
+	url: "https://alerts.example.com/1",
+	fields: [{ name: "host", value: "db-1", inline: false }],
+	footer: { text: "Alertmanager" },
+	author: null,
+};
+
+test("an embed-only webhook post reads as its embed's text", async () => {
+	const inbound = await toInbound(
+		discordMessage({
+			content: "",
+			webhookId: "hook-3",
+			applicationId: null,
+			author: { id: "hook-3", bot: true, username: "Alertmanager" },
+			member: null,
+			embeds: [alertEmbed],
+		}),
+		identity,
+	);
+	expect(inbound?.integration).toEqual({ id: "hook-3", own: false });
+	expect(inbound?.text).toBe(
+		[
+			"[FIRING:2] HighLoad",
+			"load is above 8",
+			"host: db-1",
+			"Alertmanager",
+			"https://alerts.example.com/1",
+		].join("\n"),
+	);
+});
+
+test("a message with text and an embed carries both, the bot mention removed from either", async () => {
+	const inbound = await toInbound(
+		discordMessage({
+			content: `<@${BOT}> deploy finished`,
+			embeds: [{ ...alertEmbed, title: `ok <@${BOT}>`, fields: [] }],
+		}),
+		identity,
+	);
+	expect(inbound?.text.startsWith("deploy finished\n\nok")).toBe(true);
+	expect(inbound?.text).not.toContain(BOT);
+});
+
+test("a long embed is bounded, and a replied-to message's embed is read too", async () => {
+	const inbound = await toInbound(
+		discordMessage({
+			content: "",
+			embeds: [{ ...alertEmbed, description: "y".repeat(20_000) }],
+			reference: { messageId: "8", type: MessageReferenceType.Default },
+			fetchReference: async () => ({
+				author: { id: "5", username: "ci" },
+				content: "",
+				webhookId: "hook-2",
+				attachments: attachments(),
+				embeds: [alertEmbed],
+			}),
+		}),
+		identity,
+	);
+	expect(inbound?.text.length).toBeLessThanOrEqual(4_000);
+	expect(inbound?.reference?.text).toContain("[FIRING:2] HighLoad");
 });

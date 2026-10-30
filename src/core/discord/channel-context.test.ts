@@ -259,6 +259,7 @@ function discordMessage(extra: Record<string, unknown> = {}) {
 			members: new Map([["201", { displayName: "Noa N" }]]),
 		},
 		stickers: new Map([["s", { name: "wave" }]]),
+		embeds: [],
 		attachments: new Map([
 			[
 				"a",
@@ -294,6 +295,42 @@ test("a Discord message reads as its author's name, its mentions by name, and it
 			},
 		],
 	});
+});
+
+test("a Discord message's embeds read as text after its own text, so an embed-only post is not blank", () => {
+	const self = { botId: BOT, applicationId: "app" };
+	const embeds = [
+		{
+			title: "Build 42 failed",
+			description: null,
+			url: null,
+			fields: [{ name: "branch", value: "main", inline: false }],
+			footer: null,
+			author: null,
+		},
+	];
+	expect(
+		contextSourceOf(
+			discordMessage({
+				embeds,
+				stickers: new Map(),
+				attachments: new Map(),
+				content: "",
+			}),
+			self,
+		).text,
+	).toBe("Build 42 failed\nbranch: main");
+	expect(
+		contextSourceOf(
+			discordMessage({
+				embeds,
+				stickers: new Map(),
+				attachments: new Map(),
+				content: "ci says",
+			}),
+			self,
+		).text,
+	).toBe("ci says Build 42 failed\nbranch: main");
 });
 
 test("the assistant's own user and its application's webhooks are its own; another webhook is a bot", () => {
