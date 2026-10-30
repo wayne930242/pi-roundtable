@@ -21,6 +21,7 @@ import { toolTiers } from "../tool-tiers.ts";
 import { AgentMessages } from "./agent-messages.ts";
 import type { Agent } from "./agent-store.ts";
 import { GroupTurns } from "./group-turns.ts";
+import { type Routes, routesOf } from "./routes.ts";
 import {
 	agentOfChannel,
 	channelIdOf,
@@ -28,7 +29,6 @@ import {
 	coordinatorOf,
 	discordIdOf,
 	discordKey,
-	keysOf,
 	roomScope,
 	scopeOf,
 } from "./team-keys.ts";
@@ -49,6 +49,7 @@ export { MAX_CHAIN_MESSAGES, type TeamTurnsOptions };
  */
 export class TeamTurns {
 	readonly #options: TeamTurnsOptions;
+	readonly routes: Routes;
 	/** The chain of each running turn, by session key, read by message_agent. */
 	readonly #chains = new Map<ChannelKey, Chain>();
 	/** The channel each working agent's turn posts in. */
@@ -63,8 +64,10 @@ export class TeamTurns {
 
 	constructor(options: TeamTurnsOptions) {
 		this.#options = options;
+		this.routes = routesOf(options);
 		const host: TurnHost = {
 			options,
+			routes: this.routes,
 			chains: this.#chains,
 			turn: (agent, scope, postTo, text, chain, extra) =>
 				this.#turn(agent, scope, postTo, text, chain, extra),
@@ -450,11 +453,7 @@ export class TeamTurns {
 		const home =
 			entryChannelId !== undefined
 				? discordKey(entryChannelId)
-				: keysOf(
-						store,
-						coordinator.name,
-						this.#options.surfaces?.roomSurfaces() ?? [],
-					)[0];
+				: this.routes.primary(coordinator.name);
 		if (!home)
 			throw new AgentError(`${coordinator.name} has no room to post in`);
 		await this.#post(home, coordinator, { chunks: splitReply(text) });

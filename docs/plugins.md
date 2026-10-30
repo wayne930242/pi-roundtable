@@ -195,8 +195,8 @@ Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue
 `context.logger` is a child of the host's logger and adds `plugin: <your plugin's name>` to each line in the journal.
 `Logger` has five levels and `child(fields)`; you can pass an existing pino logger as `DefineOverrides.logger`.
 
-With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.ops.agent`, which reports it in its channel, or, with `config.ops.conversation`, to that conversation as a visible message and a report turn its claim answers.
-The report turn is the host's own background turn of the `owner` target: it runs as the system principal (`SYSTEM_PRINCIPAL`) at the owner tier, as in 0.8, and so does the report turn of an outside Discord webhook's post in an agent's channel, whose text is untrusted input; neither can set up a schedule or delegate a task. The host does not start, with a `ConfigError` naming `config ops.conversation` and the reason, when no chat surface serves the key, no plugin's claim owns it, no plugin contributes the `owner` background target, the claim that owns it takes no background turns (has no `background`), or that claim says `takesSystemReports: false`, since its conversations are each private to their person and refuse the system principal's turns; a report is then never only logged. A claim like that is answered at startup, not by a warning at each report.
+With `defineRoundtable`, the host's logger sends every `error` and `fatal` line to the ops agent named by `config.routing.places.ops` as `{ agent }` (or the deprecated `config.ops.agent`), which reports it in its primary place, or, with a conversation key there (or `config.ops.conversation`), to that conversation as a visible message and a report turn its claim answers.
+The report turn is the host's own background turn of the `owner` target: it runs as the system principal (`SYSTEM_PRINCIPAL`) at the owner tier, as in 0.8, and so does the report turn of an outside Discord webhook's post in an agent's channel, whose text is untrusted input; neither can set up a schedule or delegate a task. The host does not start, with a `ConfigError` naming `config ops.conversation` (or `config routing.places.ops`) and the reason, when no chat surface serves the key, no plugin's claim owns it, no plugin contributes the `owner` background target, the claim that owns it takes no background turns (has no `background`), or that claim says `takesSystemReports: false`, since its conversations are each private to their person and refuse the system principal's turns; a report is then never only logged. A claim like that is answered at startup, not by a warning at each report.
 A webhook's post in an agent's channel starts that report turn with the post's text, and an embed counts as text: the post's embeds (author, title, description, each field as `name: value`, footer, link) follow its own content, plain and at most 4,000 characters, so a CI bot that posts only an embed, such as "Build 42 failed" with the branch and the run's link as fields, reaches the agent as `Webhook "CI" posted in your channel:` followed by those lines. A post with neither text nor embed text starts no turn. A replied-to message's embeds and the embeds in `discord.channelContext` are read the same way.
 
 The core contributes `PERSONAL_TARGET` (`"owner"`) with or without Discord; `ops.conversation` still needs a surface and a claim that accepts system report turns.
@@ -245,7 +245,7 @@ The built-in plugins provide these, from the main entry:
 | `CONVERSATIONS` | `ConversationRegistry` | `conversations` | The conversations run through `context.turns`: `register`, `get(key)`, `list({ principal }?)`, `setTitle(key, title)`, and `adopt(key, principalId)` only for migrating a conversation recorded before 0.9; each a `ConversationRecord` of `key`, `surface`, `kind`, `visibility` (`"private"` or `"shared"`), `principalId?`, `title?`, `createdAt`, `lastActiveAt` |
 | `MODES` | `ConversationModes` | `modes` | Each conversation's modes, stored per key and kept across restarts: `peek(channel)` gives its `ConversationMode` (`yolo` and `longRunning`, both off by default; `changedBy?`, `changedAt?`) from memory, `set(channel, { yolo?, longRunning? }, speaker)` changes them and throws `PluginError` unless the speaker is an owner other than `SYSTEM_PRINCIPAL`, `onChange(listener)` hears each change, and `autoApproved(entry)` with `onAutoApproved(listener)` report a held call that yolo mode approved. See [Conversation modes](#conversation-modes-modes) |
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
-| `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), `avatars` (`AvatarStudio`), and `workspace` (`AgentWorkspace`: the agents' `workDir` and, when set, `scratchDir`) |
+| `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), `avatars` (`AvatarStudio`), `workspace` (`AgentWorkspace`: the agents' `workDir` and, when set, `scratchDir`), and `routes` (`RoutingTable`: where work no person started lands; see [Routing](#routing-where-work-no-person-started-lands)) |
 | `PROMPTS` | `PromptDocuments` | `prompts` | The prompt texts the owner edits in the app, each with a file version, an override and a history: `register`, `text`, `list`, `get`, `set`, `revert`, `history`. Always on; read it with `get`. See [`PROMPTS`: prompt texts the owner edits](#prompts-prompt-texts-the-owner-edits) |
 | `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach`, and the owner's whole-SKILL.md edits `document`, `saveDocument`, `createDocument`, `documentHistory` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `createWithin`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
@@ -3009,6 +3009,23 @@ Messages in a room are admitted by the agent server's claim like those in a Disc
 The claim reads the attachments of a room's message through the surface's `readAttachment`, so a ref the surface made is never fetched over the network; a surface without it has its refs downloaded from their URLs.
 `AGENTS.team.owns(key)` answers for a room too, only while its agent or group is active, and `AGENTS.team.coordinator()` names the coordinator, the agent in the entry channel, or on a host without Discord the one `coordinator` names.
 
+#### Routing: where work no person started lands
+
+An agent has a *place* on each surface that holds one: its Discord channel, and its room `<surface>:agent.<name>` on a surface with `agentRooms`. Its *primary place* is where its unprompted work lands. `AGENTS.routes` (`RoutingTable`) answers, and the configuration's `routing` block sets it; without the block every answer is what the host did before the block existed:
+
+| Call | Answers |
+| --- | --- |
+| `primary(agent)` | The primary place: the surface the rules name, and with `auto` the agent's Discord channel when it has one, else its room on the first surface that hosts rooms. Undefined for an unknown agent. |
+| `placeOn(agent, surface)` | The agent's place on a surface (`web` for the one surface that hosts rooms); undefined when it has none there. |
+| `of(agent, "integration", origin)` | Where the report turn of a foreign webhook's post made in `origin` runs; `origin` itself by default, and also when the destination has vanished. |
+| `of(agent, "agentMessage", from)` | The conversation a `message_agent` call that names none reaches: by default the agent's latest, never out of a room into Discord. Throws `AgentError` when the agent has no place. |
+| `of(agent, "opening", origin?)` | Where an opening task runs: by default the agent's place on the surface `origin` is on, else its primary place; undefined when it has no place at all. |
+| `place("ops")` | A named place of the host: the conversation, or the primary place of the agent it names while that agent is active. |
+
+Work a person started, or that waits on a person (a message, a card, a late answer, a schedule's firing place, a message exchange's answer back), is never routed: it stays in the conversation the person sees. A plugin that posts an agent's unprompted work asks the table instead of choosing Discord first.
+`SurfacePort.names()` lists every registered surface by name, after link; the agent server uses it to refuse a `routing` key that names one nobody registered, naming the key and the registered surfaces.
+`mirror` (a read-only copy of a primary place's posts) and an answerer per surface are defined terms with a position in the block, but they are not built: setting either stops the start.
+
 #### Dispatch threads on any surface
 
 A background dispatch (a coding task, a delegated task, a message between agents) gets a thread beside the channel that started it: one start line in the channel, then the dispatch's progress and report inside the thread.
@@ -4254,6 +4271,7 @@ Import from the entries listed below; source area files are internal.
 | `AgentChange` | `pi-roundtable` | type |
 | `AgentDirectory` | `pi-roundtable` | type |
 | `AgentGroup` | `pi-roundtable` | type |
+| `AgentRoutes` | `pi-roundtable` | type |
 | `AgentRunError` | `pi-roundtable` | value |
 | `AgentRuntime` | `pi-roundtable` | type |
 | `AgentSeed` | `pi-roundtable` | type |
@@ -4405,6 +4423,7 @@ Import from the entries listed below; source area files are internal.
 | `PersonDisplay` | `pi-roundtable` | type |
 | `PersonProfiles` | `pi-roundtable` | type |
 | `Persona` | `pi-roundtable` | type |
+| `PlaceTarget` | `pi-roundtable` | type |
 | `PluginContext` | `pi-roundtable` | type |
 | `PluginIdentity` | `pi-roundtable` | type |
 | `PluginError` | `pi-roundtable` | value |
@@ -4446,7 +4465,10 @@ Import from the entries listed below; source area files are internal.
 | `RoundtableOptions` | `pi-roundtable` | type |
 | `RegistrationReport` | `pi-roundtable` | type |
 | `RoundtablePlugin` | `pi-roundtable` | type |
+| `RouteKind` | `pi-roundtable` | type |
 | `RouteSocket` | `pi-roundtable` | type |
+| `RoutingConfig` | `pi-roundtable` | type |
+| `RoutingTable` | `pi-roundtable` | type |
 | `RuntimeDeps` | `pi-roundtable` | type |
 | `RuntimeFactory` | `pi-roundtable` | type |
 | `SCHEDULES` | `pi-roundtable` | value |
@@ -4498,6 +4520,7 @@ Import from the entries listed below; source area files are internal.
 | `SpeakerMemory` | `pi-roundtable` | type |
 | `StoredAttachment` | `pi-roundtable` | type |
 | `SurfacePort` | `pi-roundtable` | type |
+| `SurfaceRouting` | `pi-roundtable` | type |
 | `SurfaceThreads` | `pi-roundtable` | type |
 | `SYSTEM_PRINCIPAL` | `pi-roundtable` | value |
 | `THE_SPEAKER` | `pi-roundtable` | value |

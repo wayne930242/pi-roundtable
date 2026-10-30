@@ -200,6 +200,20 @@ Without `discord` the agents still run when `agents` lists them, in the rooms of
 | `coordinator` | the first of `agents` | Without `discord`, the agent the owner's general requests come to; it cannot be archived. With `discord` it is an error: the entry channel's agent coordinates |
 | `skills` | on with `agents` | The skills addon; without `discord` it is on only when `agents` lists some |
 
+Work no person is waiting on (a foreign webhook's post in an agent's channel, a `message_agent` call that names no conversation, an agent's opening task, the error reports) lands where it always did, unless the optional `routing` block says otherwise.
+It names each agent's primary place, which surface each kind of event goes to, and the host's named places such as `ops`; a message, a card or a schedule's firing is never routed and stays where its person is.
+For example, Infra's alerts handled in the web app while Discord keeps the raw posts:
+
+```ts
+routing: {
+	agents: { infra: { primary: "app", integration: "primary" } },
+	places: { ops: { agent: "infra" } }, // replaces the deprecated top-level `ops`
+},
+```
+
+A mistake stops the start naming the key and the fix.
+The [settings page](https://pi-roundtable.wayneh.tw/configure/settings/#where-work-lands-routing) lists every key, its values and the checks.
+
 When someone addresses the assistant in an agent's channel, the turn also reads the channel messages posted since the assistant's last post there (channel context; see the [plugin guide](docs/plugins.md#channel-context-what-was-said-around-an-addressed-message)).
 Tune it under `discord.channelContext`, or set `channelContext: false` to turn it off:
 

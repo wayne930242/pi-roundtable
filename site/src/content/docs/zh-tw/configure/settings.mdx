@@ -162,23 +162,79 @@ export default {
 沒有 Discord 時，`http` 可以不設：沒有外掛提供 HTTP 時就省略，host 不會開 listener。
 網頁聊天需要它。
 
+## 工作落在哪裡（`routing`）
+
+agent 做的大部分事都由一個人開頭，並在那個人所在的地方結束：訊息在它來的那段對話裡被回覆，卡片在那裡等，排程在建立它的對話裡觸發。選填的 `routing` 只管沒有人在場的事：外部 webhook 在 agent 的 place 裡的貼文、沒指定對話的 `message_agent` 呼叫、agent 的開場任務，以及行程自己的錯誤回報。不寫 `routing`，這些事都落在這個鍵出現之前原本的地方。
+
+這裡與程式碼用到的詞：
+
+- **Surface**：一個聊天轉接器，用它的 key 前綴命名：`discord`、`app`（pi-roundtable-web）、`webchat`、`line`。一個 host 可以有好幾個。
+- **Place**：agent 在某個 surface 上的對話：在 Discord 是它的頻道，在有 room 的 surface 是它的 room `<surface>:agent.<name>`。剛好只有一個 surface 有 room 時，`web` 就代表它。
+- **Primary place**：agent 主動做的工作落地的唯一地方。除非你指定 surface，否則是 `auto`：有 Discord 頻道就用它，沒有就用第一個有 room 的 surface 上的 room。
+- **Named place**：host 層級、有名字的目的地。core 宣告了 `ops`（錯誤回報）；它可以是一個對話 key，也可以是某個 agent 的 primary place。
+- **Mirror**（保留）：會收到 agent 在 primary place 所貼內容的唯讀副本的 place。**Answerer**（保留）：回答某個 surface 對話的 claim。兩者在區塊裡都有位置，但都還沒做：設了就會讓啟動中止並指出該鍵。誰回答仍由 claim 的優先序決定。
+
+| 鍵 | 值 | 預設值 | 它決定什麼 |
+| --- | --- | --- | --- |
+| `routing.agents.<name>.primary` | `auto`，或 surface 名稱 | `auto` | agent 的 primary place。用 `"*"` 取代名稱就是所有 agent 的預設；agent 自己的鍵逐鍵優先。名稱對之後才建立的 agent 一樣適用。 |
+| `routing.agents.<name>.integration` | `origin`、`primary`，或 surface 名稱 | `origin` | 外部 webhook 在 agent 頻道的貼文，它的回報那一輪在哪裡跑。貼文本身留在原處；那一輪會寫出它來自哪個 place。目的地已經不在時，那一輪改在貼文發出的地方跑並記一則警告，絕不丟棄。 |
+| `routing.agents.<name>.agentMessage` | `latest`、`primary`，或 surface 名稱 | `latest` | 呼叫沒指定對話時 `message_agent` 送到哪。`latest` 是 agent 上次跑回合的那一段，從 room 發出的訊息不會跟著它出去到 Discord；沒有時退到寄件者所在的 room surface，再退到 primary place。`primary` 把訊息固定送到 primary place，即使是從 room 送進 Discord。呼叫裡明確指定對話，勝過所有規則。 |
+| `routing.agents.<name>.opening` | `origin-surface`、`primary` | `origin-surface` | agent 的開場任務（`agent_create` 的 `task`）在哪裡跑：agent 在建立請求來源 surface 上的 place，沒有就用它的 primary place；或一律用它的 primary place。 |
+| `routing.agents.<name>.mirror` | surface 名稱的清單 | 無 | 保留；非空清單會讓啟動中止。 |
+| `routing.places.ops` | `"<surface>:<id>"`，或 `{ agent }` | 無 | 行程自己的錯誤回報送到哪，和 `ops.conversation`、`ops.agent` 一樣。agent 的寫法會落在該 agent 的 primary place，要有 agent server，但不必有 Discord。最上層的 `ops` 是已棄用的別名，1.0 會移除；兩者只能設一個。 |
+| `routing.surfaces.<name>.agentPlaces` | `all` | `all` | 這個 surface 上是否每個 agent 都有 place；目前每個 surface 都是。`none` 是保留值，會讓啟動中止。 |
+| `routing.surfaces.<name>.answeredBy` | claim 名稱 | 無 | 保留；設了會讓啟動中止。 |
+
+警報在網頁 app 處理、原始貼文留在 Discord：Infra 的 primary place 是它的網頁 room，它的 webhook 回報在那裡跑，host 的錯誤回報也落在那裡。其他 agent 照舊留在 Discord。
+
+```ts
+routing: {
+	agents: { infra: { primary: "app", integration: "primary" } },
+	places: { ops: { agent: "infra" } },
+},
+```
+
+不以 Discord 為中心的 host（例如客戶走 LINE、員工用 Slack 的客服台）可以讓每個 agent 都進網頁 room，其餘用對話 key 指名：
+
+```ts
+routing: {
+	agents: {
+		"*": { primary: "app" },
+		triage: { integration: "primary", agentMessage: "primary" },
+	},
+	places: { ops: "slack:C0OPS" },
+},
+```
+
+每個錯誤都會讓啟動以 `ConfigError` 中止，並指出鍵與修法：
+
+- `primary`、`integration` 或 `agentMessage` 寫了沒有外掛註冊的 surface，或一個不放 agent place 的 surface（沒有 room 的 surface，或 agent 沒有 Discord 頻道時的 `discord`）；訊息會列出已註冊的 surface。這項在每個外掛都註冊完自己的 surface 之後才檢查；
+- 屬於別的鍵的值，例如 `integration` 寫 `latest`，或 `agentMessage` 寫 `origin`；
+- 不是 agent 名稱也不是 `"*"` 的 agent 鍵，以及沒有人宣告的 `places` 名稱（訊息會列出已宣告的名稱）；
+- 既不是對話 key `<surface>:<id>` 也不是 `{ agent }` 的 place；
+- 最上層的 `ops` 和 `routing.places.ops` 同時設定；
+- 在沒有 agent server 的 host 上設了 `routing.agents`、`routing.surfaces` 或 agent 的 place；
+- 上面的保留鍵。
+
+規則裡寫了、但團隊還沒有的 agent，只會在 log 裡出現警告：它存在之後規則就生效。程式用 `AGENTS.routes` 讀這張表（`primary`、`placeOn`、`of`、`place`）。
+
 ## Addon 與維運
 
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
 | `skills` | `false`，或 `{ builtinDir?, reposDir?, packages? }` | 開啟，`builtinDir` 是套件附帶的技能，`reposDir` 是 `<dataDir>/repos` | `false` 會讓 `skills` addon 不載入：agent 不帶技能，也沒有技能工具。已存的技能仍留在資料表裡。`packages` 列出主機安裝的 npm 套件：它們 `pi.skills` 資料夾裡的每個技能都會以唯讀方式提供，可以像其他技能一樣被帶著、放進群組。套件沒裝、套件沒有技能，或技能名稱和別的技能重複時，啟動會失敗，訊息會指出該怎麼改。 |
 | `memory` | boolean | `true` | `false` 會讓 `memory` addon 不載入：沒有記憶工具，也沒有記憶的提示詞區塊。資料表維持原樣。 |
-| `ops.agent` | string | 無 | 負責調查行程自身錯誤的 agent 名稱。需要 Discord。 |
-| `ops.conversation` | string | 無 | 不交給 agent，而是回報到一段對話，寫它的 key `<surface>:<id>`。這段對話要有 chat surface 服務、要由一個接收背景回合的外掛 claim 擁有，還要有外掛提供 `owner` 背景目標（有 Discord 時由 agent server 提供），否則 host 不會啟動；網頁聊天不接收錯誤回報。`ops.agent` 和 `ops.conversation` 擇一設定。 |
+| `ops.agent` | string | 無 | `routing.places.ops: { agent }` 的已棄用別名，1.0 移除。負責調查行程自身錯誤的 agent 名稱。需要 Discord。 |
+| `ops.conversation` | string | 無 | `routing.places.ops: "<surface>:<id>"` 的已棄用別名，1.0 移除。不交給 agent，而是回報到一段對話，寫它的 key `<surface>:<id>`。這段對話要有 chat surface 服務、要由一個接收背景回合的外掛 claim 擁有，還要有外掛提供 `owner` 背景目標（有 Discord 時由 agent server 提供），否則 host 不會啟動；網頁聊天不接收錯誤回報。`ops.agent` 和 `ops.conversation` 擇一設定。 |
 | `drainSeconds` | 1 到 3600 的整數 | `180` | 關機時，等執行中的回合多少秒才把它們停掉。給服務管理員（如 systemd 的 `TimeoutStopSec`）的停止逾時要多一分鐘。 |
 | `interimText` | `"on"` 或 `"off"` | `"on"` | 一輪是否邊做邊貼出它在最終答案之前寫的文字。`"off"` 只貼最終回覆。 |
 | `interimPrimaryChars` | 1 到 100000 的整數 | `400` | 中間文字達到這個長度就當作一般訊息貼出；較短的敘述放進一則小小的進度訊息。 |
 | `plugins` | 外掛物件的清單 | `[]` | 你的外掛。它們在內建外掛之後，依列出的順序啟動。 |
 
-設了 `ops.agent` 之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它頻道裡的一則訊息和一輪回報；設了 `ops.conversation` 則回報到那段對話，由認領它的 claim 執行回報那一輪。
+設了 `ops.agent`（或 `routing.places.ops` 裡的 agent）之後，每一筆 `error` 和 `fatal` 的 log 都會回報給那個 agent，成為它 primary place 裡的一則訊息和一輪回報；設了 `ops.conversation`（或 `routing.places.ops` 裡的對話 key）則回報到那段對話，由認領它的 claim 執行回報那一輪。
 同一個錯誤一小時內最多回報一次，每小時最多送出五筆回報。
 
-webhook 在 agent 頻道裡的貼文（例如 CI bot 的通知）會用貼文的文字替那個 agent 開始一輪回報。只有 embed 的貼文也算：它的標題、說明、欄位、頁尾和連結會當作純文字讀進來，最多 4,000 個字元，所以沒有訊息文字的警報一樣會被回應。
+webhook 在 agent 頻道裡的貼文（例如 CI bot 的通知）會用貼文的文字替那個 agent 開始一輪回報，除非 `routing` 把它送到 agent 的 primary place，否則就在那個頻道裡。只有 embed 的貼文也算：它的標題、說明、欄位、頁尾和連結會當作純文字讀進來，最多 4,000 個字元，所以沒有訊息文字的警報一樣會被回應。
 
 addon 加了什麼、外掛怎麼啟動，見 [Services and addons](/zh-tw/plugins/services-and-addons/)。
 

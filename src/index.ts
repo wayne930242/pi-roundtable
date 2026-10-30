@@ -12,6 +12,7 @@ export type {
 	AgentStatus,
 } from "./core/agents/agent-store.ts";
 export type { AvatarMode } from "./core/agents/agent-tools.ts";
+export type { RouteKind, RoutingTable } from "./core/agents/routes.ts";
 export {
 	agentRoomKey,
 	groupRoomKey,
@@ -50,6 +51,12 @@ export type {
 export type { ConversationsConfig } from "./core/config/conversations.ts";
 export type { LimitsConfig } from "./core/config/limits.ts";
 export type { ProfilesConfig } from "./core/config/profiles.ts";
+export type {
+	AgentRoutes,
+	PlaceTarget,
+	RoutingConfig,
+	SurfaceRouting,
+} from "./core/config/routing.ts";
 export type { SkillsConfig } from "./core/config/skills-config.ts";
 export type {
 	AttachmentPort,

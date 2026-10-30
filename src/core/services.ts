@@ -2,6 +2,7 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { CharacterInput, CharacterSpec } from "../characters/index.ts";
 import type { Agent, AgentGroup } from "./agents/agent-rules.ts";
 import type { AvatarMode } from "./agents/agent-tools.ts";
+import type { RoutingTable } from "./agents/routes.ts";
 import type { TeamStatus } from "./agents/team-status.ts";
 import type { ChannelContexts } from "./contract/channel-context.ts";
 import type {
@@ -181,12 +182,12 @@ export interface AgentServer {
 	avatars: AvatarStudio;
 	/** Where the agents' files are: the directories their shell and file tools run in. */
 	workspace: AgentWorkspace;
+	routes?: RoutingTable; // where work no person started lands; the built-in server sets it
 }
 
 /**
  * The directories the agents work in, as configured. Every agent shares them: the core has no
- * workspace per agent. Read-only data, so a plugin that shows or serves the files can find them;
- * the directories may not exist yet.
+ * workspace per agent. Read-only data for a plugin that shows or serves the files; they may not exist yet.
  */
 export interface AgentWorkspace {
 	/** The shell's shared working directory (`config.workDir`), where agents write without a hold. */

@@ -12,7 +12,7 @@ import type {
 	InboundMessage,
 } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
-import type { SurfacePort } from "../contract/surface.ts";
+import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
@@ -66,6 +66,11 @@ export interface AgentClaimOptions {
 	 */
 	surface: Pick<SurfacePort, "react" | "unreact"> &
 		Partial<Pick<SurfacePort, "roomSurfaces" | "of">>;
+	/**
+	 * Where the report turn of a webhook's post in an agent's channel runs, given the channel it was
+	 * posted in: the routing table's `integration` rule. Without it, in that channel.
+	 */
+	integrationChannel?: (origin: ChannelKey) => ChannelKey;
 	/** Where a channel's attachments are saved. */
 	attachmentDir: (channel: ChannelKey) => string;
 	/** The downloads' limits: all of a message's files together (default 60 s), and one file without a byte (default 10 s). */
@@ -138,16 +143,23 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	const webhookReport = (message: InboundMessage): Admission | undefined => {
 		const text = message.text.trim();
 		if (!text) return undefined;
+		const channel =
+			options.integrationChannel?.(message.channel) ?? message.channel;
+		// Away from where it was posted, the turn says where, so the agent can find the raw post.
+		const where =
+			channel === message.channel
+				? "your channel"
+				: `your ${parseChannelKey(message.channel).surface} place (${message.channel})`;
 		return {
 			kind: "background",
 			// The host's own turn, at the owner tier as in 0.8; what the webhook posted is untrusted input.
 			turn: systemTurn({
-				channel: message.channel,
+				channel,
 				target: PERSONAL_TARGET.name,
 				author: { id: message.authorId, name: message.authorName },
 				tier: "owner",
 				turnId: `webhook-${message.messageId}`,
-				text: `Webhook "${message.authorName}" posted in your channel:\n${text}`,
+				text: `Webhook "${message.authorName}" posted in ${where}:\n${text}`,
 				report: true,
 			}),
 			unanswered: (result) =>

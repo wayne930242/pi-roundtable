@@ -233,20 +233,20 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				reportsReach = () => {
 					if (!surfaces.of(channel))
 						throw new ConfigError(
-							`config ops.conversation: no chat surface serves ${JSON.stringify(channel)}, so its error reports could never be posted. Name a conversation of a surface a plugin brings, or leave ops out.`,
+							`config ${reporter.configKey}: no chat surface serves ${JSON.stringify(channel)}, so its error reports could never be posted. Name a conversation of a surface a plugin brings, or leave ops out.`,
 						);
 					if (!conversations.owns(channel))
 						throw new ConfigError(
-							`config ops.conversation: no plugin's conversations own ${JSON.stringify(channel)}, so nothing answers its error reports. Name a conversation a plugin's claim owns, or leave ops out.`,
+							`config ${reporter.configKey}: no plugin's conversations own ${JSON.stringify(channel)}, so nothing answers its error reports. Name a conversation a plugin's claim owns, or leave ops out.`,
 						);
 					if (!conversations.takesBackground(channel))
 						throw new ConfigError(
-							`config ops.conversation: the claim that owns ${JSON.stringify(channel)} takes no background turns, so nothing answers its error reports. Name a conversation whose claim takes background turns, or leave ops out.`,
+							`config ${reporter.configKey}: the claim that owns ${JSON.stringify(channel)} takes no background turns, so nothing answers its error reports. Name a conversation whose claim takes background turns, or leave ops out.`,
 						);
 					// A report turn is the system principal's, which a conversation private to its person refuses.
 					if (!conversations.takesSystemReports(channel))
 						throw new ConfigError(
-							`config ops.conversation: the claim that owns ${JSON.stringify(channel)} keeps its conversations private to their people, so it takes no system error reports and each would only be logged. Name a conversation of a surface whose conversations are shared, such as a Discord channel, or report to an agent with ops.agent.`,
+							`config ${reporter.configKey}: the claim that owns ${JSON.stringify(channel)} keeps its conversations private to their people, so it takes no system error reports and each would only be logged. Name a conversation of a surface whose conversations are shared, such as a Discord channel, or report to an agent with ops.agent.`,
 						);
 				};
 			}

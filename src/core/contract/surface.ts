@@ -214,6 +214,11 @@ export interface SurfacePort {
 	): Prompts | undefined;
 	/** The surfaces that serve agent rooms (`agentRooms: true`); read after link. */
 	roomSurfaces(): readonly string[];
+	/**
+	 * Every registered surface, by name; read after link. The host's port always has it; optional
+	 * so a port written before 0.27 still type-checks.
+	 */
+	names?(): readonly string[];
 	/** The channel's interim posts, under `as` when given; undefined when its surface has none. */
 	interim(channel: ChannelKey, as?: PostAuthor): InterimPosts | undefined;
 	/**

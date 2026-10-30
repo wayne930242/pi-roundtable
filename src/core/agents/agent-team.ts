@@ -17,15 +17,13 @@ import {
 	type AvatarMode,
 	agentToolsExtension,
 } from "./agent-tools.ts";
+import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import {
-	agentRoomKey,
 	channelOwner,
 	coordinatorOf,
 	discordIdOf,
-	discordKey,
 	keysOf,
-	roomSurfaceOf,
 } from "./team-keys.ts";
 import {
 	layoutText,
@@ -64,14 +62,15 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	readonly #editing: TeamEditing;
 
 	constructor(options: AgentTeamOptions) {
-		this.#options = options;
+		// One routing table for the team's turns and its editing.
+		this.#options = { ...options, routes: routesOf(options) };
 		this.#turns = new TeamTurns({
-			...options,
+			...this.#options,
 			selection: (scope) => this.selection(scope),
 			changed: () => this.#changed(),
 		});
 		this.#context = {
-			options,
+			options: this.#options,
 			turns: this.#turns,
 			changed: () => {
 				this.#changed();
@@ -237,26 +236,22 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/**
 	 * Another active agent's channel, for schedule_list: its room on the surface `near` is on when
-	 * that surface hosts rooms, otherwise its Discord channel, otherwise its room on the first
-	 * surface that hosts rooms.
+	 * that surface hosts rooms, otherwise its primary place.
 	 */
 	channelOf(name: string, near?: ChannelKey): ChannelKey {
 		try {
-			const agent = this.#options.store.activeAgent(name);
-			const rooms = this.#options.surfaces?.roomSurfaces() ?? [];
-			const surface = near === undefined ? undefined : roomSurfaceOf(near);
-			if (surface !== undefined && rooms.includes(surface))
-				return agentRoomKey(surface, name);
-			if (agent.channelId) return discordKey(agent.channelId);
-			const room = rooms[0];
-			if (room === undefined)
-				throw new AgentError(`${name} has no channel yet`);
-			return agentRoomKey(room, name);
+			this.#options.store.activeAgent(name);
+			return this.#turns.routes.near(name, near);
 		} catch (error) {
 			throw new ScheduleError(
 				error instanceof Error ? error.message : String(error),
 			);
 		}
+	}
+
+	/** The routing table: where work no person started lands. */
+	get routes(): Routes {
+		return this.#turns.routes;
 	}
 
 	// ── Startup and archive, run by TeamLifecycle ──────────────────────────
@@ -267,7 +262,10 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	 * character in the background.
 	 */
 	start(): Promise<void> {
-		return this.#lifecycle.start().then(() => this.#turns.replayMessages());
+		return this.#lifecycle.start().then(() => {
+			this.#turns.routes.warnUnknown();
+			return this.#turns.replayMessages();
+		});
 	}
 
 	/** What the team still writes that a shutdown must wait for. */

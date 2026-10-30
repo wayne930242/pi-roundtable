@@ -22,6 +22,7 @@ import type { ToolTiers } from "../tool-tiers.ts";
 import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import type { RelevanceScorer } from "./group-round.ts";
+import type { Routes } from "./routes.ts";
 
 /** Agent messages without an owner message in between (spec behavior 13). */
 export const MAX_CHAIN_MESSAGES = 8;
@@ -65,6 +66,11 @@ export interface TeamTurnsOptions {
 		"sendReply" | "interim" | "roomSurfaces" | "of" | "progress"
 	>;
 	studio: Pick<AvatarStudio, "url">;
+	/**
+	 * The host's routing table, which says where work no person started lands. Without one the team
+	 * builds the defaults, every place being what the host chose before `routing` existed.
+	 */
+	routes?: Routes;
 	/** Set once the runtime exists, which itself needs the team's tools. */
 	runtime: () => AgentTurnRunner;
 	/** The tools every agent turn runs with. */
@@ -150,4 +156,6 @@ export interface TurnHost {
 	/** Whether the speaker's tier holds every tool of the held actions. */
 	mayApprove(speaker: Speaker, pending: PendingConfirmation): boolean;
 	turnChannel(scope: AgentTurnScope): ChannelKey;
+	/** The routing table. */
+	readonly routes: Routes;
 }

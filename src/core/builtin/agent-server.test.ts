@@ -10,6 +10,7 @@ import type {
 	PromptDocumentSpec,
 	PromptDocuments,
 } from "../modules/prompts/prompt-documents.ts";
+import { ErrorReporter } from "../ops/error-reporter.ts";
 import type {
 	LinkedSessions,
 	PluginContext,
@@ -85,6 +86,7 @@ async function setUp(
 	filling: RoundtablePlugin[] = [],
 	personas: Record<string, string> = {},
 	prompts?: PromptDocuments,
+	surfaces: Record<string, unknown> = {},
 ) {
 	const plugins = [...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
@@ -126,6 +128,7 @@ async function setUp(
 			startTyping: () => () => undefined,
 			showStop: () => () => undefined,
 			sendReply: async () => undefined,
+			...surfaces,
 		},
 		turns: {},
 		database: () => {
@@ -251,11 +254,14 @@ describe("the agent server without Discord", () => {
 		plugin: RoundtablePlugin,
 		rooms: string[],
 		filling: RoundtablePlugin[] = [],
+		background: Partial<BackgroundTurns> = {},
+		sendReply: (channel: string, reply: unknown) => Promise<void> = async () =>
+			undefined,
 	) {
 		const plugins = [...filling, plugin];
 		const services = new ServiceRegistry([...plugins]);
 		services.preset(SCHEDULES, {} as ScheduleStore);
-		services.preset(BACKGROUND_TURNS, {} as BackgroundTurns);
+		services.preset(BACKGROUND_TURNS, background as BackgroundTurns);
 		services.preset(RUNTIME, runtime);
 		let linked: LinkedSessions | undefined;
 		const context = {
@@ -267,7 +273,7 @@ describe("the agent server without Discord", () => {
 			},
 			queue: {},
 			toolTiers: toolTiers(),
-			events: {},
+			events: { changed: () => undefined },
 			conversations: {},
 			surfaces: {
 				roomSurfaces: () => rooms,
@@ -275,7 +281,7 @@ describe("the agent server without Discord", () => {
 				react: async () => undefined,
 				startTyping: () => () => undefined,
 				showStop: () => () => undefined,
-				sendReply: async () => undefined,
+				sendReply,
 			},
 			turns: {},
 			database: () => {
@@ -314,6 +320,58 @@ describe("the agent server without Discord", () => {
 		expect(services.get(AGENTS).avatars.url("a".repeat(64))).toBe(
 			`/avatars/${"a".repeat(64)}.png`,
 		);
+	});
+
+	test("the error reports go to the primary place of the agent the ops place names, in its web room", async () => {
+		const posted: string[] = [];
+		const reports: string[] = [];
+		const errorReporter = new ErrorReporter({
+			destination: { agent: "infra" },
+			app: "Roundtable",
+			configKey: "routing.places.ops",
+		});
+		errorReporter.record({ level: 50, msg: "disk full" });
+		const infra = { name: "infra", status: "active" };
+		// SAFETY: the team reads only these members of the store while it starts without Discord.
+		const seeded = {
+			agents: {
+				agent: (name: string) => (name === "infra" ? infra : undefined),
+				agents: () => [],
+				group: () => undefined,
+				seed: async () => [],
+				conversations: { latest: () => undefined },
+				outbox: { pending: async () => [] },
+				hasStoredCharacter: () => false,
+			},
+		} as unknown as AgentServerStores;
+		const plugin = agentServerPlugin(
+			local({
+				coordinator: "infra",
+				errorReporter,
+				routing: {
+					agents: { infra: { primary: "app" } },
+					places: { ops: { agent: "infra" } },
+				},
+			}),
+			async () => seeded,
+		);
+		const { registry } = await setUpLocal(
+			plugin,
+			["app"],
+			[],
+			{
+				runErrorReport: async (channel: string) => {
+					reports.push(channel);
+					return { status: "ran" as const };
+				},
+			},
+			async (channel) => void posted.push(channel),
+		);
+		const team = registry.services.find((service) => service.name === "team");
+		await team?.startInBackground?.();
+		await Bun.sleep(20);
+		expect(posted).toEqual(["app:agent.infra"]);
+		expect(reports).toEqual(["app:agent.infra"]);
 	});
 
 	test("refuses to start when no surface hosts the agents' rooms, and starts when one does", async () => {
@@ -413,5 +471,120 @@ describe("the agents' pictures", () => {
 			agentServerPlugin(options({ avatarListener: "web" }), async () => stores),
 		);
 		expect(registry.routes.map((route) => route.listener)).toEqual(["web"]);
+	});
+});
+
+describe("the agent server's routing", () => {
+	const known = new Map(
+		["infra", "coder"].map((name) => [
+			name,
+			{ name, status: "active", channelId: name === "infra" ? "2000" : "4000" },
+		]),
+	);
+	// SAFETY: the table reads only `agent` and `conversations.latest` of the store.
+	const routed = {
+		agents: {
+			agent: (name: string) => known.get(name),
+			agentByChannel: (id: string) =>
+				[...known.values()].find((a) => a.channelId === id),
+			group: () => undefined,
+			groupByChannel: () => undefined,
+			conversations: { latest: () => undefined },
+		},
+	} as unknown as AgentServerStores;
+	const surfaces = {
+		roomSurfaces: () => ["app"],
+		names: () => ["discord", "app"],
+	};
+	const infraOnWeb = {
+		agents: { infra: { primary: "app", integration: "primary" } },
+		places: { ops: { agent: "infra" } },
+	};
+
+	test("the server hands the plugins the routing table the configuration set", async () => {
+		const { services } = await setUp(
+			agentServerPlugin(options({ routing: infraOnWeb }), async () => routed),
+			[],
+			{},
+			undefined,
+			surfaces,
+		);
+		const { routes } = services.get(AGENTS);
+		expect(routes?.primary("infra")).toBe("app:agent.infra");
+		expect(routes?.primary("coder")).toBe("discord:4000");
+		expect(routes?.of("infra", "integration", "discord:2000")).toBe(
+			"app:agent.infra",
+		);
+		expect(routes?.place("ops")).toBe("app:agent.infra");
+	});
+
+	test("without routing the table is the defaults: Discord first, every report where it was posted", async () => {
+		const { services } = await setUp(
+			agentServerPlugin(options(), async () => routed),
+			[],
+			{},
+			undefined,
+			surfaces,
+		);
+		const { routes } = services.get(AGENTS);
+		expect(routes?.primary("infra")).toBe("discord:2000");
+		expect(routes?.of("infra", "integration", "discord:2000")).toBe(
+			"discord:2000",
+		);
+		expect(routes?.place("ops")).toBeUndefined();
+	});
+
+	test("the claim runs a webhook's report turn where the routing table puts it", async () => {
+		const reportChannel = async (routing?: AgentServerOptions["routing"]) => {
+			const { registry } = await setUp(
+				agentServerPlugin(
+					options(routing ? { routing } : {}),
+					async () => routed,
+				),
+				[],
+				{},
+				undefined,
+				surfaces,
+			);
+			const claim = registry.channels.find((c) => c.name === "agent-server");
+			const admission = claim?.admit({
+				channel: "discord:2000",
+				messageId: "m1",
+				authorId: "hook-user",
+				authorName: "Alertmanager",
+				authorIsBot: true,
+				isDirect: false,
+				space: "g1",
+				mentionsBot: false,
+				repliesToBot: false,
+				text: "disk 91%",
+				attachments: [],
+				integration: { id: "hook", own: false },
+			});
+			return admission?.kind === "background"
+				? admission.turn.channel
+				: undefined;
+		};
+		expect(await reportChannel()).toBe("discord:2000");
+		expect(await reportChannel(infraOnWeb)).toBe("app:agent.infra");
+	});
+
+	test("the preflight passes for registered surfaces and refuses one nobody registered, naming the key", async () => {
+		const good = agentServerPlugin(
+			options({ routing: infraOnWeb }),
+			async () => routed,
+		);
+		await setUp(good, [], {}, undefined, surfaces);
+		await good.preflight?.();
+		const bad = agentServerPlugin(
+			options({
+				routing: { agents: { infra: { primary: "slack" } }, places: {} },
+			}),
+			async () => routed,
+		);
+		await setUp(bad, [], {}, undefined, surfaces);
+		expect(async () => bad.preflight?.()).toThrow(
+			'config routing.agents.infra.primary: no surface is registered as "slack"',
+		);
 	});
 });
