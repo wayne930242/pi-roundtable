@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.3] - 2026-10-30
+
 ### Added
 
 - `pi-roundtable-web`: keyboard shortcuts in the owner app. Alt+↑ / Alt+↓ (Option on a Mac) go to the previous or next room in the order the room list shows (folders respected, a folded folder skipped unless it holds the open room, threads after their room, no wrapping), and Alt+Shift+↑ / Alt+Shift+↓ to the previous or next room with unread messages. Switching uses the router as a click does and scrolls the open room's row into view; it works on a page with no list too. In a text field the arrows act only when the field is empty or the caret is at the very start (up) or very end (down) with nothing selected, and nothing acts while an input method composes. Esc closes the topmost menu or sheet and otherwise lets go of the message box without touching its text. `?` outside a text field opens a sheet that lists the keys (a lazy chunk; en and zh-TW wording). Ctrl/⌘ K, which opens the search, now also ignores an input method's composition. The handler is a part that loads after the first paint, about 0.1 KB gzipped more in the first load.

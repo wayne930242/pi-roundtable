@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.3] - 2026-10-30
+
 ### Added
 
 - **Mark all as read.** The room list's menu and each folder's menu have **Mark all as read**, left out when nothing in its scope is unread (a folder's scope is its rooms and the threads under them). It sets the person's read cursor to the newest message in every room they may read, agent, group, thread and host rooms, in one call: `POST api/rooms/read-all` with `{ "rooms": [...] }` (at most 500; left out, every room the list shows), owners only, with rooms the person may not read passed over. The unread badges, the tab title's count and the tab icon's dot clear at once, the person's other pages and devices hear of it through the `read` frames a single read sends and a `changed` frame, and a notice offers Undo for five seconds: `{ "restore": [...] }` to the same route puts each cursor back unless the person has read on since. Nothing asks first
