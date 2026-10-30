@@ -236,6 +236,18 @@ describeDb("signing in with an OpenID Connect provider", () => {
 		expect(t.identified).toHaveLength(1);
 	});
 
+	test("the signed-out page names the round-table mark as its icon and lets the page load it", async () => {
+		const { get } = await setup();
+		const page = await get("auth/signed-out");
+		expect(page.status).toBe(200);
+		expect(page.headers.get("content-security-policy")).toContain(
+			"img-src 'self'",
+		);
+		expect(await page.text()).toContain(
+			`<link rel="icon" href="${MOUNT}/icons/192.png" type="image/png">`,
+		);
+	});
+
 	test("a login_required answer to the silent request leads to one interactive retry", async () => {
 		const t = await setup();
 		const start = await t.get("login");

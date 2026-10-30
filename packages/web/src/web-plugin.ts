@@ -418,6 +418,8 @@ async function build(settings: ResolvedOptions, context: Context) {
 		authenticator,
 		pathRouting: settings.routing === "path",
 		title: settings.title,
+		origin: settings.origin,
+		...(settings.description ? { description: settings.description } : {}),
 		...(settings.iconsDir ? { iconsDir: settings.iconsDir } : {}),
 		look: settings.look,
 		...(settings.presentation ? { presentation: settings.presentation } : {}),

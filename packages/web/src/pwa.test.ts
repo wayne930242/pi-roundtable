@@ -20,6 +20,7 @@ function serverOver(
 	allow = true,
 	iconsDir?: string,
 	look?: "modern" | "camelot",
+	extra: Partial<ConstructorParameters<typeof ConsoleServer>[0]> = {},
 ): ConsoleServer {
 	const { logger } = recordingLogger();
 	return new ConsoleServer({
@@ -28,6 +29,7 @@ function serverOver(
 		assets,
 		...(iconsDir ? { iconsDir } : {}),
 		...(look ? { look } : {}),
+		...extra,
 		authenticator: createAuthenticator({
 			auth: {
 				mode: "verifier",
@@ -54,8 +56,8 @@ function serverOver(
 	});
 }
 
-const get = (server: ConsoleServer, path: string) =>
-	server.handle(new Request(`http://localhost${path}`));
+const get = (server: ConsoleServer, path: string, init?: RequestInit) =>
+	server.handle(new Request(`http://localhost${path}`, init));
 
 test("the manifest scopes the app to its mount and is named by the title", async () => {
 	const response = await get(serverOver(real), "/app/manifest.webmanifest");
@@ -89,10 +91,79 @@ test("sw.js is served no-cache as JavaScript, while hashed files stay immutable"
 	expect(asset.headers.get("cache-control")).toContain("immutable");
 });
 
-test("the manifest, worker and icons sit behind the authenticator", async () => {
+test("the manifest and the icons answer without a session; the worker and the page do not", async () => {
 	const server = serverOver(real, false);
-	for (const path of ["manifest.webmanifest", "sw.js", "icons/192.png"])
-		expect((await get(server, `/app/${path}`)).status).toBe(403);
+	for (const path of [
+		"manifest.webmanifest",
+		"icons/192.png",
+		"icons/512.png",
+		"icons/mark.svg",
+	]) {
+		const answer = await get(server, `/app/${path}`);
+		expect({ path, status: answer.status }).toEqual({ path, status: 200 });
+		expect(answer.headers.get("set-cookie")).toBeNull();
+	}
+	const mark = await get(server, "/app/icons/mark.svg");
+	expect(mark.headers.get("content-type")).toBe("image/svg+xml");
+	expect(mark.headers.get("content-security-policy")).toContain(
+		"default-src 'none'",
+	);
+	for (const path of ["sw.js", "theme-init.js", "", "index.html"])
+		expect({
+			path,
+			status: (await get(server, `/app/${path}`)).status,
+		}).toEqual({ path, status: 403 });
+	// A name that is no icon is not a way around the session either.
+	for (const path of ["icons/nope.png", "icons/..%2Fx.png", "icons/a.txt"])
+		expect({
+			path,
+			status: (await get(server, `/app/${path}`)).status,
+		}).toEqual({ path, status: 403 });
+	const write = await get(server, "/app/icons/192.png", { method: "POST" });
+	expect(write.status).toBe(403);
+});
+
+test("the served page names the round-table mark as its icon, and carries a title, a description and a link preview", async () => {
+	const server = serverOver(real, true, undefined, undefined, {
+		origin: "https://rt.example.test",
+	});
+	const html = await (await get(server, "/app/")).text();
+	expect(html).toContain(
+		'<link rel="icon" href="/app/icons/mark.svg" type="image/svg+xml" sizes="any">',
+	);
+	expect(html).toContain(
+		'<link rel="icon" href="/app/icons/192.png" type="image/png">',
+	);
+	expect(html).toContain("<title>Team</title>");
+	expect(html).not.toContain("<title>Console</title>");
+	expect(html).toContain(
+		'<meta name="description" content="Chat with your agent team in Team.">',
+	);
+	expect(html).toContain('<meta property="og:title" content="Team">');
+	expect(html).toContain(
+		'<meta property="og:image" content="https://rt.example.test/app/icons/512.png">',
+	);
+});
+
+test("a host's title and description are escaped where they land, and its own icons keep the tab", async () => {
+	const custom = mkdtempSync(join(tmpdir(), "web-pwa-own-icons-"));
+	for (const name of ["192.png", "512.png"])
+		writeFileSync(join(custom, name), "x");
+	const server = serverOver(real, true, custom, undefined, {
+		title: '</title><script>alert(1)</script>"',
+		description: 'a "quote" & <b>',
+		origin: "https://rt.example.test",
+	});
+	const html = await (await get(server, "/app/")).text();
+	expect(html).toContain(
+		"<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;&quot;</title>",
+	);
+	expect(html).toContain('content="a &quot;quote&quot; &amp; &lt;b&gt;"');
+	expect(html).not.toContain("<script>alert(1)");
+	// The directory has no mark.svg, so only its PNG is linked; the host's PNG is what answers.
+	expect(html).not.toContain("mark.svg");
+	expect(html).toContain('href="/app/icons/192.png"');
+	expect((await get(server, "/app/icons/192.png")).status).toBe(200);
 });
 
 test("icons come from the shipped directory, or from options.icons.dir", async () => {

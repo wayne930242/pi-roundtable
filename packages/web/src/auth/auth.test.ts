@@ -389,6 +389,46 @@ describe("auth password login", () => {
 		);
 	});
 
+	test("the login page names the round-table mark as its icon, and the icon and the manifest need no session", async () => {
+		const { server } = build({ auth: password() });
+		const page = await server.handle(request("/console/login"));
+		expect(page.headers.get("content-security-policy")).toContain(
+			"img-src 'self'",
+		);
+		const html = await page.text();
+		expect(html).toContain(
+			'<link rel="icon" href="/console/icons/192.png" type="image/png">',
+		);
+		for (const path of [
+			"icons/192.png",
+			"icons/512.png",
+			"manifest.webmanifest",
+		])
+			expect({
+				path,
+				status: (await server.handle(request(`/console/${path}`))).status,
+			}).toEqual({ path, status: 200 });
+		// Only those: the page, the worker and any other name still need the session.
+		for (const path of [
+			"",
+			"sw.js",
+			"icons/nope.png",
+			"icons/a.txt",
+			"assets/app.js",
+		])
+			expect({
+				path,
+				status: (await server.handle(request(`/console/${path}`))).status,
+			}).toEqual({ path, status: 303 });
+		expect(
+			(
+				await server.handle(
+					request("/console/icons/192.png", { method: "DELETE" }),
+				)
+			).status,
+		).toBe(401);
+	});
+
 	test("a wrong password answers 401 after about a second, and never reaches data", async () => {
 		const { apiPaths } = build({ auth: password() });
 		const slow = build({ auth: password(), loginDelayMs: 1000 });

@@ -10,6 +10,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A folder's header no longer turns into an unreadable light fill with white text when the pointer rests on it (on a phone the highlight stuck after a tap), and its title is left-aligned, not centered. The base rule `button:hover:not(:disabled)` out-specified the header's own style; its hover, press and keyboard focus now tint the label and keep its text colour in every look and scheme.
 - A row of the room list that is held and dragged on an iPhone now lifts and reorders. iOS Safari lets a page stop a finger's scroll only if a non-passive `touchmove` listener existed when the finger went down; the lift added its own after the hold, so the first move scrolled the page and the browser cancelled the drag. While a row that can be lifted is on the page, a no-op non-passive `touchmove` listener is now held.
 - The plain room list (no pin and no folder yet) keeps Agents and Groups by latest activity, as the arranged list and the drawer do. Before, it kept the order the server listed them in, so a room you had just talked to did not move up, even after a reload.
+- Under path routing the manifest and the home-screen icon links come after the page's base, so a page opened at a room's URL (`<mount>/room/<key>`) still finds them.
+- The page now has a tab icon: the round-table mark, linked as `rel="icon"` on the app, the sign-in page and the sign-in flow's pages, so a browser no longer asks the site root for `/favicon.ico` and gets a 404. A host's own `icons.dir` is kept (add a `mark.svg` to it to replace the SVG too).
+- The manifest and the icons answer without a session in `oidc` and `password` mode, so the sign-in page and a link preview have an icon. They were redirected to the sign-in. Nothing else below the mount is open.
+- The served page carries the host's `title` in `<title>` from the first byte; it said `Console` until the script ran.
+
+### Added
+
+- The `description` option, and `<meta name="description">`, `og:title`, `og:description` and `og:image` on the page, so a search result and a link preview have a title, a line and the mark. Without `description` a line is derived from `title`.
+- `<mount>/icons/mark.svg`, the round-table mark.
 
 ### Changed
 

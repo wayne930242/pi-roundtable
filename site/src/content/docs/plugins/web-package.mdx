@@ -81,7 +81,7 @@ The page has a Modern look and a Camelot look (parchment by day, a night castle 
 
 ## Install on a device and notifications
 
-The app is a PWA: a manifest scoped to the mount, a service worker that keeps the shell and never data, and icons (`icons.dir` replaces the shipped set).
+The app is a PWA: a manifest scoped to the mount, a service worker that keeps the shell and never data, and icons (`icons.dir` replaces the shipped set). The tab icon is the round-table mark by default, and the manifest and icons answer without a session so the sign-in page and link previews show them.
 Install it from the browser's Install option or Settings; on iPhone and iPad use Share, then Add to Home Screen, and open it from there.
 
 Web Push wakes a device while no page of that owner is in view: when a card opens ("Card waiting", or "Long-running cap reached"), when an agent posts on its own, and for a notice the host sends.
@@ -114,7 +114,8 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `push` | on with an https origin | Web Push; keys below. |
 | `icons` | shipped icons | `{ dir }`: a directory of the five install icons. |
 | `appearance` | `{ look: "modern" }` | `{ look }`: `modern` or `camelot`. |
-| `title` | `Roundtable` | Page heading, title, and installed app name. |
+| `title` | `Roundtable` | Page heading, `<title>` (in the served HTML), `og:title`, and installed app name. |
+| `description` | derived from `title` | `<meta name="description">` and `og:description`, for search results and link previews. |
 | `presentation` | English | `{ locale, messages }` controls language, date formatting, and wording; English source strings are dictionary keys. A `zh-TW` locale uses the built-in Traditional Chinese (Taiwan) wording, and `messages` words single keys over it. |
 | `features` | none | Object or public setup-context factory for party status, schedule counts, cleanup, skills, and connectors. |
 | `relayNotes` | remote MCP relay note | Prefixes removed from relayed messages before display. |

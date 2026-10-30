@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AssetBundle } from "./assets.ts";
@@ -34,7 +34,16 @@ export const DEFAULT_ICONS_DIR = fileURLToPath(
 	new URL("../assets/icons/", import.meta.url),
 );
 
-const ICON_FILE = /^[A-Za-z0-9-]+\.png$/;
+const ICON_FILE = /^[A-Za-z0-9-]+\.(png|svg)$/;
+
+/** The icon files and the manifest answer without a session: a sign-in page and a link preview have none. */
+export const isPublicStatic = (rest: string): boolean =>
+	rest === "manifest.webmanifest" ||
+	(rest.startsWith("icons/") && ICON_FILE.test(rest.slice("icons/".length)));
+
+/** Whether the icon directory has the round-table mark as an SVG, which a tab shows crisper than a PNG. */
+export const hasMarkSvg = (iconsDir: string | undefined): boolean =>
+	existsSync(join(iconsDir ?? DEFAULT_ICONS_DIR, "mark.svg"));
 
 export interface PwaOptions {
 	mount: string;
@@ -116,10 +125,18 @@ export function servePwa(
 			const body = readFileSync(
 				join(options.iconsDir ?? DEFAULT_ICONS_DIR, name),
 			);
+			const svg = name.endsWith(".svg");
 			return new Response(new Uint8Array(body), {
 				headers: {
-					"content-type": "image/png",
-					"cache-control": "private, max-age=86400",
+					"content-type": svg ? "image/svg+xml" : "image/png",
+					"cache-control": "public, max-age=86400",
+					// An SVG opened as a page must not run anything of its own.
+					...(svg
+						? {
+								"content-security-policy":
+									"default-src 'none'; style-src 'unsafe-inline'",
+							}
+						: {}),
 				},
 			});
 		} catch {
