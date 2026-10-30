@@ -25,6 +25,8 @@
 //   ask      a question with options             quiz     a questionnaire
 //   late     a card the turn stops waiting on    stream   streamed text and tool chips, then a reply
 //   dispatch a coding job in a thread, with a card there     exchange  the agent asks the scout in a thread
+//   helpers  the agent makes four temp knights, one working for a long time, one waiting on a card, two done
+//   endhelpers  the agent archives its finished temp knights, as helper_end does
 // Anything else gets a reply in Markdown. The control port sends a message as the owner:
 //   curl 'http://127.0.0.1:4181/say?room=app:agent.guide&text=approve'
 // `GET /control/mode?room=...&yolo=1&long=1` sets a room's modes. `GET /control/write?path=src/main.ts&text=...`
@@ -502,6 +504,44 @@ const scripts: Record<string, Script> = {
 			).message(request.agent, "scout", "How large is the repository?");
 		return { ok: true, text: "Asked the scout; the exchange is in a thread." };
 	},
+	helpers: async (request) => {
+		const team = teamForScripts as {
+			helperCreate(
+				caller: NonNullable<TurnRequest["agent"]>,
+				input: { display_name?: string; displayName?: string } & Record<
+					string,
+					unknown
+				>,
+			): Promise<string>;
+		};
+		const agent = request.agent;
+		if (!agent) return { ok: true, text: "I am not an agent." };
+		const made: string[] = [];
+		for (const [displayName, task] of [
+			["Reconnaissance, southern harbour", "survey the harbour slowly"],
+			["Permit check", "approve the permit"],
+			["Tide table", "read the tide table"],
+			["Chart notes", "read the chart notes"],
+		] as const)
+			made.push(
+				await team.helperCreate(agent, {
+					displayName,
+					prompt: `You do one small task: ${task}.`,
+					task,
+				}),
+			);
+		return { ok: true, text: made.join("\n") };
+	},
+	endhelpers: async (request) => {
+		const team = teamForScripts as {
+			helperEnd(
+				caller: NonNullable<TurnRequest["agent"]>,
+				names: "finished",
+			): Promise<string>;
+		};
+		if (!request.agent) return { ok: true, text: "I am not an agent." };
+		return { ok: true, text: await team.helperEnd(request.agent, "finished") };
+	},
 	stream: async (request) => {
 		const progress = async (event: TurnProgress) => {
 			await host?.context.surfaces.progress?.(request.channel, event);
@@ -551,6 +591,13 @@ const scripts: Record<string, Script> = {
 const runtime = {
 	runTurn: async (request: TurnRequest) => {
 		const text = request.text.toLowerCase().trim();
+		// A temp knight acts out its task: one runs for a long while, one waits on a card, the rest finish.
+		if (text.includes("survey the harbour slowly")) {
+			await sleep(10 * 60_000);
+			return { ok: true as const, text: "The survey is done." };
+		}
+		if (text.includes("approve the permit"))
+			return scripts.approve?.(request, new AbortController().signal);
 		// A group round hands each member the chat as `[Name] message` lines; the keyword is the newest line's.
 		const said =
 			[...text.matchAll(/^\[[^\]\n]+\] (.*)$/gm)].at(-1)?.[1] ?? text;
