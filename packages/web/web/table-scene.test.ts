@@ -6,8 +6,10 @@ import { PerspectiveCamera, Vector3 } from "three";
 import {
 	blendShot,
 	closeupShot,
+	DIVE_TURN_MS,
 	dragAngle,
 	EDGE_PX,
+	easeDive,
 	fitFov,
 	fits,
 	headCorners,
@@ -104,6 +106,30 @@ describe("the camera planner", () => {
 		expect(far.cut).toBe(false);
 		const cut = planMove(closeupShot(0, 7), closeupShot(Math.PI, 7), true);
 		expect(cut).toEqual({ ms: 0, cut: true });
+	});
+
+	test("the dive into a seat creeps, then rushes in, in about 400 ms", () => {
+		expect(easeDive(0)).toBeCloseTo(0, 9);
+		expect(easeDive(1)).toBeCloseTo(1, 6);
+		// slow at first: half the time covers a tenth of the way, and the last tenth of the time more than a quarter
+		expect(easeDive(0.5)).toBeLessThan(0.1);
+		expect(easeDive(1) - easeDive(0.9)).toBeGreaterThan(0.25);
+		let last = 0;
+		for (let t = 0.05; t <= 1; t += 0.05) {
+			expect(easeDive(t)).toBeGreaterThanOrEqual(last);
+			last = easeDive(t);
+		}
+		const dive = planMove(overviewShot(0, 6), closeupShot(1, 6), false, true);
+		expect(dive).toEqual({ ms: DIVE_TURN_MS, cut: false, dive: true });
+		expect(DIVE_TURN_MS).toBeGreaterThanOrEqual(300);
+		expect(DIVE_TURN_MS).toBeLessThanOrEqual(450);
+		// reduced motion still cuts
+		expect(planMove(overviewShot(0, 6), closeupShot(1, 6), true, true)).toEqual(
+			{
+				ms: 0,
+				cut: true,
+			},
+		);
 	});
 
 	test("letting go of a drag snaps to the nearest podium's place", () => {

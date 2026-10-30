@@ -4,6 +4,7 @@ import type { RoomView } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { suggestionFor } from "../lib/character-spec.ts";
 import { useCharacters, useRoomStates } from "../lib/characters.ts";
+import { hostUi } from "../lib/frame-taps.ts";
 import {
 	useHostedTable,
 	useHostSeats,
@@ -14,6 +15,7 @@ import { useCharacterStyle, useLook } from "../lib/look.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import { navigate } from "../lib/router.ts";
+import { cancelDive, diveInto } from "../lib/seat-dive.ts";
 import {
 	createExpressionSwaps,
 	type ExpressionSwaps,
@@ -48,6 +50,11 @@ const tableLabels = (): TableLabels => ({
 	seat: (name, state) =>
 		t("{name} ({state})", { name, state: t(SEAT_STATE_LABELS[state]) }),
 });
+
+/** A host's room page loads on demand; the dive starts it so the room is there when the zoom ends. */
+const warmHostRooms = (): void => {
+	hostUi().catch(() => undefined);
+};
 
 /** More seats than this on a phone held upright are also listed as buttons: the pictures get small. */
 const LIST_ABOVE = 10;
@@ -122,7 +129,7 @@ export interface RoundTableProps {
 	focus?: string | null;
 	/** The person turned the camera (a zoom, a swipe in a close-up): the agent it is on now, or null for the whole ring. */
 	onFocus?(name: string | null): void;
-	/** A seat was tapped; by default the page opens the agent's room. */
+	/** A seat was tapped; by default the page dives into the agent's room. */
 	onSeat?(name: string): void;
 	/** A seat was held, right-clicked or given the Menu key; by default it has no menu. */
 	onSeatMenu?(request: SeatMenuRequest): void;
@@ -148,6 +155,9 @@ export function RoundTable(props: RoundTableProps) {
 	const agentStates = useRoomStates(roster.map((view) => view.key));
 	const rounds = useRounds(props.groupRoom);
 	const attention = useHostSeats().attention;
+	const hosted = useHostedTable();
+	const hostedRef = useRef(hosted);
+	hostedRef.current = hosted;
 	const upright = useMedia("(orientation: portrait)");
 	const listBelow =
 		variant === "full" &&
@@ -263,14 +273,25 @@ export function RoundTable(props: RoundTableProps) {
 				theme: optionsRef.current.look,
 				scheme: optionsRef.current.scheme,
 				seats: first,
-				onSeatClick: ({ id }) => {
+				onSeatClick: ({ id, at }) => {
 					const seat = latest.current.onSeat;
 					if (seat) {
 						seat(id);
 						return;
 					}
 					const view = rosterRef.current.find((one) => one.name === id);
-					if (view) navigate("room", view.key);
+					if (!view) return;
+					const open = () => navigate("room", view.key);
+					const frame = host.current;
+					// A tap or a key press dives into the seat, and the room opens as the zoom ends.
+					if (at && frame)
+						diveInto(
+							frame,
+							at,
+							open,
+							hostedRef.current ? warmHostRooms : undefined,
+						);
+					else open();
 				},
 				...(latest.current.onSeatMenu
 					? { onSeatMenu: (request) => latest.current.onSeatMenu?.(request) }
@@ -297,6 +318,8 @@ export function RoundTable(props: RoundTableProps) {
 		})();
 		return () => {
 			current = false;
+			// A dive that has not left yet goes with the table that started it.
+			cancelDive(element);
 			exchange.dispose();
 			swaps.current = undefined;
 			handle.current = undefined;

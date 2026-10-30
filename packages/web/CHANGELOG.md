@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Opening a room from a seat of the round table is a dive: the view zooms toward the seat that was tapped, creeping at first and then rushing in (`cubic-bezier(0.7, 0, 0.84, 0)`, about 380 ms), and the room settles in already at full size, with no blank frame. A mouse click, a tap and a key press on a seat all do it, and the camera of the 3D table dives into a seat from the whole ring the same way. It uses transform and opacity only, a second tap during the zoom is dropped, Back or leaving the table mid-zoom gives the view back and opens nothing, and `prefers-reduced-motion: reduce` switches at once. The code is part of the round table's lazy chunk, not the first load.
+
 ### Changed
 
 - The page's word for an agent is now "Knight" in every look: lists, sheets, menus, the table, notifications and the server's refusals. The main agent is the "main knight". The model picker's "Follow the assistant" row is "Default model", and the sheet shows the model it resolves to when it knows it. Agents over MCP outside Discord are "Outside AI clients", and the agent server is the "Bot server". Text only: identifiers, API fields and configuration keys are unchanged.

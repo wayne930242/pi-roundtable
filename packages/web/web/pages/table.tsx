@@ -181,10 +181,11 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 						onHandle={setTable}
 						focus={target}
 						onFocus={go}
-						onSeat={go}
 						{...(hosted
-							? { onMore: () => navigate("rooms") }
+							? // A tapped hosted seat dives into its room (the table's own way); a camera turn by the person opens it at once (`go`).
+								{ onMore: () => navigate("rooms") }
 							: {
+									onSeat: go,
 									onSeatMenu: (request: SeatMenuRequest) => {
 										const seated = agentRoster.find(
 											(one) => one.name === request.id,

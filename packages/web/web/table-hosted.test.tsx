@@ -9,6 +9,7 @@ import {
 import { partial } from "pi-roundtable/testing";
 import type { ClientFrame, ConfigView } from "../src/api-types.ts";
 import type { HostListView } from "../src/host/views.ts";
+import { stubAnimations } from "./animation-stub.ts";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
@@ -192,7 +193,14 @@ test("a seat opens its room's own page, where the room's own access decides what
 	await settle();
 	const seat = page.container.querySelector('g.seat[aria-label^="Aida"]');
 	expect(seat).not.toBeNull();
-	seat?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+	// The seat is opened as the dive into it ends.
+	const motion = stubAnimations(true);
+	try {
+		seat?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		await settle();
+	} finally {
+		motion.restore();
+	}
 	expect(decodeURIComponent(window.location.hash)).toBe(`#/room/${AIDA}`);
 });
 

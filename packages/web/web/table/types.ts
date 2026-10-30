@@ -19,6 +19,20 @@ export const SEAT_STATES: SeatState[] = [
 	"error",
 ];
 
+/**
+ * Where an activation was: the pointer for a click or a tap, the middle of the element for a key
+ * press (a keyboard click reports no position).
+ */
+export function pointOf(
+	event: { clientX: number; clientY: number; detail?: number },
+	element: Element,
+): { x: number; y: number } {
+	if (event.detail !== 0 && (event.clientX !== 0 || event.clientY !== 0))
+		return { x: event.clientX, y: event.clientY };
+	const box = element.getBoundingClientRect();
+	return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
 export interface SeatInit {
 	id: string;
 	name: string;
@@ -59,7 +73,12 @@ export interface TableOptions {
 	theme: ThemeName;
 	scheme: Scheme;
 	seats: SeatInit[];
-	onSeatClick: (seat: { id: string; name: string }) => void;
+	onSeatClick: (seat: {
+		id: string;
+		name: string;
+		/** Where the seat was tapped, or the middle of the seat when it was reached by keyboard; viewport coordinates. */
+		at?: { x: number; y: number };
+	}) => void;
 	/** A seat was held, right-clicked or given the Menu key; the page opens its menu. A press that long is no tap. */
 	onSeatMenu?: (request: SeatMenuRequest) => void;
 	/** 'auto' follows prefers-reduced-motion */

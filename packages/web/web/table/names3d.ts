@@ -4,7 +4,7 @@ import type { Hall } from "./hall";
 import { type Face, NAME_GAP, type NameSpot, spreadNames } from "./name-layout";
 import { PLATE_FONT_STACK } from "./plate";
 import type { Podium } from "./podium3d";
-import type { SeatState, TableLabels } from "./types";
+import { pointOf, type SeatState, type TableLabels } from "./types";
 
 /**
  * The names over the podiums as page elements, not as part of the picture: a name the person
@@ -36,7 +36,10 @@ export class Names {
 	constructor(
 		container: HTMLElement,
 		private readonly labels: TableLabels,
-		private readonly click: (podium: Podium) => void,
+		private readonly click: (
+			podium: Podium,
+			at: { x: number; y: number },
+		) => void,
 	) {
 		this.root.className = "rt-names";
 		container.appendChild(this.root);
@@ -69,7 +72,9 @@ export class Names {
 					: podium.init.name,
 			);
 			if (podium.init.id) el.dataset.seat = podium.init.id;
-			el.addEventListener("click", () => this.click(podium));
+			el.addEventListener("click", (event) =>
+				this.click(podium, pointOf(event, el)),
+			);
 			this.root.appendChild(el);
 			this.items.set(podium, { el, x: 0, y: 0, shown: false });
 		}

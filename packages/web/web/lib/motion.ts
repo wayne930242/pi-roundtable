@@ -10,7 +10,12 @@ export const reducedMotion = (): boolean =>
  * person allows motion; elsewhere it just runs. `update` must change the DOM synchronously.
  */
 export function transition(update: () => void): void {
-	if (reducedMotion() || typeof document.startViewTransition !== "function") {
+	// A dive into a seat (lib/seat-dive.ts) is its own transition, and a snapshot cross-fade would paint over it.
+	if (
+		reducedMotion() ||
+		typeof document.startViewTransition !== "function" ||
+		document.documentElement.hasAttribute("data-dive")
+	) {
 		update();
 		return;
 	}
