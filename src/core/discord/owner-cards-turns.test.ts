@@ -136,8 +136,12 @@ describe("a card answered after its turn stopped waiting", () => {
 		expect(resumed).toHaveLength(1);
 		expect(resumed[0]?.text).toContain(`${MAIL} ${canonicalJson(send)}`);
 
-		// The turn the answer started: the identical call runs once; any other is held.
-		gate.beginTurn("workspace", false);
+		// The turn the answer started, spoken by whoever pressed: the identical call runs once; any other is held.
+		gate.beginTurn("workspace", false, undefined, {
+			id: "s_owner",
+			principalId: "p_owner",
+			tier: "owner",
+		});
 		expect(await call({ ...send, subject: "other" }, "call-2")).toMatchObject({
 			block: true,
 		});
@@ -205,7 +209,12 @@ describe("a card answered after its turn stopped waiting", () => {
 		gate.endTurn();
 		const id = fake.cardId();
 		await owner.handle(press("button", `${CARD_PREFIX}${id}:yes`).interaction);
-		gate.beginTurn("workspace", false);
+		// The turn Discord starts for the answer is a message from whoever pressed.
+		gate.beginTurn("workspace", false, undefined, {
+			id: "s_owner",
+			principalId: "p_owner",
+			tier: "owner",
+		});
 		expect(
 			await onCall?.({ toolName: MAIL, toolCallId: "call-2", input: send }, {}),
 		).toBeUndefined();

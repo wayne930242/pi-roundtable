@@ -283,7 +283,11 @@ describe("a plugin withdrawing a call after its turn stopped waiting", () => {
 		expect(late(approval)).toContain("approved on its card");
 		// Approved, and waiting for the model to make the call: still withdrawable.
 		expect(gate.watching).toBe(1);
-		gate.beginTurn("workspace", false);
+		// The turn a surface starts for the answer is spoken by whoever answered.
+		gate.beginTurn("workspace", false, undefined, {
+			id: "1",
+			principalId: "p_ada",
+		});
 		expect(gate.watching).toBe(1);
 		const ran = await decide(gate, undefined);
 		expect(ran.reason).toBeUndefined();

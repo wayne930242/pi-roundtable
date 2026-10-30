@@ -81,6 +81,21 @@ describe("a late approval's release", () => {
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 	});
 
+	test("is not spent by a turn without a speaker, which shows the card; the approver's later turn spends it", async () => {
+		const gate = await lateApproved(undefined, riley);
+		gate.beginTurn("workspace", false, undefined, undefined);
+		expect(gate.hold(MAIL, send)).toContain("Held");
+		gate.endTurn();
+		gate.beginTurn("workspace", false, undefined, speaker("p_riley"));
+		expect(gate.hold(MAIL, send)).toBeUndefined();
+	});
+
+	test("is not spent by a turn without a speaker when the giver is unknown", async () => {
+		const gate = await lateApproved();
+		gate.beginTurn("workspace", false, undefined, undefined);
+		expect(gate.hold(MAIL, send)).toContain("Held");
+	});
+
 	test("is anyone's when the surface does not say who gave it", async () => {
 		const gate = await lateApproved();
 		gate.beginTurn("workspace", false, undefined, speaker("p_other"));

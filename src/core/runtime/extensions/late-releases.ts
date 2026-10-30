@@ -11,8 +11,8 @@ export const LATE_RELEASE_TTL_MS = 3_600_000;
 
 /**
  * The releases that cards answered after their turn stopped waiting earned. A release lets the
- * identical call run once, only while it is fresh and only in a turn of the person who gave it
- * (or an owner), and it is dropped when the identical call runs without a hold, since that run
+ * identical call run once, only while it is fresh and only in a turn spoken by the person who gave it
+ * (or by an owner), never in a turn without a speaker, and it is dropped when the identical call runs without a hold, since that run
  * is the call the person approved.
  */
 export class LateReleases {
@@ -61,12 +61,15 @@ export class LateReleases {
 }
 
 /**
- * Whether `speaker` may spend `release`: they gave it, or are an owner; anyone, when its giver is
- * unknown. A turn without a speaker is the owner's, as the gate treats it everywhere else.
+ * Whether `speaker` may spend `release`: they gave it, or are an owner; any speaker, when its
+ * giver is unknown. A turn without a speaker (an automatic, scheduled or agent-message turn)
+ * spends nothing, so a card is shown again there. Every surface that resumes a turn for a late
+ * answer (Discord, the web app) starts it as a message from whoever answered, so that turn has
+ * a speaker and needs no exception.
  */
 function maySpend(release: Release, speaker: SpeakerRef | undefined): boolean {
+	if (!speaker) return false;
 	if (!release.by) return true;
-	if (!speaker) return true;
 	return (
 		speaker.tier === "owner" || speaker.principalId === release.by.principalId
 	);
