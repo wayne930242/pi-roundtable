@@ -49,7 +49,7 @@ let armed = 0;
  * the first move after a hold scrolls the page, the browser cancels the pointer, and the row is
  * dropped where it was. The listener does nothing itself; the lift's does the stopping.
  */
-function armTouches(): () => void {
+export function armTouches(): () => void {
 	if (armed++ === 0)
 		window.addEventListener("touchmove", keepTouchmove, { passive: false });
 	return () => {

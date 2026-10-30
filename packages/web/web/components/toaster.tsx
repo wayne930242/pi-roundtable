@@ -47,6 +47,18 @@ export function Toaster() {
 			{toasts.map((one) => (
 				<div key={one.id} className="toast" data-tone={one.tone}>
 					<span>{one.text}</span>
+					{one.action ? (
+						<button
+							type="button"
+							className="secondary toast-action"
+							onClick={() => {
+								dismissToast(one.id);
+								one.action?.run();
+							}}
+						>
+							{one.action.label}
+						</button>
+					) : null}
 					<button
 						type="button"
 						className="icon-button"

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Dispatch threads in the room list are cards: the title, the room's knight, an in-progress or finished badge, the time and the unread count, with a going-on thread tinted and a finished one at rest. Swiping a finished card to the right clears it (the card slides out, the list closes the gap, and a notice offers Undo for five seconds); a going-on card gives a little and springs back. Holding a card or right-clicking it, or the menu button on a finished one, opens a menu with "Clear this thread" and "Clear all finished"; Delete on a focused finished card clears it, and "Clear finished" in the header of the finished threads clears them all, asking first with the count when there are more than five. Reduced motion skips the slide. The undo is two new owner routes, `POST api/rooms/<thread>/undismiss` and `POST api/rooms/<room>/undismiss-threads` (body `{ "threads": [<keys>] }`, at most 100 keys under that room), which put dismissed threads back on the list for every owner.
+
 ### Changed
 
 - The page's word for an agent is now "Knight" in every look: lists, sheets, menus, the table, notifications and the server's refusals. The main agent is the "main knight". The model picker's "Follow the assistant" row is "Default model", and the sheet shows the model it resolves to when it knows it. Agents over MCP outside Discord are "Outside AI clients", and the agent server is the "Bot server". Text only: identifiers, API fields and configuration keys are unchanged.

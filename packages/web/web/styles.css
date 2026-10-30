@@ -1065,6 +1065,12 @@ button.yolo-action:hover:not(:disabled) {
 	border-color: var(--danger);
 }
 
+.toast-action {
+	min-height: 2rem;
+	padding: 0 var(--space-3);
+	font-size: var(--text-sm);
+}
+
 .toast .icon-button {
 	width: 2rem;
 	min-width: 2rem;

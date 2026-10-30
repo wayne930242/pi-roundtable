@@ -24,6 +24,7 @@ import type {
 	SkillDetailView,
 	SkillView,
 	ThreadsDismissed,
+	ThreadsRestored,
 	TranscriptView,
 	UploadView,
 } from "../../src/api-types.ts";
@@ -213,6 +214,17 @@ export const api = {
 		request<ThreadsDismissed>(
 			`rooms/${encodeURIComponent(room)}/dismiss-threads`,
 			{ method: "POST" },
+		),
+	/** Puts a dismissed thread back on the room list. */
+	undismissThread: (thread: string) =>
+		request<ThreadsRestored>(`rooms/${encodeURIComponent(thread)}/undismiss`, {
+			method: "POST",
+		}),
+	/** Puts back the threads of `room` that one clear-all dismissed. */
+	undismissThreads: (room: string, threads: readonly string[]) =>
+		request<ThreadsRestored>(
+			`rooms/${encodeURIComponent(room)}/undismiss-threads`,
+			{ method: "POST", body: JSON.stringify({ threads }) },
 		),
 	startRoomOver: (room: string) =>
 		request<{ ok: true }>(`rooms/${encodeURIComponent(room)}/start-over`, {

@@ -6,6 +6,7 @@ import type {
 	RoomOneView,
 	RoomView,
 	ThreadsDismissed,
+	ThreadsRestored,
 } from "./api-types.ts";
 import type { ResolvedRoom } from "./app/rooms.ts";
 import { AppApi } from "./app/routes.ts";
@@ -95,6 +96,23 @@ function setup() {
 					}
 				return count;
 			},
+			restore: async (id: string) => {
+				const one = stored.get(id);
+				if (!one) return "missing" as const;
+				one.dismissed = false;
+				return "restored" as const;
+			},
+			restoreFinished: async (parent: string, ids: readonly string[]) => {
+				let count = 0;
+				for (const id of ids) {
+					const one = stored.get(id);
+					if (one?.parent === parent && one.dismissed) {
+						one.dismissed = false;
+						count += 1;
+					}
+				}
+				return count;
+			},
 		},
 		layout: { view: async () => EMPTY_LAYOUT } as never,
 		mount: "/console",
@@ -137,11 +155,20 @@ beforeEach(() => {
 	]);
 });
 
-const call = (server: ConsoleServer, method: string, path: string) =>
+const call = (
+	server: ConsoleServer,
+	method: string,
+	path: string,
+	body?: unknown,
+) =>
 	server.handle(
 		new Request(`http://host/console/api/${path}`, {
 			method,
-			headers: { origin: ORIGIN },
+			headers: {
+				origin: ORIGIN,
+				...(body === undefined ? {} : { "content-type": "application/json" }),
+			},
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		}),
 	);
 const at = (key: string, action = "") =>
@@ -207,18 +234,90 @@ describe("dismissing dispatch threads from the room list", () => {
 		expect((await call(server, "GET", at(GUIDE))).status).toBe(404);
 	});
 
+	test("an owner takes a dismissed thread back, and the other pages are told", async () => {
+		const server = setup();
+		await call(server, "POST", at(DONE, "dismiss"));
+		const response = await call(server, "POST", at(DONE, "undismiss"));
+		expect(response.status).toBe(200);
+		expect((await response.json()) as ThreadsRestored).toEqual({ restored: 1 });
+		expect(stored.get(DONE.slice(4))?.dismissed).toBe(false);
+		expect(changes).toBe(2);
+		// A thread that is not stored, and a room that is no thread, answer 404.
+		expect((await call(server, "POST", at(NONE, "undismiss"))).status).toBe(
+			404,
+		);
+		expect((await call(server, "POST", at(GUIDE, "undismiss"))).status).toBe(
+			404,
+		);
+	});
+
+	test("an owner takes back the threads one clear-all dismissed, those named and under that room only", async () => {
+		const server = setup();
+		stored.set(NONE.slice(4), {
+			parent: "app:agent.other",
+			open: false,
+			dismissed: true,
+		});
+		await call(server, "POST", at(GUIDE, "dismiss-threads"));
+		const response = await call(
+			server,
+			"POST",
+			at(GUIDE, "undismiss-threads"),
+			{
+				threads: [DONE, OPEN, NONE],
+			},
+		);
+		expect(response.status).toBe(200);
+		expect((await response.json()) as ThreadsRestored).toEqual({ restored: 1 });
+		expect(stored.get(DONE.slice(4))?.dismissed).toBe(false);
+		// Another room's thread stays where it was put.
+		expect(stored.get(NONE.slice(4))?.dismissed).toBe(true);
+		// Nothing came back the second time, so no page needs to refetch.
+		const changed = changes;
+		const again = await call(server, "POST", at(GUIDE, "undismiss-threads"), {
+			threads: [DONE],
+		});
+		expect((await again.json()) as ThreadsRestored).toEqual({ restored: 0 });
+		expect(changes).toBe(changed);
+	});
+
+	test("taking threads back refuses a body that is not a short list of keys, and a thread as the room", async () => {
+		const server = setup();
+		for (const body of [
+			{},
+			{ threads: "x" },
+			{ threads: [1] },
+			{ threads: Array(101).fill(DONE) },
+		])
+			expect(
+				(await call(server, "POST", at(GUIDE, "undismiss-threads"), body))
+					.status,
+			).toBe(400);
+		expect(
+			(
+				await call(server, "POST", at(DONE, "undismiss-threads"), {
+					threads: [],
+				})
+			).status,
+		).toBe(404);
+	});
+
 	test("nobody but an owner can ask: the routes do not exist for anyone else", async () => {
+		stored.set(DONE.slice(4), { parent: GUIDE, open: false, dismissed: true });
 		for (const tier of ["admin", "member"] as const) {
 			who = { id: tier, tier };
 			const server = setup();
-			for (const [method, path] of [
+			for (const [method, path, body] of [
 				["POST", at(DONE, "dismiss")],
 				["POST", at(GUIDE, "dismiss-threads")],
+				["POST", at(DONE, "undismiss")],
+				["POST", at(GUIDE, "undismiss-threads"), { threads: [DONE] }],
 				["GET", at(DONE)],
 			] as const)
-				expect((await call(server, method, path)).status).toBe(404);
+				expect((await call(server, method, path, body)).status).toBe(404);
 		}
-		expect(stored.get(DONE.slice(4))?.dismissed).toBe(false);
+		// Not dismissed by them, and not taken back by them either.
+		expect(stored.get(DONE.slice(4))?.dismissed).toBe(true);
 		expect(changes).toBe(0);
 	});
 

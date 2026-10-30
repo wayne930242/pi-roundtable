@@ -26,6 +26,7 @@ import type {
 	SessionView,
 	SkillView,
 	ThreadsDismissed,
+	ThreadsRestored,
 	WorkspaceConflict,
 	WorkspaceNew,
 	WorkspaceRefusalBody,
@@ -63,6 +64,9 @@ import {
 	WorkspaceRefusal,
 } from "./workspace-files.ts";
 
+/** The most threads one request puts back on the room list: more than the list ever shows. */
+const MAX_RESTORED = 100;
+
 export interface AppApiOptions {
 	/** The host's wording: a refusal reaches a client of the API in this locale when the catalog has it. */
 	presentation?: ConsolePresentation;
@@ -79,7 +83,12 @@ export interface AppApiOptions {
 	/** The dispatch threads, which go with the room they hang under. */
 	threads: Pick<
 		WebThreads,
-		"under" | "removeUnder" | "dismiss" | "dismissFinished"
+		| "under"
+		| "removeUnder"
+		| "dismiss"
+		| "dismissFinished"
+		| "restore"
+		| "restoreFinished"
 	>;
 	/** The owners' shared arrangement of the room list: pins and folders. */
 	layout: LayoutStore;
@@ -511,6 +520,14 @@ export class AppApi {
 			return this.#dismiss(room, admission);
 		if (action === "dismiss-threads" && method === "POST" && parts.length === 4)
 			return this.#dismissFinished(room, admission);
+		if (action === "undismiss" && method === "POST" && parts.length === 4)
+			return this.#restore(room, admission);
+		if (
+			action === "undismiss-threads" &&
+			method === "POST" &&
+			parts.length === 4
+		)
+			return this.#restoreFinished(room, request, admission);
 		if (action === "messages" && method === "GET" && parts.length === 4) {
 			const params = new URL(request.url).searchParams;
 			const before = params.get("before");
@@ -613,6 +630,41 @@ export class AppApi {
 		const dismissed = await this.#options.threads.dismissFinished(room.key);
 		if (dismissed) this.#options.changed();
 		return json({ dismissed } satisfies ThreadsDismissed);
+	}
+
+	/** Puts one dismissed thread back on the room list for every owner: the undo of a dismissal. */
+	async #restore(
+		room: ResolvedRoom,
+		admission: Authenticated,
+	): Promise<Response> {
+		if (room.kind !== "thread") throw notFound();
+		await this.#owner(admission);
+		const outcome = await this.#options.threads.restore(room.name);
+		if (outcome === "missing") throw notFound();
+		this.#options.changed();
+		return json({ restored: 1 } satisfies ThreadsRestored);
+	}
+
+	/** Puts back the threads of a room that one clear-all dismissed, named by their keys. */
+	async #restoreFinished(
+		room: ResolvedRoom,
+		request: Request,
+		admission: Authenticated,
+	): Promise<Response> {
+		if (room.kind === "thread") throw notFound();
+		await this.#owner(admission);
+		const { threads } = await bodyOf(request);
+		if (
+			!Array.isArray(threads) ||
+			threads.length > MAX_RESTORED ||
+			!threads.every((one) => typeof one === "string")
+		)
+			throw bad("threads must be a list of at most 100 keys.");
+		// A key is `<surface>:<thread id>`; the store knows the id.
+		const ids = threads.map((key: string) => key.slice(key.indexOf(":") + 1));
+		const restored = await this.#options.threads.restoreFinished(room.key, ids);
+		if (restored) this.#options.changed();
+		return json({ restored } satisfies ThreadsRestored);
 	}
 
 	async #file(id: string, admission: Authenticated): Promise<Response> {
