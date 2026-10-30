@@ -44,6 +44,12 @@ export function useHostedTable(): boolean {
 	return tier !== undefined && tier !== "owner";
 }
 
+/** Whether the table seats host rooms: a person below the owners always does, an owner where the host has kinds of room to list. */
+export function useSeatsHostRooms(): boolean {
+	const config = useContext(ConfigContext);
+	return useHostedTable() || (config?.kinds?.length ?? 0) > 0;
+}
+
 /** A host room as a seat: the room's key is its name's home, and its title is the plate. */
 function viewOf(room: HostRoomSummaryView, kind: string): RoomView {
 	return {

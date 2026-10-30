@@ -4,7 +4,11 @@ import type { RoomView } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { suggestionFor } from "../lib/character-spec.ts";
 import { useCharacters, useRoomStates } from "../lib/characters.ts";
-import { useHostedTable, useHostSeats } from "../lib/host-seats.ts";
+import {
+	useHostedTable,
+	useHostSeats,
+	useSeatsHostRooms,
+} from "../lib/host-seats.ts";
 import { useKit } from "../lib/kit.ts";
 import { useCharacterStyle, useLook } from "../lib/look.ts";
 import { useMedia } from "../lib/media.ts";
@@ -52,7 +56,7 @@ const LIST_ABOVE = 10;
  * The agents of the room list, the coordinator first; only `members` of them when the table is a
  * group's. The owner's own table seats the agents whose room is not muted; `all` lists the muted ones
  * too, for the sheet that says who sits. A group's members sit whether muted or not. A person below
- * the owners has no agent rooms: the rooms their kinds list, newest first, sit instead.
+ * the owners has no agent rooms: the rooms their kinds list, newest first, sit instead. An owner whose host has kinds of room also has those rooms seated after the agents.
  */
 export function useRoster(
 	members: readonly string[] | undefined,
@@ -61,6 +65,7 @@ export function useRoster(
 	const all = options.all === true;
 	const hosted = useHostedTable();
 	const { views: hostRooms } = useHostSeats();
+	const seatsHostRooms = useSeatsHostRooms();
 	const owned = useSelector(
 		(state) => {
 			const agents = state.order
@@ -79,7 +84,9 @@ export function useRoster(
 		},
 		`${all}\n${members?.join("\n") ?? ""}`,
 	);
-	return hosted ? hostRooms : owned;
+	if (hosted) return hostRooms;
+	// The owners' agents sit first, as they always have; the host rooms they may list sit after them, newest first.
+	return seatsHostRooms && !members && !all ? [...owned, ...hostRooms] : owned;
 }
 
 /** Every agent of the room list, seated or not. */

@@ -261,15 +261,58 @@ test("an address that names a seat is not a close-up for a member: it goes back 
 	expect(page.container.querySelector(".dialogue-box")).toBeNull();
 });
 
-test("an owner's table is the owners' as before: no host list is asked and no room is followed", async () => {
+test("an owner whose host has kinds of room sits the agents first and then the listed host rooms, newest first", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			{
+				key: "app:agent.guide",
+				kind: "agent",
+				name: "guide",
+				displayName: "Guide",
+				home: true,
+				readOnly: false,
+				mode: { yolo: false, longRunning: false },
+				typing: false,
+				stoppable: false,
+			},
+		],
+	});
+	lists.inbox = {
+		kind: "inbox",
+		label: "Inbox",
+		rooms: [
+			summary(AIDA, "Aida", { lastAt: "2026-10-29T09:00:00.000Z" }),
+			summary(BODO, "Bodo", { lastAt: "2026-10-29T11:00:00.000Z" }),
+		],
+	};
+	// A kind the owner may not list seats nobody.
+	lists.desk = 404;
+	await shown("owner");
+	await settle();
+	expect(Object.keys(seats())).toEqual(["Guide", "Bodo", "Aida"]);
+	expect(subscribed("subscribe")).toEqual([AIDA, BODO].sort());
+	// A host room opens its own page, not an agent's dialogue box.
+	page.container
+		.querySelector('g.seat[aria-label^="Bodo"]')
+		?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+	expect(decodeURIComponent(window.location.hash)).toBe(`#/room/${BODO}`);
+	expect(page.container.querySelector(".dialogue-box")).toBeNull();
+});
+
+test("an owner's table of a host without kinds of room is the agents' as before (the agent left by the last test sits): no host list is asked and no room is followed", async () => {
 	lists.inbox = {
 		kind: "inbox",
 		label: "Inbox",
 		rooms: [summary(AIDA, "Aida")],
 	};
-	await shown("owner");
+	await page.render(
+		<ConfigContext.Provider value={{ ...config("owner"), kinds: [] }}>
+			<TablePage />
+		</ConfigContext.Provider>,
+	);
 	await settle();
 	expect(requests.some((one) => one.url.includes("host/"))).toBe(false);
 	expect(sent).toEqual([]);
-	expect(Object.keys(seats())).toEqual([]);
+	expect(Object.keys(seats())).toEqual(["Guide"]);
 });
