@@ -1,4 +1,5 @@
 import type { ToolTurn } from "../../define.ts";
+import type { HeldCall } from "../../domain/conversation.ts";
 import {
 	type HoldCheck,
 	type HoldContext,
@@ -7,6 +8,7 @@ import {
 } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import type { ApprovalDetails } from "../../interactions/prompts.ts";
+import { canonicalJson } from "./held-calls.ts";
 
 /** The turn a hold that looks things up sees; see `HoldRule.describeInTurn`. */
 export interface HoldTurn {
@@ -194,4 +196,23 @@ function withoutApprovers(
 	const wrap = (found: Described): Judged =>
 		found === STOPPED || found === undefined ? found : described(found, tool);
 	return isPromise(answer) ? answer.then(wrap) : wrap(answer);
+}
+
+/** The held call for a tool call and the description a hold gave it. */
+export function heldCall(
+	tool: string,
+	input: Record<string, unknown>,
+	judged: Judgment,
+	minTier: HeldCall["minTier"],
+): HeldCall {
+	return {
+		tool,
+		input: canonicalJson(input),
+		action: judged.action,
+		...(minTier ? { minTier } : {}),
+		...(judged.approvers ? { approverIds: [...judged.approvers] } : {}),
+		...(judged.classes && judged.classes.length > 0
+			? { holdClasses: [...judged.classes] }
+			: {}),
+	};
 }

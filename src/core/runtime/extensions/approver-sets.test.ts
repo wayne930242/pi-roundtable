@@ -33,6 +33,15 @@ const ADA: ApprovedBy = { principalId: "p_ada", speakerId: "9", name: "Ada" };
 
 const send = { to: "a@b.c" };
 
+/** The speaker an approver is, as the turn their late answer starts. */
+const speakerOf = (by: ApprovedBy): Speaker => ({
+	id: by.speakerId,
+	name: by.name,
+	tier: by.owner ? "owner" : "member",
+	principalId: by.principalId,
+});
+const ADA_SPEAKER = speakerOf(ADA);
+
 /** A turn as the gate hands it to a hold: Sam speaks. */
 function turnOf(signal: AbortSignal | undefined): ToolTurn {
 	return {
@@ -360,8 +369,8 @@ describe("approvedBy", () => {
 			approvedBy: ADA,
 		};
 		expect(wait?.late(late)).toContain("Make this call now");
-		// Any later turn, here a fresh one with no card, runs the identical call once.
-		gate.beginTurn("workspace", false, undefined, SAM);
+		// The turn that answers a late card is the approver's: it runs the identical call once.
+		gate.beginTurn("workspace", false, undefined, ADA_SPEAKER);
 		const second = handlers(gate, promptSlot());
 		expect(await second.call("c2")).toBeUndefined();
 		expect(gate.approvedBy("c2")).toEqual(ADA);
@@ -522,7 +531,7 @@ describe("a call that names approvers is refused outside them", () => {
 				by: "x",
 				...(by ? { approvedBy: by } : {}),
 			});
-			gate.beginTurn("workspace", false, undefined, SAM);
+			gate.beginTurn("workspace", false, undefined, speakerOf(by ?? BO));
 			const second = (await handlers(gate, promptSlot()).call("c2"))?.block;
 			expect(second === undefined).toBe(runs);
 		}

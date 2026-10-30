@@ -40,8 +40,14 @@ import {
 	unexpired,
 } from "./held-calls.ts";
 import { HoldDescriber } from "./hold-describer.ts";
-import { type HoldTurn, type Judgment, STOPPED } from "./hold-lookups.ts";
+import {
+	type HoldTurn,
+	heldCall,
+	type Judgment,
+	STOPPED,
+} from "./hold-lookups.ts";
 import { lateOutcome } from "./late-answer.ts";
+import { LateReleases } from "./late-releases.ts";
 
 export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
 export {
@@ -76,8 +82,8 @@ export class ConfirmationGate {
 	#auto: AutoApprover | undefined;
 	#pending: PendingConfirmation | undefined;
 	#approved: Release[] = [];
-	/** Calls approved on their cards after the turn that asked stopped waiting; each runs once, in any turn. */
-	#lateApproved: Release[] = [];
+	/** Calls approved on their cards after the turn that asked stopped waiting; see `LateReleases`. */
+	readonly #late = new LateReleases();
 	/** Who approved each call that is running, and on which card, by tool call id, until its result is back. */
 	readonly #grants = new Grants();
 	readonly #holds: HoldCheck;
@@ -214,17 +220,15 @@ export class ConfirmationGate {
 	#sweep(): void {
 		const kept = (call: HeldCall) =>
 			(this.#pending?.calls.some((c) => sameCall(c, call)) ?? false) ||
-			[...this.#approved, ...this.#lateApproved].some((r) =>
-				sameCall(r.call, call),
-			);
+			this.#approved.some((r) => sameCall(r.call, call)) ||
+			this.#late.has(call);
 		this.#withdrawals.sweep(kept);
 	}
 
 	/** A plugin withdrew `call`: nothing that could run it stays, and what is held is kept anew. */
 	#forget(call: HeldCall): void {
-		const other = (r: { call: HeldCall }) => !sameCall(r.call, call);
-		this.#approved = this.#approved.filter(other);
-		this.#lateApproved = this.#lateApproved.filter(other);
+		this.#approved = this.#approved.filter((r) => !sameCall(r.call, call));
+		this.#late.drop(call);
 		const pending = this.#pending;
 		if (!pending?.calls.some((c) => sameCall(c, call))) return;
 		// In place, so a partial release's kept set stays the object `remembered` compares.
@@ -338,7 +342,7 @@ export class ConfirmationGate {
 					// A late answer on the card: the text of the turn that tells the model, and the release it earned.
 					late: (late) => {
 						const outcome = lateOutcome(call, late, watch, needing.onDeclined);
-						if (outcome?.release) this.#lateApproved.push(outcome.release);
+						if (outcome?.release) this.#late.add(outcome.release);
 						return outcome?.text;
 					},
 				},
@@ -385,7 +389,7 @@ export class ConfirmationGate {
 	/** What a call needs when a rule holds it; undefined when none does. */
 	#needing(tool: string, input: Record<string, unknown>): Needing | undefined {
 		const action = this.#holds(tool, input, this.#context);
-		if (!action) return undefined;
+		if (!action) return this.#ranUnheld(tool, input);
 		const classes = this.#holds.classesOf?.(tool, input, this.#context);
 		return this.#unlessApproved(tool, input, { action, classes });
 	}
@@ -407,8 +411,16 @@ export class ConfirmationGate {
 		if (!turn || !this.#holds.inTurn) return this.#needing(tool, input);
 		return this.#describer.describe(tool, input, turn, (judged) => {
 			if (judged === STOPPED) return STOPPED;
-			return judged ? this.#unlessApproved(tool, input, judged) : undefined;
+			return judged
+				? this.#unlessApproved(tool, input, judged)
+				: this.#ranUnheld(tool, input);
 		});
+	}
+
+	/** A call no hold stops runs as the one a late approval was for, so that approval is spent. */
+	#ranUnheld(tool: string, input: Record<string, unknown>): undefined {
+		this.#late.drop({ tool, input: canonicalJson(input) });
+		return undefined;
 	}
 
 	/**
@@ -420,21 +432,13 @@ export class ConfirmationGate {
 		input: Record<string, unknown>,
 		judged: Judgment,
 	): Needing {
-		const minTier = this.#holds.approvalTier?.(tool, input, this.#context);
-		const call: HeldCall = {
-			tool,
-			input: canonicalJson(input),
-			action: judged.action,
-			...(minTier ? { minTier } : {}),
-			...(judged.approvers ? { approverIds: [...judged.approvers] } : {}),
-			...(judged.classes && judged.classes.length > 0
-				? { holdClasses: [...judged.classes] }
-				: {}),
-		};
+		const tier = this.#holds.approvalTier?.(tool, input, this.#context);
+		const call = heldCall(tool, input, judged, tier);
 		// A plugin that already withdrew the call lets no approval of it release it.
 		const spent = judged.supersede?.aborted
 			? undefined
-			: spendApproval([this.#approved, this.#lateApproved], call);
+			: (spendApproval([this.#approved], call) ??
+				this.#late.spend(call, this.#speaker));
 		if (spent) {
 			this.#withdrawals.endCall(spent.call);
 			return { released: spent };
