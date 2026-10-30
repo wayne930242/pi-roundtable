@@ -53,6 +53,13 @@ export const useHost = <T>(select: (current: HostState) => T): T =>
 export const totalUnread = (): number =>
 	Object.values(state.unread).reduce((sum, count) => sum + count, 0);
 
+/** The rooms with something unread, each with how many messages. */
+export function unreadCounts(): Record<string, number> {
+	return Object.fromEntries(
+		Object.entries(state.unread).filter(([, count]) => count > 0),
+	);
+}
+
 const NONE: readonly never[] = [];
 export const noReads: readonly ReadMarkView[] = NONE;
 export const noCards: readonly HostCardView[] = NONE;

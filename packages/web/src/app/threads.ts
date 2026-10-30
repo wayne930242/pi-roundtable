@@ -105,6 +105,17 @@ export class WebThreads {
 		return rows.length;
 	}
 
+	/** Dismisses every finished thread under any of `parents` that is still listed; the threads dismissed, with their parents. */
+	async dismissFinishedUnder(
+		parents: readonly string[],
+	): Promise<{ id: string; parent: string }[]> {
+		if (parents.length === 0) return [];
+		return this.#sql`
+			UPDATE web_threads SET dismissed_at = now()
+			WHERE parent IN ${this.#sql([...parents])} AND NOT open AND dismissed_at IS NULL
+			RETURNING id, parent`;
+	}
+
 	/** Puts a dismissed thread back on the room list; asking again changes nothing. */
 	async restore(id: string): Promise<"restored" | "missing"> {
 		const rows: unknown[] = await this.#sql`

@@ -4,6 +4,7 @@
 import { nudgeBefore } from "../../src/layout-order.ts";
 import type { MenuItem } from "./action-menu.ts";
 import { store } from "./app-store.ts";
+import { bulkItems } from "./bulk-items.ts";
 import "./layout-icons.ts";
 import { askFolderDialog } from "./folder-dialogs.ts";
 import { arrangementNow } from "./layout-now.ts";
@@ -89,6 +90,7 @@ export function folderMenu(id: string): MenuSpec | undefined {
 				void edit().then((one) => one.muteFolder(id, !allMuted));
 			},
 		});
+	items.push(...bulkItems(shown));
 	if (nudgeBefore(order, id, "up"))
 		items.push({
 			id: "up",

@@ -11,7 +11,7 @@ import type {
 	SkillRegistry,
 	Speaker,
 } from "pi-roundtable";
-import { PluginError } from "pi-roundtable";
+import { channelKey, PluginError } from "pi-roundtable";
 import { CharacterError } from "pi-roundtable/characters";
 import { AgentError } from "pi-roundtable/kit";
 import type {
@@ -19,6 +19,8 @@ import type {
 	CharacterRefusal,
 	MessagesView,
 	ModelsView,
+	ReadAllUndone,
+	ReadAllView,
 	RoomOneView,
 	RoomsView,
 	SchedulesView,
@@ -26,6 +28,7 @@ import type {
 	SessionView,
 	SkillView,
 	ThreadsDismissed,
+	ThreadsDismissedAll,
 	ThreadsRestored,
 	WorkspaceConflict,
 	WorkspaceNew,
@@ -38,6 +41,7 @@ import type { Authenticated } from "../auth/authenticator.ts";
 import { type ConsolePresentation, message } from "../features.ts";
 import type { Gate } from "../gate.ts";
 import type { HostApp } from "../host/host-app.ts";
+import { MAX_READ_ALL } from "../host/read-all.ts";
 import type { RoomReads } from "../host/reads.ts";
 import { readsOf, withExpiredFiles } from "../host/room-views.ts";
 import { json } from "../http.ts";
@@ -66,6 +70,8 @@ import {
 
 /** The most threads one request puts back on the room list: more than the list ever shows. */
 const MAX_RESTORED = 100;
+/** The most rooms one bulk request names. */
+const MAX_BULK_ROOMS = MAX_READ_ALL;
 
 export interface AppApiOptions {
 	/** The host's wording: a refusal reaches a client of the API in this locale when the catalog has it. */
@@ -87,6 +93,7 @@ export interface AppApiOptions {
 		| "removeUnder"
 		| "dismiss"
 		| "dismissFinished"
+		| "dismissFinishedUnder"
 		| "restore"
 		| "restoreFinished"
 	>;
@@ -132,7 +139,7 @@ export interface AppApiOptions {
 	/** The read cursors, for each room's unread count and who has read what. */
 	reads?: Pick<RoomReads, "unread" | "cursorOf" | "marks">;
 	/** Who may be served a file bound to a host room or a page. */
-	host?: Pick<HostApp, "mayRead">;
+	host?: Pick<HostApp, "mayRead" | "readAll" | "unreadAll">;
 	/** The name the app shows for a person. */
 	nameOf?(principalId: string): Promise<string>;
 	/** Present when the workspace pane is served. */
@@ -157,6 +164,22 @@ export interface AppApiOptions {
 	changed(): void;
 	logger: Logger;
 }
+
+/** A cursor move as the page sends it back to undo a marking. */
+const isReadMove = (
+	value: unknown,
+): value is { room: string; from: number; to: number } => {
+	if (typeof value !== "object" || value === null) return false;
+	const { room, from, to } = value as Record<string, unknown>;
+	return (
+		typeof room === "string" &&
+		room.length <= 300 &&
+		Number.isSafeInteger(from) &&
+		(from as number) >= 0 &&
+		Number.isSafeInteger(to) &&
+		(to as number) >= 0
+	);
+};
 
 /** A refusal of the workspace pane as the HTTP error the owner reads. */
 function refusalOf(refusal: WorkspaceRefusal): HttpError {
@@ -508,6 +531,11 @@ export class AppApi {
 				...(await this.#layout.view()),
 			} satisfies RoomsView);
 		}
+		// No room key is a bare word: the bulk calls take that place.
+		if (key === "read-all" && !action && method === "POST")
+			return this.#readAll(request, admission);
+		if (key === "dismiss-finished-threads" && !action && method === "POST")
+			return this.#dismissAllFinished(request, admission);
 		const room = await rooms.resolve(key);
 		if (!room) throw notFound();
 		if (!action && method === "GET") {
@@ -603,6 +631,81 @@ export class AppApi {
 			return json({ muted });
 		}
 		throw new HttpError(404, "There is no such API.");
+	}
+
+	/**
+	 * Reads the person's rooms up to their newest message in one call: the named ones, or every room
+	 * the list shows. A room they may not read is passed over as if it were not named. With `restore`
+	 * instead, the cursors a call moved go back, where the person has not read on since.
+	 */
+	async #readAll(
+		request: Request,
+		admission: Authenticated,
+	): Promise<Response> {
+		const { host } = this.#options;
+		if (!host) throw new HttpError(404, "There is no such API.");
+		const viewer = viewerOf(admission.visitor);
+		const body = await bodyOf(request);
+		if (body.restore !== undefined) {
+			const { restore } = body;
+			if (
+				!Array.isArray(restore) ||
+				restore.length > MAX_BULK_ROOMS ||
+				!restore.every(isReadMove)
+			)
+				throw bad("restore must be a list of at most 500 moves.");
+			const restored = await host.unreadAll(viewer, restore);
+			if (restored.length) this.#options.changed();
+			return json({ restored } satisfies ReadAllUndone);
+		}
+		const named = await this.#named(body.rooms);
+		const keys =
+			named ?? (await this.#options.rooms.list()).map((one) => one.key);
+		const moved = await host.readAll(viewer, keys);
+		if (moved.length) this.#options.changed();
+		return json({
+			moved: moved.map(({ room, from, to }) => ({ room, from, to })),
+		} satisfies ReadAllView);
+	}
+
+	/** Takes every finished thread under the named rooms, or under every room the list shows, off the list. */
+	async #dismissAllFinished(
+		request: Request,
+		admission: Authenticated,
+	): Promise<Response> {
+		await this.#owner(admission);
+		const { rooms, threads, surface } = this.#options;
+		const named = await this.#named((await bodyOf(request)).rooms);
+		const listed = named ?? (await rooms.list()).map((one) => one.key);
+		const parents: string[] = [];
+		for (const key of new Set(listed)) {
+			const one = await rooms.resolve(key);
+			if (one && one.kind !== "thread") parents.push(one.key);
+		}
+		const dismissed = await threads.dismissFinishedUnder(parents);
+		const byParent: Record<string, string[]> = {};
+		for (const { id, parent } of dismissed)
+			byParent[parent] = [
+				...(byParent[parent] ?? []),
+				channelKey(surface.surface, id),
+			];
+		if (dismissed.length) this.#options.changed();
+		return json({
+			dismissed: dismissed.length,
+			threads: byParent,
+		} satisfies ThreadsDismissedAll);
+	}
+
+	/** The room keys a bulk body names; undefined when it names none, meaning every room. */
+	async #named(value: unknown): Promise<string[] | undefined> {
+		if (value === undefined) return undefined;
+		if (
+			!Array.isArray(value) ||
+			value.length > MAX_BULK_ROOMS ||
+			!value.every((one) => typeof one === "string" && one.length <= 300)
+		)
+			throw bad("rooms must be a list of at most 500 keys.");
+		return value;
 	}
 
 	/** Takes one finished thread off the room list for every owner; an open one is refused. */

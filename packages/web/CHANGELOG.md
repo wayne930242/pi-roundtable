@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Mark all as read.** The room list's menu and each folder's menu have **Mark all as read**, left out when nothing in its scope is unread (a folder's scope is its rooms and the threads under them). It sets the person's read cursor to the newest message in every room they may read, agent, group, thread and host rooms, in one call: `POST api/rooms/read-all` with `{ "rooms": [...] }` (at most 500; left out, every room the list shows), owners only, with rooms the person may not read passed over. The unread badges, the tab title's count and the tab icon's dot clear at once, the person's other pages and devices hear of it through the `read` frames a single read sends and a `changed` frame, and a notice offers Undo for five seconds: `{ "restore": [...] }` to the same route puts each cursor back unless the person has read on since. Nothing asks first
+- **Clear all finished threads.** The same two menus have **Clear all finished threads**, which hides every finished dispatch thread under every room of the list, or under the folder's rooms, in one call: `POST api/rooms/dismiss-finished-threads` with `{ "rooms": [...] }`, owners only, open threads never touched. The answer names the threads cleared by room, and the notice's Undo puts exactly those back through `undismiss-threads`
+
+### Changed
+
+- Clearing finished dispatch threads no longer asks first, however many there are: **Clear finished** in a room's list of threads and the new menu items clear at once, and the notice's Undo is the way back
+
 ## [0.26.2] - 2026-10-30
 
 ### Added

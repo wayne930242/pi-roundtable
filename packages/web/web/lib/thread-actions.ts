@@ -3,12 +3,10 @@
 
 import { api, messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
+import { bulkApi } from "./bulk-api.ts";
+import { finishedUnder } from "./finished-threads.ts";
 import { plural, translate as t } from "./messages.ts";
-import { askRoomConfirm } from "./room-confirm.ts";
 import { toast } from "./toast.ts";
-
-/** A clear-all of more finished threads than this asks first, with the count. */
-export const CONFIRM_ABOVE = 5;
 
 /** The list read again from the server: what a refusal or an undo leaves to be drawn. */
 const refresh = () => store.dispatch({ type: "changed" });
@@ -82,20 +80,80 @@ export function dismissThreads(
 	);
 }
 
-/** "Clear all finished": at once for a few, after a question with the count for many. */
+/** The notice's undo of a clear-all across rooms: each room's threads go back through the room's own route. */
+const putBack = (done: Readonly<Record<string, string[]>>) =>
+	Promise.all(
+		Object.entries(done).flatMap(([room, keys]) =>
+			Array.from(
+				{ length: Math.ceil(keys.length / RESTORE_AT_ONCE) },
+				(_, at) =>
+					api.undismissThreads(
+						room,
+						keys.slice(at * RESTORE_AT_ONCE, (at + 1) * RESTORE_AT_ONCE),
+					),
+			),
+		),
+	);
+
+/** The most threads the server puts back in one request. */
+const RESTORE_AT_ONCE = 100;
+/** The most rooms the server clears in one request. */
+const ROOMS_AT_ONCE = 500;
+
+/**
+ * Every finished thread under `parents`, in one call per 500 rooms. What the server cleared is what
+ * the notice's Undo brings back, room by room. False when the server refused.
+ */
+export async function dismissAcross(
+	parents: readonly string[],
+): Promise<boolean> {
+	const done: Record<string, string[]> = {};
+	let dismissed = 0;
+	try {
+		for (let at = 0; at < parents.length; at += ROOMS_AT_ONCE) {
+			const answer = await bulkApi.dismissAllFinished(
+				parents.slice(at, at + ROOMS_AT_ONCE),
+			);
+			dismissed += answer.dismissed;
+			for (const [room, keys] of Object.entries(answer.threads))
+				done[room] = [...(done[room] ?? []), ...keys];
+		}
+	} catch (failure) {
+		toast(messageOf(failure), "danger");
+	}
+	const cleared = Object.values(done).flat();
+	if (cleared.length === 0) {
+		refresh();
+		return dismissed > 0;
+	}
+	store.dispatch({ type: "threads_dismissed", rooms: cleared });
+	toast(
+		plural(
+			cleared.length,
+			"Cleared {count} finished thread",
+			"Cleared {count} finished threads",
+		),
+		"info",
+		{ label: t("Undo"), run: () => void undo(() => putBack(done)) },
+	);
+	return true;
+}
+
+/**
+ * "Clear all finished threads" across rooms: the folder's `rooms`, or every room of the list. It
+ * clears at once; the notice's Undo is the way back.
+ */
+export async function clearAcross(rooms?: readonly string[]): Promise<void> {
+	const byRoom = finishedUnder(rooms);
+	if (byRoom.size === 0) return;
+	await dismissAcross([...byRoom.keys()]);
+}
+
+/** "Clear all finished" in one room: at once; the notice's Undo is the way back. */
 export async function clearFinished(
 	room: string | undefined,
 	threads: readonly string[],
 ): Promise<void> {
 	if (threads.length === 0) return;
-	if (threads.length <= CONFIRM_ABOVE) {
-		await dismissThreads(room, threads);
-		return;
-	}
-	askRoomConfirm({
-		kind: "clear-threads",
-		room: room ?? "",
-		name: "",
-		threads,
-	});
+	await dismissThreads(room, threads);
 }

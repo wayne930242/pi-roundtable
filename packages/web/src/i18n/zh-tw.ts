@@ -592,13 +592,17 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Cleared “{name}”": "已清除「{name}」",
 	"Cleared {count} finished thread": "已清除 {count} 個已完成的討論串",
 	"Cleared {count} finished threads": "已清除 {count} 個已完成的討論串",
-	"Clear {count} finished thread?": "清除 {count} 個已完成的討論串？",
-	"Clear {count} finished threads?": "清除 {count} 個已完成的討論串？",
-	"They leave the list for every owner. Each one stays readable by its address, and Undo brings them back.":
-		"這些討論串會從所有擁有者的列表中消失，仍可用網址讀取，按「復原」就會回來。",
 	"The thread is still open.": "這個討論串還在進行中。",
 	"threads must be a list of at most 100 keys.":
 		"threads 必須是最多 100 個鍵的清單。",
+	"rooms must be a list of at most 500 keys.":
+		"rooms 必須是最多 500 個鍵的清單。",
+	"restore must be a list of at most 500 moves.":
+		"restore 必須是最多 500 筆移動紀錄的清單。",
+	"Mark all as read": "全部標為已讀",
+	"Marked {count} room as read": "已將 {count} 個聊天室標為已讀",
+	"Marked {count} rooms as read": "已將 {count} 個聊天室標為已讀",
+	"Clear all finished threads": "清除所有已結束的討論串",
 
 	// 排程
 	"{days} at {time}": "每{days} {time}",

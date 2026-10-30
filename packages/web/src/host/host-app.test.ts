@@ -1253,6 +1253,180 @@ describeDb("the host rooms over a real host", () => {
 		ada.close();
 	});
 
+	test("marking everything read: the owner's named rooms they may read move to their newest message, the others are passed over, the other readers and pages hear of it, and the undo puts back what was not read on since", async () => {
+		const [roomD, roomE, roomF] = ["d", "e", "f"].map(
+			(name) => `${name}${RUN}room`,
+		);
+		const { ada: adaId, mel: melId } = app.principals;
+		app.state.grants.get(adaId)?.set(roomD as string, READ_WRITE);
+		app.state.grants.get(adaId)?.set(roomE as string, READ_WRITE);
+		app.state.grants.get(melId)?.set(roomD as string, READ_WRITE);
+		app.state.grants.set(melId, app.state.grants.get(melId) ?? new Map());
+		app.state.grants.get(melId)?.set(roomF as string, READ_WRITE);
+		try {
+			await markingEverythingRead(roomD, roomE, roomF);
+		} finally {
+			// The grants were this test's: the other tests count the rooms a person has.
+			for (const id of [roomD, roomE, roomF] as string[]) {
+				app.state.grants.get(adaId)?.delete(id);
+				app.state.grants.get(melId)?.delete(id);
+			}
+		}
+	});
+
+	async function markingEverythingRead(
+		roomD: string | undefined,
+		roomE: string | undefined,
+		roomF: string | undefined,
+	): Promise<void> {
+		const keyOf = (id: string | undefined) => `app:inbox.${id}` as ChannelKey;
+		const { ada: adaId } = app.principals;
+		for (const id of [roomD, roomE, roomF])
+			await web.rooms.post(keyOf(id), external("something to read"));
+		await web.rooms.post(keyOf(roomD), external("and more"));
+		const phone = await Client.open(app, "ada");
+		const desk = await Client.open(app, "ada");
+		const mel = await Client.open(app, "mel");
+		desk.send({ type: "subscribe", room: keyOf(roomD) });
+		mel.send({ type: "subscribe", room: keyOf(roomD) });
+		await Bun.sleep(100);
+		// An agent room joins them: a reply Ada has not read.
+		desk.send({
+			type: "send",
+			id: "ra1",
+			room: AGENT_ROOM,
+			text: "hello again",
+		});
+		await desk.take(
+			(frame): frame is Extract<ServerFrame, { type: "message" }> =>
+				frame.type === "message" && frame.message.kind === "agent",
+			8000,
+		);
+		for (const client of [phone, desk, mel]) client.skip();
+		const listOf = async () =>
+			(await (
+				await rest(app, "host/inbox", { who: "ada" })
+			).json()) as HostListView;
+		const unreadOf = async (id: string | undefined) =>
+			(await listOf()).rooms.find((room) => room.key === keyOf(id))?.unread;
+		expect(await unreadOf(roomD)).toBe(2);
+		expect(await unreadOf(roomE)).toBe(1);
+
+		const named = [
+			keyOf(roomD),
+			keyOf(roomE),
+			// Mel's room, not Ada's; a room of a kind that is none; another surface's room.
+			keyOf(roomF),
+			"app:inbox.nobodyhere1",
+			"app:nothing.abcdefgh",
+			"elsewhere:agent.guide",
+			AGENT_ROOM,
+		];
+		const marked = await post(app, "rooms/read-all", { rooms: named }, "ada");
+		expect(marked.status).toBe(200);
+		const { moved } = (await marked.json()) as {
+			moved: { room: string; from: number; to: number }[];
+		};
+		expect(moved.map((one) => one.room).sort()).toEqual(
+			[keyOf(roomD), keyOf(roomE), AGENT_ROOM].sort(),
+		);
+		for (const one of moved) expect(one.to).toBeGreaterThan(one.from);
+		expect(await unreadOf(roomD)).toBeUndefined();
+		expect(await unreadOf(roomE)).toBeUndefined();
+		const guide = (await (await rest(app, "rooms", { who: "ada" })).json()) as {
+			rooms: { key: string; unread?: number }[];
+		};
+		expect(
+			guide.rooms.find((room) => room.key === AGENT_ROOM)?.unread,
+		).toBeUndefined();
+		// Ada's page that follows nothing hears of each room; the one that follows Room D hears too; Mel sees Ada's mark in the room they share.
+		for (const client of [phone, desk]) {
+			const heard = new Set<string>();
+			while (heard.size < 3) {
+				const frame = await client.take(ofType("read"));
+				if (frame.principal === adaId) heard.add(frame.room);
+			}
+			expect(heard.has(keyOf(roomD))).toBe(true);
+			expect(heard.has(keyOf(roomE))).toBe(true);
+		}
+		expect(await mel.take(ofType("read"))).toMatchObject({
+			room: keyOf(roomD),
+			principal: adaId,
+			name: "Ada",
+		});
+		// Mel's own room was not Ada's to read: Mel still has it to read.
+		const melList = (await (
+			await rest(app, "host/inbox", { who: "mel" })
+		).json()) as HostListView;
+		expect(
+			melList.rooms.find((room) => room.key === keyOf(roomF))?.unread,
+		).toBe(1);
+		expect(
+			melList.rooms.find((room) => room.key === keyOf(roomD))?.unread,
+		).toBe(2);
+		// Nothing is left to move the second time, and no page is told.
+		const again = (await (
+			await post(app, "rooms/read-all", { rooms: named }, "ada")
+		).json()) as { moved: unknown[] };
+		expect(again.moved).toEqual([]);
+
+		// Ada reads on in Room E before the undo: that room stays read, the others come back.
+		const later = await web.rooms.post(
+			keyOf(roomE),
+			external("after the marking"),
+		);
+		phone.send({ type: "subscribe", room: keyOf(roomE) });
+		await Bun.sleep(100);
+		phone.send({ type: "read", room: keyOf(roomE), upTo: later.id });
+		await phone.take(
+			(frame) => frame.type === "read" && frame.room === keyOf(roomE),
+		);
+		phone.skip();
+		desk.skip();
+		const undone = await post(app, "rooms/read-all", { restore: moved }, "ada");
+		expect(undone.status).toBe(200);
+		const { restored } = (await undone.json()) as { restored: string[] };
+		expect(restored.sort()).toEqual([keyOf(roomD), AGENT_ROOM].sort());
+		expect(await unreadOf(roomD)).toBe(2);
+		expect(await unreadOf(roomE)).toBeUndefined();
+		// Ada's pages are told to look at the list of the kind again.
+		expect(await phone.take(ofType("list_changed"))).toMatchObject({
+			kind: "inbox",
+		});
+		expect(
+			await post(app, "rooms/read-all", { restore: moved }, "ada").then(
+				(response) => response.json(),
+			),
+		).toEqual({ restored: [] });
+
+		// Without names, every room of the owner's list: the agent rooms, never a host room.
+		const whole = (await (
+			await post(app, "rooms/read-all", {}, "ada")
+		).json()) as { moved: { room: string }[] };
+		const wholeRooms = whole.moved.map((one) => one.room);
+		expect(wholeRooms).toContain(AGENT_ROOM);
+		expect(wholeRooms.every((room) => room.startsWith("app:agent."))).toBe(
+			true,
+		);
+
+		// A body that is no list of keys or of moves is refused; a member, who has no rooms list, finds no such route.
+		for (const body of [
+			{ rooms: "x" },
+			{ rooms: [1] },
+			{ rooms: Array(501).fill(AGENT_ROOM) },
+			{ restore: [{ room: AGENT_ROOM, from: -1, to: 2 }] },
+			{ restore: [{ room: AGENT_ROOM, from: 1 }] },
+			{ restore: "x" },
+		])
+			expect((await post(app, "rooms/read-all", body, "ada")).status).toBe(400);
+		expect(
+			(await post(app, "rooms/read-all", { rooms: [keyOf(roomD)] }, "mel"))
+				.status,
+		).toBe(404);
+		expect(await unreadOf(roomD)).toBe(2);
+		for (const client of [phone, desk, mel]) client.close();
+	}
+
 	test("cutting off a reader: after accessChanged the next frame is not delivered, and the room is gone for them", async () => {
 		const kim = await Client.open(app, "kim");
 		kim.send({ type: "subscribe", room: ROOM_A });

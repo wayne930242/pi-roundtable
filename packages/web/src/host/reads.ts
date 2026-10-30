@@ -10,6 +10,15 @@ export interface ReadMark {
 	at: string;
 }
 
+/** A cursor a bulk read moved: where it was (0 when the person never read the room) and where it is now. */
+export interface MovedMark {
+	room: string;
+	from: number;
+	to: number;
+	/** ISO time. */
+	at: string;
+}
+
 interface MarkRow {
 	principal_id: string;
 	last_read_id: string | number | bigint;
@@ -62,6 +71,63 @@ export class RoomReads {
 				WHERE web_room_reads.last_read_id < EXCLUDED.last_read_id
 			RETURNING principal_id, last_read_id, read_at`;
 		return row && markOf(row);
+	}
+
+	/**
+	 * Moves the person's cursor in each of `rooms` up to the room's newest message. Rooms with
+	 * nothing past the cursor, and rooms with no messages, are left out of the answer, which gives
+	 * for every room moved where its cursor was and where it is.
+	 */
+	async advanceAll(
+		principalId: string,
+		rooms: readonly string[],
+	): Promise<MovedMark[]> {
+		if (rooms.length === 0) return [];
+		const rows: {
+			room: string;
+			last_read_id: string | number | bigint;
+			was: string | number | bigint | null;
+			read_at: Date;
+		}[] = await this.#sql`
+			WITH before AS (
+				SELECT room, last_read_id FROM web_room_reads
+				WHERE principal_id = ${principalId} AND room IN ${this.#sql(rooms)}
+			), newest AS (
+				SELECT room, max(id) AS id FROM web_room_messages
+				WHERE room IN ${this.#sql(rooms)} GROUP BY room
+			)
+			INSERT INTO web_room_reads (room, principal_id, last_read_id)
+			SELECT room, ${principalId}, id FROM newest
+			ON CONFLICT (room, principal_id) DO UPDATE
+				SET last_read_id = EXCLUDED.last_read_id, read_at = now()
+				WHERE web_room_reads.last_read_id < EXCLUDED.last_read_id
+			RETURNING room, last_read_id, read_at,
+				(SELECT b.last_read_id FROM before b WHERE b.room = web_room_reads.room) AS was`;
+		return rows.map((row) => ({
+			room: row.room,
+			from: Number(row.was ?? 0),
+			to: Number(row.last_read_id),
+			at: row.read_at.toISOString(),
+		}));
+	}
+
+	/**
+	 * Puts back cursors that `advanceAll` moved: each room's goes from `to` back to `from`, unless
+	 * the person read on since (their cursor is no longer at `to`). Gives the rooms put back.
+	 */
+	async rewind(
+		principalId: string,
+		moves: readonly { room: string; from: number; to: number }[],
+	): Promise<string[]> {
+		if (moves.length === 0) return [];
+		const rows: { room: string }[] = await this.#sql`
+			UPDATE web_room_reads r SET last_read_id = v.was, read_at = now()
+			FROM jsonb_to_recordset(${JSON.stringify(
+				moves.map((move) => ({ room: move.room, was: move.from, at: move.to })),
+			)}::text::jsonb) AS v(room text, was bigint, at bigint)
+			WHERE r.principal_id = ${principalId} AND r.room = v.room AND r.last_read_id = v.at
+			RETURNING r.room`;
+		return rows.map((row) => row.room);
 	}
 
 	/** The person's cursor in the room, or undefined when they never read it. */

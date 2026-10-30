@@ -446,7 +446,7 @@ test("the Menu key opens the card's menu", async () => {
 	expect(labels()).toEqual(["Clear this thread", "Clear all finished"]);
 });
 
-test("the header's Clear finished clears a few at once, and asks first with the count above five", async () => {
+test("the header's Clear finished clears the finished threads at once, with no question, however many there are", async () => {
 	const send = spyOn(api, "dismissThreads").mockResolvedValue({ dismissed: 2 });
 	await show();
 	const clear = () =>
@@ -461,8 +461,11 @@ test("the header's Clear finished clears a few at once, and asks first with the 
 	expect(listed()).not.toContain("Earlier job");
 });
 
-test("clearing more than five asks first, naming how many, and nothing happens until it is answered", async () => {
+test("clearing more than five goes ahead at once too: no question, and the notice's Undo brings them back", async () => {
 	const send = spyOn(api, "dismissThreads").mockResolvedValue({ dismissed: 6 });
+	const back = spyOn(api, "undismissThreads").mockResolvedValue({
+		restored: 6,
+	});
 	const many = Array.from({ length: 6 }, (_, i) =>
 		thread(`app:thread.0b5e7c1a-0000-4000-8000-0000000001${i}0`, `Job ${i}`, {
 			closed: true,
@@ -475,17 +478,21 @@ test("clearing more than five asks first, naming how many, and nothing happens u
 			?.click();
 		await settle(120);
 	});
-	expect(send).not.toHaveBeenCalled();
-	expect(document.body.textContent).toContain("Clear 6 finished threads?");
-	const confirm = [...document.querySelectorAll("button")].find(
-		(one) => one.textContent === "Clear all finished",
-	);
-	await page.act(async () => {
-		confirm?.click();
-		await settle(120);
-	});
+	expect(document.body.textContent).not.toContain("finished threads?");
 	expect(send).toHaveBeenCalledWith(GUIDE);
 	expect(listed()).not.toContain("Job 3");
+	expect(document.body.textContent).toContain("Cleared 6 finished threads");
+	await page.act(async () => {
+		[...document.querySelectorAll("button")]
+			.filter((one) => one.textContent === "Undo")
+			.at(-1)
+			?.click();
+		await settle(80);
+	});
+	expect(back).toHaveBeenCalledWith(
+		GUIDE,
+		many.map((one) => one.key),
+	);
 });
 
 test("a thread opened by its address joins the state without joining the list", () => {
