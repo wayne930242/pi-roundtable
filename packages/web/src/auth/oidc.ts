@@ -27,6 +27,10 @@ const MAX_NAME_CHARS = 100;
 const MAX_SUBJECT_CHARS = 256;
 /** The most characters of one stored claim, as JSON. */
 const MAX_CLAIM_CHARS = 2000;
+/** How seldom a live session is reported again to `onSessionVerified`. */
+const VERIFIED_EVERY_MS = 300_000;
+/** The most sessions whose last report is remembered before the lapsed ones are dropped. */
+const VERIFIED_PRUNE_AT = 1024;
 /** Answers to a silent request that mean "the person must be asked", not "something is wrong". */
 const INTERACTION_NEEDED = new Set([
 	"login_required",
@@ -133,6 +137,8 @@ export interface OidcLoginOptions {
 	onSignIn?(info: SignedIn): void | Promise<void>;
 	/** A session ended (logout), so the sockets on it can close. */
 	onEnded?(sessionId: string): void;
+	/** A request or an open socket proved a live session of this person: the host's `onSessionVerified`. */
+	onSessionVerified?(principalId: string): void | Promise<void>;
 	logger: Logger;
 	/** The provider's signing keys; the published ones by default. */
 	keys?: JWTVerifyGetKey;
@@ -210,6 +216,8 @@ export class OidcLogin {
 	readonly #outCookie = "__Secure-rt_out";
 	/** States already used, until they would have lapsed. */
 	readonly #spent = new Map<string, number>();
+	/** When each session was last reported to `onSessionVerified`, by session id. */
+	readonly #verified = new Map<string, number>();
 
 	constructor(options: OidcLoginOptions) {
 		this.#options = options;
@@ -576,6 +584,33 @@ export class OidcLogin {
 		return { admitted: true, actor: facts, session: session.id };
 	};
 
+	/**
+	 * Reports that a request or an open socket proved this session live, so the host may count the
+	 * person as present. At most once per session every few minutes; never waits for the hook and
+	 * never throws: a hook that fails is logged.
+	 */
+	verified(session: string, principalId: string): void {
+		const hook = this.#options.onSessionVerified;
+		if (!hook) return;
+		const now = this.#now();
+		const last = this.#verified.get(session);
+		if (last !== undefined && now - last < VERIFIED_EVERY_MS) return;
+		if (this.#verified.size >= VERIFIED_PRUNE_AT)
+			for (const [id, at] of this.#verified)
+				if (now - at >= VERIFIED_EVERY_MS) this.#verified.delete(id);
+		this.#verified.set(session, now);
+		const failed = (cause: unknown) =>
+			this.#options.logger.warn(
+				{ err: cause },
+				"web-console: the session-verified hook failed",
+			);
+		try {
+			Promise.resolve(hook(principalId)).catch(failed);
+		} catch (cause) {
+			failed(cause);
+		}
+	}
+
 	async #logout(request: Request): Promise<Response> {
 		const { mount, origin, settings, metadata } = this.#options;
 		if (request.headers.get("origin") !== origin)
@@ -589,7 +624,10 @@ export class OidcLogin {
 		);
 		if (token) {
 			const id = await this.#options.sessions.end(token).catch(() => undefined);
-			if (id) this.#options.onEnded?.(id);
+			if (id) {
+				this.#verified.delete(id);
+				this.#options.onEnded?.(id);
+			}
 		}
 		const base = `${mount}/`;
 		let to = `${mount}/auth/signed-out`;

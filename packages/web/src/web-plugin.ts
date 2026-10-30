@@ -538,6 +538,9 @@ async function startOidc(
 				at: new Date(),
 			}),
 		onEnded: parts.ended,
+		...(auth.onSessionVerified
+			? { onSessionVerified: auth.onSessionVerified }
+			: {}),
 		logger,
 	});
 }

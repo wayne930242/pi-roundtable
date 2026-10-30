@@ -142,6 +142,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `auth.endSession` | `false` | 只用於 `oidc`：登出時是否一併登出提供者。 |
 | `auth.reauthHours` | 不會 | 只用於 `oidc`：過了這麼多小時就再向提供者確認。 |
 | `auth.storeClaims` | 無 | 只用於 `oidc`：隨 session 保存的 `id_token` claims。 |
+| `auth.onSessionVerified` | 無 | 只用於 `oidc`：`(principalId) => void`，request 或 socket 證明 session 仍有效時呼叫（每個 session 每五分鐘最多一次）。 |
 | `push.preview` | `true` | 通知是否顯示訊息的前 120 個字元。 |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | 不推播 agent 發話與通知的時段，以主控台時區的 `HH:MM` 表示；卡片一律推播。`false` 關閉勿擾時段。 |
 | `push.endpointHosts` | 無 | 額外允許的推播服務主機；開頭的 `*.` 代表所有子網域。 |
@@ -175,7 +176,7 @@ owner 能用夥伴房間、總覽與其他僅限 owner 的頁面；成員能用�
 還有必要的設定步驟沒做完時，app 會停在那些步驟上：只有個人資料、設定，以及完成步驟的頁面能用，直到最後一步完成。
 連結可以帶 `?next=`，值可以是 `profile`、`notices`、`settings`、`room:<key>` 或 `p:<page>`；其他值一律捨棄。
 
-OpenID Connect 用 authorization code 加 PKCE 登入，在 callback 只檢查一次 `id_token`，之後由 app 自己在 `web_sessions` 保存伺服器端的 session：`HttpOnly` cookie 裡是隨機 id，資料庫只存它的 SHA-256。`sessionDays` 天沒有來訪 session 就結束；登出會刪除它。`reauthHours` 會讓提供者再確認一次（能的話無聲完成），`storeClaims` 則把指定的 claims 跟 session 一起保存。
+OpenID Connect 用 authorization code 加 PKCE 登入，在 callback 只檢查一次 `id_token`，之後由 app 自己在 `web_sessions` 保存伺服器端的 session：`HttpOnly` cookie 裡是隨機 id，資料庫只存它的 SHA-256。`sessionDays` 天沒有來訪 session 就結束；登出會刪除它。`reauthHours` 會讓提供者再確認一次（能的話無聲完成），`storeClaims` 則把指定的 claims 跟 session 一起保存。`onSessionVerified(principalId)` 在 session 仍有效時被呼叫（每個 session 每五分鐘最多一次），讓 host 把只開著 app 的人也算作在線；它丟出的錯誤只會記進日誌，不會讓 request 失敗。
 
 ## 驗證與威脅模型
 

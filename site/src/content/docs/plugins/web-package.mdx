@@ -142,6 +142,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `auth.endSession` | `false` | `oidc` only: whether Log out also signs out at the provider. |
 | `auth.reauthHours` | never | `oidc` only: ask the provider again after this many hours. |
 | `auth.storeClaims` | none | `oidc` only: `id_token` claims kept with the session. |
+| `auth.onSessionVerified` | none | `oidc` only: `(principalId) => void`, called when a request or socket proves a live session (once per session per five minutes). |
 | `push.preview` | `true` | Whether a notification shows the first 120 characters. |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | When an agent's post and a notice are not pushed, as `HH:MM` times on the console's time zone; cards always are. `false` turns it off. |
 | `push.endpointHosts` | none | Extra push-service hosts; a leading `*.` allows subdomains. |
@@ -175,7 +176,7 @@ A member's socket receives nothing from an agent room, not as it happens and not
 A required onboarding step closes the app on it: only the profile, settings and the pages that finish the step answer, until the last one is done.
 A link may carry `?next=` with `profile`, `notices`, `settings`, `room:<key>` or `p:<page>`; any other value is dropped.
 
-OpenID Connect signs in with the authorization code flow and PKCE, checks the `id_token` once at the callback, and keeps its own server-side session in `web_sessions`: a random id in an `HttpOnly` cookie, of which only the SHA-256 is stored. The session ends after `sessionDays` without a visit; Log out deletes it. `reauthHours` makes the provider vouch again, silently when it can, and `storeClaims` keeps named claims with the session.
+OpenID Connect signs in with the authorization code flow and PKCE, checks the `id_token` once at the callback, and keeps its own server-side session in `web_sessions`: a random id in an `HttpOnly` cookie, of which only the SHA-256 is stored. The session ends after `sessionDays` without a visit; Log out deletes it. `reauthHours` makes the provider vouch again, silently when it can, and `storeClaims` keeps named claims with the session. `onSessionVerified(principalId)` hears a live session at most once per session every five minutes, so a host can count a person who only has the app open as present; an error it throws is logged, never failing the request.
 
 ## Authentication and the threat model
 

@@ -502,6 +502,8 @@ A verifier may vouch for members as well as owners, through a proxy that lets th
 
 `reauthHours` makes the provider vouch again: past it, the next page load does a silent round trip that refreshes the stored facts and roles, a provider that wants the person sends them through a normal sign-in, and a request to the API or the socket on such a session is answered `401` until then. `storeClaims` keeps the named `id_token` claims with the session, replaced at each sign-in, for a sender that needs, say, a mailbox address.
 
+`onSessionVerified(principalId)` is called when a request or an open socket proves a live session, at most once per session every five minutes. Use it to count who is present: a host that keeps a linked chat account only while its web person is active can note the person there, even when they only have the app open and call nothing of the host's. It is not awaited, and an error it throws is logged and never fails the request.
+
 ### Upgrading from 0.8
 
 The core [Migrating to 0.9](../../docs/migration-0.9.md) guide covers backfill, rollback, and the principal isolation boundary.
@@ -708,6 +710,7 @@ The `auth` keys:
 | `auth.endSession` | `false` | `oidc` only: whether Log out also signs out at the provider. |
 | `auth.reauthHours` | never | `oidc` only: ask the provider again after this many hours of one session. |
 | `auth.storeClaims` | none | `oidc` only: `id_token` claims kept with the session. |
+| `auth.onSessionVerified` | none | `oidc` only: `(principalId) => void`, called when a request or socket proves a live session (once per session per five minutes). |
 
 The `push` keys:
 

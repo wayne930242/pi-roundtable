@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `pi-roundtable-web`: a row of the room list that is held and dragged on an iPhone now lifts and reorders. iOS Safari lets a page stop a finger's scroll only if a non-passive `touchmove` listener existed when the finger went down; the lift added its own after the hold, so the first move scrolled the page and the browser cancelled the drag. While a row that can be lifted is on the page, a no-op non-passive `touchmove` listener is now held.
 - `pi-roundtable-web`: the plain room list (no pin and no folder yet) keeps Agents and Groups by latest activity, as the arranged list and the drawer do. Before, it kept the order the server listed them in, so a room you had just talked to did not move up, even after a reload.
 
+### Added
+
+- `pi-roundtable-web`: `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
+
 ### Changed
 
 - `pi-roundtable-web`: an ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).

@@ -116,6 +116,14 @@ export interface OidcOptions {
 	reauthHours?: number;
 	/** The id_token claims to keep with the session (replaced at each sign-in and re-verify, never logged); default none. */
 	storeClaims?: readonly string[];
+	/**
+	 * Called with the person's principal id when a request or an open socket proves they hold a
+	 * live session, at most once per session every five minutes. For a host that counts who is
+	 * present, such as one that keeps a linked chat account only while its web person is active: a
+	 * person who only has the app open, calling nothing of the host's, still counts. It is not
+	 * awaited, and an error it throws is logged and never fails the request.
+	 */
+	onSessionVerified?: (principalId: string) => void | Promise<void>;
 }
 
 /** `auth` checked and filled in. */
@@ -145,6 +153,9 @@ export interface ResolvedOidc {
 	endSession: boolean;
 	reauthHours: number | undefined;
 	storeClaims: readonly string[];
+	onSessionVerified:
+		| ((principalId: string) => void | Promise<void>)
+		| undefined;
 }
 
 /** The panes each tier is served, when the list differs by tier. */
@@ -710,6 +721,7 @@ function checkOidc(auth: OidcOptions): ResolvedOidc {
 		"endSession",
 		"reauthHours",
 		"storeClaims",
+		"onSessionVerified",
 	]);
 	for (const key of Object.keys(auth))
 		if (!known.has(key)) fail(`auth.${key} is not an oidc option`);
@@ -784,6 +796,11 @@ function checkOidc(auth: OidcOptions): ResolvedOidc {
 		!storeClaims.every((name) => typeof name === "string" && name.trim())
 	)
 		fail("auth.storeClaims must be a list of claim names");
+	if (
+		auth.onSessionVerified !== undefined &&
+		typeof auth.onSessionVerified !== "function"
+	)
+		fail("auth.onSessionVerified must be a function");
 	return {
 		mode: "oidc",
 		issuer,
@@ -804,6 +821,7 @@ function checkOidc(auth: OidcOptions): ResolvedOidc {
 		endSession: auth.endSession === true,
 		reauthHours: auth.reauthHours,
 		storeClaims: [...storeClaims],
+		onSessionVerified: auth.onSessionVerified,
 	};
 }
 
