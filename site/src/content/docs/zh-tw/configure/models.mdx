@@ -80,7 +80,7 @@ worker 會載入 `pi-web-access`，它是 pi-roundtable 的 peer dependency。
 讓 Researcher 改用 openai-codex/gpt-6-sol，thinking 設成 high。
 ```
 
-`agent_update` 的模型寫成 `<provider>/<model>`，或用 `default` 讓它再次跟著助理。
+`agent_update` 的模型寫成 `<provider>/<model>`，或用 `default` 讓它再次跟著主騎士。
 bot 跑不起來的模型會被拒絕，回應裡附上可用的清單。
 thinking 接受六個等級之一，或 `default`；`default` 就是 `auto`，由 judge 決定。
 固定了等級的 agent，不會再經過 judge。

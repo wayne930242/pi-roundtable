@@ -80,7 +80,7 @@ import agentCreate from "../../../../assets/scenes/agent-create.png";
 | --- | --- |
 | `display_name` | 顯示在它訊息上的名字。這個 agent 所在的群組，頻道主題會跟著更新。 |
 | `prompt` | 整份新的提示詞。它會取代舊的，所以 agent 應該先讀目前的提示詞。 |
-| `model` | 寫成 `<provider>/<model>` 的模型，或 `default` 讓它跟著助理的模型。主機跑不起來的模型會被拒絕，並附上可用的清單。 |
+| `model` | 寫成 `<provider>/<model>` 的模型，或 `default` 讓它跟著主騎士的模型。主機跑不起來的模型會被拒絕，並附上可用的清單。 |
 | `thinking` | `off`、`minimal`、`low`、`medium`、`high`、`xhigh` 或 `default`。預設是 `auto`：judge 依你的訊息，為每一輪挑一個等級。 |
 
 修改從 agent 的下一輪開始生效，它的對話不受影響。

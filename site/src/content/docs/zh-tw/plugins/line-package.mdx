@@ -117,7 +117,7 @@ export const linkCodes = definePlugin({
 
 這個外掛提供一個 `line` 聊天 surface，頻道就是聊天室的 key，所以 host 能寫回聊天室。
 設定 `route: true` 時，它也會把允許聊天室的文字交給 host 的路由器；預設關閉。
-**絕對不要讓 `line` 通過核心的 `everyone` 存取規則。** 任何能把機器人加進群組的人，都會因此連到助理。
+**絕對不要讓 `line` 通過核心的 `everyone` 存取規則。** 任何能把機器人加進群組的人，都會因此連到騎士。
 
 LINE 只顯示純文字，所以這個 surface 會告訴模型：每一輪在 LINE 聊天室回覆的對話，系統提示詞都會在人設之後附上一小段格式指引（英文），要求不要用標題、表格、粗體、程式碼區塊或連結語法。
 外掛選項的 `formatting: "…"` 會取代這段文字，`formatting: false` 則什麼都不告訴模型。

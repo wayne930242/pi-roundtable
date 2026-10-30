@@ -61,7 +61,7 @@ export default {
 
 | 鍵 | 型別 | 預設值 | 作用 |
 | --- | --- | --- | --- |
-| `name` | string | `"Roundtable"` | bot 所顯示文字裡，助理的顯示名稱。 |
+| `name` | string | `"Roundtable"` | bot 所顯示文字裡，主騎士的顯示名稱。 |
 
 ## Discord
 
@@ -81,7 +81,7 @@ export default {
 | `discord.agentMemory` | `"everyone"` 或 `"owners"` | `"everyone"` | `"owners"` 只讓 agent 頻道裡 owner 層級的回合有記憶區塊和記憶工具。 |
 | `discord.agentSpeakers` | `"everyone"` 或 `"owners"` | `"everyone"` | `"owners"` 只讓 owner 層級的 speaker 能在 agent 和群組頻道開始一輪；admin 或 member 在 Discord 獲准、而這項沒設時，`doctor` 會警告。 |
 | `discord.channelContext` | 物件，或 `false` | `{}` | 一輪會讀進多少被呼叫的訊息周圍的頻道內容：`fetch`（預設 50，最多 100）、`keep`（15）、`similarity`（0.8）、`messageChars`（500）、`botMessageChars`（80）、`foreignWebhook`（只能用程式碼設定）和 `attachments`（`{ images: 0, maxBytes: 10 MiB }`）。`false` 關閉。 |
-| `discord.freshMarker` | string，或 `false` | `─── new conversation ───` | 在伺服器頻道或討論串重新開始對話時，助理貼出的分隔線。`false` 不貼。 |
+| `discord.freshMarker` | string，或 `false` | `─── new conversation ───` | 在伺服器頻道或討論串重新開始對話時，主騎士貼出的分隔線。`false` 不貼。 |
 | `discord.formatting` | string，或 `false` | Markdown 會轉成排版，表格除外 | 以英文告訴模型回覆在 Discord 裡怎麼呈現。`false` 不告訴模型任何事。 |
 | `discord.cardGraceSeconds` | 1 到 86400 的整數 | `120` | 一輪為了核准卡或 `ask_user` 卡片等多久，之後這一輪結束、卡片繼續開著。 |
 | `discord.cardCopies` | `{ keepDays?, keep? }`，或 `false` | 30 天、最新 100 張 | 核准卡「複製」按鈕背後的文字，在資料目錄的 `card-copies.json` 保留多久。`false` 只留在記憶體。 |
