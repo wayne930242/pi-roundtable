@@ -52,6 +52,9 @@ export const STUBS: Readonly<Record<string, string>> = {
 	cat: `if [ "$#" -gt 0 ]; then for f; do while IFS= read -r line; do printf '%s\\n' "$line"; done < "$f"; done 2>/dev/null; exit 0; fi; while IFS= read -r line; do echo "$line"; done`,
 };
 
+/** CPU seconds a process of a line may use: far above any line's run, and a busy loop left behind dies on its own. */
+const CPU_SECONDS = 30;
+
 /** Kills the process group of `pid` (the leader of a session of its own) with everything in it. */
 function killGroup(pid: number): void {
 	try {
@@ -138,7 +141,8 @@ export class BashRunner {
 	/**
 	 * Whether `bash` ran the stub `sudo` for the line, within `timeoutMs`. The line runs in a process
 	 * group of its own that is killed as a whole, and with a cap on the user's processes (the count when the runner started, and 500 more), so a line
-	 * that loops or forks cannot outlive its run.
+	 * that loops or forks cannot outlive its run. A hard limit of CPU seconds per process ends a busy loop even when the runner itself is
+	 * killed before it can kill the group, and the line cannot raise it.
 	 */
 	async runs(bash: string, line: string, timeoutMs = 5_000): Promise<boolean> {
 		const worker = await this.#acquire();
@@ -154,7 +158,7 @@ export class BashRunner {
 				"/bin/sh",
 				[
 					"-c",
-					`ulimit -S -u ${this.#processCap} 2>/dev/null; exec "$0" "$@"`,
+					`ulimit -S -u ${this.#processCap} 2>/dev/null; ulimit -t ${CPU_SECONDS} 2>/dev/null; exec "$0" "$@"`,
 					bash,
 					"--norc",
 					"--noprofile",
