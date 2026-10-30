@@ -2174,6 +2174,26 @@ describeDb("internal notes in rooms two owners read", () => {
 		bob.close();
 	});
 
+	test("the server never reads a message's text for @AI: a note frame whose text starts with it stays a note and the agent hears nothing", async () => {
+		const tab = await Client.open(two, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		await tab.take(ofType("ready"));
+		const before = two.seen.length;
+		for (const [id, text] of [
+			["a1", "@AI mention-note-6612"],
+			["a2", "forwarded: hey @AI, mention-note-6613"],
+		] as const) {
+			tab.send({ type: "send", id, room: SCOUT, text, mode: "note" });
+			const kept = await tab.take(ofType("accepted"));
+			expect(kept.message).toMatchObject({ text, note: true });
+		}
+		expect(
+			await tab.sees((frame) => frame.type === "activity" && frame.typing),
+		).toBe(false);
+		expect(two.seen.length).toBe(before);
+		tab.close();
+	});
+
 	test("a turn without a mode is still a turn, and a note needs words or files", async () => {
 		const tab = await Client.open(two, { "x-actor": "owner" });
 		if (!tab) throw new Error("the owner was refused");

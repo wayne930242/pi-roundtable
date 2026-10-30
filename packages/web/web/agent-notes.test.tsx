@@ -144,6 +144,95 @@ test("a room more than one person reads offers @AI, on by default; off it writes
 	}
 });
 
+async function type(text: string) {
+	const box = q<HTMLTextAreaElement>("textarea");
+	if (!box) throw new Error("no box");
+	await page.act(() => {
+		const set = Object.getOwnPropertyDescriptor(
+			HTMLTextAreaElement.prototype,
+			"value",
+		)?.set;
+		set?.call(box, text);
+		box.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	await page.act(() => settle());
+}
+
+/** A paste: the paste event, then the text landing in the box. */
+async function paste(text: string) {
+	const box = q<HTMLTextAreaElement>("textarea");
+	if (!box) throw new Error("no box");
+	await page.act(() => {
+		const event = new Event("paste", { bubbles: true, cancelable: true });
+		Object.defineProperty(event, "clipboardData", {
+			value: { files: [], getData: () => text },
+		});
+		box.dispatchEvent(event);
+	});
+	await type(text);
+}
+
+test("typing @AI at the start with the switch off turns it on and sends a turn without the token; @AI elsewhere, in a paste, or in an address leaves the note", async () => {
+	const history = await open(view(GUIDE, { notes: true }));
+	try {
+		const toggle = () => q<HTMLButtonElement>("button.mode-toggle");
+		const on = () => toggle()?.getAttribute("aria-checked") === "true";
+		const send = async () => {
+			await page.click(q("button.composer-send"));
+			await page.act(() => settle());
+		};
+		// The page keeps the last room's setting between tests; start from the switch off.
+		if (on()) await page.click(toggle());
+		expect(on()).toBe(false);
+
+		await type("@AI, what do you think?");
+		expect(on()).toBe(true);
+		expect(toggle()?.disabled).toBe(true);
+		expect(q("textarea")?.getAttribute("placeholder")).toBe("Ask AI…");
+		await type("what do you think?");
+		expect(on()).toBe(false);
+		expect(toggle()?.disabled).toBe(false);
+		await type("@AI, what do you think?");
+		await send();
+		expect(on()).toBe(false);
+
+		for (const text of [
+			"so, @AI",
+			"mail a@ai.com for the team",
+			"@AIX is a name",
+		]) {
+			await type(text);
+			expect(on()).toBe(false);
+			await send();
+		}
+		await paste("@AI forwarded from a customer");
+		expect(on()).toBe(false);
+		await send();
+
+		expect(said).toEqual([
+			[GUIDE, "what do you think?", [], "turn"],
+			[GUIDE, "so, @AI", [], "note"],
+			[GUIDE, "mail a@ai.com for the team", [], "note"],
+			[GUIDE, "@AIX is a name", [], "note"],
+			[GUIDE, "@AI forwarded from a customer", [], "note"],
+		]);
+	} finally {
+		history.mockRestore();
+	}
+});
+
+test("a room only one person reads takes @AI as plain text", async () => {
+	const history = await open(view(SCOUT));
+	try {
+		await type("@AI is only text here");
+		await page.click(q("button.composer-send"));
+		await page.act(() => settle());
+		expect(said).toEqual([[SCOUT, "@AI is only text here", [], undefined]]);
+	} finally {
+		history.mockRestore();
+	}
+});
+
 test("another room opens with @AI on again", async () => {
 	const history = await open(view(SCOUT, { notes: true }));
 	try {

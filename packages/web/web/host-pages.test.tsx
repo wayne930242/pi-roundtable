@@ -326,6 +326,128 @@ test("a person who may send both ways has one toggle, on by default, and the mes
 	]);
 });
 
+test("typing @AI at the start turns the toggle on and sends a turn without the token; @AI elsewhere, in a paste, or in an address does nothing", async () => {
+	await shown(<HostRoomPage roomKey={ROOM} />);
+	await settle();
+	const toggle = () =>
+		page.container.querySelector<HTMLButtonElement>(
+			'[role="switch"].mode-toggle',
+		);
+	const box = () => page.container.querySelector("textarea");
+	const put = async (text: string) => {
+		await page.act(() => {
+			const setter = Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set;
+			setter?.call(box(), text);
+			box()?.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		await settle();
+	};
+	/** A paste: the paste event, then the text landing in the box. */
+	const paste = async (text: string) => {
+		await page.act(() => {
+			const event = new Event("paste", { bubbles: true, cancelable: true });
+			Object.defineProperty(event, "clipboardData", {
+				value: { files: [], getData: () => text },
+			});
+			box()?.dispatchEvent(event);
+		});
+		await put(text);
+	};
+	const send = async () => {
+		await page.click(buttonNamed("Send"));
+		await settle();
+	};
+	const on = () => toggle()?.getAttribute("aria-checked") === "true";
+	// The person's own setting is a note.
+	if (on()) await page.click(toggle());
+	expect(on()).toBe(false);
+
+	await put("@AI, what is the status?");
+	expect(on()).toBe(true);
+	expect(toggle()?.disabled).toBe(true);
+	expect(box()?.placeholder).toBe("Ask AI…");
+	await put("what is the status?");
+	expect(on()).toBe(false);
+	expect(toggle()?.disabled).toBe(false);
+	expect(box()?.placeholder).toBe("Write an internal note…");
+	await put("@AI, what is the status?");
+	await send();
+	// The box is empty again and the toggle is the person's setting.
+	expect(on()).toBe(false);
+
+	for (const text of [
+		"hey @AI, are you there",
+		"mail a@ai.com about it",
+		"@AIX is a name",
+		"@ai.com is a domain",
+	]) {
+		await put(text);
+		expect(on()).toBe(false);
+		await send();
+	}
+
+	// A paste into the empty box does not switch it, and the token it carried stays text.
+	await paste("@AI forwarded from a customer");
+	expect(on()).toBe(false);
+	await send();
+	// Typing after a paste leaves it ignored while the token stays, and typing the token anew counts.
+	await paste("@AI forwarded");
+	await put("@AI forwarded, and more");
+	expect(on()).toBe(false);
+	await put("forwarded, and more");
+	await put("@AI forwarded, and more");
+	expect(on()).toBe(true);
+	await put("");
+
+	expect(said).toEqual([
+		{ room: ROOM, text: "what is the status?", mode: "turn" },
+		{ room: ROOM, text: "hey @AI, are you there", mode: "note" },
+		{ room: ROOM, text: "mail a@ai.com about it", mode: "note" },
+		{ room: ROOM, text: "@AIX is a name", mode: "note" },
+		{ room: ROOM, text: "@ai.com is a domain", mode: "note" },
+		{ room: ROOM, text: "@AI forwarded from a customer", mode: "note" },
+	]);
+});
+
+test("with the toggle on, a typed leading @AI is still cut from the text, and a room with one way has no such shorthand", async () => {
+	await shown(<HostRoomPage roomKey={ROOM} />);
+	await settle();
+	const box = () => page.container.querySelector("textarea");
+	const toggle = () =>
+		page.container.querySelector<HTMLElement>('[role="switch"].mode-toggle');
+	const put = async (text: string) => {
+		await page.act(() => {
+			const setter = Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set;
+			setter?.call(box(), text);
+			box()?.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		await settle();
+	};
+	if (toggle()?.getAttribute("aria-checked") !== "true")
+		await page.click(toggle());
+	await put("@ai: please look");
+	await page.click(buttonNamed("Send"));
+	await settle();
+	expect(said).toEqual([{ room: ROOM, text: "please look", mode: "turn" }]);
+	await page.render(null);
+	said.length = 0;
+	fixture.view = roomView({ access: { send: ["note"], act: true } });
+	await shown(<HostRoomPage roomKey={ROOM} />);
+	await settle();
+	await put("@AI is only text here");
+	await page.click(buttonNamed("Send"));
+	await settle();
+	expect(said).toEqual([
+		{ room: ROOM, text: "@AI is only text here", mode: "note" },
+	]);
+});
+
 test("a kind that words the two ways has its label on the toggle and its own hints in the box", async () => {
 	fixture.view = roomView({
 		wording: {
