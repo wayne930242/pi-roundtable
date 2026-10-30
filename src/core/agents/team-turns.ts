@@ -11,7 +11,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
-import { replyBody } from "../presentation/reply-body.ts";
+import { isQuiet, replyBody } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
@@ -136,6 +136,7 @@ export class TeamTurns {
 		speaker: Speaker,
 		text: string,
 		interactive = false,
+		timeLimitMs?: number,
 	): Promise<TurnResult> {
 		const agent = this.#agentOf(channel);
 		return this.#turn(
@@ -144,7 +145,10 @@ export class TeamTurns {
 			channel,
 			text,
 			{ messages: 0, speaker },
-			interactive ? { interactive: true } : {},
+			{
+				...(interactive ? { interactive: true } : { unattended: true }),
+				...(timeLimitMs === undefined ? {} : { timeLimitMs }),
+			},
 		);
 	}
 
@@ -240,6 +244,10 @@ export class TeamTurns {
 							...(extra.confirmed ? { confirmed: true } : {}),
 							...(extra.steerable ? { steerable: true } : {}),
 							...(extra.interactive ? { interactive: true } : {}),
+							...(extra.unattended ? { unattended: true } : {}),
+							...(extra.timeLimitMs === undefined
+								? {}
+								: { timeLimitMs: extra.timeLimitMs }),
 							agent: scope,
 							speaker: chain.speaker,
 							...(interim ? { interim } : {}),
@@ -266,7 +274,12 @@ export class TeamTurns {
 					"agent turn failed",
 				);
 			}
-			await this.#post(postTo, this.#current(agent), replyBody(result));
+			if (isQuiet(result))
+				logger.info(
+					{ agent: agent.name, channel: postTo },
+					"unattended turn had nothing to say; nothing posted",
+				);
+			else await this.#post(postTo, this.#current(agent), replyBody(result));
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");
 		} finally {

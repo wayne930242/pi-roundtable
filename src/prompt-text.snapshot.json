@@ -210,7 +210,7 @@
 			},
 			{
 				"name": "agent_create",
-				"description": "Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel. Its name is permanent.",
+				"description": "Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel, which is stopped after 10 minutes unless long_running is set. Its name is permanent.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -290,6 +290,10 @@
 						"category": {
 							"type": "string",
 							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+						},
+						"long_running": {
+							"type": "boolean",
+							"description": "Turn on long-running mode for its conversations: its turns, such as the opening task, go on past the usual 10-minute limit by themselves, up to the host's cap (four hours by default). Set it for an agent whose tasks run long, such as research or large changes."
 						},
 						"skills": {
 							"type": "array",
@@ -2079,6 +2083,12 @@
 						"precheck": {
 							"type": "string",
 							"description": "The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something."
+						},
+						"time_limit_minutes": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 240,
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer."
 						}
 					}
 				}
@@ -2102,7 +2112,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), its precheck, or its time limit. A run can use this to keep its own prompt current, such as adding what it already reported.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -2189,6 +2199,19 @@
 								}
 							],
 							"description": "A precheck's name from schedule_list to run first, or null to remove the schedule's precheck."
+						},
+						"time_limit_minutes": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 240
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer. null returns it to the default."
 						}
 					}
 				}
@@ -2601,7 +2624,7 @@
 			},
 			{
 				"name": "agent_create",
-				"description": "Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel. Its name is permanent.",
+				"description": "Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel, which is stopped after 10 minutes unless long_running is set. Its name is permanent.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -2681,6 +2704,10 @@
 						"category": {
 							"type": "string",
 							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+						},
+						"long_running": {
+							"type": "boolean",
+							"description": "Turn on long-running mode for its conversations: its turns, such as the opening task, go on past the usual 10-minute limit by themselves, up to the host's cap (four hours by default). Set it for an agent whose tasks run long, such as research or large changes."
 						},
 						"skills": {
 							"type": "array",
@@ -4448,6 +4475,12 @@
 						"precheck": {
 							"type": "string",
 							"description": "The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something."
+						},
+						"time_limit_minutes": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 240,
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer."
 						}
 					}
 				}
@@ -4471,7 +4504,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), its precheck, or its time limit. A run can use this to keep its own prompt current, such as adding what it already reported.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4558,6 +4591,19 @@
 								}
 							],
 							"description": "A precheck's name from schedule_list to run first, or null to remove the schedule's precheck."
+						},
+						"time_limit_minutes": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 240
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer. null returns it to the default."
 						}
 					}
 				}
@@ -6148,6 +6194,12 @@
 						"precheck": {
 							"type": "string",
 							"description": "The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something."
+						},
+						"time_limit_minutes": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 240,
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer."
 						}
 					}
 				}
@@ -6167,7 +6219,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), its precheck, or its time limit. A run can use this to keep its own prompt current, such as adding what it already reported.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6254,6 +6306,19 @@
 								}
 							],
 							"description": "A precheck's name from schedule_list to run first, or null to remove the schedule's precheck."
+						},
+						"time_limit_minutes": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 240
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer. null returns it to the default."
 						}
 					}
 				}
@@ -6660,7 +6725,7 @@
 			},
 			{
 				"name": "agent_create",
-				"description": "Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel. Its name is permanent.",
+				"description": "Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel, which is stopped after 10 minutes unless long_running is set. Its name is permanent.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6740,6 +6805,10 @@
 						"category": {
 							"type": "string",
 							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+						},
+						"long_running": {
+							"type": "boolean",
+							"description": "Turn on long-running mode for its conversations: its turns, such as the opening task, go on past the usual 10-minute limit by themselves, up to the host's cap (four hours by default). Set it for an agent whose tasks run long, such as research or large changes."
 						},
 						"skills": {
 							"type": "array",
@@ -8529,6 +8598,12 @@
 						"precheck": {
 							"type": "string",
 							"description": "The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something."
+						},
+						"time_limit_minutes": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 240,
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer."
 						}
 					}
 				}
@@ -8552,7 +8627,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), its precheck, or its time limit. A run can use this to keep its own prompt current, such as adding what it already reported.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8639,6 +8714,19 @@
 								}
 							],
 							"description": "A precheck's name from schedule_list to run first, or null to remove the schedule's precheck."
+						},
+						"time_limit_minutes": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 240
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "How long, in minutes, each run may work before it is stopped (at most 240); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer. null returns it to the default."
 						}
 					}
 				}

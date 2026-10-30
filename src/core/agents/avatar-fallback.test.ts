@@ -375,6 +375,7 @@ describe("the agent tools, with and without an image provider", () => {
 				"color",
 				"task",
 				"category",
+				"long_running",
 				"skills",
 			]);
 			expect(each.get("agent_avatar")).toEqual([
@@ -450,6 +451,17 @@ describe("the agent_create and agent_avatar tools pass looks to the team", () =>
 			character: { class: "bard", palette: "rose" },
 		});
 		expect(calls[0]?.[1][1]).not.toHaveProperty("avatarPrompt");
+	});
+
+	test("agent_create sends long_running only when it is true", async () => {
+		const { calls, run } = tools();
+		const base = { name: "bob", display_name: "Bob", prompt: "p", task: "t" };
+		await run.get("agent_create")?.({ ...base, long_running: true });
+		await run.get("agent_create")?.({ ...base, long_running: false });
+		await run.get("agent_create")?.(base);
+		expect(calls[0]?.[1][1]).toMatchObject({ longRunning: true });
+		expect(calls[1]?.[1][1]).not.toHaveProperty("longRunning");
+		expect(calls[2]?.[1][1]).not.toHaveProperty("longRunning");
 	});
 
 	test("agent_avatar sends only what it is given, parts named in camel case", async () => {

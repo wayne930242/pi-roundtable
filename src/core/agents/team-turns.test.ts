@@ -288,6 +288,56 @@ describe("message_agent threads", () => {
 	});
 });
 
+describe("unattended turns", () => {
+	test("a schedule's turn with nothing to say posts nothing, and a failed one still posts", async () => {
+		const { team, posts } = setup(() => ({ ok: true, text: "" }));
+		await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "scheduled");
+		expect(posts).toEqual([]);
+		// A failure is still posted: only an empty answer is quiet.
+		const failed = setup(() => ({ ok: false, error: new Error("boom") }));
+		await failed.team.answerBackground(
+			discordKey("1000"),
+			OWNER_SPEAKER,
+			"scheduled",
+		);
+		expect(failed.posts).toHaveLength(1);
+	});
+
+	test("a schedule's own time limit reaches the turn, and only that turn", async () => {
+		const { team, turns } = setup(() => ({ ok: true, text: "ok" }));
+		await team.answerBackground(
+			discordKey("1000"),
+			OWNER_SPEAKER,
+			"limited",
+			false,
+			90 * 60_000,
+		);
+		await team.answerBackground(discordKey("1000"), OWNER_SPEAKER, "plain");
+		expect(turns.map((t) => t.timeLimitMs)).toEqual([90 * 60_000, undefined]);
+	});
+
+	test("an agent that has nothing to answer a message sends nothing back and wakes nobody", async () => {
+		const host = new FakeThreadHost();
+		const { team, texts, turns } = setup((request) => {
+			if (request.agent?.name === "coordinator" && turns.length === 1)
+				team.message(coordinator, "infra", "anything new?");
+			return {
+				ok: true,
+				text: request.agent?.name === "infra" ? "" : "ok",
+			};
+		}, host);
+		await run(team);
+		expect(turns.map((t) => t.agent?.name)).toEqual(["coordinator", "infra"]);
+		expect(texts("1000", "900")).toEqual([
+			`Coordinator: ${messages().messageDelivered("Infrastructure", "anything new?")}`,
+		]);
+		expect(texts("2000")).toEqual([
+			`Coordinator: ${messages().messageDelivered("Infrastructure", "anything new?")}`,
+		]);
+		expect(host.closed).toEqual(["900"]);
+	});
+});
+
 describe("speakers", () => {
 	test("a message chain keeps the speaker who started it through every hop", async () => {
 		const admin = {

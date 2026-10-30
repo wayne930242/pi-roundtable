@@ -9,11 +9,7 @@ import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
 import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
-import {
-	PRECHECK_SCRIPT_CHARS,
-	type PrecheckFinding,
-	type PrecheckRegistry,
-} from "./prechecks.ts";
+import { PRECHECK_SCRIPT_CHARS, type PrecheckRegistry } from "./prechecks.ts";
 import {
 	describeRecurrence,
 	nextRun,
@@ -22,6 +18,7 @@ import {
 	type RecurrenceInput,
 } from "./recurrence.ts";
 import type { NewSchedule, Schedule } from "./schedule-store.ts";
+import { timeLimitInput, timeLimitText } from "./time-limit.ts";
 
 const TITLE_CHARS = 80;
 const LIST_PROMPT_PREVIEW = 200;
@@ -235,10 +232,11 @@ function line(schedule: Schedule): string {
 		: schedule.precheckScript
 			? `; precheck script (${schedule.precheckScript.length} characters; tools: ${toolsText(schedule.precheckTools)})`
 			: "";
+	const limit = timeLimitText(schedule.timeLimitMinutes);
 	const last = schedule.lastRun
 		? `; last run ${zonedStamp(schedule.lastRun)} (${schedule.lastStatus ?? "?"})`
 		: "";
-	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}; set by ${schedule.createdByName}${precheck}${last}\n  ${prompt.replace(/\n/g, " ")}`;
+	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}; set by ${schedule.createdByName}${precheck}${limit}${last}\n  ${prompt.replace(/\n/g, " ")}`;
 }
 
 /** The principal who created a schedule. */
@@ -368,6 +366,8 @@ export async function callScheduleTool(
 			const script = given("precheck_script")
 				? precheckScript(ctx, input.precheck_script)
 				: undefined;
+			const timeLimitMinutes =
+				timeLimitInput(input.time_limit_minutes) ?? undefined;
 			const existing = await ctx.store.forChannel(ctx.channel);
 			if (existing.length >= limits.perChannel)
 				throw new ScheduleError(
@@ -384,6 +384,7 @@ export async function callScheduleTool(
 				createdByName: ctx.author.name,
 				createdTier: ctx.author.tier,
 				...(precheck ? { precheck } : {}),
+				...(timeLimitMinutes ? { timeLimitMinutes } : {}),
 				...(script
 					? { precheckScript: script.script, precheckTools: script.tools }
 					: {}),
@@ -393,7 +394,7 @@ export async function callScheduleTool(
 				: script
 					? "; its precheck script runs first"
 					: "";
-			return `Scheduled #${made.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}${checked}.`;
+			return `Scheduled #${made.id} "${title}": ${describeRecurrence(recurrence)}, first run ${zonedStamp(next)} ${messages().zoneTime(timeZone())}${checked}${timeLimitText(made.timeLimitMinutes)}.`;
 		}
 		case "schedule_list": {
 			if (input.id !== undefined) {
@@ -442,11 +443,13 @@ export async function callScheduleTool(
 				change.precheckScript = script.script;
 				change.precheckTools = script.tools;
 			}
+			const timeLimit = timeLimitInput(input.time_limit_minutes);
+			if (timeLimit !== undefined) change.timeLimitMinutes = timeLimit;
 			if (change.precheck) change.precheckScript = null;
 			if (change.precheckScript) change.precheck = null;
 			if (Object.keys(change).length === 0)
 				throw new ScheduleError(
-					"give a title, prompt, timing, precheck, or precheck_script to change",
+					"give a title, prompt, timing, precheck, precheck_script, or time_limit_minutes to change",
 				);
 			const updated = await ctx.store.update(ctx.channel, schedule.id, change);
 			if (!updated) throw new ScheduleError(`schedule #${schedule.id} is gone`);
@@ -455,7 +458,7 @@ export async function callScheduleTool(
 				: updated.precheckScript
 					? "; its precheck script runs first"
 					: "";
-			return `Updated #${updated.id} "${updated.title}": ${describeRecurrence(updated.recurrence)}, next run ${zonedStamp(updated.nextRun)}${checked}.`;
+			return `Updated #${updated.id} "${updated.title}": ${describeRecurrence(updated.recurrence)}, next run ${zonedStamp(updated.nextRun)}${checked}${timeLimitText(updated.timeLimitMinutes)}.`;
 		}
 		case "schedule_cancel": {
 			notTheHost(ctx, "cancel no schedules; ask the owner to cancel it");
@@ -468,28 +471,4 @@ export async function callScheduleTool(
 	}
 }
 
-/** What the schedule's precheck found, or how it failed, under its own heading after the task. */
-function findingText(finding: PrecheckFinding): string[] {
-	return "error" in finding
-		? [
-				"",
-				`### Precheck failed: ${finding.precheck}`,
-				`The precheck that decides whether this task needs you failed, so you were woken anyway: ${finding.error}. Check what it watches yourself, and say so if it needs fixing.`,
-			]
-		: ["", `### Precheck found (${finding.precheck}):`, finding.context];
-}
-
-/** What a scheduled run receives as its message, with what its precheck found when it has one. */
-export function scheduledTurnText(
-	schedule: Schedule,
-	firedAt: Date,
-	finding?: PrecheckFinding,
-): string {
-	return [
-		`## Scheduled task #${schedule.id}: ${schedule.title}`,
-		`${schedule.createdByName} set this schedule (${describeRecurrence(schedule.recurrence)}). It is due now, ${zonedStamp(firedAt)} ${messages().zoneTime(timeZone())}. Nobody wrote a new message: carry out the task below and write what you would post in this channel. If the task keeps a record for later runs, update it with schedule_update on #${schedule.id}.`,
-		"",
-		schedule.prompt,
-		...(finding ? findingText(finding) : []),
-	].join("\n");
-}
+export { scheduledTurnText } from "./scheduled-turn-text.ts";

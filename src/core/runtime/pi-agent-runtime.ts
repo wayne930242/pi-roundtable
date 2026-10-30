@@ -21,10 +21,9 @@ import type { TurnRequest } from "../domain/ports.ts";
 import { HostStoppingError } from "../errors.ts";
 import { assistantName } from "../i18n/index.ts";
 import { promptScopeOf } from "../interactions/prompts.ts";
-import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
 import { withoutReplyFiles } from "../reply-files.ts";
 import type { TransientTask } from "../sessions.ts";
-import { type ToolTiers, toolsForTier, toolTiers } from "../tool-tiers.ts";
+import { type ToolTiers, toolTiers } from "../tool-tiers.ts";
 import { AbortGuard } from "./abort-guard.ts";
 import { bridgeTurnRefusal, chosenAgentModel } from "./bridge-guard.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
@@ -52,6 +51,7 @@ import { transcriptOf, turnAnswer, unspokenTurn } from "./turn-answer.ts";
 import type { TurnBudget } from "./turn-budget.ts";
 import { promptFailed, turnLimits } from "./turn-limits.ts";
 import { progressReporter } from "./turn-progress.ts";
+import { turnTools } from "./turn-tools.ts";
 import { wrapUpTurn } from "./turn-wrapup.ts";
 import { workerReport } from "./worker-task.ts";
 
@@ -61,8 +61,6 @@ export {
 	type PiAgentRuntimeOptions,
 	sessionExtensions,
 } from "./runtime-types.ts";
-
-const MEMORY = new Set<string>(MEMORY_TOOLS);
 
 /** AgentRuntime over the Pi SDK: one persistent session per channel, each with its own loader. */
 const STOPPED = "stopped by the owner";
@@ -183,18 +181,15 @@ export class PiAgentRuntime implements AgentRuntime {
 			request.agent !== undefined &&
 			this.#options.agents?.memory === "owners" &&
 			tier !== "owner";
-		const wanted = toolsForTier(
-			[
-				...new Set([
-					...this.#factory.toolsFor(request.selection),
-					...(request.confirmed && pending
-						? pending.calls.map((call) => call.tool)
-						: []),
-				]),
-			],
-			tier,
+		const wanted = turnTools(
+			{
+				selected: this.#factory.toolsFor(request.selection),
+				held: request.confirmed && pending ? pending.calls : [],
+				tier,
+				withheld,
+			},
 			this.#tiers,
-		).filter((name) => !withheld || !MEMORY.has(name));
+		);
 		const markPrivateMemory = recordMemoryTurn(
 			session.sessionManager,
 			request.speaker.principalId,
@@ -240,8 +235,12 @@ export class PiAgentRuntime implements AgentRuntime {
 		// The caller's live view: the text as it streams and each tool, never the thinking.
 		const slot = this.#sessions.slot(key);
 		// Its time limit, not counting time waiting on the owner's cards, follows what it does to say why it fired.
-		const limits = turnLimits(this.#options, slot, request.channel, () =>
-			guard.abort(),
+		const limits = turnLimits(
+			this.#options,
+			slot,
+			request.channel,
+			() => guard.abort(),
+			request.timeLimitMs,
 		);
 		const progress = request.progress
 			? progressReporter(request.progress, {
@@ -333,7 +332,10 @@ export class PiAgentRuntime implements AgentRuntime {
 
 		if (running.stopped)
 			return { ok: false, error: new AgentRunError(STOPPED), stopped: true };
-		return limits.failure() ?? turnAnswer(turnMessages, running.steered);
+		return (
+			limits.failure() ??
+			turnAnswer(turnMessages, running.steered, request.unattended !== true)
+		);
 	}
 
 	async steer(

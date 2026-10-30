@@ -13,6 +13,9 @@ export const SCHEDULE_TOOLS = Object.freeze([
 ] as const);
 export type ScheduleToolName = (typeof SCHEDULE_TOOLS)[number];
 
+/** The most minutes a schedule's own time limit may name: the four hours a long-running turn may work. */
+export const MAX_SCHEDULE_TIME_LIMIT_MINUTES = 240;
+
 export function isScheduleTool(value: string): value is ScheduleToolName {
 	return (SCHEDULE_TOOLS as readonly string[]).includes(value);
 }
@@ -61,6 +64,8 @@ const timing = (zone: string) => ({
 		),
 	),
 });
+
+const TIME_LIMIT = `How long, in minutes, each run may work before it is stopped (at most ${MAX_SCHEDULE_TIME_LIMIT_MINUTES}); without it a run is stopped after the host's default of 10 minutes. Set it for a task that works longer.`;
 
 export interface ScheduleToolSpec {
 	name: ScheduleToolName;
@@ -118,6 +123,13 @@ export function scheduleToolSpecs(
 							"The name of a precheck the host runs first, from schedule_list; you are woken only when it finds something.",
 					}),
 				),
+				time_limit_minutes: Type.Optional(
+					Type.Integer({
+						minimum: 1,
+						maximum: MAX_SCHEDULE_TIME_LIMIT_MINUTES,
+						description: TIME_LIMIT,
+					}),
+				),
 				...script(false),
 			}),
 		},
@@ -133,7 +145,7 @@ export function scheduleToolSpecs(
 			name: "schedule_update",
 			label: "Update schedule",
 			description:
-				"Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), its precheck, or its time limit. A run can use this to keep its own prompt current, such as adding what it already reported.",
 			parameters: Type.Object({
 				id: Type.Integer({ description: "Schedule id." }),
 				title: Type.Optional(Type.String()),
@@ -146,6 +158,18 @@ export function scheduleToolSpecs(
 						description:
 							"A precheck's name from schedule_list to run first, or null to remove the schedule's precheck.",
 					}),
+				),
+				time_limit_minutes: Type.Optional(
+					Type.Union(
+						[
+							Type.Integer({
+								minimum: 1,
+								maximum: MAX_SCHEDULE_TIME_LIMIT_MINUTES,
+							}),
+							Type.Null(),
+						],
+						{ description: `${TIME_LIMIT} null returns it to the default.` },
+					),
 				),
 				...script(true),
 			}),

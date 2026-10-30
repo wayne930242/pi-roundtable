@@ -35,7 +35,8 @@ export function timeoutMessage(timeout: TurnTimeout): string {
 /**
  * The time limit of a turn of the built-in runtime; see `runtimeTurnBudget`. `abort` aborts the
  * turn. In a long-running conversation (`options.modes`) a limit extends the turn instead of
- * asking or aborting, until the turn has worked `options.autonomy.longRunningMaxMs`.
+ * asking or aborting, until the turn has worked `options.autonomy.longRunningMaxMs`. A
+ * `timeLimitMs` replaces the turn's limit and its cap, both held under that same ceiling.
  */
 export function turnLimits(
 	options: Parameters<typeof runtimeTurnBudget>[0] &
@@ -43,15 +44,24 @@ export function turnLimits(
 	slot: Pick<PromptSlot, "waitedMs" | "cards">,
 	channel: ChannelKey,
 	abort: () => void,
+	timeLimitMs?: number,
 ): TurnLimits {
 	const { longRunningMaxMs } = options.autonomy ?? DEFAULT_AUTONOMY;
+	const limited =
+		timeLimitMs === undefined
+			? options
+			: {
+					...options,
+					turnTimeoutMs: Math.min(timeLimitMs, longRunningMaxMs),
+					turnMaxMs: Math.min(timeLimitMs, longRunningMaxMs),
+				};
 	const keepGoing = (workedMs: number) =>
 		workedMs < longRunningMaxMs &&
 		options.modes?.peek(channel).longRunning === true;
 	const activity = activityTracker();
 	let timedOut: TurnTimeout | undefined;
 	const budget = runtimeTurnBudget(
-		options,
+		limited,
 		slot,
 		channel,
 		(timeout) => {

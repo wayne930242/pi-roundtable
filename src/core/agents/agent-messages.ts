@@ -2,6 +2,7 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
+import { isQuiet } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { addressee } from "../speakers.ts";
 import {
@@ -159,10 +160,19 @@ export class AgentMessages {
 				addressee(chain.speaker, this.#host.options.owner),
 			),
 			chain,
+			{ unattended: true },
 		);
 		const thread = exchange?.thread;
 		if (thread && !result.ok)
 			await thread.close(messages().agentNoReply(result.error.message));
+		// A target with nothing to answer sends nothing back and wakes nobody.
+		if (isQuiet(result)) {
+			logger.info(
+				{ from: sender.name, to: target.name },
+				"agent message answered with nothing; no follow-up",
+			);
+			return;
+		}
 		const current = this.#host.options.store.agent(sender.name);
 		if (
 			current?.status !== "active" ||

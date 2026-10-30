@@ -46,6 +46,7 @@ import agentCreate from "../../../../assets/scenes/agent-create.png";
 | `color` | 選填。它的配色：`azure`、`gules`、`vert`、`purpure`、`amber`、`sable`、`teal` 或 `rose`。 |
 | `task` | 它的第一份工作，最多 4,000 個字元，要寫成單獨看也能懂。 |
 | `category` | 選填。它的頻道放哪裡：預設是 `Agents`，也可以是 `Agents-<suffix>`。類別不存在就會建立。 |
+| `long_running` | 選填。`true` 會在第一份工作開始前，替它的對話開啟長時間執行，讓它的回合自動超過一般的 10 分鐘上限（最多到 host 的上限，預設四小時）。只有 owner 的要求才能設定。 |
 | `skills` | 選填。它要帶的技能名稱，從技能清單裡挑。只有 skills addon 開著時才提供；見[技能與記憶](/zh-tw/agents/skills-and-memory/)。 |
 
 <Aside type="caution" title="名字是永久的">

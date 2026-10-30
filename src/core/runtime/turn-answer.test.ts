@@ -25,6 +25,7 @@ describe("turnAnswer", () => {
 					assistant(" done ", "stop", { thinking: "secret", redacted: true }),
 				],
 				false,
+				true,
 			),
 		).toEqual({ ok: true, text: "done", thinking: "plan" });
 	});
@@ -39,18 +40,36 @@ describe("turnAnswer", () => {
 					assistant("second"),
 				],
 				true,
+				true,
 			),
 		).toEqual({ ok: true, text: "first\n\nsecond" });
 	});
 
 	test("fails without a usable answer", () => {
-		const none = turnAnswer([user], false);
+		const none = turnAnswer([user], false, true);
 		expect(none.ok || none.error.message).toBe(
 			"the run produced no assistant message",
 		);
-		const blank = turnAnswer([assistant("  ")], false);
+		const blank = turnAnswer([assistant("  ")], false, true);
 		expect(blank.ok || blank.error.message).toBe(
 			"the final assistant message has no text",
+		);
+	});
+
+	test("an unattended turn with nothing to say answers with empty text", () => {
+		expect(turnAnswer([user, assistant("  ")], false, false)).toEqual({
+			ok: true,
+			text: "",
+		});
+		expect(
+			turnAnswer([assistant("tool", "toolUse"), assistant("")], true, false),
+		).toEqual({ ok: true, text: "" });
+	});
+
+	test("an unattended turn still fails without an assistant message", () => {
+		const none = turnAnswer([user], false, false);
+		expect(none.ok || none.error.message).toBe(
+			"the run produced no assistant message",
 		);
 	});
 });

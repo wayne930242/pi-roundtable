@@ -154,6 +154,11 @@ export interface BackgroundTurn {
 	/** It delivers a report the owner is waiting for, so it may ask them on cards. */
 	report?: boolean;
 	/**
+	 * How long the turn may work, in ms, in place of the runtime's default time limit: a
+	 * schedule's own. The runtime holds it under the long-running cap. Absent = the default.
+	 */
+	timeLimitMs?: number;
+	/**
 	 * Who the turn runs as, set by the router alone once it checked the author: their principal
 	 * exists and is not disabled, and the tier is capped at theirs. A claim runs the turn as this
 	 * speaker; one the caller sets is replaced.

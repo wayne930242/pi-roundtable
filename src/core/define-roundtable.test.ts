@@ -310,6 +310,7 @@ describe("defineRoundtable", () => {
 			"schedules-precheck",
 			"schedules-precheck-script",
 			"schedules-precheck-tools",
+			"schedules-time-limit",
 			"prompt-overrides",
 			"prompt-history",
 			"skills",

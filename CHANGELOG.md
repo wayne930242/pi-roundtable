@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A turn nobody is present in (a schedule, an agent's message, an agent's opening task) that ends with an empty final answer no longer fails with "the final assistant message has no text": it ends quietly, posts nothing, wakes nobody (an agent that answers a message with nothing sends no answer back and no follow-up turn), and logs `unattended turn had nothing to say; nothing posted` once. A schedule that says "send nothing if there is no progress" therefore works. A turn someone waits on (an owner's message, a report turn, a remote caller's turn) keeps failing on an empty answer. The new `TurnRequest.unattended` and `ConversationTurnInput.unattended` mark such a turn; the agent server sets them for schedules, agent messages and opening tasks, and `pi-roundtable-webchat` for its background turns that are not reports. A turn that leaves them out is attended, as before. `turnAnswer` takes the new `attended` argument.
+- A turn nobody is present in that reaches its time limit still stops at it (it can show no card), but the notice it posts now says that no one was in the conversation to ask for more time and how to allow more (`TurnTimeout.unasked`, en and zh-TW), so the owner can see where an agent's first task or a schedule stopped.
+- `ask_user` in a turn nobody is present in refuses at once with a message that tells the model to write the question as its final answer, which is posted to the agent's room, instead of the earlier one-line "ask in your reply".
+
+### Added
+
+- `agent_create` takes `long_running`: `true` turns on long-running mode for the new agent's conversations (its Discord channel and its rooms) before its opening task starts, so the first task is not stopped at 10 minutes. Only an owner's turn may; any other tier or the host's own turn is refused before anything is made, and so is a host without the `modes` service. The agent team takes the new `modes` option, which the agent server fills from `MODES`.
+- A schedule may carry its own time limit: `time_limit_minutes` on `schedule_create` and `schedule_update` (1 to 240, `MAX_SCHEDULE_TIME_LIMIT_MINUTES`; `null` on update removes it). It replaces the 10-minute default for that schedule's turns and never passes the long-running cap (`autonomy.longRunning.maxSeconds`). Additive column `schedules.time_limit_minutes` (migration `schedules-time-limit`); `Schedule`, `NewSchedule` and `ScheduleChange` gain `timeLimitMinutes`, `BackgroundTurn` gains `timeLimitMs`, and `ConversationTurnInput` and `TurnRequest` gain `timeLimitMs`, which a claim's `background` passes on (the agent server and `pi-roundtable-webchat` do).
+
 ## [0.26.1] - 2026-10-30
 
 ### Added

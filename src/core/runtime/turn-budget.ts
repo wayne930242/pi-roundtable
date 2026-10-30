@@ -167,6 +167,7 @@ export function runtimeTurnBudget(
 		...seams.activity.now(clock.now()),
 		graceMs,
 		end,
+		...(slot.cards ? {} : { unasked: true as const }),
 	});
 	const stop = (timeout: TurnTimeout) => {
 		logger.warn(

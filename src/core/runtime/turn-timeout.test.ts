@@ -275,7 +275,7 @@ describe("a turn at its time limit without a card", () => {
 			end: "timeout",
 		});
 		expect(messages().turnTimedOutNotice(aborted[0] as TurnTimeout)).toBe(
-			"⏱️ The turn reached its time limit of 10 min (since it started or since the last message steered into it) and was stopped after 10 min while browser_task was running (3 min 12 s). Tools so far: web_search · browser_task ×2.",
+			"⏱️ The turn reached its time limit of 10 min (since it started or since the last message steered into it) and was stopped after 10 min while browser_task was running (3 min 12 s). Tools so far: web_search · browser_task ×2. No one was in the conversation to ask for more time. To let turns like this run longer, turn on long-running for this conversation, or give the schedule a longer time limit.",
 		);
 	});
 });

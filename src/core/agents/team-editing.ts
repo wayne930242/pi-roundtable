@@ -8,6 +8,8 @@ import {
 import { parseChannelKey } from "../contract/surface.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import type { ConversationModes } from "../modes/conversation-modes.ts";
 import type { AgentChange } from "../services.ts";
 import { addressee, type Speaker } from "../speakers.ts";
 import { openingTaskText } from "./agent-prompt.ts";
@@ -95,6 +97,8 @@ export class TeamEditing {
 			task: string;
 			category?: string;
 			skills?: string[];
+			/** Turn long-running mode on for its conversations; the speaker must be an owner. */
+			longRunning?: boolean;
 		},
 	): Promise<string> {
 		this.#refuseSkillsOff(input.skills);
@@ -149,6 +153,23 @@ export class TeamEditing {
 		return made.agent;
 	}
 
+	/**
+	 * The modes to turn long-running on in, once the speaker may: an owner other than the host's
+	 * own turns, as for any change of a conversation's modes. Refused before anything is made.
+	 */
+	#longRunning(speaker: Speaker): ConversationModes {
+		const modes = this.#ctx.options.modes?.();
+		if (!modes)
+			throw new AgentError(
+				"This host has no conversation modes, so long_running cannot be set. Create the agent without it.",
+			);
+		if (speaker.tier !== "owner" || speaker.principalId === SYSTEM_PRINCIPAL)
+			throw new AgentError(
+				"Only an owner's turn may create an agent with long_running on. Create it without, and ask the owner to turn it on.",
+			);
+		return modes;
+	}
+
 	/** An agent cannot carry skills on a host with skills switched off. */
 	#refuseSkillsOff(carried: string[] | undefined): void {
 		if (carried && carried.length > 0 && !this.#ctx.options.skills)
@@ -175,6 +196,7 @@ export class TeamEditing {
 			task?: string;
 			category?: string;
 			skills?: string[];
+			longRunning?: boolean;
 		},
 		settings: {
 			model?: string | undefined;
@@ -190,8 +212,10 @@ export class TeamEditing {
 			character: wanted,
 			avatarPrompt: _ignored,
 			task,
+			longRunning,
 			...fields
 		} = input;
+		const modes = longRunning ? this.#longRunning(who.speaker) : undefined;
 		const parent = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
@@ -233,7 +257,12 @@ export class TeamEditing {
 			"agent created",
 		);
 		this.#ctx.changed();
-		const avatar = `its picture is the ${character.class} look`;
+		const rooms = surfaces?.roomSurfaces() ?? [];
+		// Before the opening task starts, so its turn already runs under the mode.
+		if (modes)
+			for (const key of keysOf(store, agent.name, rooms))
+				await modes.set(key, { longRunning: true }, who.speaker);
+		const avatar = `its picture is the ${character.class} look${modes ? "; long-running mode is on" : ""}`;
 		const where = channelId ? ` in <#${channelId}>` : "";
 		if (!task)
 			return {
@@ -242,7 +271,6 @@ export class TeamEditing {
 			};
 		// The opening task runs in the room of the surface that asked, else where the agent is first
 		// reached: its channel, else its first room.
-		const rooms = surfaces?.roomSurfaces() ?? [];
 		const home =
 			who.openIn !== undefined && rooms.includes(who.openIn)
 				? agentRoomKey(who.openIn, agent.name)

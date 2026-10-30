@@ -67,6 +67,18 @@ export interface TurnRequest {
 	 */
 	interactive?: boolean;
 	/**
+	 * No person waits on the turn's answer: a schedule's turn, an agent's message, an agent's
+	 * opening task. A turn like that may end with nothing to say, which is an empty answer
+	 * instead of a failure; the reply is then not posted. Absent = someone waits, and an empty
+	 * final answer fails.
+	 */
+	unattended?: boolean;
+	/**
+	 * How long the turn may work, in ms, in place of the runtime's default time limit; a schedule's
+	 * own limit. The runtime never lets it pass the long-running cap. Absent = the default.
+	 */
+	timeLimitMs?: number;
+	/**
 	 * Where the turn posts the text it writes before its final answer, as it goes; the caller
 	 * hands the channel its reply goes to. Absent = only the final reply is posted.
 	 */

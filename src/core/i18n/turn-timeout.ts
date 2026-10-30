@@ -75,7 +75,10 @@ export function turnTimeoutEn() {
 					: t.end === "unanswered"
 						? `⏱️ No answer to the timeout card in ${durationEn(t.graceMs)}, so the turn was stopped after ${durationEn(t.workedMs)} ${what}.`
 						: `⏱️ The turn reached ${limit(t)} and was stopped after ${durationEn(t.workedMs)} ${what}.`;
-			return [head, tools(t)].filter(Boolean).join(" ");
+			const unasked = t.unasked
+				? "No one was in the conversation to ask for more time. To let turns like this run longer, turn on long-running for this conversation, or give the schedule a longer time limit."
+				: "";
+			return [head, tools(t), unasked].filter(Boolean).join(" ");
 		},
 	};
 }
@@ -125,7 +128,10 @@ export function turnTimeoutZhTW(): ReturnType<typeof turnTimeoutEn> {
 					: t.end === "unanswered"
 						? `⏱️ 逾時卡片在 ${durationZh(t.graceMs)}內沒有回答，這一輪在工作 ${durationZh(t.workedMs)} 後停止，${what}。`
 						: `⏱️ 這一輪達到${limit(t)}，在工作 ${durationZh(t.workedMs)} 後停止，${what}。`;
-			return [head, tools(t)].filter(Boolean).join(" ");
+			const unasked = t.unasked
+				? "當時對話裡沒有人可以問要不要再給時間。要讓這類回合跑久一點，可以替這個對話開啟長時間執行，或替排程設定較長的時間上限。"
+				: "";
+			return [head, tools(t), unasked].filter(Boolean).join(" ");
 		},
 	};
 }

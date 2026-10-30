@@ -10,7 +10,7 @@ import { turnAnswer } from "./runtime/turn-answer.ts";
 
 const file = () => ({ name: "image.png", data: new Uint8Array([1, 2, 3]) });
 const emptyAssistant = { role: "assistant", stopReason: "stop", content: [] };
-const answer = () => turnAnswer([emptyAssistant], false);
+const answer = () => turnAnswer([emptyAssistant], false, true);
 
 test("a successful textless answer delivers files; empty without files still fails", async () => {
 	const result = await withReplyFiles(true, async () => {

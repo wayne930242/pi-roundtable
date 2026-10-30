@@ -96,6 +96,10 @@ export interface TurnExtra {
 	steerable?: boolean;
 	/** The owner started it by writing, or it delivers a report, so it may ask them on cards. */
 	interactive?: boolean;
+	/** No person waits on the answer, so an empty one is no failure. */
+	unattended?: boolean;
+	/** How long the turn may work, in ms, in place of the default; a schedule's own limit. */
+	timeLimitMs?: number;
 }
 
 /** What the team's message and group collaborators need of the turns that own their state. */

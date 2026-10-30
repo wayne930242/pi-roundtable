@@ -23,3 +23,11 @@ export function replyBody(result: TurnResult): {
 		...(result.files?.length ? { files: result.files } : {}),
 	};
 }
+
+/**
+ * Whether a turn ended with nothing to post: an unattended turn, such as a schedule's, that had
+ * nothing to say. It is no failure and shows no notice.
+ */
+export function isQuiet(result: TurnResult): boolean {
+	return result.ok && !result.text.trim() && !result.files?.length;
+}

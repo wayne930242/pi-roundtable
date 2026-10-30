@@ -87,7 +87,7 @@ export function askUserExtension(
 				const prompts = slot.prompts;
 				if (!prompts)
 					return toolText(
-						`${o.name} cannot answer buttons in this turn, such as a schedule's. Ask ${o.him} in your reply instead.`,
+						`${o.name} cannot answer buttons in this turn: no one wrote to you, a schedule or another agent started it, so nothing waits. Do not call ask_user again. Write the question as your final answer instead; it is posted to this channel for ${o.him} to read, and ${o.his} answer comes in a new turn.`,
 					);
 				const p = params as {
 					questions: {
