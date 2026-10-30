@@ -39,4 +39,17 @@ export type { WebAuthOptions, WebConsoleOptions } from "./options.ts";
 export { DEFAULT_RELAY_NOTE } from "./options.ts";
 export type { RequestVerifier, Verdict } from "./verifier.ts";
 export { admit, admitAs, refuse } from "./verifier.ts";
+export type {
+	ActionResult,
+	HostCard,
+	HostPage,
+	HostRoomKind,
+	LinkProver,
+	Notices,
+	OnboardingStep,
+	OpenTarget,
+	Viewer,
+	WebApp,
+} from "./web-app.ts";
+export { WEB_APP } from "./web-app.ts";
 export { webConsole } from "./web-plugin.ts";

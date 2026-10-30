@@ -194,7 +194,7 @@ function inboxPlugin(state: Inbox) {
 						open: { room: ROOM_B, message: 7 },
 					};
 				},
-				buttons: (viewer, _id, card) =>
+				buttons: async (viewer, _id, card) =>
 					nameOf(viewer) === "mel"
 						? (card.buttons ?? [])
 								.filter((button) => button.id === "reply")

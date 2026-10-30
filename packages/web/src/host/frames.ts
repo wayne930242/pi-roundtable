@@ -60,7 +60,7 @@ export async function actInRoom(
 	if (press.card !== undefined) {
 		const card = await ctx.cards.get(room, press.card);
 		if (!card) return { refused: "unknown" };
-		offered = buttonsFor(viewer, found, access, card);
+		offered = await buttonsFor(viewer, found, access, card);
 	} else {
 		const header = await found.kind
 			.header?.(viewer, found.id)

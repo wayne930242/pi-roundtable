@@ -203,7 +203,7 @@ Transcripts contain tool arguments and results, so secrets handled by tools may 
 
 ## Host rooms, pages and cards
 
-A host plugin that is not an agent can own rooms in the app, such as a support inbox with one room per email thread. It lists `WEB_APP` in `requires` and calls `registerRoomKind`, `registerPage` from `setup`.
+A host plugin that is not an agent can own rooms in the app, such as a support inbox with one room per email thread. It lists `WEB_APP` in `requires` and calls `registerRoomKind`, `registerPage` from `setup`. The host types (`WEB_APP`, `WebApp`, `HostRoomKind`, `HostPage`, `HostCard`, `Viewer`, `OpenTarget`, `ActionResult`, `LinkProver`, `OnboardingStep`, `Notices`) are exported from `pi-roundtable-web`. Keep the `WebApp` object and read `rooms`, `notices`, `pages`, `onboarding` and `push` lazily: they throw until the plugin has started, and `notices.onAck` works only after start. `HostRoomKind.buttons` may return a promise.
 
 - **Access** is the kind's `access(viewer, id)`, asked on every read, frame, send, card answer, upload and file; `undefined` is a `404`. It answers what the person may do: read, send a `note` or a `turn`, press buttons.
 - **Messages** are posted with `app.rooms.post` by an author kind: `external` (plain text, shown with the host's label such as "Customer"), `member`, `assistant` or `notice` (Markdown). `reference` finds a message again; `edit` and `remove` change it.

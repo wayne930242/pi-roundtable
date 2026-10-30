@@ -244,8 +244,8 @@ async function open(
 		ctx.log.page(room, undefined, OPEN_LIMIT),
 		ctx.cards.list(room),
 	]);
-	const cards: HostCardView[] = stored.map((card) =>
-		cardView(viewer, found, access, card),
+	const cards: HostCardView[] = await Promise.all(
+		stored.map((card) => cardView(viewer, found, access, card)),
 	);
 	return {
 		room,

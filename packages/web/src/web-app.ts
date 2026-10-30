@@ -129,7 +129,11 @@ export interface HostRoomKind {
 		input: FormValues,
 	): Promise<ActionResult>;
 	/** The buttons of a HOST card this viewer may press; default all when `access.act`. Never applies to held-call or question cards. */
-	buttons?(viewer: Viewer, id: string, card: StoredHostCard): readonly string[];
+	buttons?(
+		viewer: Viewer,
+		id: string,
+		card: StoredHostCard,
+	): readonly string[] | Promise<readonly string[]>;
 	/** How long the kind's messages, author names, host cards and files are kept. Unset = keep. */
 	retention?: { textDays: number; fileDays: number };
 }

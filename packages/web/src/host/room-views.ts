@@ -77,27 +77,27 @@ export interface FoundRoom {
  * The buttons of a host card this viewer may press: none once the card is settled, none without
  * `access.act`, and otherwise the card's own, narrowed by the kind's `buttons` when it has one.
  */
-export function buttonsFor(
+export async function buttonsFor(
 	viewer: Viewer,
 	found: FoundRoom,
 	access: RoomAccess,
 	card: StoredHostCard,
-): NonNullable<StoredHostCard["buttons"]> {
+): Promise<NonNullable<StoredHostCard["buttons"]>> {
 	const all = card.buttons ?? [];
 	if (!access.act || !pressable(card) || all.length === 0) return [];
 	if (!found.kind.buttons) return all;
-	const allowed = new Set(found.kind.buttons(viewer, found.id, card));
+	const allowed = new Set(await found.kind.buttons(viewer, found.id, card));
 	return all.filter((button) => allowed.has(button.id));
 }
 
 /** A host card as one viewer sees it. */
-export function cardView(
+export async function cardView(
 	viewer: Viewer,
 	found: FoundRoom,
 	access: RoomAccess,
 	card: StoredHostCard,
-): HostCardView {
-	const buttons = buttonsFor(viewer, found, access, card);
+): Promise<HostCardView> {
+	const buttons = await buttonsFor(viewer, found, access, card);
 	return {
 		id: card.id,
 		room: card.room,
