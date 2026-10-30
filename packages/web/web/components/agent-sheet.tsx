@@ -71,8 +71,12 @@ const defaultModelLabel = (profile: AgentProfileView) =>
 	profile.model === undefined
 		? t("Default model ({current})", { current: profile.effective.model })
 		: t("Default model (server setting)");
+/** The resolved level the profile line shows: a setting, or `auto` when the model picks. */
+const AUTOMATIC = wording("Automatic");
 const thinkingOf = (value: string) =>
-	t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value);
+	value === "auto"
+		? t(AUTOMATIC)
+		: t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value);
 
 interface Draft {
 	displayName: string;

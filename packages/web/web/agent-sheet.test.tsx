@@ -558,6 +558,16 @@ test("the system Back takes the sheet away with the page it was opened on", asyn
 	expect(currentAgentSheet()).toBeUndefined();
 });
 
+test("the profile line names an automatic thinking level in words, not as auto", async () => {
+	agent.mockResolvedValue(
+		profile({ effective: { model: "model-a", thinking: "auto" } }),
+	);
+	await open({ creator: false });
+	expect(q(".agent-sheet .meta")?.textContent).toBe(
+		"Runs on model-a, thinking Automatic",
+	);
+});
+
 test("a profile that cannot be read says so", async () => {
 	agent.mockRejectedValue(new Error("There is no such room, knight or file."));
 	await open({ creator: false });
