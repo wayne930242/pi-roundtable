@@ -343,12 +343,16 @@ export const HOST_CSS = `
 	cursor: pointer;
 }
 
+/* The chips sit in the composer's column, over its left edge, wherever the pane is wide. */
 .mode-switch {
 	display: flex;
-	margin: 0;
+	width: 100%;
+	max-width: 52rem;
+	min-width: 0;
+	margin: 0 auto;
 	border: 0;
 	gap: var(--space-1);
-	padding: var(--space-2) var(--space-4) 0;
+	padding: var(--space-2) var(--space-3) 0;
 }
 
 .mode-switch button {

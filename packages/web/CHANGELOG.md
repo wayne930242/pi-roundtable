@@ -9,6 +9,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - An owner can take a finished dispatch thread off the room list: a remove button on each finished row, and "Clear all" in the fold of a room's finished threads. The thread leaves the list for every owner and every open page at once; it is hidden, not deleted, and stays readable by its address and through the links in its room. An open thread cannot be removed (409). The mark is the new column `web_threads.dismissed_at` (migration `web-threads-dismissed`, additive). Routes: `POST api/rooms/<thread>/dismiss`, `POST api/rooms/<room>/dismiss-threads`, and `GET api/rooms/<thread>` for the view of a thread the list does not carry (owners only, like the rest of `api/rooms`).
 
+### Fixed
+
+- The send-mode chips of a host room (Note, Ask the agent) sit in the composer's column over its left edge, not at the pane's edge, when the pane is wider than the column.
+
 ## [0.26.0] - 2026-10-30
 
 The core peer range is now `>=0.26.0 <0.27.0`.
