@@ -105,6 +105,7 @@ export interface RoomActivity {
 export class AppSurface implements ChatSurface {
 	readonly surface: string;
 	readonly agentRooms = true;
+	readonly label = "the web app";
 	readonly supportsFiles = true;
 	readonly formatting = APP_FORMATTING;
 	/** The turn takes an upload up to the most the app lets a person upload. */

@@ -79,6 +79,11 @@ export interface SurfaceThreads {
 export interface ChatSurface {
 	/** The key prefix of this surface's channels, such as "discord"; unique per host. */
 	readonly surface: string;
+	/**
+	 * What people call this surface, such as "Discord" or "the web app"; the agent prompt names it
+	 * as the place a conversation is in. Absent = the key prefix.
+	 */
+	readonly label?: string;
 	/** Explicit opt-in to delivering OutboundReply.files; absent or false refuses turn attachments. */
 	readonly supportsFiles?: boolean;
 	/**

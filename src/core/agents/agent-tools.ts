@@ -123,7 +123,7 @@ const NAME = Type.String({
 const DISPLAY = Type.String({
 	minLength: 1,
 	maxLength: 32,
-	description: "The name shown on its Discord messages; any language.",
+	description: "The name shown on its messages; any language.",
 });
 const PROMPT = Type.String({
 	minLength: 1,

@@ -9,7 +9,7 @@ import {
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { DiscordAgentTeam } from "../agents/agent-team.ts";
 import { FakeChannels } from "../agents/agent-team-fixture.ts";
-import { discordKey } from "../agents/team-keys.ts";
+import { discordKey, groupRoomKey } from "../agents/team-keys.ts";
 import type { RoundtableConfig } from "../config/config.ts";
 import { openPool } from "../db/migrations.ts";
 import { defineRoundtable } from "../define-roundtable.ts";
@@ -25,6 +25,13 @@ import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
 import { AGENTS, MEMORY, RUNTIME } from "../services.ts";
 import type { Speaker } from "../speakers.ts";
 import { testDatabaseUrl } from "./database.ts";
+import {
+	appRooms,
+	CAPTURE_ROOM_AGENTS,
+	captureWebGroupSeat,
+	clearCaptureGuild,
+	clearLocalGroup,
+} from "./prompt-capture-rooms.ts";
 import {
 	addressed,
 	CAPTURE_GUILD,
@@ -73,24 +80,6 @@ class CaptureChannels extends FakeChannels {
 		this.topics.set(id, topic);
 		this.put(id, category);
 		return id;
-	}
-}
-
-/** Removes the agents and groups an earlier capture left in its guild, so each run starts empty. */
-async function clearCaptureGuild(): Promise<void> {
-	const sql = openPool(testDatabaseUrl);
-	try {
-		const [row] = await sql`SELECT to_regclass('agents') IS NOT NULL AS made`;
-		if (!row?.made) return;
-		for (const table of [
-			"agent_group_cursors",
-			"agent_group_messages",
-			"agent_groups",
-			"agents",
-		])
-			await sql`DELETE FROM ${sql(table)} WHERE guild_id = ${CAPTURE_GUILD}`;
-	} finally {
-		await sql.close();
 	}
 }
 
@@ -231,6 +220,8 @@ export async function captureHost(
 	form: CaptureForm,
 	/** The host's database; by default the test server's shared one. */
 	databaseUrl = testDatabaseUrl,
+	/** Seeds two agents on a host without Discord and gives it the web app's room surface. */
+	rooms = false,
 ): Promise<CaptureHost> {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-prompt-capture-"));
 	const { modelRuntime, capture } = await fauxModel(dataDir);
@@ -266,24 +257,14 @@ export async function captureHost(
 						publicUrl: "https://bot.example.com",
 						socketPath: join(dataDir, "public.sock"),
 					},
-					agents: [
-						{
-							name: "librarian",
-							displayName: "Librarian",
-							prompt: "You keep the reading list.",
-							avatarPrompt: "A calm librarian",
-						},
-						{
-							name: "archivist",
-							displayName: "Archivist",
-							prompt: "You file the notes.",
-							avatarPrompt: "A tidy archivist",
-						},
-					],
+					agents: CAPTURE_ROOM_AGENTS,
 				}
-			: {}),
+			: rooms
+				? { agents: CAPTURE_ROOM_AGENTS }
+				: {}),
 	};
 	if (withDiscord) await clearCaptureGuild();
+	if (rooms) await clearLocalGroup();
 	const channels = new CaptureChannels();
 	const discord = withDiscord
 		? [
@@ -306,6 +287,7 @@ export async function captureHost(
 			plugins: [
 				...discord,
 				silentJudge,
+				...(rooms ? [appRooms] : []),
 				personas((context) => {
 					probed = context;
 				}, withDiscord),
@@ -464,6 +446,15 @@ export async function capturePrompts(
 	} finally {
 		await discord.stop();
 	}
+	const web = await captureHost(false, form, undefined, true);
+	try {
+		out["i web group seat"] = await captureWebGroupSeat(
+			web,
+			CAPTURE_OWNER_SPEAKER,
+		);
+	} finally {
+		await web.stop();
+	}
 	const headless = await captureHost(false, form);
 	try {
 		const { context } = headless;
@@ -491,5 +482,9 @@ export async function capturePrompts(
 	} finally {
 		await headless.stop();
 	}
-	return normalize(out, [...discord.dirs, ...headless.dirs], [tmpdir()]);
+	return normalize(
+		out,
+		[...discord.dirs, ...web.dirs, ...headless.dirs],
+		[tmpdir()],
+	);
 }

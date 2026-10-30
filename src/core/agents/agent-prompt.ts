@@ -1,3 +1,5 @@
+import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
+import type { ChannelKey } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../identity.ts";
 import type { AgentTools } from "../plugin.ts";
@@ -28,6 +30,8 @@ export function agentSystemPrompt(input: {
 	images?: boolean;
 	/** "chat-only": the agent has no shell, file tools or workspace, and the prompt says so. Default "full". */
 	agentTools?: AgentTools;
+	/** Where this conversation is, and the other surfaces the agent has places on. */
+	surface?: { label: string; key: string; others: readonly string[] };
 }): string {
 	const { agent, coordinator, shared, workDir, owner, shellUser, group } =
 		input;
@@ -37,7 +41,7 @@ export function agentSystemPrompt(input: {
 	const guest = input.speaker && input.speaker.tier !== "owner";
 	const parts = [
 		(guest && input.guestShared) || shared,
-		`You are "${agent.displayName}" (agent name \`${agent.name}\`), one of ${o.name}'s agents in ${o.his} Discord agent server. Each agent owns one channel and one conversation; you all share ${o.his} tools and ${o.his} memory.`,
+		`You are "${agent.displayName}" (agent name \`${agent.name}\`), one of ${o.name}'s agents in ${o.his} agent server.${placeText(input.surface)} Each agent owns one channel and one conversation; you all share ${o.his} tools and ${o.his} memory.`,
 		roleText(agent, coordinator, who),
 		`The team: agent_list shows every agent and group; agent_get and agent_update read and improve any agent's prompt, display name, model, and thinking level, yours included; agent_create adds an agent with its own channel; agent_avatar changes an agent's look (class, colors, parts); schedule_list with agent reads another agent's schedules. A message marked as coming from another agent is that agent speaking, not ${w.name}; only ${w.name} approves held actions.`,
 		input.agentTools === "chat-only"
@@ -60,6 +64,19 @@ export function agentSystemPrompt(input: {
 	if (input.speaker && input.speaker.tier !== "owner")
 		parts.push(speakerText(input.speaker, owner));
 	return parts.join("\n\n");
+}
+
+/** Names the surface of this conversation, and the others the agent has places on. */
+function placeText(
+	surface:
+		| NonNullable<Parameters<typeof agentSystemPrompt>[0]["surface"]>
+		| undefined,
+): string {
+	if (!surface) return "";
+	const others = surface.others.length
+		? ` You also have places on ${surface.others.join(", ")}.`
+		: "";
+	return ` This conversation is in ${surface.label} (${surface.key}).${others}`;
 }
 
 /**
@@ -168,4 +185,26 @@ export function returnedAnswerPost(text: string): string {
 export function chainLimitReason(who: OwnerIdentity): string {
 	const o = ownerWords(who);
 	return `This chain of agent messages has reached 8 messages without ${o.name} in between, so it is stopped. Tell ${o.him} what was done and ask whether to continue.`;
+}
+
+/**
+ * Where a turn's conversation is: the surface of the turn's conversation (`home`: the agent's own
+ * channel or room, or the group's in a group round), named by its `label`, and the other surfaces the agents have places on, Discord when the team has
+ * channels and each surface that hosts rooms.
+ */
+export function placeOf(
+	home: ChannelKey,
+	surfaces: Pick<SurfacePort, "of" | "roomSurfaces"> | undefined,
+	hasDiscord: boolean,
+): { surface: { label: string; key: string; others: readonly string[] } } {
+	const prefix = parseChannelKey(home).surface;
+	const label = (name: string) =>
+		surfaces?.of(`${name}:`)?.label ?? (name === "discord" ? "Discord" : name);
+	const names = [
+		...(hasDiscord ? ["discord"] : []),
+		...(surfaces?.roomSurfaces() ?? []),
+	].filter((n, i, all) => n !== prefix && all.indexOf(n) === i);
+	return {
+		surface: { label: label(prefix), key: prefix, others: names.map(label) },
+	};
 }

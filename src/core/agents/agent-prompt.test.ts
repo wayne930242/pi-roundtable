@@ -1,0 +1,78 @@
+import { expect, test } from "bun:test";
+import { TEST_OWNER } from "../testing/owner.ts";
+import { agentSystemPrompt, placeOf } from "./agent-prompt.ts";
+import type { Agent } from "./agent-store.ts";
+
+const agent: Agent = {
+	name: "coder",
+	displayName: "Coder",
+	prompt: "",
+	avatarPrompt: "",
+	channelId: "4000",
+	status: "active",
+};
+
+const surfaces = {
+	of: (key: string) =>
+		key.startsWith("app:") ? { label: "the web app" } : undefined,
+	roomSurfaces: () => ["app"],
+} as never;
+
+const build = (home: `${string}:${string}`) =>
+	agentSystemPrompt({
+		agent,
+		shared: "shared",
+		workDir: "/w",
+		owner: TEST_OWNER,
+		shellUser: "u",
+		...placeOf(home, surfaces, true),
+	});
+
+test("an app room's prompt names the web app and the other places, not Discord as home", () => {
+	const text = build("app:agent.coder");
+	expect(text).toContain("This conversation is in the web app (app).");
+	expect(text).toContain("You also have places on Discord.");
+	expect(text).not.toContain("Discord agent server");
+});
+
+test("a Discord channel's prompt names Discord and the web app", () => {
+	const text = build("discord:4000");
+	expect(text).toContain("This conversation is in Discord (discord).");
+	expect(text).toContain("You also have places on the web app.");
+});
+
+const group = {
+	name: "council",
+	displayName: "Council",
+	members: ["coder", "infra"],
+	host: "coder",
+	channelId: "5000",
+	status: "active",
+} as never;
+
+const infra: Agent = { ...agent, name: "infra", displayName: "Infra" };
+
+/** A seat's prompt, placed at the conversation the group round runs in, not at the agent's home. */
+const seat = (conversation: `${string}:${string}`) =>
+	agentSystemPrompt({
+		agent,
+		shared: "shared",
+		workDir: "/w",
+		owner: TEST_OWNER,
+		shellUser: "u",
+		group: { group, members: [agent, infra] },
+		...placeOf(conversation, surfaces, true),
+	});
+
+test("a web group seat names the web app, not the agent's home surface", () => {
+	const text = seat("app:group.council");
+	expect(text).toContain("This conversation is in the web app (app).");
+	expect(text).toContain("You also have places on Discord.");
+	expect(text).toContain('group chat "Council"');
+});
+
+test("a Discord group seat names Discord", () => {
+	const text = seat("discord:5000");
+	expect(text).toContain("This conversation is in Discord (discord).");
+	expect(text).toContain("You also have places on the web app.");
+});

@@ -10,7 +10,7 @@ import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
 import type { AgentChange, AgentTeam } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../speakers.ts";
-import { agentSystemPrompt } from "./agent-prompt.ts";
+import { agentSystemPrompt, placeOf } from "./agent-prompt.ts";
 import type { Agent } from "./agent-store.ts";
 import {
 	type AgentOps,
@@ -150,6 +150,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			shellUser,
 			scratchDir,
 			agentTools,
+			surfaces,
+			channels,
 		} = this.#options;
 		const agent = store.agent(scope.name);
 		if (!agent) throw new AgentError(`no agent ${scope.name}`);
@@ -172,6 +174,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 			...(scratchDir ? { scratchDir } : {}),
 			images: this.#images(),
 			...(agentTools ? { agentTools } : {}),
+			...placeOf(this.#turns.turnChannel(scope), surfaces, !!channels),
 			...(group
 				? {
 						group: {
@@ -304,10 +307,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	// ── Turns, run by TeamTurns ────────────────────────────────────────────
 
-	/**
-	 * The owner's message in an agent's channel; call inside the channel's queue. `text`
-	 * carries the reference, `replyText` is what they typed.
-	 */
+	/** The owner's message in an agent's channel; call inside its queue. `text` has the reference, `replyText` what they typed. */
 	answerOwner(
 		channel: ChannelKey,
 		speaker: Speaker,
