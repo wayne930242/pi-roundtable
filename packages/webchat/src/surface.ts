@@ -38,6 +38,7 @@ const WEB_FORMATTING =
  */
 export class WebSurface implements ChatSurface {
 	readonly surface: string;
+	readonly label = "the web chat";
 	readonly supportsFiles = true;
 	readonly formatting: string | undefined;
 	readonly #options: WebSurfaceOptions;

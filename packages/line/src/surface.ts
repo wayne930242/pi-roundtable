@@ -47,6 +47,7 @@ function pieces(text: string): string[] {
  */
 export class LineSurface implements ChatSurface {
 	readonly surface = "line";
+	readonly label = "LINE";
 	readonly formatting: string | undefined;
 	readonly #outbox: LineOutbox;
 	#deliver: ((message: InboundMessage) => void) | undefined;
