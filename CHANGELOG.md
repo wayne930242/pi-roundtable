@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `pi-roundtable-web`: `WebApp.rooms.context(room, { limit?, messageChars? })`: a host room's recent messages as the channel-context block `CHANNEL_CONTEXT.read` gives a turn, for a host that starts a turn from a room's `send` hook and has no addressing message. It marks nothing handed over, so a retry reads the same.
 - `pi-roundtable-web`: `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
 
 ### Changed

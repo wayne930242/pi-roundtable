@@ -1,5 +1,6 @@
 import type { ChannelKey, ServiceKey, Tier } from "pi-roundtable";
 import { PluginError, serviceKey } from "pi-roundtable";
+import type { ChannelContext } from "pi-roundtable/discord";
 import type {
 	FormFieldView,
 	FormSpecView,
@@ -217,6 +218,17 @@ export interface HostRooms {
 	/** Deletes the row and its files now. */
 	remove(room: ChannelKey, id: number): Promise<void>;
 	byReference(room: ChannelKey, reference: string): Promise<number | undefined>;
+	/**
+	 * A room's recent messages as the block `CHANNEL_CONTEXT.read` gives a turn: what was said
+	 * since the assistant last posted, at most `limit` (default 15, at most 100) newest messages,
+	 * an outsider's words marked `external`, notices left out. For a host that starts a turn from
+	 * a room's `send` hook and has no message that addressed the assistant. Unlike `read` it marks
+	 * nothing handed over, so a retry gets the same; undefined when the room has nothing to give.
+	 */
+	context(
+		room: ChannelKey,
+		options?: { limit?: number; messageChars?: number },
+	): Promise<ChannelContext | undefined>;
 	card(room: ChannelKey, card: HostCard): Promise<{ id: string }>;
 	updateCard(room: ChannelKey, id: string, card: HostCard): Promise<void>;
 	saveFile(

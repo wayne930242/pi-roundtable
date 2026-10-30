@@ -19,7 +19,7 @@ import type { Uploads } from "../app/uploads.ts";
 import type { Viewer, WebAppRegistry } from "../web-app.ts";
 import { HostAccess } from "./access.ts";
 import type { HostCardLog } from "./cards.ts";
-import { hostChannelContext } from "./context.ts";
+import { type HostRoomContext, hostRoomContext } from "./context.ts";
 import { installFrames } from "./frames.ts";
 import type { HostContext } from "./host-context.ts";
 import { hostArea, pagesArea } from "./host-routes.ts";
@@ -66,7 +66,7 @@ export class HostApp {
 	readonly rooms: HostRoomsService;
 	readonly pages: HostPagesService;
 	readonly #context: HostContext;
-	readonly #channelContext: ReturnType<typeof hostChannelContext>;
+	readonly #roomContext: HostRoomContext;
 
 	constructor(options: HostAppOptions) {
 		const now = options.now ?? Date.now;
@@ -102,6 +102,8 @@ export class HostApp {
 			maxFileBytes: options.maxFileBytes,
 			roomUrl: options.roomUrl,
 			listed,
+			context: (room, contextOptions) =>
+				this.#roomContext.peek(room, contextOptions),
 			now,
 			logger: options.logger,
 		});
@@ -126,7 +128,7 @@ export class HostApp {
 			now,
 			logger: options.logger,
 		};
-		this.#channelContext = hostChannelContext(this.#context);
+		this.#roomContext = hostRoomContext(this.#context);
 	}
 
 	/** Plugs the pieces into the registry: who reads, the frames, the areas, and the services a host reaches. */
@@ -153,7 +155,7 @@ export class HostApp {
 		message: InboundMessage,
 		options?: ChannelContextOptions,
 	): Promise<ChannelContext | undefined> {
-		return this.#channelContext(message, options);
+		return this.#roomContext.read(message, options);
 	}
 
 	/** Whether a stored file bound to a room or a page may be served to this viewer now. */
