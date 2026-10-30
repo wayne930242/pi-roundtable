@@ -126,6 +126,7 @@ export class RoomReads {
 				moves.map((move) => ({ room: move.room, was: move.from, at: move.to })),
 			)}::text::jsonb) AS v(room text, was bigint, at bigint)
 			WHERE r.principal_id = ${principalId} AND r.room = v.room AND r.last_read_id = v.at
+				AND v.was < v.at
 			RETURNING r.room`;
 		return rows.map((row) => row.room);
 	}

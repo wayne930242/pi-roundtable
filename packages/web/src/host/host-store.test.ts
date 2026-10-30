@@ -361,6 +361,14 @@ describeDb("what the host rooms store", () => {
 		// Putting back twice changes nothing more.
 		expect(await reads.rewind(person, moved)).toEqual([]);
 		expect(await reads.rewind(person, [])).toEqual([]);
+		// A "put back" that would move a cursor forward, past where it is, moves nothing.
+		const at = await reads.cursorOf(two as string, person);
+		expect(
+			await reads.rewind(person, [
+				{ room: two as string, from: (at ?? 0) + 1000, to: at ?? 0 },
+			]),
+		).toEqual([]);
+		expect(await reads.cursorOf(two as string, person)).toBe(at);
 	});
 
 	test("the reads of a room are everyone's cursors", async () => {
