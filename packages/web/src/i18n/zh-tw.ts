@@ -282,16 +282,38 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Reply to the knight that started this thread.": "回覆開啟這個討論串的騎士。",
 	"Yolo mode": "Yolo 模式",
 	"No knights are seated yet.": "圓桌上還沒有騎士入座。",
-	"Who's at the table": "誰上桌",
-	"Off the table": "離席中",
-	"Leave the table": "離席",
-	"{name} left the table": "{name}已離席",
 	"The table is empty": "圓桌空了",
 	"There are no rooms to seat yet.": "還沒有可以入座的聊天室。",
-	"Every knight has left the table. Choose who sits down.":
-		"所有騎士都離席了。選擇誰要上桌。",
-	"A knight who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.":
-		"離席的騎士會被靜音：它的聊天室不再推播給你。等你回應的卡片仍會推播。",
+	"All rooms": "所有聊天室",
+	"Council: {name} ▾": "評議會：{name} ▾",
+	Council: "評議會",
+	Councils: "評議會",
+	"{count} knights": "{count} 位騎士",
+	"Pick who sits": "選誰上桌",
+	"No council yet": "還沒有評議會",
+	"The council is empty": "評議會沒有人了",
+	"Every member of this council is gone. Edit who sits.":
+		"這個評議會的成員都不在了。請重新選誰上桌。",
+	"A council is a group of up to {max} knights who answer in turn. Pick who sits.":
+		"評議會是最多 {max} 位騎士組成的群組，他們輪流發言。請選誰上桌。",
+	"Edit this council": "編輯這個評議會",
+	"{count} of {max} picked": "已選 {count}/{max}",
+	"At most {max} knights": "最多 {max} 位",
+	"A council needs at least {min} knights.": "評議會至少要有 {min} 位騎士。",
+	"Council name": "評議會名稱",
+	"Save as a new council": "另存為新評議會",
+	"Make council": "建立評議會",
+	"Private chat": "私下對話",
+	"Remove from the council": "移出評議會",
+	"{name} left the council": "{name}已移出評議會",
+	"Speaking order": "發言順序",
+	"has spoken": "已發言",
+	"Reply {n} of {limit}": "第 {n}／{limit} 則",
+	"{count} of {limit} replies": "{count}／{limit} 則回覆",
+	"Limit reached": "已達上限",
+	"Round stopped": "本輪已停止",
+	"Stop the round": "停止本輪",
+	"Your message waits for the next round": "你的訊息排在下一輪",
 
 	// 通知
 	"A file is no longer available. Attach it again.":
@@ -542,7 +564,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Edit group": "編輯群組",
 	"Name, members and host": "名稱、成員與主持人",
 	Members: "成員",
-	"Pick 2 to 6 knights. They take turns in the order picked.":
+	"Pick 2 to 8 knights. They take turns in the order picked.":
 		"選 2 到 6 位騎士。他們依選取的順序輪流發言。",
 	Host: "主持人",
 	"It stops answering. The history is kept and it can be restored.":

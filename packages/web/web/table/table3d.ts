@@ -157,7 +157,6 @@ export function createTable3D(
 	const names = new Names(container, labels, (podium, at) => {
 		if (podium.init.kind === "agent" && podium.init.id)
 			opts.onSeatClick({ id: podium.init.id, name: podium.init.name, at });
-		else if (podium.init.kind === "more") opts.onMore?.();
 	});
 	const speed: SpeedLines = createSpeedLines(container, () => reduced);
 
@@ -172,6 +171,7 @@ export function createTable3D(
 	let scheme: Scheme = opts.scheme;
 	let seats: SeatInit[] = [];
 	const states = new Map<string, SeatState>();
+	const marks = new Map<string, string>();
 	const svgs = new Map<string, string>();
 	let world: World | undefined;
 	let building = 0;
@@ -337,20 +337,6 @@ export function createTable3D(
 			if (kept && kept.svg === svgs.get(seat.id) && kept.tone === toneOf())
 				podium.setSticker(kept.canvas);
 		});
-		if (slots.more > 0)
-			place(
-				slots.count - 1,
-				new Podium(
-					{
-						id: undefined,
-						name: `+${slots.more}`,
-						kind: "more",
-						accent: hall.gold,
-					},
-					kit,
-					toon,
-				),
-			);
 		world = { hall, toon, kit, built, group, slots, podiums, slotOf, order };
 		if (glide && show) {
 			const joining = new Set<Podium>();
@@ -394,6 +380,10 @@ export function createTable3D(
 		moveTo(targetShot(), glide === undefined);
 		names.paint(hall);
 		names.set(podiums, (p) => states.get(p.init.id ?? "") ?? "idle");
+		for (const p of podiums) {
+			const mark = marks.get(p.init.id ?? "");
+			if (mark) names.mark(p, mark);
+		}
 		loop.wake();
 	};
 
@@ -855,8 +845,7 @@ export function createTable3D(
 						name: seat.name,
 						at: { x: event.clientX, y: event.clientY },
 					});
-			} else if (found.kind === "more") opts.onMore?.();
-			else if (found.kind === "owner" && focusId !== null)
+			} else if (found.kind === "owner" && focusId !== null)
 				setFocus(null, false, true);
 			return;
 		}
@@ -993,6 +982,14 @@ export function createTable3D(
 				applyState(p, state);
 				names.relabel(p, state);
 			}
+			loop.wake();
+		},
+		setMark(id, mark) {
+			if (mark === null) marks.delete(id);
+			else marks.set(id, mark);
+			const slot = world?.slotOf.get(id);
+			const p = slot === undefined ? undefined : world?.podiums[slot];
+			if (p) names.mark(p, mark);
 			loop.wake();
 		},
 		async setAvatar(id, svg) {

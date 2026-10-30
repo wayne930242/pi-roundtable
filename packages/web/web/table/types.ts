@@ -99,8 +99,6 @@ export interface TableOptions {
 	focus?: string | null;
 	/** The camera was turned by the person (a zoom, a swipe in a close-up), not by the page: the page follows it. `null` is back to the whole ring. */
 	onFocus?: (id: string | null) => void;
-	/** The "+N" podium was tapped: the page shows the agents the ring leaves out. */
-	onMore?: () => void;
 }
 
 export interface TableStats {
@@ -129,6 +127,8 @@ export interface TableHandle {
 	setTheme(theme: ThemeName, scheme: Scheme): void;
 	setSeats(seats: SeatInit[]): void;
 	setState(id: string, state: SeatState): void;
+	/** A short sign before a seat's name that says where it stands in a round (a check for who has spoken, a number for who is next); `null` takes it away. */
+	setMark(id: string, mark: string | null): void;
 	/** The seam for the composed characters: replace one seat's picture. */
 	setAvatar(id: string, svg: string): Promise<void>;
 	setReducedMotion(reduced: boolean): void;

@@ -64,7 +64,7 @@ export interface TeamTurnsOptions {
 	 */
 	surfaces?: Pick<
 		SurfacePort,
-		"sendReply" | "interim" | "roomSurfaces" | "of" | "progress"
+		"sendReply" | "interim" | "roomSurfaces" | "of" | "progress" | "groupRound"
 	>;
 	studio: Pick<AvatarStudio, "url">;
 	/**

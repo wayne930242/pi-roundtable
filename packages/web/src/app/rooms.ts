@@ -44,7 +44,7 @@ export interface RoomsOptions {
 	mutes: Pick<PushMutes, "all">;
 	activity(
 		room: ChannelKey,
-	): Pick<RoomView, "typing" | "stoppable" | "phase" | "agent">;
+	): Pick<RoomView, "typing" | "stoppable" | "phase" | "agent" | "round">;
 	/**
 	 * Whether more than one person reads the agent and group rooms, so a message may be an
 	 * internal note. Absent: one person does, and a room takes only turns.

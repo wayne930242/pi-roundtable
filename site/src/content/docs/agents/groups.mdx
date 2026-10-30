@@ -22,7 +22,7 @@ The agent calls `group_create` with these fields:
 | --- | --- |
 | `name` | The permanent name, with the same rules as an agent's name. No agent or group may share it. |
 | `display_name` | The name shown for the group, 1 to 32 characters. |
-| `members` | 2 to 6 different agents that exist and are not archived. |
+| `members` | 2 to 8 different agents that exist and are not archived. |
 | `host` | Optional. One of the members. Without one, the host is the member named `coordinator` if there is one, and otherwise the first member. |
 | `category` | Optional. `Groups`, which is the default, or `Groups-<suffix>`. A missing category is created. |
 
@@ -44,6 +44,7 @@ Three rules decide the rest:
 
 Members can hand the next word to each other by mentioning a name, such as `@Editor`, in their reply.
 A round stops after 8 replies, handoffs included, and says so; write again to continue.
+Stop ends the whole round: the agent speaking is stopped and the ones waiting do not speak. This is the same in Discord and in the web app.
 
 Inside a group, agents use mentions to talk to each other in the channel.
 [Archive and channels](/agents/archive-and-channels/) covers `message_agent` for everywhere else.
@@ -62,7 +63,7 @@ Make Researcher the host of Review, and rename the group to Reading room.
 
 The agent calls `group_update` to change the display name, members, or host.
 
-- The new member list replaces the old one and must have 2 to 6 different agents.
+- The new member list replaces the old one and must have 2 to 8 different agents.
 - The host has to be a member.
   When you remove the host and name no new one, the first member becomes the host.
 - The name of the group does not change.
@@ -75,5 +76,14 @@ The agent calls `group_update` to change the display name, members, or host.
 - Archiving a group leaves its members as they are.
 
 See [Archive and channels](/agents/archive-and-channels/).
+
+## The round table in the web app
+
+The web app's round table shows one group, which it calls a council: the members, at most eight, at the podiums, and the group's room in the dialogue box under them.
+A message sent there starts a round under the rules above.
+An order strip over the box shows the faces in the order of the round: who has spoken, who speaks now, who is next, and which reply of 8 it is on; the seats wear the same check or number.
+A sheet with a tick list edits the group in place, or saves the ticks as another group; a group saved there opens its Discord channel like any other.
+A group made in Discord, or by `group_create`, is in the council list at once.
+Muting a knight only stops its push. It no longer takes the knight off the table.
 
 {/* Sources: src/core/agents/agent-tools.ts:92-96, src/core/agents/agent-tools.ts:218-262, src/core/agents/team-editing.ts:176-209, src/core/agents/agent-store.ts:241-326, src/core/agents/group-round.ts:1-60, src/core/agents/group-round.ts:68-100, src/core/agents/group-turns.ts:25-120, src/core/agents/agent-prompt.ts:41-47, src/core/agents/agent-prompt.ts:53-60, src/core/agents/team-lifecycle.ts:50-62, src/core/agents/team-layout.ts:44-55, src/core/i18n/conversation.ts:15-17 */}

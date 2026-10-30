@@ -162,7 +162,7 @@ function setup(withSkills = true) {
 			host?: string;
 		}) => {
 			if (input.members.length < 2)
-				throw new AgentError("A group has 2 to 6 different members.");
+				throw new AgentError("A group has 2 to 8 different members.");
 			for (const member of input.members) need(member, "active");
 			groups.set(input.name, {
 				name: input.name,
@@ -182,7 +182,7 @@ function setup(withSkills = true) {
 			if (group?.status !== "active")
 				throw new AgentError(`There is no active group "${name}".`);
 			if (change.members && change.members.length < 2)
-				throw new AgentError("A group has 2 to 6 different members.");
+				throw new AgentError("A group has 2 to 8 different members.");
 			Object.assign(group, change);
 			calls.push(`updateGroup ${name} ${JSON.stringify(change)}`);
 			return "Updated";

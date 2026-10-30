@@ -158,7 +158,7 @@ export interface PodiumInit {
 	id: string | undefined;
 	name: string;
 	/** An agent's podium carries a standee; the owner's is the camera's home, and "+N" opens the list of the agents left out. */
-	kind: "agent" | "owner" | "more";
+	kind: "agent" | "owner";
 	/** The seat's accent, which tints the speaking light. */
 	accent: string;
 }

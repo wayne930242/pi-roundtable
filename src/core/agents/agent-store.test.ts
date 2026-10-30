@@ -454,7 +454,7 @@ describeDb("PostgreSQL", () => {
 			}
 		});
 
-		test("a group needs 2 to 6 distinct active members and a member host", async () => {
+		test("a group needs 2 to 8 distinct active members and a member host", async () => {
 			expect(() => store.checkNewGroup("g", ["infra"], "infra")).toThrow(
 				AgentError,
 			);

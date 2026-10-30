@@ -448,7 +448,7 @@ describeDb("PostgreSQL", () => {
 			).toEqual(["Infra: -# Stopped."]);
 		});
 
-		test("a group round shows no stop button", async () => {
+		test("a group round shows the stop button until the round ends", async () => {
 			await fx.team.createGroup({
 				name: "pair",
 				displayName: "Pair",
@@ -457,15 +457,16 @@ describeDb("PostgreSQL", () => {
 			const pair = fx.store.group("pair");
 			if (!pair) throw new Error("no pair group");
 			script.scores = { infra: 0.9, doctor: 0.1 };
+			const pairChannel = discordKey(pair.channelId ?? "");
 			await fx.team.answerGroup(
-				discordKey(pair.channelId ?? ""),
+				pairChannel,
 				OWNER_SPEAKER,
 				"hello all",
 				"hello all",
 				NO_ATTACHMENTS,
 				undefined,
 			);
-			expect(stops).toEqual([]);
+			expect(stops).toEqual([`show ${pairChannel}`, `hide ${pairChannel}`]);
 		});
 	});
 

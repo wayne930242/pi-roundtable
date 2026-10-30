@@ -88,6 +88,7 @@ beforeAll(async () => {
 				sent.push(frame);
 				return true;
 			},
+			focus: () => undefined,
 		}),
 	);
 });
@@ -160,7 +161,8 @@ test("a member's ring seats the rooms their kinds list, newest first, and nothin
 		/\/rooms|mute|workspace|overview|skills|presence/,
 	);
 	expect(requests.every((one) => one.method === "GET")).toBe(true);
-	expect(buttons()).not.toContain("Who's at the table");
+	expect(buttons()).not.toContain("Pick who sits");
+	expect(buttons()).toContain("All rooms");
 });
 
 test("only the seated rooms are followed, and they are let go when the table closes", async () => {
@@ -248,7 +250,7 @@ test("with no room to seat the table says so, and offers no sheet of who sits", 
 		"There are no rooms to seat yet.",
 	);
 	expect(page.container.querySelector("g.seat")).toBeNull();
-	expect(buttons()).not.toContain("Who's at the table");
+	expect(buttons()).not.toContain("Pick who sits");
 	expect(sent).toEqual([]);
 });
 
@@ -269,7 +271,7 @@ test("an address that names a seat is not a close-up for a member: it goes back 
 	expect(page.container.querySelector(".dialogue-box")).toBeNull();
 });
 
-test("an owner whose host has kinds of room sits the agents first and then the listed host rooms, newest first", async () => {
+test("an owner's table seats no host room, even where the host has kinds of room: its rooms are in the room list", async () => {
 	store.dispatch({
 		type: "rooms_loaded",
 		rooms: [
@@ -284,43 +286,64 @@ test("an owner whose host has kinds of room sits the agents first and then the l
 				typing: false,
 				stoppable: false,
 			},
+			{
+				key: "app:agent.scout",
+				kind: "agent",
+				name: "scout",
+				displayName: "Scout",
+				home: false,
+				readOnly: false,
+				mode: { yolo: false, longRunning: false },
+				typing: false,
+				stoppable: false,
+			},
+			{
+				key: "app:group.crew",
+				kind: "group",
+				name: "crew",
+				displayName: "Crew",
+				home: false,
+				readOnly: false,
+				members: ["guide", "scout"],
+				mode: { yolo: false, longRunning: false },
+				typing: false,
+				stoppable: false,
+			},
 		],
 	});
 	lists.inbox = {
 		kind: "inbox",
 		label: "Inbox",
-		rooms: [
-			summary(AIDA, "Aida", { lastAt: "2026-10-29T09:00:00.000Z" }),
-			summary(BODO, "Bodo", { lastAt: "2026-10-29T11:00:00.000Z" }),
-		],
+		rooms: [summary(AIDA, "Aida"), summary(BODO, "Bodo")],
 	};
-	// A kind the owner may not list seats nobody.
-	lists.desk = 404;
 	await shown("owner");
 	await settle();
-	expect(Object.keys(seats())).toEqual(["Guide", "Bodo", "Aida"]);
-	expect(subscribed("subscribe")).toEqual([AIDA, BODO].sort());
-	// A host room opens its own page, not an agent's dialogue box.
-	page.container
-		.querySelector('g.seat[aria-label^="Bodo"]')
-		?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-	expect(decodeURIComponent(window.location.hash)).toBe(`#/room/${BODO}`);
-	expect(page.container.querySelector(".dialogue-box")).toBeNull();
+	expect(Object.keys(seats())).toEqual(["Guide", "Scout"]);
+	expect(requests.some((one) => one.url.includes("host/"))).toBe(false);
+	expect(sent).toEqual([]);
 });
 
-test("an owner's table of a host without kinds of room is the agents' as before (the agent left by the last test sits): no host list is asked and no room is followed", async () => {
+test("a member's ring seats at most eight rooms, newest first, with no +N seat and a button to the room list", async () => {
 	lists.inbox = {
 		kind: "inbox",
 		label: "Inbox",
-		rooms: [summary(AIDA, "Aida")],
+		rooms: Array.from({ length: 11 }, (_, n) =>
+			summary(`inbox.thread-room${String(n).padStart(4, "0")}`, `Room${n}`, {
+				lastAt: `2026-10-29T${String(10 + n).padStart(2, "0")}:00:00.000Z`,
+			}),
+		),
 	};
-	await page.render(
-		<ConfigContext.Provider value={{ ...config("owner"), kinds: [] }}>
-			<TablePage />
-		</ConfigContext.Provider>,
-	);
+	await shown("member");
 	await settle();
-	expect(requests.some((one) => one.url.includes("host/"))).toBe(false);
-	expect(sent).toEqual([]);
-	expect(Object.keys(seats())).toEqual(["Guide"]);
+	const names = Object.keys(seats());
+	expect(names).toHaveLength(8);
+	expect(names[0]).toBe("Room10");
+	expect(names.some((name) => name.startsWith("+"))).toBe(false);
+	// only the rooms that sit are followed
+	expect(subscribed("subscribe")).toHaveLength(8);
+	const all = [...page.container.querySelectorAll("button")].find(
+		(button) => button.textContent === "All rooms",
+	);
+	await page.click(all ?? null);
+	expect(decodeURIComponent(window.location.hash)).toBe("#/rooms");
 });

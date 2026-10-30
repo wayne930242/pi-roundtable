@@ -15,6 +15,7 @@ import type {
 	RoomView,
 } from "../src/api-types.ts";
 import { ConfigContext } from "./components/../lib/config.ts";
+import { DialogueBox } from "./components/dialogue-box.tsx";
 import { GroupScene } from "./components/group-scene.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
@@ -28,7 +29,6 @@ import {
 	setTableMode,
 	tableModeOf,
 } from "./lib/table-mode.ts";
-import { TablePage } from "./pages/table.tsx";
 
 const SCOUT = "app:agent.lena";
 const MASON = "app:agent.otto";
@@ -96,50 +96,11 @@ afterAll(async () => {
 	await releaseDom();
 });
 
-/**
- * The box waits 300 ms for the camera before it slides up. A test holds that wait back and ends it with `arrive`, so
- * "the camera has not arrived yet" lasts as long as the test says however long a render takes on a busy machine, and
- * nothing waits for a clock. Every other timer runs as it would.
- */
-const waiting = new Map<number, () => void>();
-let releaseTimers = () => {};
-
-function holdArrival() {
-	const realSet = globalThis.setTimeout;
-	const realClear = globalThis.clearTimeout;
-	let next = -1;
-	Reflect.set(
-		globalThis,
-		"setTimeout",
-		(callback: () => void, ms?: number, ...rest: unknown[]) => {
-			if (ms !== 300) return realSet(callback, ms, ...(rest as []));
-			waiting.set(next, callback);
-			return next--;
-		},
-	);
-	Reflect.set(globalThis, "clearTimeout", (id?: number) => {
-		if (id !== undefined && waiting.has(id)) waiting.delete(id);
-		else realClear(id);
-	});
-	releaseTimers = () => {
-		Reflect.set(globalThis, "setTimeout", realSet);
-		Reflect.set(globalThis, "clearTimeout", realClear);
-		waiting.clear();
-	};
-}
-
-/** The camera has arrived: the held waits end. */
-async function arrive() {
-	const due = [...waiting.values()];
-	waiting.clear();
-	await page.act(() => {
-		for (const callback of due) callback();
-	});
-}
+/** Lets the box's own timers run out; there is no wait for the camera any more, the council's box is up at once. */
+const arrive = () => settle(30);
 
 let fetched: ReturnType<typeof spyOn>;
 beforeEach(() => {
-	holdArrival();
 	// every test sets its own: another file of the same run may have put a different one in place
 	setConnection(
 		partial<AppConnection>({
@@ -180,7 +141,6 @@ afterEach(async () => {
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	clearDrafts();
-	releaseTimers();
 });
 
 const settle = (ms = 80) =>
@@ -188,18 +148,18 @@ const settle = (ms = 80) =>
 const query = <T extends Element>(selector: string): T | null =>
 	page.container.querySelector<T>(selector);
 
-const render = (focus?: string) =>
+/** The box on an agent's room, as the scene's dialogue box is built: open, over a table. */
+const render = (room: string) =>
 	page.render(
 		<ConfigContext.Provider value={config}>
-			<TablePage focus={focus} />
+			<DialogueBox roomKey={room} open />
 		</ConfigContext.Provider>,
 	);
 
-test("the overview has no dialogue box, and an address that names an agent opens the box on that agent's room", async () => {
-	await render();
-	await settle();
-	expect(query(".scene-box")).toBeNull();
-	await render("lena");
+const NOVA = "app:agent.nova";
+
+test("the box on an agent's room names that agent on the plate and shows its newest line", async () => {
+	await render(SCOUT);
 	await settle();
 	const box = query(".scene-box");
 	expect(box).not.toBeNull();
@@ -207,16 +167,10 @@ test("the overview has no dialogue box, and an address that names an agent opens
 	expect(box?.textContent).toContain("Found");
 	// the room's own composer is under it
 	expect(box?.querySelector("textarea")).not.toBeNull();
-});
-
-test("the key of a room opens the same view as the agent's name", async () => {
 	await render(MASON);
 	await settle();
-	expect(query(".scene-box")).not.toBeNull();
 	expect(query(".scene-name")?.textContent).toBe("\u6885\u68ee");
 });
-
-const NOVA = "app:agent.nova";
 
 test("an agent's room keeps that agent's name on the plate and in the progress line while the newest line is the owner's", async () => {
 	store.dispatch({
@@ -248,7 +202,7 @@ test("an agent's room keeps that agent's name on the plate and in the progress l
 			stoppable: true,
 		}),
 	);
-	await render("nova");
+	await render(NOVA);
 	await arrive();
 	expect(query(".scene-name")?.textContent).toBe("Nova");
 	expect(query(".scene-chip")).not.toBeNull();
@@ -257,29 +211,6 @@ test("an agent's room keeps that agent's name on the plate and in the progress l
 	expect(query(".scene-line")?.textContent).toContain("stream");
 	expect(query(".scene-box")?.textContent).toContain("Nova");
 	expect(query(".scene-box")?.textContent).not.toContain("Ada is");
-});
-
-test("an address that names nobody seated goes back to the whole ring in place, adding no history entry", async () => {
-	window.location.hash = "#/table/ghost";
-	const before = window.history.length;
-	await render("ghost");
-	await settle();
-	expect(window.location.hash).toBe("#/table");
-	expect(window.history.length).toBe(before);
-	expect(query(".scene-box")).toBeNull();
-});
-
-test("the box slides up after the camera has turned, at once under reduced motion", async () => {
-	await render("lena");
-	expect(waiting.size).toBeGreaterThan(0);
-	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(false);
-	await arrive();
-	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(true);
-	await render();
-	reduced = true;
-	await render("otto");
-	await settle(20);
-	expect(query(".scene-box")?.hasAttribute("data-open")).toBe(true);
 });
 
 /** Frames and a clock the test turns by hand, so the typing can be watched half way and `act` has no chain of frames to wait out. */
@@ -318,7 +249,7 @@ function manualFrames() {
 test("a streaming reply types out, and a tap on it shows the whole text", async () => {
 	const frames = manualFrames();
 	try {
-		await render("lena");
+		await render(SCOUT);
 		await arrive();
 		const words =
 			`Streaming along nicely ${"with a fairly long sentence ".repeat(30)}`.trim();
@@ -356,14 +287,14 @@ test("a streaming reply types out, and a tap on it shows the whole text", async 
 
 test("under reduced motion the whole text shows at once", async () => {
 	reduced = true;
-	await render("lena");
+	await render(SCOUT);
 	await settle(30);
 	expect(query(".scene-line")?.textContent).toContain("Found three leads.");
 	expect(query(".scene-line")?.getAttribute("role")).toBeNull();
 });
 
 test("a card that waits shows in the box, and answering it there answers the room's card", async () => {
-	await render("lena");
+	await render(SCOUT);
 	await arrive();
 	await page.act(() => {
 		store.dispatch({
@@ -394,7 +325,7 @@ test("a card that waits shows in the box, and answering it there answers the roo
 });
 
 test("each room keeps what was typed and not sent while the table turns to another agent", async () => {
-	await render("lena");
+	await render(SCOUT);
 	await arrive();
 	const type = async (value: string) => {
 		const box = query<HTMLTextAreaElement>(".scene-box textarea");
@@ -410,12 +341,12 @@ test("each room keeps what was typed and not sent while the table turns to anoth
 	};
 	await type("remember the milk");
 	expect(draftOf(SCOUT)).toBe("remember the milk");
-	await render("otto");
+	await render(MASON);
 	await settle(30);
 	expect(query<HTMLTextAreaElement>(".scene-box textarea")?.value).toBe("");
 	await type("\u7246\u8981\u518d\u9ad8\u4e00\u9ede");
 	expect(draftOf(MASON)).toBe("\u7246\u8981\u518d\u9ad8\u4e00\u9ede");
-	await render("lena");
+	await render(SCOUT);
 	await settle(30);
 	expect(query<HTMLTextAreaElement>(".scene-box textarea")?.value).toBe(
 		"remember the milk",
@@ -423,7 +354,7 @@ test("each room keeps what was typed and not sent while the table turns to anoth
 });
 
 test("the Log button opens the room's whole message list over the scene", async () => {
-	await render("lena");
+	await render(SCOUT);
 	await arrive();
 	const open = query<HTMLButtonElement>(".scene-log-button");
 	await page.click(open);
@@ -434,7 +365,7 @@ test("the Log button opens the room's whole message list over the scene", async 
 });
 
 test("the box's last button hides it with a chevron and says so, and the chevron turns to bring it back; no second dots stand beside More", async () => {
-	await render("lena");
+	await render(SCOUT);
 	await arrive();
 	const hide = () => query<HTMLButtonElement>(".scene-collapse");
 	const shape = (button: Element | null) =>

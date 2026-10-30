@@ -64,6 +64,9 @@ function setup(
 		answerGroup: async (_c: string, speaker: Speaker, text: string) => {
 			answered.push({ kind: "group", speaker, text });
 		},
+		// A round runs in the group's channel, with one member's turn in its own session.
+		stopRound: (channel: string) =>
+			channel === "discord:20" ? ["agentgroup:20.infra"] : undefined,
 		answerBackground: async (_c: string, speaker: Speaker, text: string) => {
 			answered.push({ kind: "background", speaker, text });
 			return { ok: true as const, text: "" };
@@ -445,6 +448,12 @@ test("a stop goes to the runtime for the channel it was asked in", () => {
 	const { claim, stopped } = setup();
 	expect(claim.stop?.("discord:10")).toBe(true);
 	expect(stopped).toEqual(["discord:10"]);
+});
+
+test("a stop in a group's channel ends its round: the running member's session is stopped, not the channel", () => {
+	const { claim, stopped } = setup();
+	expect(claim.stop?.("discord:20")).toBe(true);
+	expect(stopped).toEqual(["agentgroup:20.infra"]);
 });
 
 test("a claim of a plugin at priority 10 on another surface's keys hears its messages while the agent server runs, and the agent server's own channels stay its", async () => {

@@ -12,7 +12,7 @@ import { Failure, Loading } from "./states.tsx";
 
 const NAME = /^[a-z0-9-]{1,32}$/;
 const MIN_MEMBERS = 2;
-const MAX_MEMBERS = 6;
+const MAX_MEMBERS = 8;
 
 /** Splits the names of one agent from its display name in the selector's one string. */
 const SEP = "\u0000";
@@ -189,7 +189,7 @@ export function GroupEditor(props: { name?: string; onDone(): void }) {
 			<fieldset className="field">
 				<legend>{t("Members")}</legend>
 				<span className="meta">
-					{t("Pick 2 to 6 knights. They take turns in the order picked.")}
+					{t("Pick 2 to 8 knights. They take turns in the order picked.")}
 				</span>
 				<ul className="menu">
 					{agents.map((agent) => {

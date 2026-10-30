@@ -14,7 +14,7 @@ import {
 	roomOf,
 	type TurnProgress,
 } from "pi-roundtable";
-import type { RoomFile, RoomMessage } from "../api-types.ts";
+import type { RoomFile, RoomMessage, RoundView } from "../api-types.ts";
 import type { OwnerDesk } from "./desk.ts";
 import { type FileBinding, type FileDir, typeByName } from "./files.ts";
 import type { NewRoomMessage, RoomLog } from "./room-log.ts";
@@ -115,6 +115,8 @@ export class AppSurface implements ChatSurface {
 	readonly threads: AppSurfaceThreads;
 	readonly #options: AppSurfaceOptions;
 	readonly #activity = new Map<ChannelKey, Activity>();
+	/** The round each group room runs now; an ended round is dropped, since the page keeps what it was told. */
+	readonly #rounds = new Map<ChannelKey, RoundView>();
 	/** When a page last sent a message to each room. */
 	readonly #askedAt = new Map<ChannelKey, number>();
 	/** The turns running in each room that a page's message started. */
@@ -194,6 +196,21 @@ export class AppSurface implements ChatSurface {
 			...(typing ? { phase: found?.tools.size ? "working" : "thinking" } : {}),
 			...(typing && found?.agent ? { agent: found.agent } : {}),
 		};
+	}
+
+	/** Where the group room's running round stands, for a page that opens mid-round. */
+	roundOf(room: ChannelKey): RoundView | undefined {
+		return this.#rounds.get(room);
+	}
+
+	/** Shows a group round's step to the sockets that may have the room. */
+	groupRound(channel: ChannelKey, round: RoundView): void {
+		if (round.state === "ended") this.#rounds.delete(channel);
+		else this.#rounds.set(channel, round);
+		this.#options.sockets.deliver(
+			{ type: "round", room: channel, round },
+			this.#options.audienceOf(channel),
+		);
 	}
 
 	/** The agents with a turn working in an app room now: a room's own agent, or a group's speaker. */

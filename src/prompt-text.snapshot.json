@@ -1782,7 +1782,7 @@
 			},
 			{
 				"name": "group_create",
-				"description": "Create a group chat channel with 2 to 6 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
+				"description": "Create a group chat channel with 2 to 8 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -1807,7 +1807,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -1845,7 +1845,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -4354,7 +4354,7 @@
 			},
 			{
 				"name": "group_create",
-				"description": "Create a group chat channel with 2 to 6 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
+				"description": "Create a group chat channel with 2 to 8 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4379,7 +4379,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -4417,7 +4417,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -8609,7 +8609,7 @@
 			},
 			{
 				"name": "group_create",
-				"description": "Create a group chat channel with 2 to 6 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
+				"description": "Create a group chat channel with 2 to 8 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8634,7 +8634,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -8672,7 +8672,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -10108,7 +10108,7 @@
 			},
 			{
 				"name": "group_create",
-				"description": "Create a group chat channel with 2 to 6 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
+				"description": "Create a group chat channel with 2 to 8 agents. The judge picks which members answer each of the speaker's messages there, one after another. The host answers when nobody else fits.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -10133,7 +10133,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
@@ -10171,7 +10171,7 @@
 								"type": "string"
 							},
 							"minItems": 2,
-							"maxItems": 6,
+							"maxItems": 8,
 							"description": "Agent names in speaking-tie order."
 						},
 						"host": {
