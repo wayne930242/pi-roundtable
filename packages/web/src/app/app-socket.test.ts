@@ -353,7 +353,12 @@ describeDb("the owner app over a real host", () => {
 		expect(accepted).toMatchObject({
 			id: "m1",
 			room: GUIDE,
-			message: { kind: "owner", author: "Ada", text: "hello team" },
+			message: {
+				kind: "owner",
+				author: "Ada",
+				principalId: ADA_DISCORD,
+				text: "hello team",
+			},
 		});
 		const reply = await tab.take(agentReply("guide"));
 		if (reply.type !== "message") throw new Error("expected a message");
@@ -2170,6 +2175,55 @@ describeDb("internal notes in rooms two owners read", () => {
 			noteOnly.messages.filter((m) => !m.note && m.kind === "agent").at(-1)
 				?.text,
 		).toBe("echo ask-after-the-note");
+		ada.close();
+		bob.close();
+	});
+
+	test("each owner's message carries its author's principal, live and in the history, so a page tells whose it is", async () => {
+		const ada = await Client.open(two, { "x-actor": "owner" });
+		const bob = await Client.open(two, { "x-actor": "owner2" });
+		if (!ada || !bob) throw new Error("an owner was refused");
+		await ada.take(ofType("ready"));
+		await bob.take(ofType("ready"));
+		// The log is the database's, so the texts are this run's own.
+		const tag = `-${crypto.randomUUID().slice(0, 8)}`;
+		ada.send({ type: "send", id: "w1", room: GUIDE, text: `from-ada${tag}` });
+		const fromAda = await ada.take(ofType("accepted"));
+		expect(fromAda.message).toMatchObject({
+			kind: "owner",
+			author: "Ada",
+			principalId: ADA_DISCORD,
+		});
+		const shownToBob = await bob.take(
+			(frame): frame is Extract<ServerFrame, { type: "message" }> =>
+				frame.type === "message" && frame.message.text === `from-ada${tag}`,
+		);
+		expect(shownToBob.message).toMatchObject({
+			kind: "owner",
+			author: "Ada",
+			principalId: ADA_DISCORD,
+		});
+		await ada.take(agentReply("guide"));
+		bob.send({ type: "send", id: "w2", room: GUIDE, text: `from-bob${tag}` });
+		const fromBob = await bob.take(ofType("accepted"));
+		expect(fromBob.message).toMatchObject({
+			kind: "owner",
+			author: "Bob",
+			principalId: BOB_DISCORD,
+		});
+		await bob.take(agentReply("guide"));
+		for (const who of ["owner", "owner2"]) {
+			const history = (await (
+				await rest(two, `rooms/${encodeURIComponent(GUIDE)}/messages`, { who })
+			).json()) as MessagesView;
+			const owners = history.messages.filter(
+				(m) => m.kind === "owner" && m.text.endsWith(tag),
+			);
+			expect(owners.map((m) => [m.author, m.principalId])).toEqual([
+				["Ada", ADA_DISCORD],
+				["Bob", BOB_DISCORD],
+			]);
+		}
 		ada.close();
 		bob.close();
 	});
