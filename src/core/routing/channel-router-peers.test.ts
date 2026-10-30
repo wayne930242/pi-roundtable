@@ -194,7 +194,7 @@ describe("PeerBots", () => {
 			}
 			return "";
 		};
-		expect(bad(["merlin"])).toContain("config peerBots.allow[0]");
+		expect(bad(["herald"])).toContain("config peerBots.allow[0]");
 		expect(bad([PEER, "*"], "discord.peerBots")).toContain(
 			"config discord.peerBots.allow[1]: expected a Discord id",
 		);

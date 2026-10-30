@@ -55,7 +55,7 @@ describe("discord.peerBots", () => {
 	});
 
 	test("refuses a name, a wildcard, or a bad id, naming the key", () => {
-		expect(refused(withPeers({ allow: ["merlin"] }))).toContain(
+		expect(refused(withPeers({ allow: ["herald"] }))).toContain(
 			"config discord.peerBots.allow[0]: expected a Discord id",
 		);
 		expect(refused(withPeers({ allow: [PEER, "*"] }))).toContain(
