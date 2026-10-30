@@ -68,6 +68,7 @@ import {
 	type ConversationTurns,
 	conversationTurns,
 } from "./core/routing/conversation-turns.ts";
+import { MessageObservers } from "./core/routing/message-observers.ts";
 import { PeerBots, type PeerBotsConfig } from "./core/routing/peer-bots.ts";
 import { surfacePort } from "./core/routing/surface-port.ts";
 import {
@@ -384,9 +385,14 @@ export async function testPlugin(
 	let linked: LinkedSessions | undefined;
 	let router: ChannelRouter | undefined;
 	const queue = new ChannelQueue();
+	const observers = new MessageObservers(logger);
 	const conversations: ConversationPort = {
 		handle: async (message) =>
 			(router ?? unlinked("conversations")).handle(message),
+		messageDeleted: async (channel, id, space) =>
+			(router ?? unlinked("conversations")).messageDeleted(channel, id, space),
+		messageEdited: async (message) =>
+			(router ?? unlinked("conversations")).messageEdited(message),
 		background: async (turn) =>
 			(router ?? unlinked("conversations")).background(turn),
 		runsAs: async (turn) => (router ?? unlinked("conversations")).runsAs(turn),
@@ -541,6 +547,7 @@ export async function testPlugin(
 		}),
 		surfaces,
 		turns,
+		observe: (filter, observer) => observers.add(filter, observer),
 		database: () => {
 			if (!options.database) throw new PluginError("no database is configured");
 			return options.database;
@@ -605,6 +612,7 @@ export async function testPlugin(
 				: undefined),
 		queue,
 		logger,
+		observers,
 		...(options.peerBots ? { peerBots: new PeerBots(options.peerBots) } : {}),
 		...(options.forwardJoinMs === undefined
 			? {}
@@ -644,7 +652,12 @@ export async function testPlugin(
 		throw error;
 	}
 	for (const service of registry.services) await service.start?.();
-	for (const surface of options.surfaces ?? []) await surface.start(deliver);
+	for (const surface of options.surfaces ?? [])
+		await surface.start(deliver, {
+			deleted: (channel, id, space) =>
+				void conversations.messageDeleted?.(channel, id, space),
+			edited: (message) => void conversations.messageEdited?.(message),
+		});
 	let stopped = false;
 	const files: { channel: ChannelKey; file: ReplyFile }[] = [];
 	const images: { channel: ChannelKey; image: ClientPart }[] = [];

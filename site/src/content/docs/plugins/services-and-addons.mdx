@@ -158,6 +158,10 @@ What is held back is counted in `faults()`, never summed up in a post.
 An alert is posted when it is raised, a failed post (the sink throws or answers `false`) gives the key back so the next raise tries again, and `raise` never throws.
 `info: true` marks news: it posts once per key, outside the kind's cap and outside `faults()`.
 
+The sink also gets what it needs to choose a picture or a route: `sink(text, { kind, key, code?, info?, severity? })`, where `severity` is `"info"`, `"warning"` or `"critical"` as `raise` was given it. A sink that takes only the text still works.
+When the fault is over, `alerts.resolve("push:group-7")` gives the key back and calls the sink's optional `resolved({ kind, key })`, so it can mark the posted alert as recovered, for example by editing its message; `faults()` then shows `clearedAt` for the kind.
+Resolving a key twice, or a key that was never posted, does nothing.
+
 ### Codex images
 
 `drawCodexImage` and `createCodexImages` from `pi-roundtable/kit` are the client and the plugin behind the official [`codex-images`](/plugins/official-plugins/#codex-images) plugin, for a project that wants to draw images itself or to build its own `images` provider on them.

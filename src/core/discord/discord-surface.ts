@@ -16,7 +16,11 @@ import type {
 	ChannelContext,
 	ChannelContextOptions,
 } from "../contract/channel-context.ts";
-import type { ChatSurface, SurfaceThreads } from "../contract/surface.ts";
+import type {
+	ChatSurface,
+	SurfaceMessageEvents,
+	SurfaceThreads,
+} from "../contract/surface.ts";
 import type {
 	ChannelKey,
 	InboundMessage,
@@ -42,7 +46,8 @@ import type { ChannelInfo, DiscordConnection } from "./connection.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
-import { lateAnswerMessage, toInbound } from "./inbound-message.ts";
+import { lateAnswerMessage } from "./inbound-message.ts";
+import { listenForMessages, reportChanges } from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
 import { stopPanel } from "./stop-button.ts";
@@ -103,7 +108,7 @@ export class DiscordSurface
 			GatewayIntentBits.DirectMessages,
 			GatewayIntentBits.MessageContent,
 		],
-		partials: [Partials.Channel],
+		partials: [Partials.Channel, Partials.Message],
 		allowedMentions: { parse: [] },
 	});
 
@@ -263,21 +268,14 @@ export class DiscordSurface
 		onMessage(lateAnswerMessage(turn));
 	}
 
-	async start(onMessage: (message: InboundMessage) => void): Promise<void> {
+	async start(
+		onMessage: (message: InboundMessage) => void,
+		events?: SurfaceMessageEvents,
+	): Promise<void> {
 		const { logger, token } = this.#options;
 		this.#onMessage = onMessage;
-		this.#client.on(Events.MessageCreate, (message) => {
-			toInbound(message, {
-				botId: this.#client.user?.id,
-				applicationId: this.#client.application?.id,
-			})
-				.then((inbound) => {
-					if (inbound) onMessage(inbound);
-				})
-				.catch((error: unknown) =>
-					logger.error({ err: error }, "inbound message could not be read"),
-				);
-		});
+		if (events) reportChanges(this.#client, events, logger);
+		listenForMessages(this.#client, onMessage, logger);
 		this.#client.on(Events.InteractionCreate, (interaction) => {
 			void this.#dispatch(interaction);
 		});

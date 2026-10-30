@@ -6,6 +6,8 @@ import type {
 	BackgroundTarget,
 	ChannelClaim,
 	ConversationPort,
+	MessageObserver,
+	ObserveFilter,
 	QueuePort,
 } from "./contract/channels.ts";
 import type { Providers, ResolvedProviders } from "./contract/providers.ts";
@@ -335,6 +337,20 @@ export interface PluginContext {
 	events: EventSink;
 	/** The claimed channels' conversations; calls during setup throw NotLinkedError. */
 	conversations: ConversationPort;
+	/**
+	 * Hears every inbound message the filter matches, whichever claim owns its channel, without
+	 * admitting, blocking or delaying it: the observer runs after routing has begun and cannot
+	 * change the message the claims get. It hears what the router considers: people's messages,
+	 * those of a bot the host lists as a peer, and an integration's (such as a webhook's) with
+	 * `integration` set; never an unlisted bot's, never the assistant's own, and never a message
+	 * in a channel no claim owns. It does not hear direct conversations unless the filter says
+	 * `includeDirect`. The message is a copy without a `speaker`, as no one is resolved for an
+	 * observer. Observers see untrusted text from other people: keep it out of logs, hold it no
+	 * longer than needed, and treat it as private to the people who wrote it. A throw or rejection
+	 * is logged and never reaches routing or another observer. Returns a function that stops it.
+	 * May be called during setup.
+	 */
+	observe(filter: ObserveFilter, observer: MessageObserver): () => void;
 	/**
 	 * Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation
 	 * until a turn uses them; a call throws PluginError when the host has no `dataDir`.

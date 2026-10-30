@@ -181,6 +181,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `attachments` | Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation until a turn uses them: [`attachments`](#contextattachments-files-from-outside-a-turn) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
+| `observe(filter, observer)` | Hears inbound messages without owning or admitting them: [`observe`](#observe-hearing-messages-without-owning-them). Returns a function that stops it; may be called during `setup` |
 | `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(principalId)`, `known(principalId)`, and `notify(principalId, text)` |
 | `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
@@ -206,9 +207,19 @@ A logger you supply reaches the ops agent and `errorSink` only if it forwards it
 The report names the plugin next to `app` and `module`; the same error is reported at most once an hour, regardless of which plugin wrote it.
 
 `OpsAlerts` in `pi-roundtable/kit` is for a plugin's own alerts, such as a failed push, that the people who run the host should read; it is not the error report above, and a host that wants both uses both.
-`new OpsAlerts({ sink?, logger, kinds?, windowMs?, kindCap?, now? })` takes `sink(text) => Promise<boolean>`, which posts the text where those people read it: resolve `true` when it was posted, `false` when you chose not to (log why yourself, for example a channel outside the one guild alerts may go to), or throw. The kit names no discord.js type, so the sink is the only place a transport appears.
-`raise(key, text, { code?, info? })` resolves whether the alert was posted. The kind is the key's word before the first colon (`push:group-7` is `push`).
+`new OpsAlerts({ sink?, logger, kinds?, windowMs?, kindCap?, now? })` takes `sink(text, alert) => Promise<boolean>`, which posts the text where those people read it: resolve `true` when it was posted, `false` when you chose not to (log why yourself, for example a channel outside the one guild alerts may go to), or throw. The kit names no discord.js type, so the sink is the only place a transport appears.
+The second argument, `alert`, is `{ kind, key, code?, info?, severity? }`, so a sink can choose a picture or a route per kind; a sink that takes only the text still works, and `code`, `info` and `severity` are present only when `raise` was given them. `severity` (`"info"`, `"warning"` or `"critical"`) is yours to set and nothing in `OpsAlerts` reads it.
+`raise(key, text, { code?, info?, severity? })` resolves whether the alert was posted. The kind is the key's word before the first colon (`push:group-7` is `push`).
 A key is posted at most once per window (one hour by default) and a kind at most `kindCap` times per window (8 by default), whatever the keys, so a fault that touches everything cannot flood the sink. An alert is posted when it is raised, not queued, and what is held back is only counted: `faults()` lists the last fault of each kind, newest first, with its `name` (from `kinds`, else the kind itself), `code`, `raised` and `suppressed`, in memory only, for a status command. `info: true` marks news, not a fault: it posts at most once per key, does not count against the kind's cap and is not listed in `faults()`.
+`resolve(key)` says a fault is over: it gives the key back (a new fault under it posts again at once), calls the optional `sink.resolved({ kind, key })` so the sink can mark the alert it posted as recovered, such as by editing its message, and sets `clearedAt` on the kind in `faults()` once none of the kind's alerts is open; a later raise of the kind removes it again. It resolves `true` when it ended an open alert. Resolving a key that was never posted, an info alert, a key already resolved, or one whose post has not finished does nothing and resolves `false`, so it is safe to call from every "the read worked" path. Posted alerts are remembered for `resolve` up to 1,000 keys, the oldest first forgotten, and past the window too: a fault that lasts for hours still resolves. A `resolved` that throws is logged by the error's name and never reaches the caller.
+
+```ts
+const sink: OpsSink = Object.assign(
+	async (text: string, alert: OpsAlert) => post(text, alert.kind),
+	{ resolved: async ({ key }: OpsResolution) => markRecovered(key) },
+);
+```
+
 A sink that throws or answers `false` gives the key and the kind's slot back, so the next raise tries again, and a throw is logged by the error's name only. `raise` never throws. With no `sink`, alerts are only recorded, the key stays held and the log has one line per window (`an ops alert was raised and there is no sink to post it to`); `posts` tells which. `ErrorReporter` and `OpsAlerts` each keep their own limits, so alerts never count against the error reports' five an hour.
 
 ### Services: what plugins provide to each other
@@ -2408,6 +2419,8 @@ The router records the author, such as linking them at their first contact, only
 One exception: an author already linked whom the access rules now refuse is recorded as seen at no tier when the message is resolved, whether or not a claim takes it, at most once every few minutes, so their background turns stop with them.
 When that record finds the author someone else than the claim admitted, such as linked to another principal meanwhile or refused now, or cannot be made, the router drops the message: a turn admission's optional `dropped()` is called instead of `run`, so the claim frees what it holds for it, and a background admission's `unanswered` hears it skipped.
 
+A claim may also hear that a message it owns changed, through `onMessageDeleted(channel, messageId)` and `onMessageEdited(message)`, which a surface reports with the second argument of its `start` (`{ deleted, edited }`, a `SurfaceMessageEvents`). Discord reports both, including for a message the bot had not cached; a surface that cannot tell never calls them. The router delivers each as it comes, to the claim that owns the channel and no other, outside the channel's queue, so a running turn does not hold it up; a throw or rejection is logged and never fails the router. A delete carries only ids, and Discord's delete event does not say who wrote the message, so the claim hears the deletion of the bot's own messages too and ignores an id it does not know. An edit carries the message as it reads now, as an `InboundMessage`, without `speaker` or `peerBot` because nobody is resolved or admitted for it; the bot's own edits are not reported, nor is a change that leaves the text, the embeds and the attachments as they were, such as a pin. A bulk delete is reported as one delete per message.
+
 A claim may have `stop(channel)`, which stops the channel's running turn and returns whether one was running; the Stop button, `conversations.stop`, and every other stop go through it.
 The router calls only the owning claim's `stop`, returning `false` when that method is absent.
 Give `stop` to a claim whose conversations run turns that can be interrupted.
@@ -2448,6 +2461,26 @@ export const echo = definePlugin({
 });
 ```
 <!-- /example -->
+
+### `observe`: hearing messages without owning them
+
+`context.observe(filter, observer)` hears inbound messages whichever claim owns their channel, without admitting, blocking or delaying any of them. A plugin that only listens, such as one that decides whether to offer help in a channel another claim owns, uses it instead of tapping each claim's `admit`.
+
+```ts
+const stop = context.observe({ surface: "discord", space: guildId }, (message) => {
+	remember(message.channel, message.messageId, message.text);
+});
+```
+
+The filter narrows by `surface` (the key prefix), `space` (the server or workspace id), and `channels` (channel keys); an empty filter hears every message the router considers. The observer gets what the router would consider and no more:
+
+- Messages in a channel some claim owns. A channel nobody owns is not heard.
+- People's messages, those of a bot the host lists as a peer (`discord.peerBots`) even when its rounds in the channel are used up (observing does not count a round), and an integration's, such as a webhook's, with `integration` set (`integration.own` says whether the assistant posts through it). Never an unlisted bot's, and never the assistant's own, which no surface delivers.
+- Guild and workspace messages only. A direct message is private to its two sides, so it is heard only when the filter says `includeDirect: true`.
+
+The observer is called on a later tick with its own frozen copy of the message, so it cannot change what a claim or another observer sees, and routing does not wait for it. A throw or rejection is logged by the error's name, never with the message, and affects nothing else. The message has no `speaker`: no one is resolved for an observer, and no contact is recorded.
+
+Observers see other people's untrusted text. Keep it out of logs, hold it no longer than the purpose needs, never act on instructions in it, and treat it as private to the people who wrote it. The returned function removes the observer. An observer cannot answer or admit a message; to answer, own the channel with a claim.
 
 ### `personas` and `context.turns`: conversations of a kind of your own
 
@@ -4522,6 +4555,9 @@ Import from the entries listed below; source area files are internal.
 | `SurfacePort` | `pi-roundtable` | type |
 | `SurfaceRouting` | `pi-roundtable` | type |
 | `SurfaceThreads` | `pi-roundtable` | type |
+| `SurfaceMessageEvents` | `pi-roundtable` | type |
+| `ObserveFilter` | `pi-roundtable` | type |
+| `MessageObserver` | `pi-roundtable` | type |
 | `SYSTEM_PRINCIPAL` | `pi-roundtable` | value |
 | `THE_SPEAKER` | `pi-roundtable` | value |
 | `THREADS` | `pi-roundtable` | value |
@@ -4746,6 +4782,10 @@ Import from the entries listed below; source area files are internal.
 | `InterimPosterOptions` | `pi-roundtable/kit` | type |
 | `OpsAlerts` | `pi-roundtable/kit` | value |
 | `OpsAlertsOptions` | `pi-roundtable/kit` | type |
+| `OpsAlert` | `pi-roundtable/kit` | type |
+| `OpsResolution` | `pi-roundtable/kit` | type |
+| `OpsSeverity` | `pi-roundtable/kit` | type |
+| `OpsSink` | `pi-roundtable/kit` | type |
 | `OpsRaiseOptions` | `pi-roundtable/kit` | type |
 | `OpsAlertKind` | `pi-roundtable/kit` | type |
 | `JEV_COMPACTION_ENGINE` | `pi-roundtable/kit` | value |

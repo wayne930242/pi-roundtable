@@ -119,9 +119,13 @@ export {
 } from "./mirror.ts";
 export { oidcIdentity, oidcProvider } from "./oidc.ts";
 export type {
+	OpsAlert,
 	OpsAlertKind,
 	OpsAlertsOptions,
 	OpsRaiseOptions,
+	OpsResolution,
+	OpsSeverity,
+	OpsSink,
 } from "./ops-alerts.ts";
 export { OpsAlerts } from "./ops-alerts.ts";
 export {

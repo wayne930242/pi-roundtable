@@ -122,6 +122,7 @@ test("hello greets", async () => {
 });
 ```
 
+外掛也可以只聽、不擁有頻道：`context.observe` 會聽到伺服器頻道的訊息，不論由哪個 claim 擁有；claim 會得知訊息被刪除或編輯；`OpsAlerts` 能告訴 sink 告警的類型，以及故障何時結束。
 [外掛指南](docs/plugins.md)（英文）說明外掛能新增的每個部分（工具、提示詞區段、智慧體、事件、服務、migration、provider、斜線指令、HTTP 路由等等）、啟動與停止的順序，以及每一種啟動錯誤和它的修正方式。
 指南裡的範例放在 [`examples/`](examples)，測試套件會執行每一個範例。
 `pi-roundtable/kit` 提供頻道認領（claim）、工具與呈現用的輔助函式，以及 context 現有服務的純型別名稱。
