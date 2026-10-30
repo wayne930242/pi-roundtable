@@ -1052,8 +1052,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"This page is not available.": "這個頁面無法使用。",
 	"You can read this room but not write in it.":
 		"你可以閱讀這個聊天室，但不能在其中發言。",
-	"Send as": "傳送方式",
-	"Ask the agent": "請夥伴處理",
+	"@AI": "@AI",
+	"Write an internal note…": "寫一則內部備註…",
+	"Ask AI…": "問 AI…",
 	"Earlier cards ({count})": "先前的卡片（{count}）",
 	Replaced: "已被取代",
 	Image: "圖片",

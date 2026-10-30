@@ -127,6 +127,14 @@ function inboxPlugin(state: Inbox) {
 				kind: "inbox",
 				label: "Inbox",
 				icon: "chat",
+				// Padding is trimmed, text only is kept, and a label is cut to forty characters.
+				sendWording: {
+					note: { placeholder: "  Write to the team…  " },
+					turn: {
+						label: "@Atlas".padEnd(60, "x"),
+						placeholder: 42 as unknown as string,
+					},
+				},
 				list: async (viewer) => {
 					const mine = state.grants.get(viewer.principalId);
 					if (!mine) return undefined;
@@ -703,6 +711,10 @@ describeDb("the host rooms over a real host", () => {
 			},
 		});
 		expect(view.header.actions[0]?.id).toBe("assign");
+		expect(view.wording).toEqual({
+			note: { placeholder: "Write to the team…" },
+			turn: { label: "@Atlas".padEnd(40, "x") },
+		});
 		const kinds = view.messages.map((m) => [m.authorKind, m.text]);
 		expect(kinds).toContainEqual(["external", "Please call me"]);
 		expect(kinds).toContainEqual(["assistant", "I will ask them **now**"]);

@@ -8,11 +8,12 @@ import type {
 	HostIconName,
 	PictureRef,
 	RoomFile,
+	SendWording,
 } from "./api-types.ts";
 import { HOST_ICONS } from "./api-types.ts";
 import type { Visitor } from "./visitors.ts";
 
-export type { HostAuthorKind, HostIconName, PictureRef };
+export type { HostAuthorKind, HostIconName, PictureRef, SendWording };
 
 /** A host's icon name as the page may show it: one of `HOST_ICONS`, else none (the default shows). */
 export const hostIcon = (name: unknown): HostIconName | undefined =>
@@ -112,6 +113,13 @@ export interface HostRoomKind {
 	label: string;
 	/** An icon of the console's own set, shown beside the kind's section; none = no icon. */
 	icon?: HostIconName;
+	/**
+	 * The kind's own words for writing in its rooms. Where a viewer may send both a note and a turn,
+	 * the room shows one toggle, "@AI" (off = a note for the room's people only, on =
+	 * the agent answers): `turn.label` words the toggle, and each mode's `placeholder` is the box's
+	 * hint while that mode is on. Without it the console's own words show.
+	 */
+	sendWording?: SendWording;
 	/** Rooms this viewer may open. Undefined = the kind is not shown to them. */
 	list(
 		viewer: Viewer,

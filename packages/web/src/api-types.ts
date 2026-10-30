@@ -108,6 +108,15 @@ export const HOST_ICONS = [
 ] as const;
 export type HostIconName = (typeof HOST_ICONS)[number];
 
+/**
+ * How a kind of host room words its two ways to write: `turn` is talking to the agent (the toggle's
+ * label, and the box's hint while it is on), `note` is a message for the room's people only.
+ */
+export interface SendWording {
+	note?: { placeholder?: string };
+	turn?: { label?: string; placeholder?: string };
+}
+
 /** A host page that is not a room, in the places the shell lists it. */
 export interface PageLinkView {
 	id: string;

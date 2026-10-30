@@ -10,9 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - An owner can take a finished dispatch thread off the room list: a remove button on each finished row, and "Clear all" in the fold of a room's finished threads. The thread leaves the list for every owner and every open page at once; it is hidden, not deleted, and stays readable by its address and through the links in its room. An open thread cannot be removed (409). The mark is the new column `web_threads.dismissed_at` (migration `web-threads-dismissed`, additive). Routes: `POST api/rooms/<thread>/dismiss`, `POST api/rooms/<room>/dismiss-threads`, and `GET api/rooms/<thread>` for the view of a thread the list does not carry (owners only, like the rest of `api/rooms`).
 - `HostPage.icon` and `HostRoomKind.icon`: an optional name from the console's own icon set (`HOST_ICONS`, type `HostIconName`, exported): `chat`, `link`, `activity`, `users`, `megaphone`, `qr`, `settings`, `bell`, `file`, `list`, `shield`, `lock`, `sparkle`. A page's icon shows in the navigation (the list icon stays the default), a kind's beside its section in the room list. A name outside the set is dropped and the default shows. `ConfigView.pages[].icon` and `.kinds[].icon` carry it. The new glyphs load only when a page names one.
 
-### Fixed
+### Changed
 
-- The send-mode chips of a host room (Note, Ask the agent) sit in the composer's column over its left edge, not at the pane's edge, when the pane is wider than the column.
+- A host room where a viewer may send both a note and a turn shows one `@AI` toggle over the composer's bar instead of the two chips "Note" and "Ask the agent": off sends a note for the room's people only, on sends a turn the agent answers, and the box's hint follows ("Write an internal note…" / "Ask AI…", never naming the room as a recipient; zh-TW 「寫一則內部備註…」 / 「問 AI…」). The toggle stands in the composer's column (it sat at the pane's edge on a wide screen) and is at least 44 px high. A room open to one way only shows that way's hint and no toggle. `Composer` takes `placeholder` and `above`, and `ModeToggle` is a piece of its own, for any room that offers the choice.
+- `HostRoomKind.sendWording`: a kind may word the toggle (`turn.label`) and each way's hint (`note.placeholder`, `turn.placeholder`); text only, a label cut to 40 characters and a placeholder to 100. `HostRoomView.wording` carries it.
 
 ## [0.26.0] - 2026-10-30
 

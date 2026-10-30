@@ -12,6 +12,7 @@ import { HostActions, type RunAction } from "../components/host-actions.tsx";
 import { HostCard, isOpenCard } from "../components/host-card.tsx";
 import { HostPicture } from "../components/host-picture.tsx";
 import { Icon } from "../components/icons.tsx";
+import { ModeToggle } from "../components/mode-toggle.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
 import ReadLog from "../components/read-log.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
@@ -343,6 +344,11 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 			: sends.includes("turn")
 				? "turn"
 				: sends[0];
+	// The box says what writing here does, never who gets it: the room is not the recipient.
+	const placeholder =
+		chosen === "turn"
+			? (view?.wording?.turn?.placeholder ?? t("Ask AI…"))
+			: (view?.wording?.note?.placeholder ?? t("Write an internal note…"));
 	const title = view?.header.title ?? roomKey;
 	const messages = room?.messages ?? [];
 	return (
@@ -440,28 +446,26 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 			) : null}
 			{view && sends.length > 0 ? (
 				<>
-					{sends.length > 1 ? (
-						<fieldset className="mode-switch" aria-label={t("Send as")}>
-							{sends.map((one) => (
-								<button
-									key={one}
-									type="button"
-									className={chosen === one ? "" : "secondary"}
-									aria-pressed={chosen === one}
-									onClick={() => {
-										lastMode = one;
-										setMode(one);
-									}}
-								>
-									{one === "note" ? t("Note") : t("Ask the agent")}
-								</button>
-							))}
-						</fieldset>
-					) : null}
 					<Composer
 						key={roomKey}
 						draftKey={roomKey}
 						name={title}
+						placeholder={placeholder}
+						{...(sends.length > 1
+							? {
+									above: (
+										<ModeToggle
+											on={chosen === "turn"}
+											label={view?.wording?.turn?.label ?? t("@AI")}
+											onChange={(next) => {
+												const one = next ? "turn" : "note";
+												lastMode = one;
+												setMode(one);
+											}}
+										/>
+									),
+								}
+							: {})}
 						limits={limits}
 						stoppable={Boolean(room?.stoppable)}
 						onSend={(text, files) => {

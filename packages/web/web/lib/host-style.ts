@@ -348,25 +348,6 @@ export const HOST_CSS = `
 	vertical-align: -2px;
 }
 
-/* The chips sit in the composer's column, over its left edge, wherever the pane is wide. */
-.mode-switch {
-	display: flex;
-	width: 100%;
-	max-width: 52rem;
-	min-width: 0;
-	margin: 0 auto;
-	border: 0;
-	gap: var(--space-1);
-	padding: var(--space-2) var(--space-3) 0;
-}
-
-.mode-switch button {
-	min-height: 0;
-	padding: var(--space-1) var(--space-3);
-	border-radius: var(--radius-full);
-	font-size: var(--text-sm);
-}
-
 .host-form {
 	display: flex;
 	flex-direction: column;
