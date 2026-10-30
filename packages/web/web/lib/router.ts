@@ -80,6 +80,17 @@ export function blockNavigation(ask: NavigationBlocker): () => void {
 	return release;
 }
 
+/**
+ * What names the page under the topbar: a new name mounts it afresh, with its state and its
+ * entrance. Beside the list the room changes under it, and the files change place inside their
+ * pane, so both keep one name and the list, the tree and what they hold stay where they are.
+ */
+export function pageKey(pane: string, key: string | undefined, wide: boolean) {
+	if (wide && pane === "room") return "room";
+	if (pane === "workspace") return "workspace";
+	return `${pane}/${key ?? ""}`;
+}
+
 /** Goes to a pane (and key) as the browser's own navigation would, with a view transition. */
 export function navigate(
 	pane: string,
@@ -121,7 +132,10 @@ export function useRoute(): Route {
 			// A history step that lands on the page already shown (the room switcher's own entry) moves nothing.
 			if (next.pane === shown.current.pane && next.key === shown.current.key)
 				return;
-			transition(() => setRoute(next));
+			// A move inside the files pane changes what one pane lists; a cross-fade of the whole page would flash it.
+			if (next.pane === "workspace" && shown.current.pane === "workspace")
+				setRoute(next);
+			else transition(() => setRoute(next));
 			window.scrollTo(0, 0);
 		};
 		window.addEventListener("hashchange", onChange);

@@ -1,5 +1,5 @@
-/** A stylesheet imported with `with { type: "file" }` is the URL of the file the build emits. */
+/** A stylesheet imported with `with { type: "file" }` is the URL of the file the build emits, and with `with { type: "text" }` its text. */
 declare module "*.css" {
-	const url: string;
-	export default url;
+	const urlOrText: string;
+	export default urlOrText;
 }

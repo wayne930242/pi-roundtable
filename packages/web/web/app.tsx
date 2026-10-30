@@ -29,7 +29,7 @@ import {
 } from "./lib/messages.ts";
 import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
-import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
+import { hrefFor, pageKey, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
 import { openCards, tabTitle, useTabUnread } from "./lib/tab-count.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
@@ -508,13 +508,7 @@ function Console({ config }: { config: ConfigView }) {
 							<ThemeButton />
 						</div>
 					</header>
-					<main
-						className="route"
-						// Beside the list the room changes under it; the list stays where it is.
-						key={
-							wide && pane === "room" ? "room" : `${pane}/${route.key ?? ""}`
-						}
-					>
+					<main className="route" key={pageKey(pane, route.key, wide)}>
 						<ErrorBoundary resetKey={`${pane}/${route.key ?? ""}`}>
 							<Suspense
 								fallback={

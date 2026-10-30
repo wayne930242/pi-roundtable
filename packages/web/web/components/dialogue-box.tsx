@@ -272,10 +272,17 @@ export function DialogueBox(props: DialogueBoxProps) {
 						aria-label={
 							collapsed ? t("Show the message box") : t("Hide the message box")
 						}
+						title={
+							collapsed ? t("Show the message box") : t("Hide the message box")
+						}
 						aria-expanded={!collapsed}
 						onClick={() => setCollapsed((now) => !now)}
 					>
-						<Icon name="menu" />
+						{/* The chevron points where the box goes: down to tuck it away, up to bring it back. */}
+						<Icon
+							name="chevron"
+							style={{ rotate: collapsed ? "-90deg" : "90deg" }}
+						/>
 					</button>
 				</span>
 			</header>

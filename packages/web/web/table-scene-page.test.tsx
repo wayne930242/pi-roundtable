@@ -433,6 +433,31 @@ test("the Log button opens the room's whole message list over the scene", async 
 	);
 });
 
+test("the box's last button hides it with a chevron and says so, and the chevron turns to bring it back; no second dots stand beside More", async () => {
+	await render("lena");
+	await arrive();
+	const hide = () => query<HTMLButtonElement>(".scene-collapse");
+	const shape = (button: Element | null) =>
+		button?.querySelector("path")?.getAttribute("d");
+	const turn = () => hide()?.querySelector("svg")?.style.rotate;
+	// A chevron, not the dots of More or the vertical dots the button had.
+	expect(shape(hide())).toBe("M9 6l6 6-6 6");
+	expect(shape(hide())).not.toBe(shape(query(".scene-more")));
+	expect(shape(hide())).not.toBe("M12 5h.01M12 12h.01M12 19h.01");
+	// It points down while the box is up: it tucks it away.
+	expect(turn()).toBe("90deg");
+	expect(hide()?.getAttribute("aria-label")).toBe("Hide the message box");
+	expect(hide()?.getAttribute("title")).toBe("Hide the message box");
+	expect(hide()?.getAttribute("aria-expanded")).toBe("true");
+	await page.click(hide());
+	expect(query(".scene-box")?.hasAttribute("data-collapsed")).toBe(true);
+	// And up once it is tucked away: it brings it back.
+	expect(turn()).toBe("-90deg");
+	expect(hide()?.getAttribute("aria-label")).toBe("Show the message box");
+	expect(hide()?.getAttribute("title")).toBe("Show the message box");
+	expect(hide()?.getAttribute("aria-expanded")).toBe("false");
+});
+
 const CREW = "app:group.crew";
 
 const crew = (): RoomView => ({

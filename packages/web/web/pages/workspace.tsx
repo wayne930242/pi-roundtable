@@ -5,6 +5,7 @@ import {
 	useContext,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -20,11 +21,13 @@ import type {
 import { Confirm } from "../components/confirm.tsx";
 import { Dialog } from "../components/dialog.tsx";
 import { Icon } from "../components/icons.tsx";
+import { Select } from "../components/select.tsx";
 import { Sheet } from "../components/sheet.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { messageOf } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { size, when } from "../lib/format.ts";
+import { installStyle } from "../lib/lazy-style.ts";
 import { useLeaveGuard } from "../lib/leave-guard.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t, wording } from "../lib/messages.ts";
@@ -39,6 +42,8 @@ import {
 	placeOf,
 	segmentsOf,
 } from "../lib/workspace-place.ts";
+// The files' styles load with this page, not with every visit: the page was already a lazy chunk.
+import filesCss from "../styles/workspace.css" with { type: "text" };
 import type { EditorHandle } from "../workspace/codeeditor.ts";
 import { Glyph } from "../workspace/icons.tsx";
 import { FileCard, MediaPreview } from "../workspace/preview.tsx";
@@ -94,15 +99,43 @@ interface Shared {
 }
 const SharedContext = createContext<Shared>({ rev: 0, bump: () => undefined });
 
+installStyle("workspace", filesCss);
+
+/**
+ * What was listed last for each folder. A folder that was shown before shows at once while it is
+ * fetched again, so a visit, or a branch of the tree opened a second time, never starts from nothing.
+ */
+const LISTED = new Map<string, WorkspaceListView>();
+const LISTED_MAX = 200;
+function remember(key: string, data: WorkspaceListView): void {
+	LISTED.delete(key);
+	LISTED.set(key, data);
+	const oldest = LISTED.keys().next().value;
+	if (LISTED.size > LISTED_MAX && oldest !== undefined) LISTED.delete(oldest);
+}
+/** Forgets the folders listed so far (a test starts clean; the page never needs it). */
+export const forgetListings = (): void => LISTED.clear();
+
+interface Listing {
+	data?: WorkspaceListView;
+	error?: string;
+	/** The folder `data` lists: a new place keeps showing the last one until its own arrives. */
+	at?: { root: string; path: string };
+	/** `data` is of the folder shown before, and the one asked for is on its way. */
+	pending?: true;
+}
+
 /** A directory's entries, fetched when it is shown, when something changed, and when the page regains focus. */
-function useListing(root: string, path: string, enabled = true) {
+function useListing(root: string, path: string, enabled = true): Listing {
 	const { rev } = useContext(SharedContext);
 	const [focus, setFocus] = useState(0);
 	const [state, setState] = useState<{
 		key: string;
+		root: string;
+		path: string;
 		data?: WorkspaceListView;
 		error?: string;
-	}>({ key: "" });
+	}>({ key: "", root, path });
 	const key = `${root}:${path}`;
 	useEffect(() => {
 		const onFocus = () => setFocus((value) => value + 1);
@@ -114,16 +147,24 @@ function useListing(root: string, path: string, enabled = true) {
 		if (!enabled) return;
 		let current = true;
 		workspaceApi.list(root, path).then(
-			(data) => current && setState({ key, data }),
-			(failure) => current && setState({ key, error: messageOf(failure) }),
+			(data) => {
+				remember(key, data);
+				if (current) setState({ key, root, path, data });
+			},
+			(failure) =>
+				current && setState({ key, root, path, error: messageOf(failure) }),
 		);
 		return () => {
 			current = false;
 		};
 	}, [root, path, enabled, rev, focus]);
-	return state.key === key
-		? { data: state.data, error: state.error }
-		: { data: undefined, error: undefined };
+	if (state.key === key)
+		return { data: state.data, error: state.error, at: state };
+	const known = LISTED.get(key);
+	if (known) return { data: known, at: { root, path } };
+	// Not listed before: the last folder stays up, dimmed, rather than a blank that collapses the pane.
+	if (state.data) return { data: state.data, at: state, pending: true };
+	return {};
 }
 
 const hrefOf = (place: Place) => hrefFor("workspace", placeKey(place));
@@ -186,9 +227,10 @@ function TreeDir(props: {
 	toggle(path: string): void;
 	current: Place | undefined;
 }) {
-	const { data, error } = useListing(props.root, props.path);
+	const { data, error, pending } = useListing(props.root, props.path);
 	if (error) return <p className="ws-tree-note">{error}</p>;
-	if (!data) return <p className="ws-tree-note">…</p>;
+	// Another root's folders are not shown in this one's place while it loads.
+	if (!data || pending) return <p className="ws-tree-note">…</p>;
 	if (data.entries.length === 0)
 		return <p className="ws-tree-note">{t("This folder is empty")}</p>;
 	return (
@@ -269,18 +311,32 @@ function DirView(props: {
 	path: string;
 	onMenu(entry: WorkspaceEntry): void;
 }) {
-	const { data, error } = useListing(props.root.id, props.path);
+	const { data, error, at, pending } = useListing(props.root.id, props.path);
 	const { timeZone } = useConfig();
+	const top = useRef<HTMLDivElement>(null);
+	const shownRoot = at?.root ?? props.root.id;
+	const shownPath = at?.path ?? props.path;
+	// A folder opens at its top, and the one it replaces is gone only once the new one is there.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a different folder on show is the trigger
+	useLayoutEffect(() => {
+		top.current?.closest(".ws-main")?.scrollTo?.(0, 0);
+	}, [shownRoot, shownPath]);
 	if (error) return <Failure message={error} />;
 	if (!data) return <Loading />;
 	if (data.missing) return <Empty>{t("No files yet")}</Empty>;
 	if (data.entries.length === 0)
 		return <Empty>{t("This folder is empty")}</Empty>;
 	return (
-		<>
+		<div
+			ref={top}
+			className="ws-listing"
+			data-pending={pending || undefined}
+			aria-busy={pending || undefined}
+			inert={pending || undefined}
+		>
 			<ul className="ws-rows">
 				{data.entries.map((entry) => {
-					const target = entryTarget(props.root.id, props.path, entry);
+					const target = entryTarget(shownRoot, shownPath, entry);
 					const body = (
 						<>
 							<Glyph
@@ -337,7 +393,7 @@ function DirView(props: {
 			{data.truncated ? (
 				<p className="meta">{t("Only the first 2,000 items are listed")}</p>
 			) : null}
-		</>
+		</div>
 	);
 }
 
@@ -1293,7 +1349,8 @@ export function WorkspacePage() {
 					<Icon name="back" />
 				</a>
 			) : (
-				<select
+				<Select
+					chip
 					className="ws-root-picker"
 					aria-label={t("Place")}
 					value={root.id}
@@ -1309,7 +1366,7 @@ export function WorkspacePage() {
 							{rootLabel(one)}
 						</option>
 					))}
-				</select>
+				</Select>
 			)}
 			<Breadcrumbs root={root} path={place.path} />
 			{root.writable ? (
