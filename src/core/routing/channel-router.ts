@@ -25,6 +25,7 @@ import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
 import { ForwardJoin } from "./forward-join.ts";
+import type { PeerBots } from "./peer-bots.ts";
 import { isSystemTurn } from "./system-turns.ts";
 
 export interface ChannelRouterOptions {
@@ -45,6 +46,8 @@ export interface ChannelRouterOptions {
 	surfaces?: Pick<SurfacePort, "of"> & Partial<Pick<SurfacePort, "sendReply">>;
 	/** How long a bare forward waits for the text sent with it; FORWARD_JOIN_MS by default. */
 	forwardJoinMs?: number;
+	/** The other bots whose messages are answered like a guest's, with the rounds they get; without it, no bot's. */
+	peerBots?: PeerBots;
 }
 
 /** Claims by descending priority, keeping registration order among equals; refuses a repeated name. */
@@ -101,7 +104,16 @@ export class ChannelRouter implements ConversationPort {
 		return this.#forwards.handle(message, (m) => this.#route(m));
 	}
 
-	async #route(message: InboundMessage): Promise<void> {
+	async #route(given: InboundMessage): Promise<void> {
+		// Only the router says a message is a peer bot's.
+		const { peerBot: _dropped, ...plain } = given;
+		const peers = this.#options.peerBots;
+		if (peers && !plain.authorIsBot && !plain.integration)
+			peers.personPosted(plain.channel);
+		const listed = peers?.lists(plain) === true;
+		const message: InboundMessage = listed
+			? { ...plain, peerBot: true }
+			: plain;
 		if (
 			!message.text.trim() &&
 			message.attachments.length === 0 &&
@@ -111,8 +123,16 @@ export class ChannelRouter implements ConversationPort {
 		const claim = this.#owner(message.channel, message.space);
 		if (!claim) return;
 		const started = await this.#inOrder(message.channel, async () => {
+			if (listed && peers?.exhausted(message.channel)) {
+				this.#options.logger.info(
+					{ channel: message.channel, bot: message.authorId },
+					"peer bot message ignored: its rounds in this channel are used up until a person posts",
+				);
+				return undefined;
+			}
 			const admission = await this.#admit(claim, message);
 			if (!admission) return undefined;
+			if (listed) peers?.answered(message.channel);
 			// Once the host shuts down only the turns already running finish: this one starts nothing.
 			if (this.#options.queue.closed) {
 				await this.#refuse(message, admission);
@@ -197,10 +217,11 @@ export class ChannelRouter implements ConversationPort {
 	/**
 	 * Who wrote the message, as its surface reports them; a surface that reports no `actor` has it
 	 * read from the author fields under its own name, once warned. None for a bot or an
-	 * integration.
+	 * integration, unless the host lists the bot as a peer.
 	 */
 	#actorOf(message: InboundMessage): ActorFacts | undefined {
-		if (message.authorIsBot || message.integration) return undefined;
+		if ((message.authorIsBot && !message.peerBot) || message.integration)
+			return undefined;
 		if (message.actor) return message.actor;
 		const { surface } = parseChannelKey(message.channel);
 		if (!this.#warned.has(surface)) {

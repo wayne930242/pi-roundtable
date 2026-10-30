@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Peer bots: `discord.peerBots` (also the host option `peerBots`, and `testPlugin({ peerBots })`) lists other bots by user id whose mention or reply the host answers like a guest's, so separate bots can talk to each other. Explicit ids only: there is no wildcard and no "all bots", an id that is not a Discord id stops the start with a `ConfigError` naming its place, and leaving it out keeps today's behaviour, where every bot's message is ignored. An entry can be limited to servers (`guilds`) or channels (`channels`). The router sets the new `InboundMessage.peerBot` on a listed bot's message and resolves its `speaker` through the identity service as for a person, so `access` still decides whether the bot is served and at which tier; webhooks are never peers and a surface's own `peerBot` is dropped. A channel answers at most `maxRounds` (default 3) of their messages in a row, counted when a claim takes one; a person's message restarts the count and the messages after the cap are ignored. The agent server answers a peer that mentions the agent or replies to it. A claim of your own uses the new `answersAuthor` (`answersAuthor(message)`, from `pi-roundtable/kit`) where it checked `!message.authorIsBot`; the types `PeerBotsConfig` and `PeerBotEntry` are in the main entry. Replies already allow user mentions, so a `<@id>` of a peer pings it (now covered by a test). Channel context is unchanged. See [the plugin guide](docs/plugins.md#peer-bots-answering-other-bots).
+
 ## [0.26.3] - 2026-10-30
 
 ### Added

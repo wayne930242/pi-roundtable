@@ -18,6 +18,7 @@ import type { OwnerIdentity } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
 import { withReference } from "../routing/message-text.ts";
+import { answersAuthor } from "../routing/peer-bots.ts";
 import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
 import { addressee, attributed, type Speaker } from "../speakers.ts";
@@ -180,7 +181,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 				return webhookReport(message);
 			// Who may talk to the agents, and at which tier, the router resolved through the identity service.
 			const { speaker } = message;
-			if (message.authorIsBot || !speaker) return undefined;
+			if (!answersAuthor(message) || !speaker) return undefined;
 			if (options.speakers === "owners" && speaker.tier !== "owner")
 				return undefined;
 			const { channel, messageId } = message;

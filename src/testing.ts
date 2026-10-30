@@ -68,6 +68,7 @@ import {
 	type ConversationTurns,
 	conversationTurns,
 } from "./core/routing/conversation-turns.ts";
+import { PeerBots, type PeerBotsConfig } from "./core/routing/peer-bots.ts";
 import { surfacePort } from "./core/routing/surface-port.ts";
 import {
 	AGENTS,
@@ -258,6 +259,8 @@ export interface TestPluginOptions {
 	apiKeys?: Readonly<Record<string, string>>;
 	/** How long the router holds a bare forward for the message that follows it; the host option `conversations.forwardJoinMs`. */
 	forwardJoinMs?: number;
+	/** The peer bots the router answers, as the host option `peerBots` (`discord.peerBots`); default none. */
+	peerBots?: PeerBotsConfig;
 	/** The addresses `context.listener(id)` reports; a plugin that reads one gets `undefined` for any not listed. */
 	listeners?: readonly ListenerConfig[];
 }
@@ -602,6 +605,7 @@ export async function testPlugin(
 				: undefined),
 		queue,
 		logger,
+		...(options.peerBots ? { peerBots: new PeerBots(options.peerBots) } : {}),
 		...(options.forwardJoinMs === undefined
 			? {}
 			: { forwardJoinMs: options.forwardJoinMs }),

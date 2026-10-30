@@ -12,6 +12,7 @@ import type { Locale } from "./i18n/index.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
 import type { AgentTools, RoundtablePlugin, Service } from "./plugin.ts";
+import type { PeerBotsConfig } from "./routing/peer-bots.ts";
 import { RUNTIME } from "./services.ts";
 import type { ChannelKey } from "./sessions.ts";
 import type { ToolTierTable } from "./tool-tiers.ts";
@@ -50,6 +51,11 @@ export interface RoundtableOptions {
 	conversations?: {
 		forwardJoinMs?: number;
 	};
+	/**
+	 * The other bots on Discord whose mentions and replies are answered like a guest's (what
+	 * `discord.peerBots` sets); without it no bot is. Stops the start for an id that is not a Discord id.
+	 */
+	peerBots?: PeerBotsConfig;
 	/** The model the default judge asks, when no plugin provides a judge. */
 	judgeModel?: JudgeModel;
 	/**
