@@ -623,6 +623,43 @@ test("a divider stands where the new messages began, and each reader's mark unde
 	);
 });
 
+test("in a host room the messages past the read marker wear a frame, the person's own do not, and a pointer passing over one clears it", async () => {
+	loadMessages();
+	hostState.keepReads(ROOM2, undefined, 2);
+	const scroller = { current: null as HTMLElement | null };
+	await shown(
+		<div
+			ref={(element) => {
+				scroller.current = element;
+			}}
+		>
+			<ReadLog
+				roomKey={ROOM2}
+				enterAfter={5}
+				quotable={false}
+				scroller={scroller}
+				host
+			/>
+		</div>,
+	);
+	const framed = () =>
+		[...page.container.querySelectorAll<HTMLElement>("li[data-unread]")].map(
+			(item) => item.dataset.mid,
+		);
+	// The cursor was 2; message 4 is the person's own.
+	expect(framed()).toEqual(["3", "5"]);
+	const target = page.container.querySelector("li[data-mid='3'] .bubble");
+	if (!target) throw new Error("no bubble");
+	await page.act(() => {
+		target.dispatchEvent(
+			Object.assign(new Event("pointerover", { bubbles: true }), {
+				pointerType: "mouse",
+			}),
+		);
+	});
+	expect(framed()).toEqual(["5"]);
+});
+
 const rects = new Map<string, { top: number; bottom: number }>();
 function pretendLayout(): () => void {
 	const realRect = HTMLElement.prototype.getBoundingClientRect;

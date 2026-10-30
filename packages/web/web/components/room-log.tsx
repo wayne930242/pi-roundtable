@@ -78,9 +78,16 @@ export async function loadOlderMessages(roomKey: string): Promise<boolean> {
 export interface RowDecor {
 	before?(message: RoomMessage): ReactNode;
 	after?(message: RoomMessage): ReactNode;
+	/** Whether a message wears the unread frame. */
+	unread?(message: RoomMessage): boolean;
 	message?(
 		message: RoomMessage,
-		look: { header: boolean; enter: boolean; timeZone: string },
+		look: {
+			header: boolean;
+			enter: boolean;
+			unread: boolean;
+			timeZone: string;
+		},
 	): ReactNode;
 }
 
@@ -169,6 +176,7 @@ export function RoomLog(props: {
 									enter:
 										props.enterAfter !== undefined &&
 										row.item.message.id > props.enterAfter,
+									unread: props.decor?.unread?.(row.item.message) ?? false,
 									timeZone: config.timeZone,
 								}) ?? (
 									<MessageRow
@@ -183,6 +191,7 @@ export function RoomLog(props: {
 											props.enterAfter !== undefined &&
 											row.item.message.id > props.enterAfter
 										}
+										unread={props.decor?.unread?.(row.item.message) ?? false}
 										timeZone={config.timeZone}
 										quotable={props.quotable}
 									/>
