@@ -208,6 +208,7 @@ export async function mountRoundTable(
 			syncList();
 			inner!.setState(id, st);
 		},
+		setMark: (id, mark) => inner!.setMark(id, mark),
 		setAvatar(id, svg) {
 			const s = seats.get(id);
 			if (s) s.avatarSvg = svg;

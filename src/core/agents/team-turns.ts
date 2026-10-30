@@ -477,6 +477,8 @@ export class TeamTurns {
 	 * One owner message in a group channel: scored, then answered by the chosen members one at
 	 * a time, each seeing every group message since its last turn. Call inside the queue.
 	 */
+	/** Ends the group channel's running round on Stop: the sessions to stop, or undefined when none runs. */
+	readonly stopRound = (channel: ChannelKey) => this.#groups.stopRound(channel);
 	answerGroup(
 		channel: ChannelKey,
 		speaker: Speaker,

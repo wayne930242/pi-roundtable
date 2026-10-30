@@ -92,3 +92,60 @@ test("a file an agent attaches in a host room is bound to it, with the kind's ex
 	expect(puts[0]?.[4]).toEqual({ room: "app:inbox.1", expiresAt: 42 });
 	expect(puts[1]?.[4]).toBeUndefined();
 });
+
+const GROUP = "app:group.crew" as ChannelKey;
+
+test("a group round reaches the room's audience as a frame, a page that opens mid-round reads it, and an ended round leaves no snapshot", () => {
+	const frames: { frame: unknown; audience: unknown }[] = [];
+	const surface = new AppSurface({
+		surface: "app",
+		sockets: {
+			deliver: (frame: unknown, audience: unknown) =>
+				void frames.push({ frame, audience }),
+		},
+		audienceOf: () => ({ owners: true }),
+		isHostRoom: () => false,
+		log: { append: async (row: object) => ({ id: 1, ...row }) },
+		files: {},
+		uploads: { maxBytes: 1 },
+		threads: {},
+		canHost: async () => false,
+		changed: () => undefined,
+		logger: { warn: () => undefined },
+	} as never);
+	const running = {
+		id: 7,
+		state: "running" as const,
+		current: "scout",
+		next: ["mason"],
+		spoken: [],
+		replies: 0,
+		limit: 8,
+	};
+	surface.groupRound(GROUP, running);
+	expect(frames).toEqual([
+		{
+			frame: { type: "round", room: GROUP, round: running },
+			audience: { owners: true },
+		},
+	]);
+	expect(surface.roundOf(GROUP)).toEqual(running);
+	expect(surface.roundOf(ROOM)).toBeUndefined();
+	const ended = {
+		...running,
+		state: "ended" as const,
+		ended: "done" as const,
+		next: [],
+		spoken: ["scout", "mason"],
+		replies: 2,
+	};
+	delete (ended as { current?: string }).current;
+	surface.groupRound(GROUP, ended);
+	expect(frames.at(-1)?.frame).toEqual({
+		type: "round",
+		room: GROUP,
+		round: ended,
+	});
+	// The page keeps what it was told; a page that opens afterwards finds no round running.
+	expect(surface.roundOf(GROUP)).toBeUndefined();
+});

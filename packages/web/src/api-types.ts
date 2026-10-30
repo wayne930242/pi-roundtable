@@ -528,6 +528,8 @@ export interface RoomView {
 	agent?: string;
 	/** A turn runs that Stop would end. */
 	stoppable: boolean;
+	/** A group room: the round running now, who has spoken and who is next; absent when none runs. */
+	round?: RoundView;
 	/** The newest stored message, if any. */
 	last?: RoomMessage;
 	/** Messages past this person's read cursor; absent when none. */
@@ -1181,6 +1183,28 @@ export type ClientFrame =
 	| { type: "cancel"; prompt: string };
 
 /** What the server sends: one JSON object per WebSocket text message. */
+/**
+ * Where a group's round stands: the members' answers to one owner message, one after another.
+ * `id` is the group message that opened the round, so a new round is told from the last one.
+ */
+export interface RoundView {
+	id: number;
+	state: "running" | "ended";
+	/** The member speaking now, by name. */
+	current?: string;
+	/** The members still to speak, in order, a handoff appended. */
+	next: string[];
+	/** The members who have replied so far, in order. */
+	spoken: string[];
+	/** The replies made so far, and the most a round holds. */
+	replies: number;
+	limit: number;
+	/** Why the round ended: every member spoke, it reached its limit, or the owner stopped it. */
+	ended?: "done" | "limit" | "stopped";
+	/** The owner's messages waiting in the room for the next round. */
+	queued?: number;
+}
+
 export type ServerFrame =
 	/** The socket is authenticated; sent first, and followed by every open card. */
 	| {
@@ -1215,6 +1239,8 @@ export type ServerFrame =
 			/** Only on the frame where `typing` turns false. */
 			outcome?: "done" | "failed";
 	  }
+	/** Where a group room's round stands; sent at each step and when it ends. */
+	| { type: "round"; room: string; round: RoundView }
 	/** Which agents work now, anywhere (Discord included); sent after `ready` and when it changes. */
 	| { type: "presence"; agents: Record<string, { busy: boolean }> }
 	| { type: "prompt"; room: string; prompt: PromptFrame }

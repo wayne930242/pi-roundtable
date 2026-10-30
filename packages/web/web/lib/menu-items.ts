@@ -7,10 +7,13 @@ import type {
 	PromptQuestion,
 	RoomFile,
 	RoomMessage,
+	RoomView,
 } from "../../src/api-types.ts";
 import { type MenuItem, openMenu } from "./action-menu.ts";
 import { openAgentSheet } from "./agent-sheet.ts";
+import { messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
+import { COUNCIL_MIN } from "./council.ts";
 import { quoteInto } from "./drafts.ts";
 import { translate as t } from "./messages.ts";
 import { changeMode } from "./modes.ts";
@@ -18,6 +21,8 @@ import { setRoomMuted } from "./mute.ts";
 import { placementItems } from "./placement-items.ts";
 import { askRoomConfirm } from "./room-confirm.ts";
 import { fileUrl } from "./rooms.ts";
+import { navigate } from "./router.ts";
+import { refreshRooms, teamApi } from "./team-api.ts";
 import { openTeamSheet } from "./team-sheet.ts";
 import { toast } from "./toast.ts";
 
@@ -195,27 +200,60 @@ export function openAddMenu(button: HTMLElement, leave?: Leave): void {
 // ── A seat at the round table ────────────────────────────────────────────────────────────────
 
 /**
- * The menu of a seat on the round table, and of the box that talks to it: the agent leaves the table,
- * which is muting its room's push. Coming back is the sheet's switch, since an agent off the table has
- * no seat to hold.
+ * The menu of a council member's seat: the private chat, which opens the knight's own room, and
+ * taking the knight out of the council, which saves the group without it. A council cannot be left
+ * with fewer than two members, so the last removal asks to archive the council instead. Muting is not
+ * here: it only stops push, and lives in the knight's sheet and the room menu.
  */
-export function seatMenu(key: string): MenuSpec | undefined {
-	const view = store.getState().rooms[key]?.view;
-	if (view?.kind !== "agent") return undefined;
+export function seatMenu(key: string, council: string): MenuSpec | undefined {
+	const { rooms } = store.getState();
+	const view = rooms[key]?.view;
+	const group = rooms[council]?.view;
+	if (view?.kind !== "agent" || group?.kind !== "group") return undefined;
 	return {
 		title: view.displayName,
 		items: [
 			{
+				id: "chat",
+				label: t("Private chat"),
+				icon: "conversations",
+				run: () => navigate("room", key),
+			},
+			{
 				id: "leave",
-				label: t("Leave the table"),
-				icon: "bell-off",
-				run: async () => {
-					if (!(await setRoomMuted(key, true))) return;
-					toast(t("{name} left the table", { name: view.displayName }));
-				},
+				label: t("Remove from the council"),
+				icon: "close",
+				run: () => removeFromCouncil(group, view),
 			},
 		],
 	};
+}
+
+/** Saves the council without the knight; the host passes to the first member left when it was the one. */
+async function removeFromCouncil(
+	group: RoomView,
+	agent: RoomView,
+): Promise<void> {
+	const left = (group.members ?? []).filter((name) => name !== agent.name);
+	if (left.length < COUNCIL_MIN) {
+		askRoomConfirm({
+			kind: "archive",
+			room: group.key,
+			name: group.displayName,
+		});
+		return;
+	}
+	try {
+		const profile = await teamApi.group(group.name);
+		await teamApi.updateGroup(group.name, {
+			members: left,
+			...(profile.host === agent.name ? { host: left[0] ?? "" } : {}),
+		});
+		await refreshRooms();
+		toast(t("{name} left the council", { name: agent.displayName }));
+	} catch (failure) {
+		toast(messageOf(failure), "danger");
+	}
 }
 
 // ── A message ────────────────────────────────────────────────────────────────────────────────

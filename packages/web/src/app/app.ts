@@ -334,7 +334,10 @@ export class OwnerApp {
 			log,
 			modes,
 			mutes,
-			activity: (room) => surface.activityOf(room),
+			activity: (room) => {
+				const round = surface.roundOf(room);
+				return { ...surface.activityOf(room), ...(round ? { round } : {}) };
+			},
 			// The agent rooms are the owners'; where there are several, they can leave each other notes.
 			readers: async () => (await identity.owners()).length > 1,
 		});

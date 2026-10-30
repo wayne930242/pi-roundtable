@@ -12,14 +12,6 @@ import type { Kit } from "./kit.ts";
 // group round, the seat's picture and the swap of a picture when the face changes. All of it is pure
 // or takes its clock, so it is tested without a browser; `components/round-table.tsx` wires it up.
 
-/**
- * The agents who sit at the round table: those whose room is not muted. Taking an agent off the table
- * is muting its room's push, so the table has no state of its own to keep in step with the room list.
- */
-export const seatedAtTable = <T extends { muted?: boolean | undefined }>(
-	views: readonly T[],
-): T[] => views.filter((view) => view.muted !== true);
-
 /** The table has no `sleepy` seat: a sleepy agent sits there idle. */
 export const seatStateOf = (state: AvatarState): SeatState =>
 	state === "sleepy" ? "idle" : state;

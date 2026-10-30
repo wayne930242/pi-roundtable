@@ -241,17 +241,16 @@ describe("the camera planner", () => {
 		expect(middle.y).toBeCloseTo(0, 6);
 	});
 
-	test("the ring seats twelve and a +N podium stands for the rest", () => {
-		expect(slotsFor(3)).toEqual({ count: 4, seated: 3, more: 0 });
+	test("the ring seats eight and never has a +N podium: the rest are not seated", () => {
+		expect(slotsFor(3)).toEqual({ count: 4, seated: 3 });
 		expect(slotsFor(MAX_SEATED)).toEqual({
 			count: 1 + MAX_SEATED,
 			seated: MAX_SEATED,
-			more: 0,
 		});
+		expect(MAX_SEATED).toBe(8);
 		expect(slotsFor(15)).toEqual({
-			count: 2 + MAX_SEATED,
+			count: 1 + MAX_SEATED,
 			seated: MAX_SEATED,
-			more: 3,
 		});
 	});
 

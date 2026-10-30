@@ -511,6 +511,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 								toEnd(true);
 							}}
 							onStop={() => connection.send({ type: "stop", room: roomKey })}
+							{...(view?.kind === "group"
+								? { stopLabel: t("Stop the round") }
+								: {})}
 							{...(dropped
 								? {
 										incoming: dropped,

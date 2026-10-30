@@ -8,7 +8,6 @@ import { loadKit } from "./lib/kit.ts";
 import {
 	createExpressionSwaps,
 	seatExpressionOf,
-	seatedAtTable,
 	seatPicture,
 	seatStateOf,
 	seatStates,
@@ -204,38 +203,5 @@ describe("seatPicture", () => {
 		expect(svg).toContain('viewBox="-7 -3 114 100"');
 		expect(svg).toContain('width="256" height="225"');
 		expect(svg).not.toContain('viewBox="0 0 100 100"');
-	});
-});
-
-describe("seatedAtTable", () => {
-	const view = (name: string, muted?: boolean) => ({
-		name,
-		...(muted === undefined ? {} : { muted }),
-	});
-
-	test("seats exactly the agents whose room is not muted, in the order given", () => {
-		const everyone = [
-			view("guide"),
-			view("scout", true),
-			view("mason", false),
-			view("cook", true),
-			view("nurse"),
-		];
-		expect(seatedAtTable(everyone).map((one) => one.name)).toEqual([
-			"guide",
-			"mason",
-			"nurse",
-		]);
-	});
-
-	test("an empty list, or one where everyone is muted, seats nobody", () => {
-		expect(seatedAtTable([])).toEqual([]);
-		expect(seatedAtTable([view("a", true), view("b", true)])).toEqual([]);
-	});
-
-	test("keeps the same objects, so a seat's picture is not drawn again for a neighbour's change", () => {
-		const keep = view("keep");
-		const [seated] = seatedAtTable([keep, view("gone", true)]);
-		expect(seated).toBe(keep);
 	});
 });

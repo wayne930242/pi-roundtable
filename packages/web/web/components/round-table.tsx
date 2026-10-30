@@ -5,27 +5,23 @@ import { useSelector } from "../lib/app-store.ts";
 import { suggestionFor } from "../lib/character-spec.ts";
 import { useCharacters, useRoomStates } from "../lib/characters.ts";
 import { hostUi } from "../lib/frame-taps.ts";
-import {
-	useHostedTable,
-	useHostSeats,
-	useSeatsHostRooms,
-} from "../lib/host-seats.ts";
+import { useHostedTable, useHostSeats } from "../lib/host-seats.ts";
 import { useKit } from "../lib/kit.ts";
 import { useCharacterStyle, useLook } from "../lib/look.ts";
-import { useMedia } from "../lib/media.ts";
 import { translate as t, wording } from "../lib/messages.ts";
+import { marksOf, speakerOfRound } from "../lib/round-view.ts";
 import { navigate } from "../lib/router.ts";
 import { cancelDive, diveInto } from "../lib/seat-dive.ts";
 import {
 	createExpressionSwaps,
 	type ExpressionSwaps,
 	type GroupRound,
-	seatedAtTable,
 	seatPicture,
 	seatStates,
 	seatUid,
 } from "../lib/seats.ts";
 import { useSkins } from "../lib/skins.ts";
+import { MAX_SEATED } from "../table/camera.ts";
 import type {
 	SeatInit,
 	SeatMenuRequest,
@@ -56,50 +52,53 @@ const warmHostRooms = (): void => {
 	hostUi().catch(() => undefined);
 };
 
-/** More seats than this on a phone held upright are also listed as buttons: the pictures get small. */
-const LIST_ABOVE = 10;
-
 /**
- * The agents of the room list, the coordinator first; only `members` of them when the table is a
- * group's. The owner's own table seats the agents whose room is not muted; `all` lists the muted ones
- * too, for the sheet that says who sits. A group's members sit whether muted or not. A person below
- * the owners has no agent rooms: the rooms their kinds list, newest first, sit instead. An owner whose host has kinds of room also has those rooms seated after the agents.
+ * The agents of the room list, the coordinator first, as `RoomView`s. Who sits is not mute's say:
+ * an owner's table seats `members` (a council's), or the first agents of the list when no members
+ * are named, and never more than the ring holds. A person below the owners has no agent rooms: the
+ * rooms their kinds list, newest first, sit instead.
  */
-export function useRoster(
-	members: readonly string[] | undefined,
-	options: { all?: boolean } = {},
-): RoomView[] {
-	const all = options.all === true;
+export function useRoster(members: readonly string[] | undefined): RoomView[] {
 	const hosted = useHostedTable();
 	const { views: hostRooms } = useHostSeats();
-	const seatsHostRooms = useSeatsHostRooms();
-	const owned = useSelector(
-		(state) => {
-			const agents = state.order
+	const owned = useSelector((state) => {
+		const agents = state.order
+			.map((key) => state.rooms[key]?.view)
+			.filter(
+				(view): view is RoomView => view !== undefined && view.kind === "agent",
+			);
+		const seated = members
+			? members
+					.slice(0, MAX_SEATED)
+					.map((name) => agents.find((view) => view.name === name))
+					.filter((view): view is RoomView => view !== undefined)
+			: agents;
+		return [...seated]
+			.sort((a, b) => Number(b.home) - Number(a.home))
+			.slice(0, MAX_SEATED);
+	}, members?.join("\n") ?? "");
+	return hosted ? hostRooms.slice(0, MAX_SEATED) : owned;
+}
+
+/** Every agent of the room list, in its order: whom a council can be made of. */
+export function useAgents(): RoomView[] {
+	return useSelector(
+		(state) =>
+			state.order
 				.map((key) => state.rooms[key]?.view)
 				.filter(
 					(view): view is RoomView =>
 						view !== undefined && view.kind === "agent",
-				);
-			const seated = members
-				? members
-						.map((name) => agents.find((view) => view.name === name))
-						.filter((view): view is RoomView => view !== undefined)
-				: agents;
-			const sitting = members || all ? seated : seatedAtTable(seated);
-			return [...sitting].sort((a, b) => Number(b.home) - Number(a.home));
-		},
-		`${all}\n${members?.join("\n") ?? ""}`,
+				),
+		"agents",
 	);
-	if (hosted) return hostRooms;
-	// The owners' agents sit first, as they always have; the host rooms they may list sit after them, newest first.
-	return seatsHostRooms && !members && !all ? [...owned, ...hostRooms] : owned;
 }
 
-/** Every agent of the room list, seated or not. */
-export const useAgents = (): RoomView[] => useRoster(undefined, { all: true });
-
-/** The rounds of the group rooms that count for this table: one group's, or every group's. */
+/**
+ * The rounds of the group rooms that count for this table: one group's, or every group's. The member
+ * a running round says speaks is the speaker, since the room's `agent` only names the author of the
+ * last reply.
+ */
 function useRounds(groupRoom: string | undefined): GroupRound[] {
 	return useSelector(
 		(state) =>
@@ -107,10 +106,24 @@ function useRounds(groupRoom: string | undefined): GroupRound[] {
 				.filter((room) =>
 					groupRoom ? room.key === groupRoom : room.view?.kind === "group",
 				)
-				.map((room) => ({
-					typing: room.typing,
-					...(room.agent === undefined ? {} : { agent: room.agent }),
-				})),
+				.map((room) => {
+					const speaking = speakerOfRound(room.round);
+					const agent = speaking ?? room.agent;
+					return {
+						typing: room.typing || speaking !== undefined,
+						...(agent === undefined ? {} : { agent }),
+					};
+				}),
+		groupRoom ?? "",
+	);
+}
+
+/** The signs the seats of a group's table wear for its round: who has spoken, who is next. */
+function useRoundMarks(
+	groupRoom: string | undefined,
+): Readonly<Record<string, string>> {
+	return useSelector(
+		(state) => marksOf(groupRoom ? state.rooms[groupRoom]?.round : undefined),
 		groupRoom ?? "",
 	);
 }
@@ -133,8 +146,6 @@ export interface RoundTableProps {
 	onSeat?(name: string): void;
 	/** A seat was held, right-clicked or given the Menu key; by default it has no menu. */
 	onSeatMenu?(request: SeatMenuRequest): void;
-	/** The "+N" podium was tapped. */
-	onMore?(): void;
 	/** The owner's own podium carries this name. */
 	ownerName?: string;
 }
@@ -154,14 +165,12 @@ export function RoundTable(props: RoundTableProps) {
 	const roster = useRoster(props.members);
 	const agentStates = useRoomStates(roster.map((view) => view.key));
 	const rounds = useRounds(props.groupRoom);
+	const marks = useRoundMarks(props.groupRoom);
 	const attention = useHostSeats().attention;
 	const hosted = useHostedTable();
 	const hostedRef = useRef(hosted);
 	hostedRef.current = hosted;
-	const upright = useMedia("(orientation: portrait)");
-	const listBelow =
-		variant === "full" &&
-		(props.list === true || (upright && roster.length > LIST_ABOVE));
+	const listBelow = variant === "full" && props.list === true;
 
 	const states = useMemo(
 		() =>
@@ -299,7 +308,6 @@ export function RoundTable(props: RoundTableProps) {
 				ownerName: latest.current.ownerName ?? t("You"),
 				focus: latest.current.focus ?? null,
 				onFocus: (id) => latest.current.onFocus?.(id),
-				onMore: () => latest.current.onMore?.(),
 				reducedMotion: "auto",
 				lowPower: "auto",
 				variant,
@@ -348,6 +356,15 @@ export function RoundTable(props: RoundTableProps) {
 		for (const seat of seats)
 			swaps.current?.seed(seat.id, current[seat.id] ?? "idle");
 	}, [seats, mounted]);
+
+	// The seats wear the round's signs, the same as the strip over the box.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `mounted` says the handle exists
+	useEffect(() => {
+		const table = handle.current;
+		if (!table) return;
+		for (const seat of seatsRef.current)
+			table.setMark(seat.id, marks[seat.id] ?? null);
+	}, [marks, seats, mounted]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `mounted` says the handle exists, which may be after the theme changed
 	useEffect(() => {

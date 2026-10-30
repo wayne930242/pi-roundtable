@@ -11,6 +11,7 @@ import type {
 	RoomMessage,
 	RoomMode,
 	RoomView,
+	RoundView,
 	ServerFrame,
 	UploadView,
 } from "../../src/api-types.ts";
@@ -87,6 +88,8 @@ export interface RoomState {
 	phase?: ActivityPhase;
 	/** While typing: the member speaking, in a group round. */
 	agent?: string;
+	/** A group room: where its round stands, kept after it ends until the next round starts. */
+	round?: RoundView;
 	/** How the last turn ended, until the next turn starts or the page opens the room. */
 	outcome?: "done" | "failed";
 	/** When the page saw the outcome (its clock, epoch ms). */
@@ -475,12 +478,18 @@ function onRooms(
 		folders: layout.folders ?? state.folders,
 	};
 	for (const view of rooms)
-		next = withRoom(next, view.key, (room) => ({
-			...withTurn(room, view),
-			view,
-			mode: view.mode,
-			stoppable: view.stoppable,
-		}));
+		next = withRoom(next, view.key, (room) => {
+			const { round: held, ...rest } = withTurn(room, view);
+			// The list says what runs now; a round that ended is only in the page's memory.
+			const round = view.round ?? (held?.state === "ended" ? held : undefined);
+			return {
+				...rest,
+				...(round ? { round } : {}),
+				view,
+				mode: view.mode,
+				stoppable: view.stoppable,
+			};
+		});
 	return { ...next, order: rooms.map((view) => view.key) };
 }
 
@@ -564,6 +573,11 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			}));
 		case "progress":
 			return onProgress(state, action);
+		case "round":
+			return withRoom(state, action.room, (room) => ({
+				...room,
+				round: action.round,
+			}));
 		case "activity":
 			return withRoom(state, action.room, (room) => {
 				const next: RoomState = {

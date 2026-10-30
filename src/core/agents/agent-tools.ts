@@ -345,7 +345,7 @@ function toolDefs(
 		{
 			name: "group_create",
 			label: "Create group",
-			description: `Create a group chat channel with 2 to 6 agents. The judge picks which members answer each of ${o.name}'s messages there, one after another. The host answers when nobody else fits.`,
+			description: `Create a group chat channel with 2 to 8 agents. The judge picks which members answer each of ${o.name}'s messages there, one after another. The host answers when nobody else fits.`,
 			parameters: Type.Object({
 				name: Type.String({ pattern: "^[a-z0-9-]{1,32}$" }),
 				display_name: DISPLAY,

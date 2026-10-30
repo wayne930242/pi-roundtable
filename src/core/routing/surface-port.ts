@@ -65,6 +65,9 @@ export function surfacePort(
 		progress: async (channel, event) => {
 			await of(channel)?.progress?.(channel, event);
 		},
+		groupRound: async (channel, round) => {
+			await of(channel)?.groupRound?.(channel, round);
+		},
 	};
 }
 

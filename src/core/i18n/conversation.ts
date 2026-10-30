@@ -16,6 +16,8 @@ export function conversationEn(ctx: CatalogContext) {
 		restartingNotice: `-# ${ctx.assistant} is restarting and takes no new messages right now; please send this again in a few minutes.`,
 		roundLimitNotice:
 			"-# This round already has 8 replies, so it stops here; call us again if you need more.",
+		roundStoppedNotice:
+			"-# The round was stopped, so the members still waiting did not speak.",
 		restartNotice: `-# ${ctx.assistant} restarted before this job finished, so nothing more will be reported here.`,
 		threadStarted: (name: string, thread: string | undefined) =>
 			thread ? `🧵 Started: ${name} → ${thread}` : `🧵 Started: ${name}`,
@@ -48,6 +50,7 @@ export function conversationZhTW(
 		restartingNotice: `-# ${ctx.assistant} 正在重新啟動，暫時不接新訊息；請過幾分鐘再傳一次。`,
 		roundLimitNotice:
 			"-# 這一輪已經有 8 則回覆，先停在這裡；需要的話請再叫我們。",
+		roundStoppedNotice: "-# 本輪已停止，還沒輪到的成員不再發言。",
 		restartNotice: `-# ${ctx.assistant} 在這項工作結束前重新啟動了，這裡不會再有回報。`,
 		threadStarted: (name: string, thread: string | undefined) =>
 			thread ? `🧵 開始：${name} → ${thread}` : `🧵 開始：${name}`,

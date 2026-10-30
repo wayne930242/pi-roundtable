@@ -335,7 +335,7 @@ test("a refusal of the server is shown in the sheet, which stays open with what 
 
 // ── Groups ───────────────────────────────────────────────────────────────────────────────────
 
-test("a new group needs 2 to 6 members; the host is one of them, and the group opens in its room", async () => {
+test("a new group needs 2 to 8 members; the host is one of them, and the group opens in its room", async () => {
 	const create = spyOn(teamApi, "createGroup").mockResolvedValue({
 		name: "duo",
 		displayName: "Duo",
@@ -374,18 +374,18 @@ test("a new group needs 2 to 6 members; the host is one of them, and the group o
 	}
 });
 
-test("at six members the other agents cannot be added", async () => {
-	const names = ["a1", "a2", "a3", "a4", "a5", "a6", "a7"];
+test("at eight members the other agents cannot be added", async () => {
+	const names = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"];
 	store.dispatch({
 		type: "rooms_loaded",
 		rooms: names.map((name) => view(`app:agent.${name}`)),
 	});
 	await openSheet({ kind: "group" });
 	const boxes = all<HTMLInputElement>('.agent-sheet input[type="checkbox"]');
-	for (const box of boxes.slice(0, 6)) await page.click(box);
-	expect(boxes[6]?.disabled).toBe(true);
+	for (const box of boxes.slice(0, 8)) await page.click(box);
+	expect(boxes[8]?.disabled).toBe(true);
 	await page.click(boxes[0] ?? null);
-	expect(boxes[6]?.disabled).toBe(false);
+	expect(boxes[8]?.disabled).toBe(false);
 });
 
 test("editing a group renames it, changes its members and its host, and sends only what changed", async () => {
@@ -614,14 +614,14 @@ test("a refused restore is told and the entry stays", async () => {
 		entries: [entries[1] as ArchivedEntry],
 	});
 	const restore = spyOn(teamApi, "restoreGroup").mockRejectedValue(
-		new Error("A group has 2 to 6 different members."),
+		new Error("A group has 2 to 8 different members."),
 	);
 	try {
 		await openSheet({ kind: "archive" });
 		await page.click(button("Restore"));
 		await page.act(() => settle(60));
 		expect(document.body.textContent).toContain(
-			"A group has 2 to 6 different members.",
+			"A group has 2 to 8 different members.",
 		);
 		expect(q(".agent-sheet")?.textContent).toContain("Past");
 	} finally {
