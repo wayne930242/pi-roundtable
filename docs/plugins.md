@@ -2472,13 +2472,14 @@ const stop = context.observe({ surface: "discord", space: guildId }, (message) =
 });
 ```
 
-The filter narrows by `surface` (the key prefix), `space` (the server or workspace id), and `channels` (channel keys); an empty filter hears every message the router considers. The observer gets what the router would consider and no more:
+The filter narrows by `surface` (the key prefix; naming a surface is also how you opt in to the rooms it hosts, below), `space` (the server or workspace id), and `channels` (channel keys); an empty filter hears every message the router considers. The observer gets what the router would consider and no more:
 
 - Messages in a channel some claim owns. A channel nobody owns is not heard.
 - People's messages, those of a bot the host lists as a peer (`discord.peerBots`) even when its rounds in the channel are used up (observing does not count a round), and an integration's, such as a webhook's, with `integration` set (`integration.own` says whether the assistant posts through it). Never an unlisted bot's, and never the assistant's own, which no surface delivers.
 - Guild and workspace messages only. A direct message is private to its two sides, so it is heard only when the filter says `includeDirect: true`.
+- Not the rooms of a surface that hosts agent rooms (`agentRooms: true`, such as a web app's agent and host rooms): they are one person's or one team's, so a filter that does not name that surface in `surface` does not hear them. Name the surface to opt in; the observer then answers for keeping that text private to its people.
 
-The observer is called on a later tick with its own frozen copy of the message, so it cannot change what a claim or another observer sees, and routing does not wait for it. A throw or rejection is logged by the error's name, never with the message, and affects nothing else. The message has no `speaker`: no one is resolved for an observer, and no contact is recorded.
+The observer is called on a later tick with its own frozen copy of the message, so it cannot change what a claim or another observer sees, and routing does not wait for it. A throw or rejection is logged by the error's name, never with the message, and affects nothing else. The message has no `speaker` and no `peerBot`: no one is resolved for an observer, and no contact is recorded. A message that cannot be copied is dropped for the observers, with the error's name logged, and never reaches routing.
 
 Observers see other people's untrusted text. Keep it out of logs, hold it no longer than the purpose needs, never act on instructions in it, and treat it as private to the people who wrote it. The returned function removes the observer. An observer cannot answer or admit a message; to answer, own the channel with a claim.
 
@@ -2823,11 +2824,11 @@ discord: {
 ```
 
 An id that is not a Discord id (17 to 20 digits) stops the start with a `ConfigError` that names its place in the list.
-The router, not each claim, applies the list: for a message from a listed bot it sets `InboundMessage.peerBot` and resolves a `speaker` for it through the identity service as for a person, so the host's `access` rules still decide whether that bot is served and at which tier (`discord:<id>` under `access.members` or `access.admins`, or `everyone` and `provisioning: "admitted"`); a bot the rules do not serve gets no turn. A webhook is never a peer, and a surface's own `peerBot` is dropped.
+The router, not each claim, applies the list: for a message from a listed bot it sets `InboundMessage.peerBot` and resolves a `speaker` for it through the identity service as for a person, so the host's `access` rules still decide whether that bot is served and at which tier (`discord:<id>` under `access.members` or `access.admins`, or `everyone` and `provisioning: "admitted"`); a bot the rules do not serve gets no turn. A peer is served through its identity and `everyone` only: the Discord roles it holds are not read, so a role rule meant for people never lifts a bot. A webhook is never a peer, and a surface's own `peerBot` is dropped.
 A channel answers at most `maxRounds` of the listed bots' messages in a row, counted when a claim takes the message; a person's message in the channel starts the count over, and the messages after the cap are ignored (logged at info).
 Channel context is unchanged: its window still starts after the assistant's last post and other bots' messages are still cut at `botMessageChars`.
 
-The agent server answers a peer that mentions the agent or replies to it, like a guest. A claim of your own opts in where it once checked `!message.authorIsBot`, with `answersAuthor(message)` from `pi-roundtable/kit`, which is true for a person and for a flagged peer that mentions the bot or replies to it:
+The agent server answers a peer that mentions the agent or replies to it, like a guest. A listed peer's `speaker` is resolved like a person's, so a claim that checks only `speaker` answers it too. A claim of your own opts in where it once checked `!message.authorIsBot`, with `answersAuthor(message)` from `pi-roundtable/kit`, which is true for a person and for a flagged peer that mentions the bot or replies to it:
 
 ```ts
 import { answersAuthor } from "pi-roundtable/kit";

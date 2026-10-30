@@ -117,7 +117,9 @@ export class Linkage {
 		this.#plugins = plugins;
 		this.tiers = options.toolTiers ?? toolTiers();
 		this.events = new EventBus(options.logger);
-		this.observers = new MessageObservers(options.logger);
+		this.observers = new MessageObservers(options.logger, () =>
+			this.#surfaces().roomSurfaces(),
+		);
 	}
 
 	/** Applies the host's environment to the process and returns what plugins read of it. */

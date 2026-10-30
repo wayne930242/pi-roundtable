@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `OpsAlerts` sinks receive structured information: `sink(text, { kind, key, code?, info?, severity? })` (`OpsAlert`), so a host can choose a picture or a route per kind (`OpsAlert`, and the sink's type `OpsSink`). `raise` takes a new `severity` (`OpsSeverity`: `"info"`, `"warning"` or `"critical"`) that only the sink reads. A sink that takes only the text works unchanged.
 
+- `InboundMessage.speaker` is resolved for a listed peer bot too (see Added: peer bots). A third-party claim that checks only `speaker` therefore answers a listed peer without asking for anything more; check `answersAuthor(message)` (or `peerBot`) to tell a person from a peer. The `speaker` doc says so.
+- A listed peer bot is served through its identity and `everyone` in `access`, never through the Discord roles it holds, so a role rule meant for people cannot lift a bot to member or admin. Give a peer a `discord:<id>` entry in `access.members` or `access.admins` to serve it.
+- `context.observe` leaves out the rooms of a surface that hosts agent rooms (`agentRooms: true`) unless the filter names that surface in `surface`, since those rooms are one person's or one team's; guild messages of other surfaces are heard as before. The observer's copy has neither `speaker` nor `peerBot` even if a surface set one, and a message that cannot be copied is dropped for the observers instead of throwing into routing.
+
 ### Deprecated
 
 - The top-level `ops` is an alias of `routing.places.ops` and logs a deprecation at start; it goes away in 1.0. Setting both stops the start. Its error messages name `routing.places.ops` when that is the key in use.

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import { ConfigError } from "../domain/errors.ts";
+import { factsTier } from "../identity/access-policy.ts";
 import type { ContactAssessor } from "../identity/contact.ts";
 import { silentLogger } from "../log.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
@@ -156,6 +157,89 @@ describe("peer bots in the router", () => {
 		await routing.handle({ ...fromBot(PEER, "chatter"), mentionsBot: false });
 		await routing.handle(fromBot(PEER, "real"));
 		expect(log.map((line) => line.split(" ")[0])).toEqual(["real"]);
+	});
+});
+
+describe("a peer bot's roles", () => {
+	const ROLE = "discord:role:900000000000000001";
+
+	/** Serves by the access rules alone: a role rule makes an admin, an identity rule a member. */
+	function byRules(log: string[], peerBots: PeerBotsConfig) {
+		const rules = {
+			admins: { roles: [ROLE] },
+			members: { identities: [`discord:${PEER}`] },
+		};
+		const assessor: ContactAssessor = {
+			assess: async (facts) => {
+				const tier = factsTier(rules, facts);
+				if (!tier) return undefined;
+				const speaker = {
+					id: facts.subject,
+					name: facts.name,
+					tier,
+					principalId: `p-${facts.subject}`,
+				};
+				return { speaker, take: async () => speaker };
+			},
+		};
+		const answering: ChannelClaim = {
+			name: "tiers",
+			priority: 0,
+			owns: () => true,
+			admit: (m) =>
+				m.speaker
+					? {
+							kind: "turn",
+							run: async () =>
+								void log.push(`${m.authorId} ${m.speaker?.tier}`),
+							failure: "failed",
+						}
+					: undefined,
+			startFresh: async () => "tiers",
+		};
+		return new ChannelRouter({
+			claims: [answering],
+			targets: () => undefined,
+			queue: new ChannelQueue(),
+			logger: silentLogger(),
+			contacts: assessor,
+			peerBots: new PeerBots(peerBots),
+		});
+	}
+
+	test("a role rule does not lift a listed peer above its identity rule", async () => {
+		const log: string[] = [];
+		const routing = byRules(log, { allow: [PEER, STRANGER] });
+		const actor = (subject: string) => ({
+			provider: "discord",
+			subject,
+			name: subject,
+			surface: "discord",
+			roles: [ROLE],
+		});
+		const asBot = (id: string) => ({
+			...fromBot(id),
+			actor: actor(id),
+			authorRoleIds: ["900000000000000001"],
+		});
+		await routing.handle(asBot(PEER));
+		// Listed and holding the admin role, but no identity rule serves it: not served at all.
+		await routing.handle(asBot(STRANGER));
+		await routing.handle({
+			...message({ authorId: "person", mentionsBot: true }),
+			actor: actor("person"),
+		});
+		expect(log).toEqual([`${PEER} member`, "person admin"]);
+	});
+
+	test("the roles of a surface that reports no actor are dropped for a peer as well", async () => {
+		const log: string[] = [];
+		const routing = byRules(log, { allow: [PEER] });
+		await routing.handle({
+			...fromBot(PEER),
+			authorRoleIds: ["900000000000000001"],
+		});
+		expect(log).toEqual([`${PEER} member`]);
 	});
 });
 

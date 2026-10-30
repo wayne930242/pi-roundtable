@@ -28,7 +28,10 @@ function message(overrides: Partial<InboundMessage> = {}): InboundMessage {
 	};
 }
 
-function setup(claimOverrides: Partial<ChannelClaim> = {}) {
+function setup(
+	claimOverrides: Partial<ChannelClaim> = {},
+	rooms: readonly string[] = [],
+) {
 	const warnings: unknown[] = [];
 	const logger = {
 		warn: (fields: unknown) => warnings.push(fields),
@@ -47,7 +50,7 @@ function setup(claimOverrides: Partial<ChannelClaim> = {}) {
 		startFresh: async () => "kind",
 		...claimOverrides,
 	};
-	const observers = new MessageObservers(logger);
+	const observers = new MessageObservers(logger, () => rooms);
 	const routing = new ChannelRouter({
 		claims: [claim],
 		targets: () => undefined,
@@ -180,6 +183,53 @@ describe("message observers", () => {
 		expect(heard).toEqual(["peer1", "peer2", "hook"]);
 	});
 
+	test("a surface that hosts rooms is heard only by a filter that names it", async () => {
+		const room = "app:agent.aria";
+		const { routing, observers } = setup({ owns: () => true }, ["app"]);
+		const heard: Record<string, string[]> = { all: [], space: [], app: [] };
+		observers.add({}, (m) => void heard.all?.push(m.messageId));
+		observers.add({ space: "w" }, (m) => void heard.space?.push(m.messageId));
+		observers.add({ surface: "app" }, (m) => void heard.app?.push(m.messageId));
+		await routing.handle(message({ messageId: "guild" }));
+		await routing.handle(
+			message({ messageId: "room", channel: room, space: "w" }),
+		);
+		await tick();
+		expect(heard).toEqual({
+			all: ["guild"],
+			space: [],
+			app: ["room"],
+		});
+	});
+
+	test("a surface that hosts no rooms is heard by a filter that does not name it", async () => {
+		const { routing, observers } = setup({ owns: () => true }, ["app"]);
+		const heard: string[] = [];
+		observers.add({ space: "w" }, (m) => void heard.push(m.messageId));
+		await routing.handle(
+			message({ messageId: "x", channel: "line:abc", space: "w" }),
+		);
+		await tick();
+		expect(heard).toEqual(["x"]);
+	});
+
+	test("a message that cannot be cloned is dropped for the observer, never thrown into routing", async () => {
+		const { routing, observers, admitted, warnings } = setup();
+		const heard: string[] = [];
+		observers.add({}, (m) => void heard.push(m.messageId));
+		await routing.handle(
+			message({
+				messageId: "odd",
+				metadata: () => undefined,
+			} as unknown as Partial<InboundMessage>),
+		);
+		await routing.handle(message({ messageId: "plain" }));
+		await tick();
+		expect(heard).toEqual(["plain"]);
+		expect(admitted).toEqual(["odd", "plain"]);
+		expect(warnings).toContainEqual({ error: "DataCloneError" });
+	});
+
 	test("a removed observer hears nothing more", async () => {
 		const { routing, observers } = setup();
 		const heard: string[] = [];
@@ -202,6 +252,21 @@ describe("claim message events", () => {
 		await routing.messageDeleted(CHANNEL, "m9", "600000000000000001");
 		await routing.messageDeleted(OTHER, "m8");
 		expect(deleted).toEqual([`${CHANNEL} m9`]);
+	});
+
+	test("a speaker a surface sets is not on the copy an observer hears", async () => {
+		const { routing, observers, admitted } = setup();
+		const heard: InboundMessage[] = [];
+		observers.add({}, (m) => void heard.push(m as InboundMessage));
+		await routing.handle({
+			...message(),
+			speaker: { id: "x", name: "x", tier: "owner", principalId: "p" },
+		});
+		await tick();
+		expect(heard).toHaveLength(1);
+		expect(heard[0]).not.toHaveProperty("speaker");
+		expect(heard[0]).not.toHaveProperty("peerBot");
+		expect(admitted).toEqual(["m1"]);
 	});
 
 	test("an edit reaches the owner without a speaker or a peer flag", async () => {

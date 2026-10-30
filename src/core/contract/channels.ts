@@ -47,8 +47,12 @@ export interface InboundMessage {
 	/**
 	 * Who the author is, with their principal and tier, as the router resolved them before any
 	 * claim admits the message: undefined when the access rules serve no one by them, and for a bot
-	 * or an integration, which are not resolved. Only the router sets it; a surface's own value is
-	 * dropped. A claim that serves only people the host serves answers only when it is set.
+	 * the host does not list as a peer (`peerBot`) and for an integration, which are not resolved.
+	 * A listed peer bot is resolved too, so a claim that checks only `speaker` answers it; use
+	 * `answersAuthor` to tell a person from a peer. A peer is served by the access rules through its
+	 * identity and `everyone`, never through its server roles. Only the router sets it; a surface's
+	 * own value is dropped. A claim that serves only people the host serves answers only when it is
+	 * set.
 	 */
 	speaker?: Speaker;
 	/** The id the surface knows the author by; who they are to the host is `speaker`. */
@@ -327,10 +331,16 @@ export interface ConversationPort {
 
 /**
  * Which inbound messages an observer hears. Every field narrows; an empty filter hears every
- * message in a channel some claim owns, in a server or workspace, never in a direct conversation.
+ * message in a channel some claim owns, in a server or workspace, never in a direct conversation
+ * and never in the rooms of a surface that hosts agent rooms (`agentRooms`), which are one
+ * person's or one team's. A filter that names that surface in `surface` hears them.
  */
 export interface ObserveFilter {
-	/** Only this surface's channels, by its key prefix, such as "discord". */
+	/**
+	 * Only this surface's channels, by its key prefix, such as "discord". Naming a surface that
+	 * hosts agent rooms is how an observer opts in to hearing those rooms; without it they are
+	 * left out.
+	 */
 	surface?: string;
 	/** Only this server or workspace, in the surface's own id. */
 	space?: string;

@@ -44,7 +44,7 @@ sidebar:
 | `preflight` | 設定有誤時，要在 Discord 連線之前就讓啟動停下來。 | [`preflight.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/preflight.ts) | [preflight](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#preflight-refuse-to-start-with-a-bad-setting) |
 | `backgroundTargets` | 排程或委派的任務要以你定義的那種一輪回來，並有自己的限制。 | [`support-desk.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/support-desk.ts) | [backgroundTargets](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) |
 | `channels` | 你的外掛要自己負責某些頻道裡的對話，而不是交給 agent server。多數外掛用不到。 | [`channels.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/channels.ts) | [channels](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#channels-conversations-of-your-own) |
-| `context.observe` | 你想聽到其他 claim 所擁有頻道裡的訊息，但不接手、也不回應。除非你要求，私訊不會被聽到。 | 無 | [observe](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#observe-hearing-messages-without-owning-them) |
+| `context.observe` | 你想聽到其他 claim 所擁有頻道裡的訊息，但不接手、也不回應。除非你要求，私訊不會被聽到；承載代理人房間的介面，除非你的篩選明確指定該介面，否則其房間也不會被聽到。 | 無 | [observe](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#observe-hearing-messages-without-owning-them) |
 | `personas` 和 `context.turns` | 你擁有某一種對話，替它寫 system prompt，並執行它的每一輪，不必自己寫輸入中、停止和回覆的流程。 | [`study-room.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/study-room.ts) | [personas](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 
 ## Discord 和 HTTP 周邊

@@ -385,7 +385,6 @@ export async function testPlugin(
 	let linked: LinkedSessions | undefined;
 	let router: ChannelRouter | undefined;
 	const queue = new ChannelQueue();
-	const observers = new MessageObservers(logger);
 	const conversations: ConversationPort = {
 		handle: async (message) =>
 			(router ?? unlinked("conversations")).handle(message),
@@ -416,6 +415,7 @@ export async function testPlugin(
 			? [...registry.surfaces, ...(options.surfaces ?? [])]
 			: unlinked("surfaces"),
 	);
+	const observers = new MessageObservers(logger, () => surfaces.roomSurfaces());
 	const sink = {
 		turnStarted: (turn: TurnEvent) => {
 			events.push({ name: "turnStarted", turn });

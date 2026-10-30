@@ -135,3 +135,15 @@ export function answersAuthor(
 		message.peerBot === true && (message.mentionsBot || message.repliesToBot)
 	);
 }
+
+/**
+ * The message as a listed peer bot's reaches the access rules: without the server roles it holds,
+ * which a rule written for people could otherwise use to lift a bot above what its identity and
+ * `everyone` give.
+ */
+export function peerFacts(message: InboundMessage): InboundMessage {
+	const { authorRoleIds: _ids, actor, ...rest } = message;
+	if (!actor) return rest;
+	const { roles: _roles, ...bare } = actor;
+	return { ...rest, actor: bare };
+}

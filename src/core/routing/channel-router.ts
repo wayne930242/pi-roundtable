@@ -27,7 +27,7 @@ import type { ChannelQueue } from "./channel-queue.ts";
 import { tellDeleted, tellEdited } from "./claim-events.ts";
 import { ForwardJoin } from "./forward-join.ts";
 import type { MessageObservers } from "./message-observers.ts";
-import type { PeerBots } from "./peer-bots.ts";
+import { type PeerBots, peerFacts } from "./peer-bots.ts";
 import { isSystemTurn } from "./system-turns.ts";
 
 export interface ChannelRouterOptions {
@@ -109,14 +109,14 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	async #route(given: InboundMessage): Promise<void> {
-		// Only the router says a message is a peer bot's.
-		const { peerBot: _dropped, ...plain } = given;
+		// Only the router says a message is a peer bot's or who its speaker is.
+		const { peerBot: _peer, speaker: _speaker, ...plain } = given;
 		const peers = this.#options.peerBots;
 		if (peers && !plain.authorIsBot && !plain.integration)
 			peers.personPosted(plain.channel);
 		const listed = peers?.lists(plain) === true;
 		const message: InboundMessage = listed
-			? { ...plain, peerBot: true }
+			? { ...peerFacts(plain), peerBot: true }
 			: plain;
 		if (
 			!message.text.trim() &&

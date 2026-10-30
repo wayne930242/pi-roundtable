@@ -344,7 +344,8 @@ export interface PluginContext {
 	 * those of a bot the host lists as a peer, and an integration's (such as a webhook's) with
 	 * `integration` set; never an unlisted bot's, never the assistant's own, and never a message
 	 * in a channel no claim owns. It does not hear direct conversations unless the filter says
-	 * `includeDirect`. The message is a copy without a `speaker`, as no one is resolved for an
+	 * `includeDirect`, and not the rooms of a surface that hosts agent rooms unless the filter
+	 * names that surface. The message is a copy without a `speaker`, as no one is resolved for an
 	 * observer. Observers see untrusted text from other people: keep it out of logs, hold it no
 	 * longer than needed, and treat it as private to the people who wrote it. A throw or rejection
 	 * is logged and never reaches routing or another observer. Returns a function that stops it.

@@ -81,7 +81,7 @@ export default {
 | `discord.agentMemory` | `"everyone"` 或 `"owners"` | `"everyone"` | `"owners"` 只讓 agent 頻道裡 owner 層級的回合有記憶區塊和記憶工具。 |
 | `discord.agentSpeakers` | `"everyone"` 或 `"owners"` | `"everyone"` | `"owners"` 只讓 owner 層級的 speaker 能在 agent 和群組頻道開始一輪；admin 或 member 在 Discord 獲准、而這項沒設時，`doctor` 會警告。 |
 | `discord.channelContext` | 物件，或 `false` | `{}` | 一輪會讀進多少被呼叫的訊息周圍的頻道內容：`fetch`（預設 50，最多 100）、`keep`（15）、`similarity`（0.8）、`messageChars`（500）、`botMessageChars`（80）、`foreignWebhook`（只能用程式碼設定）和 `attachments`（`{ images: 0, maxBytes: 10 MiB }`）。`false` 關閉。 |
-| `discord.peerBots` | `{ allow, maxRounds? }` | 無 | host 會回應的其他 bot，讓不同的 bot 能互相對話：`allow` 列出它們的使用者 id，每項是字串或 `{ id, guilds?, channels? }`。只接受明確的 id，沒有萬用字元，也沒有「所有 bot」；id 不對會讓啟動失敗。名單內 bot 的提及或回覆會像訪客一樣被回應，能用到什麼程度由 `access` 對它的身分（`discord:<id>`）決定。`maxRounds`（預設 3）是同一頻道連續回應它們訊息的次數，有人說話就重新計算。不設就忽略所有 bot。 |
+| `discord.peerBots` | `{ allow, maxRounds? }` | 無 | host 會回應的其他 bot，讓不同的 bot 能互相對話：`allow` 列出它們的使用者 id，每項是字串或 `{ id, guilds?, channels? }`。只接受明確的 id，沒有萬用字元，也沒有「所有 bot」；id 不對會讓啟動失敗。名單內 bot 的提及或回覆會像訪客一樣被回應，能用到什麼程度由 `access` 對它的身分（`discord:<id>`）決定；bot 持有的 Discord 身分組不會被讀取。`maxRounds`（預設 3）是同一頻道連續回應它們訊息的次數，有人說話就重新計算。不設就忽略所有 bot。 |
 | `discord.freshMarker` | string，或 `false` | `─── new conversation ───` | 在伺服器頻道或討論串重新開始對話時，主騎士貼出的分隔線。`false` 不貼。 |
 | `discord.formatting` | string，或 `false` | Markdown 會轉成排版，表格除外 | 以英文告訴模型回覆在 Discord 裡怎麼呈現。`false` 不告訴模型任何事。 |
 | `discord.cardGraceSeconds` | 1 到 86400 的整數 | `120` | 一輪為了核准卡或 `ask_user` 卡片等多久，之後這一輪結束、卡片繼續開著。 |
