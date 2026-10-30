@@ -8,6 +8,7 @@ import type {
 	PictureRef,
 	ReadMarkView,
 	RoomMessage,
+	SendWording,
 } from "../api-types.ts";
 
 /** One room of a kind, as the list shows it. */
@@ -47,6 +48,8 @@ export interface HostRoomView {
 	id: string;
 	/** What this viewer may do in the room. */
 	access: { send: ("note" | "turn")[]; act: boolean };
+	/** The kind's own wording of the two ways to write, where it gave any. */
+	wording?: SendWording;
 	header: HostHeaderView;
 	/** The newest messages, oldest first. */
 	messages: RoomMessage[];

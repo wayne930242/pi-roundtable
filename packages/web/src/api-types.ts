@@ -87,17 +87,49 @@ export interface GateStepView {
 	waiver?: { label: string; confirm: string };
 }
 
+/**
+ * The icons a host may give a page or a kind of room: names from the console's own icon set. A
+ * name outside the list, or none, shows the default (a list for a page, no icon for a kind).
+ */
+export const HOST_ICONS = [
+	"chat",
+	"link",
+	"activity",
+	"users",
+	"megaphone",
+	"qr",
+	"settings",
+	"bell",
+	"file",
+	"list",
+	"shield",
+	"lock",
+	"sparkle",
+] as const;
+export type HostIconName = (typeof HOST_ICONS)[number];
+
+/**
+ * How a kind of host room words its two ways to write: `turn` is talking to the agent (the toggle's
+ * label, and the box's hint while it is on), `note` is a message for the room's people only.
+ */
+export interface SendWording {
+	note?: { placeholder?: string };
+	turn?: { label?: string; placeholder?: string };
+}
+
 /** A host page that is not a room, in the places the shell lists it. */
 export interface PageLinkView {
 	id: string;
 	label: string;
 	place: "main" | "settings" | "hidden";
+	icon?: HostIconName;
 }
 
 /** A kind of host room, listed by its label. */
 export interface KindLinkView {
 	kind: string;
 	label: string;
+	icon?: HostIconName;
 }
 
 export type ChannelName =
@@ -527,6 +559,16 @@ export interface LayoutView {
 	/** The pinned rooms' keys, in order. */
 	pins: string[];
 	folders: FolderView[];
+}
+
+/** `GET api/rooms/<key>` for a thread: its view, listed or dismissed from the list. */
+export interface RoomOneView {
+	room: RoomView;
+}
+
+/** What a dismissal removed from the room list: the finished threads that were listed. */
+export interface ThreadsDismissed {
+	dismissed: number;
 }
 
 export interface RoomsView extends LayoutView {

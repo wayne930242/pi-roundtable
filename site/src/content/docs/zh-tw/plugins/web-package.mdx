@@ -203,11 +203,13 @@ Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能
 
 ## 宿主房間、頁面與卡片
 
-不是夥伴的宿主外掛可以在 app 裡擁有自己的房間，例如客服信箱，一封信件串一個房間。外掛在 `requires` 列出 `WEB_APP`，並在 `setup` 呼叫 `registerRoomKind`、`registerPage`。
+不是夥伴的宿主外掛可以在 app 裡擁有自己的房間，例如客服信箱，一封信件串一個房間。外掛在 `requires` 列出 `WEB_APP`，並在 `setup` 呼叫 `registerRoomKind`、`registerPage`。宿主用的型別（`WEB_APP`、`WebApp`、`HostRoomKind`、`HostPage`、`HostCard`、`Viewer`、`OpenTarget`、`ActionResult`、`LinkProver`、`OnboardingStep`、`Notices`）由 `pi-roundtable-web` 匯出。請保留 `WebApp` 物件，並在用到時才讀 `rooms`、`notices`、`pages`、`onboarding`、`push`：外掛啟動前讀取會丟錯，`notices.onAck` 也只能在啟動後掛。`HostRoomKind.buttons` 可以回傳 Promise。
 
 - **存取權**由房間種類的 `access(viewer, id)` 決定，每次讀取、frame、傳訊、卡片回應、上傳與取檔都會重問；回傳 `undefined` 就是 `404`。它回答這個人能做什麼：讀、傳 `note` 或 `turn`、按按鈕。
 - **訊息**用 `app.rooms.post` 發出，作者種類有 `external`（純文字，附宿主給的標籤，例如「客戶」）、`member`、`assistant` 與 `notice`（Markdown）。`reference` 用來再找到同一則訊息，`edit` 與 `remove` 修改或刪除。
 - **卡片**有標題、內文、色調、狀態、連結與按鈕；按鈕可以開表單（文字、多行文字、網址、可設 `initial` 與 `search` 的單選、複選），伺服器會先檢查再交給房間種類的 `act`。只有卡片狀態是 `open` 時才顯示按鈕。夥伴的核准與提問卡片沿用夥伴自己的提示範圍。
+- **寫入方式**：檢視者能傳 `note` 也能傳 `turn` 時，房間在輸入列上方只顯示一個 `@AI` 開關（關 = 只給房間裡的人看的內部備註，開 = 請夥伴回應），輸入框的提示跟著開關變；只能用一種方式傳的人沒有開關。房間種類可以用 `sendWording: { note?: { placeholder }, turn?: { label, placeholder } }` 自訂用字，只收純文字，label 最多 40 字、placeholder 最多 100 字。
+- **圖示**：頁面或房間種類可以給 `icon`，值是 `HOST_ICONS` 的其中一個（型別 `HostIconName`）：`chat`、`link`、`activity`、`users`、`megaphone`、`qr`、`settings`、`bell`、`file`、`list`、`shield`、`lock`、`sparkle`。頁面的圖示顯示在導覽列，房間種類的圖示顯示在聊天室清單的區段標題旁；不在清單內的名稱會顯示預設圖示。
 - **連結與圖片**：`app.rooms.link(room, messageId?)` 回傳開啟房間並標出該則訊息的網址；`![alt](file:<id>)` 顯示用 `saveFile` 或 `app.pages.saveAsset` 存下的 PNG、JPEG、WebP，只給有權看該房間或頁面的人。
 - **頁面**在 `<mount>/p/<id>`，由 Markdown、清單、表單與卡片區塊組成；`visible(viewer)` 每次都會重問，`app.pages.changed(id?)` 讓檢視者重新取得內容。
 - **保留期限**：房間種類的 `retention: { textDays, fileDays }` 會刪除過期的訊息、作者名稱、卡片與檔案，從每則訊息的時間起算。

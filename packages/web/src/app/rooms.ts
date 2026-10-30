@@ -163,6 +163,33 @@ export class Rooms {
 		return `${this.#options.mount}${path ?? "/avatars/missing.png"}`;
 	}
 
+	/**
+	 * The view of one thread, listed or not: a thread the owners dismissed is off the list and still
+	 * opens by its address, and the page asks for its view here.
+	 */
+	async threadView(key: ChannelKey): Promise<RoomView | undefined> {
+		const room = await this.resolve(key);
+		if (room?.kind !== "thread") return undefined;
+		const thread = await this.#options.threads.get(room.name);
+		if (!thread) return undefined;
+		const { modes, activity, log } = this.#options;
+		const { yolo, longRunning } = modes.peek(key);
+		const last = (await log.lastOf([key])).get(key);
+		return {
+			home: false,
+			readOnly: true,
+			mode: { yolo, longRunning },
+			...activity(key),
+			kind: "thread",
+			name: thread.id,
+			displayName: thread.title,
+			parent: thread.parent,
+			...(thread.open ? {} : { closed: true as const }),
+			...(last ? { last } : {}),
+			key,
+		};
+	}
+
 	async list(): Promise<RoomView[]> {
 		const { surface, directory, modes, mutes, activity, log, threads } =
 			this.#options;

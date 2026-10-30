@@ -580,6 +580,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} cards waiting": "{count} 張卡片等待中",
 	"{count} finished thread": "{count} 個已結束的討論串",
 	"{count} finished threads": "{count} 個已結束的討論串",
+	"Clear all": "清除全部",
+	"The thread is still open.": "這個討論串還在進行中。",
 
 	// 排程
 	"{days} at {time}": "每{days} {time}",
@@ -1050,8 +1052,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"This page is not available.": "這個頁面無法使用。",
 	"You can read this room but not write in it.":
 		"你可以閱讀這個聊天室，但不能在其中發言。",
-	"Send as": "傳送方式",
-	"Ask the agent": "請夥伴處理",
+	"@AI": "@AI",
+	"Write an internal note…": "寫一則內部備註…",
+	"Ask AI…": "問 AI…",
 	"Earlier cards ({count})": "先前的卡片（{count}）",
 	Replaced: "已被取代",
 	Image: "圖片",

@@ -6,12 +6,13 @@ import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
 import { hostApi } from "../lib/host-api.ts";
 import { seedUnread, useHost } from "../lib/host-state.ts";
+import "../lib/host-icons.ts";
 import { installHostStyle } from "../lib/host-style.ts";
 import { useLive } from "../lib/live.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { HostPicture } from "./host-picture.tsx";
-import { Icon } from "./icons.tsx";
+import { Icon, type IconName } from "./icons.tsx";
 import { Empty, Failure } from "./states.tsx";
 import UnreadMark from "./unread-mark.tsx";
 
@@ -25,6 +26,7 @@ const TYPING_PAUSE_MS = 250;
 export default function HostKindSection(props: {
 	kind: string;
 	label: string;
+	icon?: IconName;
 	active: string | undefined;
 }) {
 	const { kind } = props;
@@ -87,7 +89,12 @@ export default function HostKindSection(props: {
 
 	return (
 		<section className="stack">
-			<h2 className="section-title">{props.label}</h2>
+			<h2 className="section-title">
+				{props.icon ? (
+					<Icon name={props.icon} size={14} className="section-icon" />
+				) : null}
+				{props.label}
+			</h2>
 			{rooms && (rooms.length >= FILTER_FROM || filter || typed) ? (
 				<input
 					type="search"

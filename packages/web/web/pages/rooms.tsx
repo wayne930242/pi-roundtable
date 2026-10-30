@@ -158,7 +158,7 @@ const ThreadRow = memo(function ThreadRow(
 ) {
 	const { view } = props;
 	return (
-		<li>
+		<li className={view.closed ? "thread-item" : undefined}>
 			<a
 				className="thread-row"
 				href={hrefFor("room", view.key)}
@@ -173,6 +173,21 @@ const ThreadRow = memo(function ThreadRow(
 					{props.at ? ago(props.at, props.now, props.timeZone) : ""}
 				</span>
 			</a>
+			{view.closed ? (
+				<button
+					type="button"
+					className="thread-dismiss"
+					aria-label={t("Remove {name}", { name: view.displayName })}
+					title={t("Remove")}
+					onClick={() =>
+						import("../lib/thread-actions.ts").then((m) =>
+							m.dismissThread(view.key),
+						)
+					}
+				>
+					<Icon name="close" size={16} />
+				</button>
+			) : null}
 		</li>
 	);
 });
@@ -205,6 +220,8 @@ export function ThreadList(props: {
 	open: string[];
 	closed: string[];
 	active: string | undefined;
+	/** The room the threads hang under; with it the finished ones can be cleared at once. */
+	parent?: string;
 }) {
 	const { now } = useLive();
 	const { timeZone } = useConfig();
@@ -242,6 +259,22 @@ export function ThreadList(props: {
 						)}
 					</summary>
 					<ul className="thread-list">{closed.map(row)}</ul>
+					{props.parent ? (
+						<button
+							type="button"
+							className="thread-clear"
+							onClick={() =>
+								import("../lib/thread-actions.ts").then((m) =>
+									m.dismissThreads(
+										props.parent as string,
+										closed.map((one) => one.key),
+									),
+								)
+							}
+						>
+							{t("Clear all")}
+						</button>
+					) : null}
 				</details>
 			) : null}
 		</div>
@@ -278,6 +311,7 @@ function Section(props: {
 												open={threads.open}
 												closed={threads.closed}
 												active={props.active}
+												parent={key}
 											/>
 										),
 									}

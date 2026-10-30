@@ -11,6 +11,7 @@ export default function HostKinds(props: {
 			key={kind.kind}
 			kind={kind.kind}
 			label={kind.label}
+			{...(kind.icon ? { icon: kind.icon } : {})}
 			active={props.active}
 		/>
 	));
