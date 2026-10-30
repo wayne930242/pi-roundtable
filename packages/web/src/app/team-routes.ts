@@ -133,7 +133,17 @@ export class TeamApi {
 			// The app's part runs inside the delete, after its checks and before the row goes: a
 			// cleanup that fails leaves the agent there to delete again.
 			const room = agentRoomKey(this.#options.surface, name);
-			await this.#options.team.remove(name, () => this.#forget(room, by));
+			await this.#options.team.remove(name, async () => {
+				// Its archived temp knights go with it, and so does what the app kept of their rooms.
+				for (const helper of this.#options.directory
+					.agents()
+					.filter((one) => one.parent === name))
+					await this.#forget(
+						agentRoomKey(this.#options.surface, helper.name),
+						by,
+					);
+				await this.#forget(room, by);
+			});
 			this.#options.changed();
 			return json({ ok: true });
 		}
@@ -311,6 +321,15 @@ export class TeamApi {
 			avatar: rooms.avatarOf(agent),
 			character: characterOf(agent),
 			room: agentRoomKey(surface, agent.name),
+			...(agent.parent
+				? {
+						helper: {
+							parent: agentRoomKey(surface, agent.parent),
+							parentName:
+								directory.agent(agent.parent)?.displayName ?? agent.parent,
+						},
+					}
+				: {}),
 		};
 	}
 
@@ -412,6 +431,7 @@ export class TeamApi {
 						displayName: agent.displayName,
 						avatar: rooms.avatarOf(agent),
 						character: characterOf(agent),
+						...(agent.parent ? { parent: agent.parent } : {}),
 					}),
 				),
 			...directory

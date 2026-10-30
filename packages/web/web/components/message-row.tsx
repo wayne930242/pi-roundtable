@@ -1,6 +1,10 @@
 import type { CharacterSpec } from "pi-roundtable/characters";
 import { lazy, memo, Suspense, useContext, useEffect, useState } from "react";
-import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
+import {
+	HELPERS_ENDED,
+	type RoomFile,
+	type RoomMessage,
+} from "../../src/api-types.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import { ConfigContext } from "../lib/config.ts";
 import { clock } from "../lib/format.ts";
@@ -14,7 +18,7 @@ import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
 import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 
-// An internal note's row and its styles are read when the first note is shown.
+// An internal note's row and its styles, and a knight's line that it archived its temp knights, are read when the first is shown.
 const NoteRow = lazy(() => import("./note-row.tsx"));
 
 // Another owner's picture, and the styles it brings, are read when a room shows one.
@@ -130,7 +134,10 @@ export const MessageRow = memo(function MessageRow(props: {
 	const avatarPress = useMenuPress(() =>
 		agent ? avatarMenuOf(agent, message.author) : Promise.resolve(undefined),
 	);
-	if (message.note)
+	if (
+		message.note ||
+		(message.kind === "system" && message.text.startsWith(HELPERS_ENDED))
+	)
 		return (
 			<Suspense fallback={<li className="message" data-header />}>
 				<NoteRow

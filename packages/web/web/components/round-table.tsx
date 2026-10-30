@@ -65,7 +65,8 @@ export function useRoster(members: readonly string[] | undefined): RoomView[] {
 		const agents = state.order
 			.map((key) => state.rooms[key]?.view)
 			.filter(
-				(view): view is RoomView => view !== undefined && view.kind === "agent",
+				(view): view is RoomView =>
+					view !== undefined && view.kind === "agent" && !view.helper,
 			);
 		const seated = members
 			? members
@@ -88,7 +89,7 @@ export function useAgents(): RoomView[] {
 				.map((key) => state.rooms[key]?.view)
 				.filter(
 					(view): view is RoomView =>
-						view !== undefined && view.kind === "agent",
+						view !== undefined && view.kind === "agent" && !view.helper,
 				),
 		"agents",
 	);

@@ -16,7 +16,7 @@ agent 透過工具行動。
 
 這些工具屬於 agent server。
 你很少自己呼叫它們：你對 agent 說，通常是協調者，由它去呼叫。
-實際怎麼運作，見[建立 agent](/zh-tw/agents/create-agents/)、[群組](/zh-tw/agents/groups/)和[封存與頻道](/zh-tw/agents/archive-and-channels/)。
+實際怎麼運作，見[建立 agent](/zh-tw/agents/create-agents/)、[群組](/zh-tw/agents/groups/)、[臨時騎士](/zh-tw/agents/temp-knights/)和[封存與頻道](/zh-tw/agents/archive-and-channels/)。
 
 | 工具 | 作用 | 最低層級 |
 | --- | --- | --- |
@@ -26,6 +26,8 @@ agent 透過工具行動。
 | `agent_update` | 修改 agent 的顯示名稱、提示詞、模型或 thinking level。修改從它的下一輪起生效。 | `admin` |
 | `agent_avatar` | 改 agent 的外觀：`class`、`color` 或單一 `parts`；沒提到的維持原樣。 | `admin` |
 | `message_agent` | 傳一個自成一體的請求給另一個 agent。回答會以新的一輪回來。群組裡的席位沒有這個工具。 | `member` |
+| `helper_create` | 做一位臨時騎士，為單一、自成一體的任務幫忙；他立刻開始，回答以新的一輪回來。臨時騎士不能建立 agent、群組或臨時騎士。 | `member` |
+| `helper_end` | 封存你自己的臨時騎士，指定名字，或封存每一位已結束的。 | `member` |
 | `group_create` | 建立一個有 2 到 8 個 agent、可以指定主持人的群組頻道。 | `admin` |
 | `group_update` | 修改群組的顯示名稱、成員或主持人。 | `admin` |
 | `archive` | 封存 agent 或群組。頻道和歷史紀錄保留在 `Archive` 類別底下。協調者和發出呼叫的 agent 不能被封存。 | `admin` |

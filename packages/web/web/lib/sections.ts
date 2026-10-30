@@ -3,6 +3,7 @@
 // shared layout, so the rooms page and the switcher drawer agree and a test needs no browser.
 
 import type { FolderView, RoomView } from "../../src/api-types.ts";
+import { nestedHelper } from "./helper-nesting.ts";
 
 /** The dispatch threads of a room: the open ones and the finished ones, in list order. */
 export interface ThreadKeys {
@@ -54,9 +55,17 @@ export function sections(
 		const view = state.rooms[key]?.view;
 		if (view) views.set(key, view);
 	}
+	const listed = new Set(
+		[...views].filter(([, view]) => view.kind !== "thread").map(([key]) => key),
+	);
 	const isRoom = (key: string) => {
 		const view = views.get(key);
-		return view !== undefined && view.kind !== "thread" && !view.home;
+		return (
+			view !== undefined &&
+			view.kind !== "thread" &&
+			!view.home &&
+			!nestedHelper(view, listed)
+		);
 	};
 	const taken = new Set<string>();
 	/** Keeps the first mention of each room that exists and is not Home or a thread. */
@@ -75,18 +84,17 @@ export function sections(
 	const home: string[] = [];
 	const threads: Record<string, ThreadKeys> = {};
 	const orphans: ThreadKeys = { open: [], closed: [] };
-	const listed = new Set(
-		[...views].filter(([, view]) => view.kind !== "thread").map(([key]) => key),
-	);
 	const loose: { key: string; index: number; at: number }[] = [];
 	let index = 0;
 	for (const [key, view] of views) {
 		index += 1;
-		if (view.kind === "thread") {
+		if (view.kind === "thread" || nestedHelper(view, listed)) {
+			// A temp knight hangs under its knight's room among the open threads, which the card list tells apart.
+			const parent = view.helper?.parent ?? view.parent;
 			let into = orphans;
-			if (view.parent && listed.has(view.parent)) {
-				into = threads[view.parent] ?? { open: [], closed: [] };
-				threads[view.parent] = into;
+			if (parent && listed.has(parent)) {
+				into = threads[parent] ?? { open: [], closed: [] };
+				threads[parent] = into;
 			}
 			(view.closed ? into.closed : into.open).push(key);
 		} else if (view.home) home.push(key);

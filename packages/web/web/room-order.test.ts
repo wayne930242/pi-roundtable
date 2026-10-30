@@ -174,3 +174,20 @@ test("the unread neighbour steps over rooms that have none, folded ones included
 	expect(neighbour(run, "b", -1, has)).toBeUndefined();
 	expect(neighbour(run, "c", 1, has)).toBe("d");
 });
+
+test("a knight's temp knights are stops right after it, as the server lists them before the threads, and follow its fold", () => {
+	const a = "app:agent.a";
+	const helper = view("app:agent.a-1", {
+		helper: { parent: a, parentName: "a" },
+	});
+	const t1 = "app:thread.00000000-0000-4000-8000-000000000001";
+	const stops = roomStops(
+		input(
+			[view("app:agent.h", { home: true }), view(a), helper, thread(t1, a)],
+			{ folders: [{ id: F1, name: "Work", rooms: [a] }] },
+		),
+		options({ collapsed: new Set([F1]) }),
+	);
+	expect(keys(stops)).toEqual(["app:agent.h", a, helper.key, t1]);
+	expect(shown(stops)).toEqual(["app:agent.h"]);
+});

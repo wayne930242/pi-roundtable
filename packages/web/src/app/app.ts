@@ -13,8 +13,8 @@ import type {
 	ScheduleStore,
 	WebSocketRoute,
 } from "pi-roundtable";
-import { channelKey } from "pi-roundtable";
-import { APP_CLOSE_EXPIRED } from "../api-types.ts";
+import { agentRoomKey, channelKey, isHelper, roomOf } from "pi-roundtable";
+import { APP_CLOSE_EXPIRED, HELPERS_ENDED } from "../api-types.ts";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import type { ConsolePresentation } from "../features.ts";
 import type { Gate } from "../gate.ts";
@@ -209,6 +209,11 @@ export class OwnerApp {
 		const quiet = quietClock
 			? (at: number) => quietClock.quietAt(at)
 			: undefined;
+		const held = roomMuted(
+			mutes,
+			threads,
+			channelKey(options.surface, "thread."),
+		);
 		const mounted = mountNotices({
 			database: options.database,
 			logger,
@@ -246,7 +251,16 @@ export class OwnerApp {
 			visible: (principalId) => sockets.anyVisible(principalId),
 			preview: options.push.preview,
 			...(quiet ? { quiet } : {}),
-			muted: roomMuted(mutes, threads, channelKey(options.surface, "thread.")),
+			muted: async (room) => {
+				const named = roomOf(room as ChannelKey, [options.surface]);
+				// A temp knight's answers reach its knight's room, which pushes; its own room stays quiet.
+				if (
+					named?.kind === "agent" &&
+					isHelper(agents.directory.agent(named.name))
+				)
+					return true;
+				return held(room);
+			},
 			urlOf: options.push.urlOf,
 			logger,
 		});
@@ -400,6 +414,23 @@ export class OwnerApp {
 				});
 			},
 			push,
+		});
+		// A knight clearing its own temp knights leaves a line in its room, with the undo.
+		agents.team.onHelpersEnded((event) => {
+			const named = event.names.map((name) => ({
+				name,
+				displayName: agents.directory.agent(name)?.displayName ?? name,
+			}));
+			void surface
+				.publish({
+					room: agentRoomKey(options.surface, event.parent),
+					kind: "system",
+					author: "Notice",
+					text: `${HELPERS_ENDED}${JSON.stringify(named)}`,
+				})
+				.catch((error) =>
+					logger.warn({ err: error }, "the temp knights' line was not posted"),
+				);
 		});
 		this.#api = new AppApi({
 			...(options.presentation ? { presentation: options.presentation } : {}),

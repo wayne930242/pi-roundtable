@@ -507,6 +507,11 @@ export interface RoomView {
 	members?: string[];
 	/** A thread's parent room. */
 	parent?: string;
+	/**
+	 * A temp knight's room: `parent` is the room of the knight that made it, and `finished` is set
+	 * when it has nothing running, queued or waiting. Absent on every permanent knight.
+	 */
+	helper?: { parent: string; parentName: string; finished?: true };
 	/** A thread's room takes no messages from the page. */
 	readOnly: boolean;
 	/**
@@ -578,6 +583,22 @@ export interface ThreadsDismissed {
 /** What one clear-all across rooms dismissed: the finished threads' room keys, by the room they hang under. */
 export interface ThreadsDismissedAll extends ThreadsDismissed {
 	threads: Record<string, string[]>;
+}
+
+/**
+ * What a system line of a room starts with when its knight cleared its temp knights: the rest is a
+ * JSON list of `{ name, displayName }`, which the page words and offers the undo of.
+ */
+export const HELPERS_ENDED = "Temp knights archived: ";
+
+/** `POST api/rooms/archive-finished-helpers`: the temp knights archived, by the room of the knight that made them. */
+export interface HelpersArchived {
+	archived: { room: string; names: string[] }[];
+}
+
+/** `POST api/rooms/restore-helpers`: the temp knights that came back; a name no longer archived is passed over. */
+export interface HelpersRestored {
+	restored: string[];
 }
 
 /** A cursor that marking rooms read moved: where it was (0 for a room never read) and where it is. */
@@ -785,6 +806,8 @@ export interface AgentProfileView {
 	avatar: string;
 	character: CharacterSpec;
 	room: string;
+	/** A temp knight's profile: the room of the knight that made it, and its name. */
+	helper?: { parent: string; parentName: string };
 }
 
 export interface ModelsView {
@@ -979,6 +1002,8 @@ export interface ArchivedEntry {
 	character?: CharacterSpec;
 	/** A group's members that are still on the team. */
 	members?: string[];
+	/** A temp knight's parent, by name; the archive page groups it under that knight. */
+	parent?: string;
 }
 
 /** `GET api/archive`. */

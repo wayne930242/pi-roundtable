@@ -341,21 +341,32 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						className="room-status"
 						data-working={room?.typing || undefined}
 					>
-						{view?.kind === "thread"
-							? view.closed
-								? t("Thread · finished")
-								: room?.typing
-									? t("Working…")
-									: t("Thread · read-only")
-							: view?.readOnly
-								? t("Read-only")
-								: room?.typing
-									? t("Working…")
-									: view?.kind === "group"
-										? t("Group")
-										: view?.home
-											? t("Home")
-											: t("Idle")}
+						{view?.helper ? (
+							<>
+								{t("Temp knight")} ·{" "}
+								<a href={hrefFor("room", view.helper.parent)}>
+									{t("Made by {name}", { name: view.helper.parentName })}
+								</a>
+							</>
+						) : view?.kind === "thread" ? (
+							view.closed ? (
+								t("Thread · finished")
+							) : room?.typing ? (
+								t("Working…")
+							) : (
+								t("Thread · read-only")
+							)
+						) : view?.readOnly ? (
+							t("Read-only")
+						) : room?.typing ? (
+							t("Working…")
+						) : view?.kind === "group" ? (
+							t("Group")
+						) : view?.home ? (
+							t("Home")
+						) : (
+							t("Idle")
+						)}
 					</span>
 				</div>
 				{view?.kind === "group" ? (

@@ -12,6 +12,7 @@ import {
 	channelKey,
 	characterOf,
 	groupRoomKey,
+	isHelper,
 	roomOf,
 } from "pi-roundtable";
 import type { RoomKind, RoomView } from "../api-types.ts";
@@ -127,7 +128,9 @@ export class Rooms {
 		const coordinator = team.coordinator();
 		const home =
 			(coordinator ? directory.agent(coordinator) : undefined) ??
-			directory.agents().find((agent) => agent.status === "active");
+			directory
+				.agents()
+				.find((agent) => agent.status === "active" && !isHelper(agent));
 		return home?.status === "active"
 			? agentRoomKey(surface, home.name)
 			: undefined;
@@ -144,7 +147,7 @@ export class Rooms {
 			[
 				...directory
 					.agents()
-					.filter((agent) => agent.status === "active")
+					.filter((agent) => agent.status === "active" && !isHelper(agent))
 					.map((agent) => agentRoomKey(surface, agent.name)),
 				...directory
 					.groups()
@@ -225,6 +228,18 @@ export class Rooms {
 					avatar: this.avatarOf(agent),
 					character: characterOf(agent),
 					...(agent.name === coordinator ? { coordinator: true as const } : {}),
+					...(agent.parent
+						? {
+								helper: {
+									parent: agentRoomKey(surface, agent.parent),
+									parentName:
+										directory.agent(agent.parent)?.displayName ?? agent.parent,
+									...(agent.finishedAt ? { finished: true as const } : {}),
+								},
+								// A temp knight's answers reach its knight's room, which pushes; its cards still do.
+								muted: true as const,
+							}
+						: {}),
 				}),
 			),
 			...groups.map((group: AgentGroup) =>

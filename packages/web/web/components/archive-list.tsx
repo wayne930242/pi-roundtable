@@ -8,6 +8,22 @@ import { Confirm } from "./confirm.tsx";
 import { Icon } from "./icons.tsx";
 import { Empty, Failure, Loading } from "./states.tsx";
 
+/** The entries with each temp knight right after its knight, whether or not that knight is archived too; the rest keep their order. */
+export function groupedEntries(
+	entries: readonly ArchivedEntry[],
+): ArchivedEntry[] {
+	const helpers = entries.filter((entry) => entry.parent !== undefined);
+	const ordinary = entries.filter((entry) => entry.parent === undefined);
+	const named = new Set(ordinary.map((entry) => entry.name));
+	return [
+		...ordinary.flatMap((entry) => [
+			entry,
+			...helpers.filter((one) => one.parent === entry.name),
+		]),
+		...helpers.filter((one) => !named.has(one.parent ?? "")),
+	];
+}
+
 /**
  * The agents and groups that were archived, which stay here with their history until they are
  * restored or deleted for good. A delete asks first and names what it deletes.
@@ -56,16 +72,25 @@ export function ArchiveList() {
 			</p>
 			{entries.length === 0 ? <Empty>{t("Nothing is archived.")}</Empty> : null}
 			<ul className="menu">
-				{entries.map((entry) => (
-					<li key={`${entry.kind}:${entry.name}`} className="menu-item">
+				{groupedEntries(entries).map((entry) => (
+					<li
+						key={`${entry.kind}:${entry.name}`}
+						className="menu-item"
+						data-helper={entry.parent ?? undefined}
+						style={entry.parent ? { paddingLeft: "var(--space-6)" } : undefined}
+					>
 						<span className="menu-icon">
 							<Icon name={entry.kind === "agent" ? "profile" : "rooms"} />
 						</span>
 						<span className="menu-text">
 							<strong>{entry.displayName}</strong>
 							<span className="meta">
-								{entry.kind === "agent" ? t("Knight") : t("Group")} ·{" "}
-								{entry.name}
+								{entry.parent
+									? t("Temp knight of {name}", { name: entry.parent })
+									: entry.kind === "agent"
+										? t("Knight")
+										: t("Group")}{" "}
+								· {entry.name}
 							</span>
 						</span>
 						<button

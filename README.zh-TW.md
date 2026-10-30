@@ -194,6 +194,7 @@ export default {
 | `agents` | 無 | 第一批團隊，只建立一次。沒有 `discord` 時，種子沒有 `channelId`，團隊的資料列記在 id `local` 之下 |
 | `coordinator` | `agents` 的第一位 | 沒有 `discord` 時，接手主人一般請求的 agent，不能被封存。有 `discord` 時設它會出錯：由入口頻道的 agent 協調 |
 | `skills` | 有 `agents` 時開啟 | 技能 addon；沒有 `discord` 時，只有 `agents` 列了 agent 才會開 |
+| `helpers` | 每位騎士 4 位、全站 12 位，結束 24 小時後封存 | 臨時騎士：騎士用 `helper_create` 為單一任務做出、完成後用 `helper_end` 清掉的幫手。設定為 `{ perParent, perHost, archiveFinishedAfterHours }`；`false` 兩個工具都不提供 |
 
 沒有人在等的工作（外部 webhook 在 agent 頻道的貼文、沒指定對話的 `message_agent` 呼叫、agent 的開場任務、錯誤回報）照舊落在原本的地方，除非選填的 `routing` 區塊另有指定。
 它指定每個 agent 的 primary place、每種事件送到哪個 surface，以及 host 的具名 place（例如 `ops`）；訊息、卡片、排程的觸發不會被改道，一律留在當事人所在的地方。

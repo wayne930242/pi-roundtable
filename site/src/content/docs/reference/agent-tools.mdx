@@ -16,7 +16,7 @@ A tool with no declared tier needs the owner.
 
 These tools belong to the agent server.
 Ask an agent, usually the coordinator, and it calls them for you.
-For how they work in practice, see [Create agents](/agents/create-agents/), [Groups](/agents/groups/), and [Archive and channels](/agents/archive-and-channels/).
+For how they work in practice, see [Create agents](/agents/create-agents/), [Groups](/agents/groups/), [Temp knights](/agents/temp-knights/), and [Archive and channels](/agents/archive-and-channels/).
 
 | Tool | What it does | Minimum tier |
 | --- | --- | --- |
@@ -26,6 +26,8 @@ For how they work in practice, see [Create agents](/agents/create-agents/), [Gro
 | `agent_update` | Changes an agent's display name, prompt, model, or thinking level. The change applies from its next turn. | admin |
 | `agent_avatar` | Changes an agent's look: its `class`, `color`, or single `parts`. What is left out stays as it is. | admin |
 | `message_agent` | Sends a self-contained request to another agent. The answer comes back as a new turn. A seat in a group does not have it. | member |
+| `helper_create` | Makes a temp knight, a helper for one self-contained task, that starts at once and answers back as a new turn. A temp knight cannot make agents, groups or temp knights. | member |
+| `helper_end` | Archives your own temp knights, by name or every finished one. | member |
 | `group_create` | Creates a group channel with 2 to 8 agents and an optional host. | admin |
 | `group_update` | Changes a group's display name, members, or host. | admin |
 | `archive` | Archives an agent or a group. The channel and its history are kept under the Archive category. The coordinator and the calling agent cannot be archived. | admin |

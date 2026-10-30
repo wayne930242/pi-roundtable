@@ -3,7 +3,11 @@
 // when it would do nothing, and does its work in `bulk-actions.ts`, loaded when it is chosen.
 
 import type { MenuItem } from "./action-menu.ts";
-import { finishedUnder, threadsUnder } from "./finished-threads.ts";
+import {
+	finishedHelpersUnder,
+	finishedUnder,
+	threadsUnder,
+} from "./finished-threads.ts";
 import { unreadCounts } from "./host-state.ts";
 import "./layout-icons.ts";
 import { translate as t } from "./messages.ts";
@@ -42,5 +46,22 @@ export function bulkItems(rooms?: readonly string[]): MenuItem[] {
 				void actions().then((one) => one.clearAllFinished(rooms));
 			},
 		});
+	items.push(...helperItems(rooms));
 	return items;
+}
+
+/** "Clear finished temp knights" for `rooms` (a folder's or one knight's), or for every knight; left out when none has finished. */
+export function helperItems(rooms?: readonly string[]): MenuItem[] {
+	if (finishedHelpersUnder(rooms).size === 0) return [];
+	return [
+		{
+			id: "clear-helpers",
+			label: t("Clear finished temp knights"),
+			icon: "trash",
+			tone: "danger",
+			run: () => {
+				void actions().then((one) => one.clearFinishedHelpers(rooms));
+			},
+		},
+	];
 }

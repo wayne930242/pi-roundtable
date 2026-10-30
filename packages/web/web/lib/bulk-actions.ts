@@ -7,6 +7,7 @@ import { bulkApi } from "./bulk-api.ts";
 import { unreadIn } from "./bulk-items.ts";
 import { seedUnread } from "./host-state.ts";
 import { plural, translate as t } from "./messages.ts";
+import { teamApi } from "./team-api.ts";
 import { clearAcross } from "./thread-actions.ts";
 import { toast } from "./toast.ts";
 
@@ -73,3 +74,61 @@ async function undoRead(
 /** Clears every finished thread under `rooms` (a folder's), or under every room of the list. */
 export const clearAllFinished = (rooms?: readonly string[]): Promise<void> =>
 	clearAcross(rooms);
+
+/** Puts back the temp knights an archive took, by name; a refusal is said, and the list is read again either way. */
+export async function putBackHelpers(names: readonly string[]): Promise<void> {
+	try {
+		await bulkApi.restoreHelpers(names);
+	} catch (failure) {
+		toast(messageOf(failure), "danger");
+	}
+	refresh();
+}
+
+/**
+ * "Clear finished temp knights" for `rooms` (a folder's or one knight's) or for every knight: it
+ * archives at once, and the notice's Undo restores exactly the ones it archived.
+ */
+export async function clearFinishedHelpers(
+	rooms?: readonly string[],
+): Promise<void> {
+	let names: string[];
+	try {
+		const answer = await bulkApi.archiveFinishedHelpers(rooms);
+		names = answer.archived.flatMap((one) => one.names);
+	} catch (failure) {
+		toast(messageOf(failure), "danger");
+		refresh();
+		return;
+	}
+	refresh();
+	if (names.length === 0) return;
+	toast(
+		plural(
+			names.length,
+			"Archived {count} temp knight",
+			"Archived {count} temp knights",
+		),
+		"info",
+		{ label: t("Undo"), run: () => void putBackHelpers(names) },
+	);
+}
+
+/** Archives one temp knight, finished or not; the notice's Undo restores it. */
+export async function archiveHelper(
+	name: string,
+	shown: string,
+): Promise<void> {
+	try {
+		await teamApi.archiveAgent(name);
+	} catch (failure) {
+		toast(messageOf(failure), "danger");
+		refresh();
+		return;
+	}
+	refresh();
+	toast(t("Archived {name}", { name: shown }), "info", {
+		label: t("Undo"),
+		run: () => void putBackHelpers([name]),
+	});
+}
