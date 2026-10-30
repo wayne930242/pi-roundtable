@@ -77,7 +77,7 @@ export function RoomMenu(props: {
 								<span className="menu-text">
 									<strong>{t("Open the parent room")}</strong>
 									<span className="meta">
-										{t("Reply to the agent that started this thread.")}
+										{t("Reply to the knight that started this thread.")}
 									</span>
 								</span>
 								<Icon name="chevron" size={16} />
@@ -186,7 +186,7 @@ export function RoomMenu(props: {
 								<Icon name="profile" />
 							</span>
 							<span className="menu-text">
-								<strong>{t("Edit agent")}</strong>
+								<strong>{t("Edit knight")}</strong>
 								<span className="meta">
 									{t("Name, prompt, model and picture")}
 								</span>
@@ -305,7 +305,7 @@ export function RoomMenu(props: {
 							</span>
 							<span className="menu-text">
 								<strong>
-									{props.group ? t("Archive group") : t("Archive agent")}
+									{props.group ? t("Archive group") : t("Archive knight")}
 								</strong>
 								<span className="meta">
 									{t(

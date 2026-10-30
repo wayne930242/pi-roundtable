@@ -338,7 +338,7 @@ export function RoundTable(props: RoundTableProps) {
 	}, [states, mounted]);
 
 	if (roster.length === 0)
-		return <p className="table-empty">{t("No agents are seated yet.")}</p>;
+		return <p className="table-empty">{t("No knights are seated yet.")}</p>;
 	return (
 		<section className="table-host" ref={host} aria-label={t("Round table")} />
 	);

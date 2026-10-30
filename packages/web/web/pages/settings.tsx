@@ -109,13 +109,13 @@ function Notifications({
 								"Notifications are blocked for this site. Allow them in the browser's site settings.",
 							)
 						: t(
-								"Get a notification on this device when a card waits for you or an agent reports on its own, while the app is not open.",
+								"Get a notification on this device when a card waits for you or a knight reports on its own, while the app is not open.",
 							)}
 			</p>
 			{quietHours ? (
 				<p className="meta">
 					{t(
-						"Quiet hours, {start} to {end} ({zone}): no notification for an agent's report or a notice. A card waiting for you still notifies. The server sets the hours.",
+						"Quiet hours, {start} to {end} ({zone}): no notification for a knight's report or a notice. A card waiting for you still notifies. The server sets the hours.",
 						{
 							start: quietHours.start,
 							end: quietHours.end,
@@ -295,7 +295,7 @@ export function SettingsPage() {
 									<strong>{t("Edit the main prompts")}</strong>
 									<span className="meta">
 										{t(
-											"The texts the assistant and the agents start from, with a diff to read before you save and a way back to the file's text.",
+											"The texts the main knight and the other knights start from, with a diff to read before you save and a way back to the file's text.",
 										)}
 									</span>
 								</span>

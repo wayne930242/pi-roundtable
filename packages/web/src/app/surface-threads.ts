@@ -9,7 +9,7 @@ import type { NewRoomMessage } from "./room-log.ts";
 import type { WebThreads } from "./threads.ts";
 
 /** The name a post shows when its sender names none. */
-const ASSISTANT = "Assistant";
+const ASSISTANT = "Knight";
 /** Discord's small-print marker, which the notices of the host carry. */
 const NOTICE = /^-# /;
 

@@ -189,7 +189,7 @@ export function GroupEditor(props: { name?: string; onDone(): void }) {
 			<fieldset className="field">
 				<legend>{t("Members")}</legend>
 				<span className="meta">
-					{t("Pick 2 to 6 agents. They take turns in the order picked.")}
+					{t("Pick 2 to 6 knights. They take turns in the order picked.")}
 				</span>
 				<ul className="menu">
 					{agents.map((agent) => {

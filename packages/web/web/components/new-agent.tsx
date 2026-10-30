@@ -192,7 +192,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 					value={model}
 					onChange={(event) => setModel(event.target.value)}
 				>
-					<option value={DEFAULT}>{t("Follow the assistant")}</option>
+					<option value={DEFAULT}>{t("Default model")}</option>
 					{modelGroups(models).map((group) =>
 						group.provider === "" ? (
 							group.models.map((one) => (
@@ -221,7 +221,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 					onChange={(event) => setTask(event.target.value)}
 				/>
 				<span className="meta">
-					{t("Optional. The agent starts on it as soon as it is made.")}
+					{t("Optional. The knight starts on it as soon as it is made.")}
 				</span>
 			</label>
 			<div className="profile-head">
@@ -248,7 +248,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 			{error ? <Failure message={error} /> : null}
 			<div className="actions">
 				<button type="submit" disabled={!ready || saving}>
-					{saving ? t("Making…") : t("Make agent")}
+					{saving ? t("Making…") : t("Make knight")}
 				</button>
 			</div>
 		</form>

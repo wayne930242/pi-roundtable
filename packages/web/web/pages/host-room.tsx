@@ -466,7 +466,7 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 											{...(mentioned
 												? {
 														locked: t(
-															"The message starts with @AI, so the agent answers.",
+															"The message starts with @AI, so the knight answers.",
 														),
 													}
 												: {})}

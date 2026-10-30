@@ -12,7 +12,7 @@ import { Sheet } from "./sheet.tsx";
 
 const titleOf = (ask: TeamSheetRequest): string =>
 	ask.kind === "new-agent"
-		? t("New agent")
+		? t("New knight")
 		: ask.kind === "archive"
 			? t("Archived")
 			: ask.name === undefined

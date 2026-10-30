@@ -217,7 +217,7 @@ test("without the owner app nothing can be edited, and the page keeps its old hi
 	await show();
 	expect(inCard("daily-notes", "Edit")).toBeNull();
 	expect(button("New skill")).toBeNull();
-	expect(q(".hint")?.textContent).toContain("ask an agent on Discord");
+	expect(q(".hint")?.textContent).toContain("ask a knight on Discord");
 });
 
 test("editing opens the whole SKILL.md in a full-screen sheet; a change is read as a diff, then saved against the hash it was read with", async () => {

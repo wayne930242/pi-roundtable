@@ -4,9 +4,9 @@ import { translate as t, wording } from "./messages.ts";
 const CORE: Record<string, string> = {
 	"Shared prompt": wording("Shared prompt"),
 	"Guest prompt": wording("Guest prompt"),
-	"The base every agent's prompt starts with, the main assistant's included.":
+	"The base every knight's prompt starts with, the main knight's included.":
 		wording(
-			"The base every agent's prompt starts with, the main assistant's included.",
+			"The base every knight's prompt starts with, the main knight's included.",
 		),
 	"Used instead of the shared prompt when the person speaking is not the owner.":
 		wording(

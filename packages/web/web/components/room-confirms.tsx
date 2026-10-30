@@ -37,7 +37,7 @@ export function YoloConfirm(props: ConfirmProps) {
 		>
 			<p>
 				{t(
-					"In this room, the agent's held actions are approved for you, without a card, as soon as they come up.",
+					"In this room, the knight's held actions are approved for you, without a card, as soon as they come up.",
 				)}
 			</p>
 			<p>

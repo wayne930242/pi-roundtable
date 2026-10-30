@@ -42,7 +42,7 @@ export function PromptsPage() {
 			</header>
 			<p className="hint">
 				{t(
-					"The texts the assistant and the agents start from. A text you save here replaces the one from the file from the next turn on, until you go back to the file's.",
+					"The texts the main knight and the other knights start from. A text you save here replaces the one from the file from the next turn on, until you go back to the file's.",
 				)}
 			</p>
 			{error ? <Failure message={error} /> : null}

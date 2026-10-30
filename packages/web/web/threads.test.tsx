@@ -46,7 +46,7 @@ const line = (text: string): RoomMessage => ({
 	id: 5,
 	room: GUIDE,
 	kind: "system",
-	author: "Assistant",
+	author: "Knight",
 	text,
 	files: [],
 	at: "2026-10-28T10:00:00.000Z",

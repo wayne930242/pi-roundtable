@@ -36,14 +36,14 @@ export function OverviewPage() {
 		<>
 			{error ? <Failure message={error} /> : null}
 			<section className="stack">
-				<h2>{t("Agent server")}</h2>
+				<h2>{t("Bot server")}</h2>
 				<p className="hint">
 					{t(
-						"Agent and group status; starting over archives the conversation and preserves memory.",
+						"Knight and group status; starting over archives the conversation and preserves memory.",
 					)}
 				</p>
 				{view.agents.length + view.groups.length === 0 ? (
-					<Empty>{t("No agents.")}</Empty>
+					<Empty>{t("No knights.")}</Empty>
 				) : null}
 				{view.agents.map((agent) => (
 					<AgentRow
@@ -71,7 +71,7 @@ export function OverviewPage() {
 				<h2>{t("My workspaces")}</h2>
 				<p className="hint">
 					{t(
-						"Direct messages and channels where you mention the assistant. Start over archives; delete removes every archive permanently.",
+						"Direct messages and channels where you mention a knight. Start over archives; delete removes every archive permanently.",
 					)}
 				</p>
 				{view.workspaces?.length ? (
@@ -89,7 +89,7 @@ export function OverviewPage() {
 				)}
 			</section>
 			<section className="stack">
-				<h2>{t("Outside-agent conversations")}</h2>
+				<h2>{t("Outside AI client conversations")}</h2>
 				<p className="hint">
 					{t(
 						"Conversations opened through remote MCP; after deletion the session ID cannot be resumed.",
@@ -105,7 +105,7 @@ export function OverviewPage() {
 						/>
 					))
 				) : (
-					<Empty>{t("No outside-agent conversations.")}</Empty>
+					<Empty>{t("No outside AI client conversations.")}</Empty>
 				)}
 			</section>
 			<section className="stack">

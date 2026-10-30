@@ -189,7 +189,7 @@ const WORK = { id: F1, name: "Work", rooms: [SCOUT] };
 
 test("with no pin and no folder the page is as it was: Home, Agents, Groups, no folder controls", async () => {
 	await show(<List />);
-	expect(headings()).toEqual(["Home", "Agents", "Groups"]);
+	expect(headings()).toEqual(["Home", "Knights", "Groups"]);
 	expect(all(".folder")).toEqual([]);
 	// Normal mode: no menu button beside a row, no arrange bar.
 	expect(all(".row-more")).toEqual([]);
@@ -573,13 +573,13 @@ test("a row's menu pins and unpins it, and the list follows the server's answer"
 		expect(labels().slice(0, 2)).toEqual(["Pin", "Move to folder…"]);
 		await choose("Pin");
 		expect(pin).toHaveBeenCalledWith(SCOUT, true, null);
-		expect(headings()).toEqual(["Home", "Pinned", "Agents", "Groups"]);
+		expect(headings()).toEqual(["Home", "Pinned", "Knights", "Groups"]);
 		pin.mockResolvedValue({ pins: [], folders: [] });
 		await rightClick(rowOf("scout"));
 		expect(labels().slice(0, 2)).toEqual(["Unpin", "Move to folder…"]);
 		await choose("Unpin");
 		expect(pin).toHaveBeenLastCalledWith(SCOUT, false, null);
-		expect(headings()).toEqual(["Home", "Agents", "Groups"]);
+		expect(headings()).toEqual(["Home", "Knights", "Groups"]);
 	} finally {
 		pin.mockRestore();
 	}

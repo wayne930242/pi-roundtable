@@ -461,7 +461,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 			</header>
 			{listed && none && !hosted ? (
 				<Empty>
-					{t("No rooms yet. Rooms appear when the team has an agent.")}
+					{t("No rooms yet. Rooms appear when the team has a knight.")}
 				</Empty>
 			) : null}
 			{!listed ? (
@@ -478,7 +478,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 				active={props.active}
 			/>
 			<Section
-				title={t("Agents")}
+				title={t("Knights")}
 				rooms={groups.agents}
 				threads={threads}
 				active={props.active}

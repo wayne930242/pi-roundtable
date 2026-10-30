@@ -43,7 +43,7 @@ export function TranscriptPage({
 	const { conversation } = view;
 	const title =
 		conversation.kind === "outside"
-			? t("Outside agent · {id}", { id: conversation.id.slice(0, 8) })
+			? t("Outside AI client · {id}", { id: conversation.id.slice(0, 8) })
 			: conversationTitle(conversation);
 	return (
 		<>
@@ -131,7 +131,7 @@ function Entry({ entry }: { entry: TranscriptEntry }) {
 
 const LABELS: Record<TranscriptEntry["role"], string> = {
 	user: wording("User"),
-	assistant: wording("Assistant"),
+	assistant: wording("Knight"),
 	tool: wording("Tool"),
 	compaction: wording("Summary of earlier conversation"),
 };

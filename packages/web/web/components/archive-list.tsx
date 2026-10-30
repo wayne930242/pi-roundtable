@@ -51,7 +51,7 @@ export function ArchiveList() {
 		<div className="stack">
 			<p className="meta">
 				{t(
-					"Archived agents and groups no longer answer. Their history is kept until you delete them.",
+					"Archived knights and groups no longer answer. Their history is kept until you delete them.",
 				)}
 			</p>
 			{entries.length === 0 ? <Empty>{t("Nothing is archived.")}</Empty> : null}
@@ -64,7 +64,7 @@ export function ArchiveList() {
 						<span className="menu-text">
 							<strong>{entry.displayName}</strong>
 							<span className="meta">
-								{entry.kind === "agent" ? t("Agent") : t("Group")} ·{" "}
+								{entry.kind === "agent" ? t("Knight") : t("Group")} ·{" "}
 								{entry.name}
 							</span>
 						</span>

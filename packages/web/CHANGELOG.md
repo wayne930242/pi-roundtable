@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The page's word for an agent is now "Knight" in every look: lists, sheets, menus, the table, notifications and the server's refusals. The main agent is the "main knight". The model picker's "Follow the assistant" row is "Default model", and the sheet shows the model it resolves to when it knows it. Agents over MCP outside Discord are "Outside AI clients", and the agent server is the "Bot server". Text only: identifiers, API fields and configuration keys are unchanged.
+
 ## [0.26.1] - 2026-10-30
 
 ### Added

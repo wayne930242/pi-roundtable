@@ -191,13 +191,13 @@ test("an agent row's menu has the edit, look, notifications, mode and restart ac
 	expect(labels()).toEqual([
 		"Pin",
 		"Move to folder…",
-		"Edit agent",
+		"Edit knight",
 		"Change look",
 		"Notifications",
 		"Yolo mode",
 		"Long-running mode",
 		"Start over",
-		"Archive agent",
+		"Archive knight",
 	]);
 	expect(q("[role=menu]")?.getAttribute("aria-label")).toBe("scout");
 	expect(rowOf("scout")?.getAttribute("data-hold")).toBe("row");
@@ -221,10 +221,10 @@ test("a group row has the modes and restart but no agent edit; a thread row has 
 	expect(labels()).toEqual([]);
 });
 
-test("Edit agent opens the agent sheet; Change look opens it at the character creator", async () => {
+test("Edit knight opens the knight sheet; Change look opens it at the character creator", async () => {
 	await page.render(<List />);
 	await rightClick(rowOf("scout"));
-	await choose("Edit agent");
+	await choose("Edit knight");
 	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: false });
 	// The sheet is over the page, not a page of its own.
 	expect(window.location.hash).toBe("#/rooms");
@@ -382,8 +382,8 @@ test("a row of the phone drawer opens the same menu as a sheet; an action that l
 		});
 	await rightClick(q(".switcher-row[href*='scout']"));
 	expect(q("dialog.sheet")?.hasAttribute("open")).toBe(true);
-	expect(labels()).toContain("Edit agent");
-	await choose("Edit agent");
+	expect(labels()).toContain("Edit knight");
+	await choose("Edit knight");
 	await settle(300);
 	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: false });
 	expect(q(".switcher")?.getAttribute("data-state")).toBe("closed");
@@ -526,8 +526,8 @@ test("system lines have no menu", async () => {
 test("a message's avatar opens the agent sheet; the message's own menu does not also open", async () => {
 	await page.render(<Message />);
 	await rightClick(q(".message-avatar"));
-	expect(labels()).toEqual(["Agent profile"]);
-	await choose("Agent profile");
+	expect(labels()).toEqual(["Knight profile"]);
+	await choose("Knight profile");
 	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: false });
 });
 

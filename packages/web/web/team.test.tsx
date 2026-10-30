@@ -199,7 +199,7 @@ test("the + button of the room list offers a new agent, a new group and the arch
 	await page.click(add);
 	await page.act(() => settle(60));
 	expect(menuItems().map((one) => one.textContent)).toEqual([
-		"New agent",
+		"New knight",
 		"New group",
 		"Archived",
 	]);
@@ -219,8 +219,8 @@ test("the + button of the room list offers a new agent, a new group and the arch
 
 test("a new agent needs a name, a valid permanent name and a prompt, and the permanent name follows the name until it is typed", async () => {
 	await openSheet({ kind: "new-agent" });
-	expect(dialog("New agent")?.open).toBe(true);
-	const submit = () => button("Make agent");
+	expect(dialog("New knight")?.open).toBe(true);
+	const submit = () => button("Make knight");
 	expect(submit()?.disabled).toBe(true);
 	await typeInto(field("Name"), "Notes Taker");
 	expect(field("Permanent name")?.value).toBe("notes-taker");
@@ -262,7 +262,7 @@ test("making an agent sends the form, shows its room and closes the sheet", asyn
 			select.dispatchEvent(new Event("change", { bubbles: true }));
 		});
 		expect(models).toHaveBeenCalled();
-		await page.click(button("Make agent"));
+		await page.click(button("Make knight"));
 		await page.act(() => settle(60));
 		expect(create).toHaveBeenCalledWith({
 			name: "notes-taker",
@@ -304,7 +304,7 @@ test("a look chosen in the creator is sent with the agent; leaving the creator k
 		await page.act(() => settle(40));
 		expect(q(".agent-sheet .creator")).toBeNull();
 		expect(document.body.textContent).toContain("Your look");
-		await page.click(button("Make agent"));
+		await page.click(button("Make knight"));
 		await page.act(() => settle(60));
 		const body = create.mock.calls[0]?.[0];
 		expect(body?.character).toMatchObject({ class: "knight" });
@@ -321,12 +321,12 @@ test("a refusal of the server is shown in the sheet, which stays open with what 
 		await openSheet({ kind: "new-agent" });
 		await typeInto(field("Name"), "Scout");
 		await typeInto(field("Prompt"), "Scout around.");
-		await page.click(button("Make agent"));
+		await page.click(button("Make knight"));
 		await page.act(() => settle(60));
 		expect(q(".agent-sheet .failure")?.textContent).toContain("is taken");
-		expect(dialog("New agent")?.open).toBe(true);
+		expect(dialog("New knight")?.open).toBe(true);
 		expect(field("Prompt")?.value).toBe("Scout around.");
-		expect(button("Make agent")?.disabled).toBe(false);
+		expect(button("Make knight")?.disabled).toBe(false);
 		expect(window.location.hash).toBe("#/rooms");
 	} finally {
 		create.mockRestore();
@@ -506,7 +506,7 @@ test("a room row's Archive agent asks first, then archives and leaves the room",
 			await settle(40);
 		});
 		await page.click(
-			menuItems().find((one) => one.textContent === "Archive agent") ?? null,
+			menuItems().find((one) => one.textContent === "Archive knight") ?? null,
 		);
 		await page.act(() => settle(80));
 		const asking = dialog("Archive scout?");
@@ -539,7 +539,7 @@ test("the coordinator's row has no Archive item", async () => {
 	});
 	expect(menuItems().length).toBeGreaterThan(0);
 	expect(menuItems().map((one) => one.textContent)).not.toContain(
-		"Archive agent",
+		"Archive knight",
 	);
 });
 

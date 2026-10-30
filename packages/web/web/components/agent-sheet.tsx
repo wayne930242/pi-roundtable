@@ -57,7 +57,7 @@ const THINKING = [
 	"xhigh",
 ] as const;
 const THINKING_LABELS: Record<(typeof THINKING)[number], string> = {
-	default: wording("Follow the assistant (automatic)"),
+	default: wording("Default"),
 	off: wording("Off"),
 	minimal: wording("Minimal"),
 	low: wording("Low"),
@@ -66,6 +66,11 @@ const THINKING_LABELS: Record<(typeof THINKING)[number], string> = {
 	xhigh: wording("Very high"),
 };
 const DEFAULT = "default";
+/** The select's "no model chosen" row: the resolved model when this page knows it, else the server setting. */
+const defaultModelLabel = (profile: AgentProfileView) =>
+	profile.model === undefined
+		? t("Default model ({current})", { current: profile.effective.model })
+		: t("Default model (server setting)");
 const thinkingOf = (value: string) =>
 	t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value);
 
@@ -125,7 +130,7 @@ export function AgentSheetHost() {
 	return (
 		<Sheet
 			open={ask !== undefined}
-			title={t("Edit agent")}
+			title={t("Edit knight")}
 			size="wide"
 			onClose={closeAgentSheet}
 		>
@@ -205,6 +210,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 
 	const dirty = Object.keys(patch).length > 0;
 	const choices = Array.from(new Set([DEFAULT, ...models, draft.model]));
+	const defaultModel = defaultModelLabel(profile);
 
 	const save = async () => {
 		setSaving(true);
@@ -337,7 +343,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 						onChange={(model) => setDraft({ ...draft, model })}
 						options={choices.map((model) => ({
 							value: model,
-							label: model === DEFAULT ? t("Follow the assistant") : model,
+							label: model === DEFAULT ? defaultModel : model,
 						}))}
 					/>
 					<Chips
@@ -383,7 +389,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 					<h3>{t("Archive")}</h3>
 					<p className="meta">
 						{t(
-							"An archived agent stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.",
+							"An archived knight stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.",
 						)}
 					</p>
 					<div className="actions">
@@ -494,7 +500,7 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 			<h3>{t("Skills")}</h3>
 			<p className="meta">
 				{t(
-					"What the agent can load when a task calls for it. It applies from its next turn.",
+					"What the knight can load when a task calls for it. It applies from its next turn.",
 				)}
 			</p>
 			<ul className="menu">
@@ -509,7 +515,7 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 										{skill.missing
 											? t("Its file cannot be read.")
 											: skill.builtin
-												? t("Built in: every agent carries it.")
+												? t("Built in: every knight carries it.")
 												: (skill.description ?? "")}
 									</span>
 								</span>
@@ -568,7 +574,7 @@ function Review(props: {
 			after: draft.displayName,
 		});
 	const modelOf = (value: string) =>
-		value === DEFAULT ? t("Follow the assistant") : value;
+		value === DEFAULT ? defaultModelLabel(profile) : value;
 	if (draft.model !== (profile.model ?? DEFAULT))
 		changes.push({
 			label: t("Model"),

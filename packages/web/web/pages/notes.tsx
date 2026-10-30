@@ -23,7 +23,7 @@ const KINDS: { kind: NoteKind; label: string; hint: string }[] = [
 	{
 		kind: "note",
 		label: wording("Note"),
-		hint: wording("Searched when the assistant needs them."),
+		hint: wording("Searched when a knight needs them."),
 	},
 	{
 		kind: "event",
@@ -94,9 +94,7 @@ export function NotesPage() {
 				<div>
 					<h2>{t("Notes")}</h2>
 					<p className="hint">
-						{t(
-							"What the assistant remembers. A change applies from the next turn.",
-						)}
+						{t("What a knight remembers. A change applies from the next turn.")}
 					</p>
 				</div>
 				<button

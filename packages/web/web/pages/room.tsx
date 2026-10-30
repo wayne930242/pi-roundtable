@@ -313,7 +313,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 								type="button"
 								className="room-name"
 								aria-haspopup="dialog"
-								title={agentName ? t("Edit agent") : t("Edit group")}
+								title={agentName ? t("Edit knight") : t("Edit group")}
 								onClick={() =>
 									agentName
 										? openAgentSheet(agentName)
@@ -477,7 +477,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 													{...(mentioned
 														? {
 																locked: t(
-																	"The message starts with @AI, so the agent answers.",
+																	"The message starts with @AI, so the knight answers.",
 																),
 															}
 														: {})}

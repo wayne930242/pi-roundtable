@@ -688,7 +688,7 @@ describeDb("the host rooms over a real host", () => {
 			external("Please call me", { at: new Date(Date.now() - 60_000) }),
 		);
 		const reply = await web.rooms.post(ROOM_A, {
-			author: { kind: "assistant", name: "Assistant" },
+			author: { kind: "assistant", name: "Knight" },
 			text: "I will ask them **now**",
 		});
 		await web.rooms.post(ROOM_A, {
@@ -1678,7 +1678,7 @@ describeDb("the host rooms over a real host", () => {
 		app.state.grants.get(app.principals.ada)?.set(`c${RUN}ctx01`, READ_WRITE);
 		await web.rooms.post(room, external("old question"));
 		await web.rooms.post(room, {
-			author: { kind: "assistant", name: "Assistant" },
+			author: { kind: "assistant", name: "Knight" },
 			text: "old answer",
 		});
 		await web.rooms.post(room, external("customer says A"));
@@ -1750,7 +1750,7 @@ describeDb("the host rooms over a real host", () => {
 		app.state.grants.get(app.principals.ada)?.set(`c${RUN}ctx02`, READ_WRITE);
 		await web.rooms.post(room, external("old question"));
 		await web.rooms.post(room, {
-			author: { kind: "assistant", name: "Assistant" },
+			author: { kind: "assistant", name: "Knight" },
 			text: "old answer",
 		});
 		await web.rooms.post(room, external("customer says A"));
@@ -1791,7 +1791,7 @@ describeDb("the host rooms over a real host", () => {
 		expect(read?.messages).toHaveLength(3);
 		// A room with nothing since the assistant spoke gives none; so does a room of no kind, by throwing.
 		await web.rooms.post(room, {
-			author: { kind: "assistant", name: "Assistant" },
+			author: { kind: "assistant", name: "Knight" },
 			text: "answered",
 		});
 		expect(await web.rooms.context(room)).toBeUndefined();

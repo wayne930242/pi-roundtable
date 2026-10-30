@@ -71,7 +71,7 @@ export function roomMenu(
 		items.push(
 			{
 				id: "edit",
-				label: t("Edit agent"),
+				label: t("Edit knight"),
 				icon: "profile",
 				run: () => leave(() => openAgentSheet(name)),
 			},
@@ -145,7 +145,7 @@ export function roomMenu(
 	if (!view.readOnly && !view.coordinator)
 		items.push({
 			id: "archive",
-			label: view.kind === "group" ? t("Archive group") : t("Archive agent"),
+			label: view.kind === "group" ? t("Archive group") : t("Archive knight"),
 			icon: "archive",
 			tone: "danger",
 			run: () =>
@@ -161,7 +161,7 @@ export function addMenu(leave: Leave = now): MenuSpec {
 		items: [
 			{
 				id: "new-agent",
-				label: t("New agent"),
+				label: t("New knight"),
 				icon: "profile",
 				run: () => leave(() => openTeamSheet({ kind: "new-agent" })),
 			},
@@ -299,7 +299,7 @@ export function avatarMenu(agent: string, author: string): MenuSpec {
 		items: [
 			{
 				id: "profile",
-				label: t("Agent profile"),
+				label: t("Knight profile"),
 				icon: "profile",
 				run: () => openAgentSheet(agent),
 			},
