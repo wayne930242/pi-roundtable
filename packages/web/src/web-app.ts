@@ -164,6 +164,12 @@ export interface HostCard {
 	/** `https` or same-origin only. */
 	links?: readonly { label: string; url: string }[];
 	buttons?: readonly HostAction[];
+	/**
+	 * Keeps the card past its kind's `retention.textDays`, for as long as the host passes `true`: a
+	 * ticket's pinned card while the ticket is open. The sweep skips it; `updateCard` without `keep`
+	 * (or with `false`) makes it an ordinary card again, counted from when it was first posted.
+	 */
+	keep?: boolean;
 }
 
 /** A host card as it is stored. */

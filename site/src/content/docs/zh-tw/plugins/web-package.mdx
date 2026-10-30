@@ -214,7 +214,7 @@ Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能
 - **圖示**：頁面或房間種類可以給 `icon`，值是 `HOST_ICONS` 的其中一個（型別 `HostIconName`）：`chat`、`link`、`activity`、`users`、`megaphone`、`qr`、`settings`、`bell`、`file`、`list`、`shield`、`lock`、`sparkle`。頁面的圖示顯示在導覽列，房間種類的圖示顯示在聊天室清單的區段標題旁；不在清單內的名稱會顯示預設圖示。
 - **連結與圖片**：`app.rooms.link(room, messageId?)` 回傳開啟房間並標出該則訊息的網址；`![alt](file:<id>)` 顯示用 `saveFile` 或 `app.pages.saveAsset` 存下的 PNG、JPEG、WebP，只給有權看該房間或頁面的人。
 - **頁面**在 `<mount>/p/<id>`，由 Markdown、清單、表單與卡片區塊組成；`visible(viewer)` 每次都會重問，`app.pages.changed(id?)` 讓檢視者重新取得內容。
-- **保留期限**：房間種類的 `retention: { textDays, fileDays }` 會刪除過期的訊息、作者名稱、卡片與檔案，從每則訊息的時間起算。
+- **保留期限**：房間種類的 `retention: { textDays, fileDays }` 會刪除過期的訊息、作者名稱、卡片與檔案，從每則訊息的時間起算（卡片從首次發出時起算）。在 `card` 或 `updateCard` 帶 `keep: true` 的卡片（例如工單未結案時釘住的那張）只要宿主持續帶著它，清理就會略過。
 - **已讀標記**：app 記錄每個人在每個房間讀到哪裡（宿主房間與夥伴房間一樣）。清單與側欄顯示未讀數，進房間時在新訊息處出現「新訊息」分隔線，每則訊息下方顯示讀到這裡的人（「已讀 2」，附頭像）。
 
 房間、清單與頁面的程式碼在第一次開啟時才載入，app 的首次載入大小不變。

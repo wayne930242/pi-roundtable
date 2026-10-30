@@ -214,7 +214,7 @@ A host plugin that is not an agent can own rooms in the app, such as a support i
 - **Icons**: a page or a kind may give `icon`, one of `HOST_ICONS` (type `HostIconName`): `chat`, `link`, `activity`, `users`, `megaphone`, `qr`, `settings`, `bell`, `file`, `list`, `shield`, `lock`, `sparkle`. A page's icon shows in the navigation, a kind's beside its section in the room list; a name outside the list shows the default.
 - **Links and images**: `app.rooms.link(room, messageId?)` gives the address that opens a room and highlights a message; `![alt](file:<id>)` shows a PNG, JPEG or WebP saved with `saveFile` or `app.pages.saveAsset`, to those who may see the room or page.
 - **Pages** at `<mount>/p/<id>` are built from Markdown, list, form and card sections; `visible(viewer)` is asked every time and `app.pages.changed(id?)` makes viewers fetch again.
-- **Retention**: a kind's `retention: { textDays, fileDays }` deletes its messages, author names, cards and files, counted from each message's time.
+- **Retention**: a kind's `retention: { textDays, fileDays }` deletes its messages, author names, cards and files, counted from each message's time (a card's from when it was first posted). A card marked `keep: true` in `card` or `updateCard`, such as a ticket's pinned card while the ticket is open, is skipped by the sweep for as long as the host passes it.
 - **Read marks**: the app keeps how far each person has read in every room (host and agent rooms alike). The list and drawer show unread counts, a room opens with a "new messages" divider, and each message shows who has read up to it ("Seen by 2", with pictures).
 
 The room, list and page code loads when first opened; the app's first load does not grow.

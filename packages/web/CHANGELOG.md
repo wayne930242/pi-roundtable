@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `HostCard.keep`: a card the host still wants (a ticket's pinned card while the ticket is open) survives its kind's `retention.textDays` sweep for as long as `card` or `updateCard` passes `keep: true`; `updateCard` without it makes the card ordinary again. Adds the migration `web-host-cards-keep` (a `keep` column).
 - `WebApp.rooms.context(room, { limit?, messageChars? })`: a host room's recent messages as the channel-context block `CHANNEL_CONTEXT.read` gives a turn, for a host that starts a turn from a room's `send` hook and has no addressing message. It marks nothing handed over, so a retry reads the same.
 - `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
 - The package entry exports the host-facing API: `WEB_APP` and the types `WebApp`, `HostRoomKind`, `HostPage`, `HostCard`, `Viewer`, `OpenTarget`, `ActionResult`, `LinkProver`, `OnboardingStep` and `Notices`, so a host plugin no longer mirrors them.

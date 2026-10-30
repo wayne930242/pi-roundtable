@@ -49,11 +49,20 @@ export class HostCardLog {
 		},
 	};
 
+	/** The mark of a card the host keeps past its kind's retention (`HostCard.keep`). */
+	static readonly keepMigration: Migration = {
+		name: "web-host-cards-keep",
+		up: async (sql) => {
+			await sql`
+				ALTER TABLE web_host_cards ADD COLUMN IF NOT EXISTS keep boolean NOT NULL DEFAULT false`;
+		},
+	};
+
 	async create(room: string, card: HostCard): Promise<StoredHostCard> {
 		const id = crypto.randomUUID();
 		const [row]: Row[] = await this.#sql`
-			INSERT INTO web_host_cards (id, room, card, state)
-			VALUES (${id}, ${room}, ${JSON.stringify(card)}::jsonb, ${card.state ?? null})
+			INSERT INTO web_host_cards (id, room, card, state, keep)
+			VALUES (${id}, ${room}, ${JSON.stringify(card)}::jsonb, ${card.state ?? null}, ${card.keep === true})
 			RETURNING *`;
 		if (!row) throw new Error("the card log stored nothing");
 		return cardOf(row);
@@ -67,7 +76,7 @@ export class HostCardLog {
 	): Promise<StoredHostCard | undefined> {
 		const [row]: Row[] = await this.#sql`
 			UPDATE web_host_cards
-			SET card = ${JSON.stringify(card)}::jsonb, state = ${card.state ?? null}, updated_at = now()
+			SET card = ${JSON.stringify(card)}::jsonb, state = ${card.state ?? null}, keep = ${card.keep === true}, updated_at = now()
 			WHERE id = ${id} AND room = ${room} RETURNING *`;
 		return row && cardOf(row);
 	}
@@ -85,11 +94,15 @@ export class HostCardLog {
 		return rows.map(cardOf);
 	}
 
-	/** Deletes the cards of the rooms whose key starts with `prefix` that are older than `before`; how many. */
+	/**
+	 * Deletes the cards of the rooms whose key starts with `prefix` that are older than `before`,
+	 * except those the host marked `keep`; how many.
+	 */
 	async sweepKind(prefix: string, before: Date): Promise<number> {
 		const rows: unknown[] = await this.#sql`
 			DELETE FROM web_host_cards
-			WHERE starts_with(room, ${prefix}) AND created_at < ${before} RETURNING 1`;
+			WHERE starts_with(room, ${prefix}) AND created_at < ${before}
+			AND NOT keep RETURNING 1`;
 		return rows.length;
 	}
 
