@@ -288,6 +288,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Leave the table": "離席",
 	"{name} left the table": "{name}已離席",
 	"The table is empty": "圓桌空了",
+	"There are no rooms to seat yet.": "還沒有可以入座的聊天室。",
 	"Every agent has left the table. Choose who sits down.":
 		"所有夥伴都離席了。選擇誰要上桌。",
 	"An agent who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.":

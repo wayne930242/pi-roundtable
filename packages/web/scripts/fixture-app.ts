@@ -13,6 +13,8 @@
 //   FIXTURE_HOST                  `1` registers a host room kind ("inbox": an empty room and one with a message,
 //                                 both open to notes and turns) and a host page, for trying the host rooms
 //   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
+//   FIXTURE_TIER                  `member` (with FIXTURE_HOST=1) admits every request as a member of the host (admission
+//                                 access, the panes rooms and table), who lists only the "Support thread" room of the inbox
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
 //   approve  a held action with details          timeout  a turn's time-limit card
@@ -62,6 +64,7 @@ const { AGENTS, MODES, promptScope, SCHEDULES, SKILLS, THREADS } = await import(
 const { testHost } = await import("pi-roundtable/testing");
 const { webConsole } = await import("../src/web-plugin.ts");
 const { WEB_APP } = await import("../src/web-app.ts");
+const { admitAs } = await import("../src/verifier.ts");
 const { definePlugin } = await import("pi-roundtable");
 type SkillRegistry = import("pi-roundtable").SkillRegistry;
 type TurnProgress = import("pi-roundtable").TurnProgress;
@@ -154,6 +157,8 @@ const registrySkills = (registry: SkillRegistry) => ({
 });
 
 const origin = `http://127.0.0.1:${port}`;
+const asMember = process.env.FIXTURE_TIER === "member";
+const MEMBER_IDENTITY = "discord:300000000000000013";
 
 /** A host room kind and a page, as a plugin that sits on the web app would register them. */
 const hostFixture = definePlugin({
@@ -161,27 +166,36 @@ const hostFixture = definePlugin({
 	requires: [WEB_APP],
 	setup: (context) => {
 		const web = context.services.get(WEB_APP);
-		const rooms = [
+		const all = [
 			{ id: "inbox-empty", title: "Empty thread" },
 			{ id: "inbox-busy", title: "Support thread" },
 		];
+		// A member reads one room of the two, as a kind that gives the tiers different rooms would.
+		const roomsOf = (viewer: { tier: string }) =>
+			viewer.tier === "owner"
+				? all
+				: all.filter((room) => room.id === "inbox-busy");
 		web.registerRoomKind({
 			kind: "inbox",
 			label: "Inbox",
 			icon: "users",
-			list: async () => ({
-				rooms: rooms.map((room) => ({
+			list: async (viewer) => ({
+				rooms: roomsOf(viewer).map((room) => ({
 					...room,
 					subtitle: "Support",
 					picture: { initials: "IN", color: "#336699" },
 				})),
 			}),
-			access: async (_viewer, id) =>
-				rooms.some((room) => room.id === id)
-					? { read: true, send: ["note", "turn"], act: true }
+			access: async (viewer, id) =>
+				roomsOf(viewer).some((room) => room.id === id)
+					? {
+							read: true,
+							send: viewer.tier === "owner" ? ["note", "turn"] : ["note"],
+							act: true,
+						}
 					: undefined,
 			header: async (_viewer, id) => ({
-				title: rooms.find((room) => room.id === id)?.title ?? id,
+				title: all.find((room) => room.id === id)?.title ?? id,
 				fields: [{ label: "Status", value: "Open" }],
 				actions: [],
 			}),
@@ -554,6 +568,20 @@ host = await testHost({
 	config: {
 		dataDir,
 		http: { port, hostname: "127.0.0.1" },
+		...(asMember
+			? {
+					access: {
+						owners: [
+							{
+								name: "Ada",
+								principal: "100000000000000001",
+								identities: ["discord:100000000000000001"],
+							},
+						],
+						members: { identities: [MEMBER_IDENTITY] },
+					},
+				}
+			: {}),
 		agents: [
 			{
 				name: "guide",
@@ -583,21 +611,37 @@ host = await testHost({
 	} as never,
 	plugins: [
 		webConsole({
-			auth: { mode: "none" },
+			...(asMember
+				? {
+						// Every request is the member's, as a signing proxy would vouch for them.
+						verifier: () =>
+							admitAs({
+								provider: "discord",
+								subject: MEMBER_IDENTITY.slice("discord:".length),
+								name: "Mel",
+							}),
+						admission: "access" as const,
+					}
+				: { auth: { mode: "none" as const } }),
 			origin,
 			dataDir,
 			title: "Roundtable",
 			cardGraceSeconds: 5,
-			panes: [
-				"rooms",
-				"table",
-				"workspace",
-				"overview",
-				"schedules",
-				"conversations",
-				"notes",
-				"skills",
-			],
+			panes: asMember
+				? {
+						owner: ["rooms", "table"],
+						member: ["rooms", "table"],
+					}
+				: [
+						"rooms",
+						"table",
+						"workspace",
+						"overview",
+						"schedules",
+						"conversations",
+						"notes",
+						"skills",
+					],
 			...(process.env.LOCALE
 				? { presentation: { locale: process.env.LOCALE } }
 				: {}),

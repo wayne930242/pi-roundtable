@@ -222,6 +222,33 @@ describe("the authorization table", () => {
 		expect(missing).toEqual([]);
 	});
 
+	test("the round table adds no route: a member's seats come from the host lists, and everything the owners' table reads stays closed to them", () => {
+		const member = SUBJECTS.member as Subject;
+		const admin = SUBJECTS.admin as Subject;
+		for (const who of [member, admin]) {
+			// What a hosted table reads: the kinds' lists, and the room a seat opens.
+			for (const [method, path] of [
+				["GET", "api/host/inbox"],
+				["GET", "api/host/inbox/abcdefgh"],
+				["GET", "api/host/inbox/abcdefgh/messages"],
+			] as const)
+				expect(outcome(method, path, who)).toBe("allow");
+			// What the owners' table reads and writes: the agent rooms, their mute, the presence of the team, and the other panes' data.
+			for (const [method, path] of [
+				["GET", "api/rooms"],
+				["PUT", "api/rooms/app:agent.guide/mute"],
+				["GET", "api/rooms/app:agent.guide"],
+				["GET", "api/agents/guide"],
+				["GET", "api/groups/crew"],
+				["GET", "api/overview"],
+				["GET", "api/workspace/roots"],
+				["GET", "api/skills"],
+			] as const)
+				expect(outcome(method, path, who)).not.toBe("allow");
+		}
+		expect(outcome("PUT", "api/rooms/app:agent.guide/mute", member)).toBe(404);
+	});
+
 	test("the table lists no tier that the type does not know", () => {
 		const tiers: Tier[] = ["owner", "admin", "member"];
 		for (const rule of ROUTES) expect(["G", "V", "O"]).toContain(rule.who);

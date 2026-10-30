@@ -14,6 +14,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- A host may name the `table` pane for a member or an admin (`panes: { owner, admin?, member }`, with that tier's `rooms` pane too; the default lists still leave it out). Their table seats the host rooms their kinds let them list, newest first, not agents: the agent rooms stay the owners'. A seat is lit by its room's own `activity` and cards, which reach a socket only for a room the person may read now, and a tap opens the room's page, where the kind's `access` decides what they may write and press. There is no dialogue box, seat menu or "Who's at the table" sheet for them, and no new route. `overview`, `workspace`, `skills` and `connectors` stay owners-only. The owners' table is unchanged.
+- Following a host room now also sends the follower the room's `activity` frame when a turn is already running, so a seat does not wait for the next change to show it.
 - `HostRoomKind.buttons` may return a promise, for a host whose rights source is async.
 - README: `WebApp.rooms`, `.notices`, `.pages`, `.onboarding` and `.push` throw until the plugin started; `notices.onAck` is available only after start.
 - An ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).

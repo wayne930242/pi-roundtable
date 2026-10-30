@@ -552,6 +552,11 @@ function checkPanes(
 					`${label} names the ${pane} pane, which the owners' panes do not have; the pane's API is served for the owners' list`,
 				);
 		}
+		// A member's table seats the host rooms they may list, which the rooms pane brings with its socket.
+		if (list.includes("table") && !list.includes("rooms"))
+			fail(
+				`${label} names the table pane without the rooms pane, whose host rooms it seats`,
+			);
 	}
 	return { owner, admin, member, given: true };
 }
