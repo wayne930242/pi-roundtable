@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-10-30
+
 ### Added
 
 - `HostCard.keep`: a card the host still wants (a ticket's pinned card while the ticket is open) survives its kind's `retention.textDays` sweep for as long as `card` or `updateCard` passes `keep: true`; `updateCard` without it makes the card ordinary again. Adds the migration `web-host-cards-keep` (a `keep` column).

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-10-30
+
+- Release in lockstep with pi-roundtable 0.26.1; no package-specific behavior changes. The core peer range stays `>=0.26.0 <0.27.0`.
+
 ## [0.26.0] - 2026-10-30
 
 The core peer range is now `>=0.26.0 <0.27.0`.

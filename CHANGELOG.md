@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-10-30
+
 ### Added
 
 - `pi-roundtable-web`: typing `@AI` as the first word of the composer works as the toggle in a room that offers it: the switch shows on while it is there, and the page sends an explicit turn with the token cut from the text. Pasted text, a mention later in the text and an address like `a@ai.com` do not count, and the server never reads a message's text for it.
