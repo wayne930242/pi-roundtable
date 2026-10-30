@@ -40,3 +40,39 @@ test("a Discord channel's prompt names Discord and the web app", () => {
 	expect(text).toContain("This conversation is in Discord (discord).");
 	expect(text).toContain("You also have places on the web app.");
 });
+
+const group = {
+	name: "council",
+	displayName: "Council",
+	members: ["coder", "infra"],
+	host: "coder",
+	channelId: "5000",
+	status: "active",
+} as never;
+
+const infra: Agent = { ...agent, name: "infra", displayName: "Infra" };
+
+/** A seat's prompt, placed at the conversation the group round runs in, not at the agent's home. */
+const seat = (conversation: `${string}:${string}`) =>
+	agentSystemPrompt({
+		agent,
+		shared: "shared",
+		workDir: "/w",
+		owner: TEST_OWNER,
+		shellUser: "u",
+		group: { group, members: [agent, infra] },
+		...placeOf(conversation, surfaces, true),
+	});
+
+test("a web group seat names the web app, not the agent's home surface", () => {
+	const text = seat("app:group.council");
+	expect(text).toContain("This conversation is in the web app (app).");
+	expect(text).toContain("You also have places on Discord.");
+	expect(text).toContain('group chat "Council"');
+});
+
+test("a Discord group seat names Discord", () => {
+	const text = seat("discord:5000");
+	expect(text).toContain("This conversation is in Discord (discord).");
+	expect(text).toContain("You also have places on the web app.");
+});

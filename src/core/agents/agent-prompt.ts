@@ -188,8 +188,8 @@ export function chainLimitReason(who: OwnerIdentity): string {
 }
 
 /**
- * Where a turn's conversation is: the surface of the agent's own channel or room (`home`), named
- * by its `label`, and the other surfaces the agents have places on, Discord when the team has
+ * Where a turn's conversation is: the surface of the turn's conversation (`home`: the agent's own
+ * channel or room, or the group's in a group round), named by its `label`, and the other surfaces the agents have places on, Discord when the team has
  * channels and each surface that hosts rooms.
  */
 export function placeOf(
