@@ -158,11 +158,17 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 		[
 			"POST",
 			/^\/webhooks\/(\d+)\/([^/]+)$/,
-			({ params, body }) => {
+			({ params, body, query }) => {
 				const hook = webhookOf(state, params[0], params[1]);
 				const channel = channelOf(state, hook.channelId);
 				const files = Array.isArray(body.__files) ? body.__files : [];
-				if (!str(body.content) && files.length === 0)
+				// Components are respected only when the request asks (`with_components`); the bot's own webhooks take every kind.
+				const sent =
+					query.get("with_components") === "true"
+						? body
+						: { ...body, components: undefined, flags: 0 };
+				checkCard(sent);
+				if (!str(body.content) && files.length === 0 && !sent.components)
 					throw new HttpError(400, 50006, "Cannot send an empty message");
 				const username = str(body.username);
 				if (username && FORBIDDEN_WORDS.test(username.normalize("NFKC")))
@@ -175,7 +181,7 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 					state,
 					channel,
 					{ authorId: hook.id, webhookId: hook.id },
-					body,
+					sent,
 				);
 				return messageJson(message);
 			},
@@ -194,6 +200,18 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 			/^\/webhooks\/(\d+)\/([^/]+)\/messages\/(\d+)$/,
 			(ctx) => {
 				const { message } = webhookMessage(state, ctx);
+				if (
+					ctx.body.components !== undefined &&
+					ctx.query.get("with_components") === "true"
+				) {
+					if ((message.flags & COMPONENTS_V2) === 0)
+						throw formError(
+							"components[0]",
+							"UNION_TYPE_CHOICES",
+							"Value of field type must be one of (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)",
+						);
+					message.components = ctx.body.components;
+				}
 				if (typeof ctx.body.content === "string")
 					message.content = ctx.body.content;
 				const mentions = mentionsOf(ctx.body);

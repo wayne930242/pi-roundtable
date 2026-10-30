@@ -32,7 +32,7 @@ export interface FakePosterMessage {
 	urls?: string[];
 	/** When it was posted, in the fake's own clock (one more for each message). */
 	at: number;
-	/** The card, for a message `sayCard` posted; `content` then holds its text. */
+	/** The card, for a message `sayCard` or `postCard` posted; `content` then holds its text. */
 	card?: DiscordCard;
 	/** Discord's message type; absent for an ordinary message, 6 for the notice a pin makes. */
 	type?: number;

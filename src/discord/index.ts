@@ -81,6 +81,7 @@ export {
 export type {
 	CardButton,
 	CardLink,
+	CardPicture,
 	CardSelect,
 	CategoryChannel,
 	DiscordCard,
@@ -93,6 +94,7 @@ export type {
 	RecentMessage,
 	ThreadCloser,
 	ThreadState,
+	WebhookCardPost,
 	WebhookPost,
 } from "../core/discord/poster/poster.ts";
 export {

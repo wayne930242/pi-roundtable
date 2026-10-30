@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { DiscordCard } from "./poster.ts";
+import { cardScenarios } from "./poster-contract-cards.ts";
 import { guildScenarios } from "./poster-contract-guild.ts";
 import {
 	expectFailure,
@@ -451,6 +452,7 @@ const messageScenarios: Scenario[] = [
 /** The contract the real poster (over an emulated Discord) and the fake both keep. */
 export const posterScenarios: Scenario[] = [
 	...messageScenarios,
+	...cardScenarios,
 	...guildScenarios,
 ];
 

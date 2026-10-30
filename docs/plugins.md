@@ -2831,7 +2831,7 @@ await poster.edit(channelId, posted.messageId, { content: "Hello again" }, ["rel
 await poster.remove(channelId, posted.messageId, ["relay"]);
 ```
 
-What it covers: webhook posts under names you choose (`post`, `edit`, `remove`, `webhookIds`, `setAvatar`, `onWebhookMade`), the bot's own messages and cards (`say`, `sayCard`, `editCard`, `deleteAsBot`), direct messages (`sendDirect`), pins, reading (`message`, `recentMessages`, `botUserId`, `channelGuild`, `canView`, `memberName`), text channels (`createTextChannel`, `textChannels`, `deleteChannel`, `renameChannel`) and threads (`startThread`, `setThreadArchived`, `threadState`, `threadCloser`).
+What it covers: webhook posts under names you choose (`post`, `edit`, `remove`, `webhookIds`, `setAvatar`, `onWebhookMade`), cards posted through such a webhook (`postCard`, `editWebhookCard`), the bot's own messages and cards (`say`, `sayCard`, `editCard`, `deleteAsBot`), direct messages (`sendDirect`), pins, reading (`message`, `recentMessages`, `botUserId`, `channelGuild`, `canView`, `memberName`), text channels (`createTextChannel`, `textChannels`, `deleteChannel`, `renameChannel`) and threads (`startThread`, `setThreadArchived`, `threadState`, `threadCloser`).
 Use `DISCORD.connection.channelInfo(channelId)` to read what a channel is called now: it comes from the gateway's cache.
 
 The rules the poster keeps, so a plugin does not rediscover them:
@@ -2839,6 +2839,25 @@ The rules the poster keeps, so a plugin does not rediscover them:
 - **Webhooks are named by the plugin.** `post` finds the bot's webhook of that name in the channel, or makes it on first use; a same-named webhook someone else made is never used. A plugin that needs several voices keeps one name per voice, so the `webhookId` on a message tells them apart. A webhook name, and a post's `username`, are 1 to 80 characters without "discord" or "clyde" in any case (full-width letters too); a username is not "everyone" or "here" either. Anything else is refused as `invalid` before a request is sent. `edit` and `remove` take the names to ask, in order, since a webhook changes only its own messages; they make no webhook. `remove` falls back to deleting as the bot (Manage Messages) for a message an earlier webhook of the same name posted.
 - **Nothing pings by accident.** Every post, edit, card and direct message sends `allowed_mentions` with `parse: []` and, for a post, the `mentions` users you list (at most 20). `@everyone`, roles and users merely named in the text never ping.
 - **Cards are Components V2 messages.** A card carries no `content`. Three lessons: every `editCard` re-sends the Components V2 flag (without it Discord answers a 400); a message posted by `say` cannot be edited into a card (`rejected`: delete it and post a card, which changes the message id); and a pin makes Discord post a system notice (type 6) as the bot, which `recentMessages` lists, `deleteAsBot` deletes, and nothing can edit (`rejected`, Discord's 50021), so skip it when looking for your own message.
+- **A card can carry a picture.** `thumbnail: { url, description? }` makes the heading a Section with a small picture beside it; `image: { url, description? }` puts a Media Gallery of one picture under the text sections and above the quiet last line. Both take an `https` address of at most 2,048 characters and an alt text of 1 to 1,024 characters, else `invalid`; `editCard` and `editWebhookCard` keep them when you send them again, and a card without them is sent exactly as before. Discord fetches the address itself, so it must be reachable from the internet.
+- **A webhook can post a card.** `postCard` takes the same `webhook`, `username` and `avatarUrl` as `post` plus a `card`, and sends it with `with_components=true`, which Discord allows for the bot's own (application-owned) webhooks; a button or menu on it reaches your interaction handler like one on a bot card, and the colour bar stays. `editWebhookCard(channelId, messageId, card, webhooks)` asks each named webhook in order, as `edit` does: `message_gone` when none posted it, `rejected` for a message that is not a card. The webhook's token is never logged or put in an error.
+
+```ts
+await poster.postCard(channelId, {
+  webhook: "alerts",
+  username: "Build alerts",
+  avatarUrl: "https://assets.example.org/alerts.png",
+  card: {
+    accent: 0xcc3333,
+    title: "Build failed",
+    sections: ["`main` failed at the test step."],
+    thumbnail: { url: "https://assets.example.org/failed.png", description: "A red cross" },
+    image: { url: "https://assets.example.org/graph.png", description: "Failures over the last week" },
+    links: [{ label: "Open the run", url: "https://ci.example.org/runs/42" }],
+  },
+});
+```
+
 - **A channel is renamed twice in ten minutes.** Discord answers a third with a wait of minutes. `renameChannel` does not queue it: after ten seconds it fails as `unavailable`, and the held request is aborted, never sent later.
 - **Threads.** `startThread` makes a public thread on a message that archives itself after a week and wakes on the next post. The bot needs no Manage Threads to archive or open a thread it started; a locked thread needs it to open again (`forbidden`). `threadCloser` reads the guild's audit log (View Audit Log, else `forbidden`): a person's id, the bot, or `unknown` for Discord's own auto-archive. An archive counts only if its entry is within two minutes of the thread's `archive_timestamp`. It reads the newest 50 `THREAD_UPDATE` entries, so on a busy guild an old close may have left the log and read as `unknown`.
 - **Errors.** Every failure is a `DiscordPosterError` with a `kind`: `invalid` (refused before sending), `channel_gone`, `message_gone`, `forbidden` (a missing permission), `rejected` (Discord refused; asking again fails again) and `unavailable` (Discord or the network failed, or a rate limit held the call; `retryable`). `reason` says more for a full category (`category_full`), a channel that is no category (`not_category`) and one in no guild (`wrong_guild`). A webhook deleted by hand is found or made again once. A person who takes no direct messages is the answer `"closed"`, and a user who is not a member is `false` from `canView` and `undefined` from `memberName`, not failures. A message never holds a URL, a webhook token or the bot token.
@@ -4829,6 +4848,7 @@ Import from the entries listed below; source area files are internal.
 | `DiscordPosterError` | `pi-roundtable/discord` | value |
 | `CardButton` | `pi-roundtable/discord` | type |
 | `CardLink` | `pi-roundtable/discord` | type |
+| `CardPicture` | `pi-roundtable/discord` | type |
 | `CardSelect` | `pi-roundtable/discord` | type |
 | `CategoryChannel` | `pi-roundtable/discord` | type |
 | `DiscordCard` | `pi-roundtable/discord` | type |
@@ -4841,6 +4861,7 @@ Import from the entries listed below; source area files are internal.
 | `RecentMessage` | `pi-roundtable/discord` | type |
 | `ThreadCloser` | `pi-roundtable/discord` | type |
 | `ThreadState` | `pi-roundtable/discord` | type |
+| `WebhookCardPost` | `pi-roundtable/discord` | type |
 | `WebhookPost` | `pi-roundtable/discord` | type |
 | `InteractionContribution` | `pi-roundtable/discord` | type |
 | `InteractionModule` | `pi-roundtable/discord` | type |
