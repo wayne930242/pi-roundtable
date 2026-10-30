@@ -1,7 +1,10 @@
 import type { ConversationPort } from "../contract/channels.ts";
 import type { Logger } from "../log.ts";
 import type { Service } from "../plugin.ts";
-import type { ConversationRegistry } from "./conversation-registry.ts";
+import type {
+	ConversationRecord,
+	ConversationRegistry,
+} from "./conversation-registry.ts";
 
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -12,6 +15,8 @@ export interface ConversationRetentionOptions {
 	conversations: Pick<ConversationPort, "deleteConversation">;
 	/** Days to keep each kind after its last activity; a kind not listed is kept. */
 	keepDays: Readonly<Record<string, number>>;
+	/** True keeps a conversation past its days for this sweep; a throw keeps it too and is logged. */
+	keep?: (record: ConversationRecord) => boolean | Promise<boolean>;
 	now: () => Date;
 	logger: Logger;
 }
@@ -21,8 +26,10 @@ export interface ConversationSweep {
 	deleted: number;
 	/** A turn was running or waiting: tried again at the next sweep. */
 	busy: number;
-	/** Its claim could not delete it: logged, and tried again at the next sweep. */
+	/** Its claim could not delete it, or `keep` threw: logged, and tried again at the next sweep. */
 	failed: number;
+	/** `keep` wanted it: asked again at the next sweep. */
+	kept: number;
 }
 
 /**
@@ -33,8 +40,13 @@ export interface ConversationSweep {
 export async function sweepConversations(
 	options: ConversationRetentionOptions,
 ): Promise<ConversationSweep> {
-	const { registry, conversations, keepDays, now, logger } = options;
-	const result: ConversationSweep = { deleted: 0, busy: 0, failed: 0 };
+	const { registry, conversations, keepDays, keep, now, logger } = options;
+	const result: ConversationSweep = {
+		deleted: 0,
+		busy: 0,
+		failed: 0,
+		kept: 0,
+	};
 	const at = now().getTime();
 	for (const record of await registry.list()) {
 		const days = keepDays[record.kind];
@@ -44,6 +56,10 @@ export async function sweepConversations(
 		)
 			continue;
 		try {
+			if (keep && (await keep(record))) {
+				result.kept += 1;
+				continue;
+			}
 			const outcome = await conversations.deleteConversation(record.key);
 			if (outcome === "busy") {
 				result.busy += 1;
@@ -55,7 +71,7 @@ export async function sweepConversations(
 			result.failed += 1;
 			logger.warn(
 				{ channel: record.key, kind: record.kind, err: error },
-				"conversation past its keepDays not deleted",
+				"conversation past its keepDays not deleted (keep or its claim failed)",
 			);
 		}
 	}
@@ -77,7 +93,7 @@ export function conversationRetentionService(
 	const sweep = async (): Promise<void> => {
 		try {
 			const result = await sweepConversations(options);
-			if (result.deleted + result.busy + result.failed > 0)
+			if (result.deleted + result.busy + result.failed + result.kept > 0)
 				options.logger.info(result, "conversations past their keepDays swept");
 		} catch (error) {
 			options.logger.warn(

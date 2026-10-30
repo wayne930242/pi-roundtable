@@ -40,6 +40,7 @@ const settings = (over: Partial<ResolvedOidc> = {}): ResolvedOidc => ({
 	endSession: false,
 	reauthHours: undefined,
 	storeClaims: [],
+	onSessionVerified: undefined,
 	...over,
 });
 
@@ -163,6 +164,9 @@ describeDb("signing in with an OpenID Connect provider", () => {
 			},
 			onSignIn: (info) => void signedIn.push(info),
 			onEnded: (id) => void ended.push(id),
+			...(over.onSessionVerified
+				? { onSessionVerified: over.onSessionVerified }
+				: {}),
 			logger: logs.logger,
 			keys: idp.keys,
 			fetch: idp.fetcher,
@@ -455,5 +459,37 @@ describeDb("signing in with an OpenID Connect provider", () => {
 		expect(rows[0]?.id).toBe(createHash("sha256").update(token).digest("hex"));
 		clock += 31 * DAY;
 		expect(await sessions.sweep()).toBe(1);
+	});
+	test("onSessionVerified hears a live session at most once every five minutes, and a hook that fails is logged, not thrown", async () => {
+		const heard: string[] = [];
+		const t = await setup({
+			onSessionVerified: (id) => {
+				heard.push(id);
+				if (heard.length === 2) throw new Error("hook broke");
+			},
+		});
+		t.login.verified("s-1", "p-ada");
+		t.login.verified("s-1", "p-ada");
+		t.login.verified("s-2", "p-bea");
+		expect(heard).toEqual(["p-ada", "p-bea"]);
+		clock += 299_000;
+		t.login.verified("s-1", "p-ada");
+		expect(heard).toHaveLength(2);
+		clock += 2_000;
+		t.login.verified("s-1", "p-ada");
+		expect(heard).toEqual(["p-ada", "p-bea", "p-ada"]);
+		await Bun.sleep(5);
+		expect(JSON.stringify(t.logs.lines)).toContain("session-verified hook");
+	});
+
+	test("a hook that rejects is logged and a login with no hook ignores the report", async () => {
+		const t = await setup({
+			onSessionVerified: () => Promise.reject(new Error("later")),
+		});
+		t.login.verified("s-1", "p-ada");
+		await Bun.sleep(5);
+		expect(JSON.stringify(t.logs.lines)).toContain("session-verified hook");
+		const plain = await setup();
+		expect(() => plain.login.verified("s-1", "p-ada")).not.toThrow();
 	});
 });

@@ -20,7 +20,7 @@ import {
 	approverOf,
 	askSpeaker,
 	awaitingText,
-	declinedText,
+	declinedRefusal,
 	type GateDecision,
 	type Needing,
 	namesOf,
@@ -337,7 +337,7 @@ export class ConfirmationGate {
 				wait: {
 					// A late answer on the card: the text of the turn that tells the model, and the release it earned.
 					late: (late) => {
-						const outcome = lateOutcome(call, late, watch);
+						const outcome = lateOutcome(call, late, watch, needing.onDeclined);
 						if (outcome?.release) this.#lateApproved.push(outcome.release);
 						return outcome?.text;
 					},
@@ -372,13 +372,8 @@ export class ConfirmationGate {
 				reason: awaitingText(this.#addressee, call),
 				refused: "pending",
 			};
-		if (answer === "declined") {
-			watch?.end();
-			return {
-				reason: declinedText(this.#addressee, call),
-				refused: "declined",
-			};
-		}
+		if (answer === "declined")
+			return declinedRefusal(this.#addressee, call, watch, needing.onDeclined);
 		if (answer === "cancelled") {
 			watch?.end();
 			return { reason: "The turn was stopped." };
@@ -449,6 +444,7 @@ export class ConfirmationGate {
 			...(judged.copy ? { copy: judged.copy } : {}),
 			...(judged.supersede ? { supersede: judged.supersede } : {}),
 			...(judged.speakerOnly ? { speakerOnly: judged.speakerOnly } : {}),
+			...(judged.onDeclined ? { onDeclined: judged.onDeclined } : {}),
 		};
 	}
 

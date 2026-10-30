@@ -125,6 +125,7 @@ export function checkCard(card: {
 	state?: string | undefined;
 	links?: readonly { label: string; url: string }[] | undefined;
 	buttons?: readonly HostAction[] | undefined;
+	keep?: boolean | undefined;
 }): void {
 	if (typeof card.title !== "string" || card.title.length > LIMITS.title)
 		fail(`a card's title is at most ${LIMITS.title} characters`);
@@ -134,6 +135,8 @@ export function checkCard(card: {
 		fail(`a card's tone is note, ok, warn or risk`);
 	if (card.state !== undefined && !STATES.has(card.state))
 		fail(`a card's state is open, working, done, superseded or expired`);
+	if (card.keep !== undefined && typeof card.keep !== "boolean")
+		fail("a card's keep is true or false");
 	const links = card.links ?? [];
 	if (links.length > LIMITS.links)
 		fail(`a card takes at most ${LIMITS.links} links`);

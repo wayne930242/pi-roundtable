@@ -1568,4 +1568,62 @@ describeDb("the host rooms over a real host", () => {
 		} as InboundMessage);
 		expect(agent).toBeUndefined();
 	});
+
+	test("rooms.context reads a room's recent messages without an addressing message and marks nothing handed over", async () => {
+		const room = `app:inbox.c${RUN}ctx02` as ChannelKey;
+		app.state.grants.get(app.principals.ada)?.set(`c${RUN}ctx02`, READ_WRITE);
+		await web.rooms.post(room, external("old question"));
+		await web.rooms.post(room, {
+			author: { kind: "assistant", name: "Assistant" },
+			text: "old answer",
+		});
+		await web.rooms.post(room, external("customer says A"));
+		await web.rooms.post(room, {
+			author: { kind: "notice", name: "System" },
+			text: "a status line",
+		});
+		await web.rooms.post(room, external("customer says B"));
+		await web.rooms.post(room, external("customer says C"));
+		const first = await web.rooms.context(room, { limit: 2 });
+		expect(first?.messages.map((m) => m.text)).toEqual([
+			"customer says B",
+			"customer says C",
+		]);
+		expect(first?.messages[0]?.external).toBe(true);
+		expect(first?.text).toContain('role="external"');
+		// A retry gets the same, and so does the turn's own read after it.
+		const again = await web.rooms.context(room, { limit: 2 });
+		expect(again?.text).toBe(first?.text);
+		const all = await web.rooms.context(room);
+		expect(all?.messages.map((m) => m.text)).toEqual([
+			"customer says A",
+			"customer says B",
+			"customer says C",
+		]);
+		const read = await app.host.context.services.get(CHANNEL_CONTEXT).read({
+			channel: room,
+			messageId: "app-999999",
+			authorId: "x",
+			authorName: "Ada",
+			authorIsBot: false,
+			isDirect: false,
+			mentionsBot: false,
+			repliesToBot: false,
+			text: "now answer",
+			attachments: [],
+		} as InboundMessage);
+		expect(read?.messages).toHaveLength(3);
+		// A room with nothing since the assistant spoke gives none; so does a room of no kind, by throwing.
+		await web.rooms.post(room, {
+			author: { kind: "assistant", name: "Assistant" },
+			text: "answered",
+		});
+		expect(await web.rooms.context(room)).toBeUndefined();
+		await expect(
+			web.rooms.context("app:nokind.x" as ChannelKey),
+		).rejects.toThrow("not a room");
+		await expect(web.rooms.context(room, { limit: 0 })).rejects.toThrow(
+			RangeError,
+		);
+	});
 });

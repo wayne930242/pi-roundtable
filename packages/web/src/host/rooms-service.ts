@@ -1,5 +1,6 @@
 import type { ChannelKey, Logger } from "pi-roundtable";
 import { PluginError } from "pi-roundtable";
+import type { ChannelContext } from "pi-roundtable/discord";
 import type { ServerFrame } from "../api-types.ts";
 import { MAX_MESSAGE_CHARS } from "../api-types.ts";
 import { type FileDir, isFileId, safeName } from "../app/files.ts";
@@ -15,6 +16,7 @@ import type {
 } from "../web-app.ts";
 import type { HostAccess } from "./access.ts";
 import type { HostCardLog } from "./cards.ts";
+import type { HostRoomContextOptions } from "./context.ts";
 import { checkCard } from "./forms.ts";
 import { cardView, checkPicture, type FoundRoom } from "./room-views.ts";
 
@@ -37,6 +39,11 @@ export interface HostRoomsOptions {
 	roomUrl(room: ChannelKey, message?: number): string;
 	/** Which kinds a person's last list showed, so the list's changes reach only them. */
 	listed: ListedKinds;
+	/** A room's recent messages as a channel-context block, without marking them handed over. */
+	context(
+		room: string,
+		options?: HostRoomContextOptions,
+	): Promise<ChannelContext | undefined>;
 	now?: () => number;
 	logger: Logger;
 }
@@ -270,6 +277,14 @@ export class HostRoomsService implements HostRooms {
 	): Promise<number | undefined> {
 		this.#found(room);
 		return this.#options.log.byReference(room, reference);
+	}
+
+	async context(
+		room: ChannelKey,
+		options?: HostRoomContextOptions,
+	): Promise<ChannelContext | undefined> {
+		this.#found(room);
+		return this.#options.context(room, options);
 	}
 
 	// ── Cards ──

@@ -835,3 +835,70 @@ describe("auth options", () => {
 			);
 	});
 });
+
+describe("an oidc session reports itself as verified", () => {
+	const fakeOidc = (verified: [string, string][]) => ({
+		login: {
+			open: async () => undefined,
+			credential: async () => ({
+				admitted: true as const,
+				actor: { provider: "idp", subject: "u-1", name: "Ada" },
+				session: "s-1",
+			}),
+			verified: (session: string, principalId: string) =>
+				void verified.push([session, principalId]),
+		},
+		sessions: { alive: async () => true },
+	});
+	const build = (verified: [string, string][]) => {
+		const recorder = recordingLogger();
+		return createAuthenticator({
+			auth: {
+				mode: "oidc",
+			} as unknown as AuthenticatorOptions["auth"],
+			identify: async () => ({ visitor: OWNER }),
+			origin: HTTPS_ORIGIN,
+			mount: "/console",
+			title: "Test console",
+			logger: recorder.logger,
+			dataDir: tempDir(),
+			listener: { id: "public", address: loopback },
+			oidc: fakeOidc(verified),
+		});
+	};
+
+	test("a request and an open socket name the session and the person", async () => {
+		const verified: [string, string][] = [];
+		const authenticator = build(verified);
+		const answer = await authenticator.authenticate(
+			new Request(`${HTTPS_ORIGIN}/console/api/session`),
+		);
+		expect("visitor" in answer).toBe(true);
+		expect(verified).toEqual([["s-1", "owner"]]);
+		await authenticator.recheck({ actor: undefined, session: "s-1" });
+		expect(verified).toEqual([
+			["s-1", "owner"],
+			["s-1", "owner"],
+		]);
+	});
+
+	test("a refused person is not reported", async () => {
+		const verified: [string, string][] = [];
+		const authenticator = createAuthenticator({
+			auth: { mode: "oidc" } as unknown as AuthenticatorOptions["auth"],
+			identify: async () => ({ refusal: "disabled" }),
+			origin: HTTPS_ORIGIN,
+			mount: "/console",
+			title: "Test console",
+			logger: recordingLogger().logger,
+			dataDir: tempDir(),
+			listener: { id: "public", address: loopback },
+			oidc: fakeOidc(verified),
+		});
+		await authenticator.authenticate(
+			new Request(`${HTTPS_ORIGIN}/console/api/session`),
+		);
+		await authenticator.recheck({ actor: undefined, session: "s-1" });
+		expect(verified).toEqual([]);
+	});
+});

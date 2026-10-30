@@ -26,6 +26,7 @@ describeDb("what the host rooms store", () => {
 		await RoomLog.migration.up(sql);
 		await RoomLog.hostMigration.up(sql);
 		await HostCardLog.migration.up(sql);
+		await HostCardLog.keepMigration.up(sql);
 		await RoomReads.migration.up(sql);
 		log = new RoomLog(sql);
 		cards = new HostCardLog(sql);
@@ -43,6 +44,7 @@ describeDb("what the host rooms store", () => {
 		for (const migration of [
 			RoomLog.hostMigration,
 			HostCardLog.migration,
+			HostCardLog.keepMigration,
 			RoomReads.migration,
 		]) {
 			await migration.up(sql);
@@ -303,6 +305,22 @@ describeDb("what the host rooms store", () => {
 		await sql`UPDATE web_host_cards SET created_at = now() - interval '3 days' WHERE room = ${ROOM}`;
 		const oldCard = await cards.create(ROOM, { title: "old", body: "b" });
 		await sql`UPDATE web_host_cards SET created_at = now() - interval '3 days' WHERE id = ${oldCard.id}`;
+		// A card the host keeps survives its age; one it stops keeping goes with the next sweep.
+		const heldCard = await cards.create(ROOM, {
+			title: "open ticket",
+			body: "b",
+			keep: true,
+		});
+		const releasedCard = await cards.create(ROOM, {
+			title: "closed ticket",
+			body: "b",
+			keep: true,
+		});
+		await sql`UPDATE web_host_cards SET created_at = now() - interval '3 days' WHERE id IN ${sql([heldCard.id, releasedCard.id])}`;
+		await cards.update(ROOM, releasedCard.id, {
+			title: "closed ticket",
+			body: "b",
+		});
 		const newCard = await cards.create(ROOM, { title: "new", body: "b" });
 		const swept = await sweepHostKinds({
 			registry: {
@@ -323,12 +341,13 @@ describeDb("what the host rooms store", () => {
 			files: dir,
 			now: () => now,
 		});
-		expect(swept).toMatchObject({ messages: 1, cards: 1, files: 1 });
+		expect(swept).toMatchObject({ messages: 1, cards: 2, files: 1 });
 		expect(await log.get(ROOM, stale.message.id)).toBeUndefined();
 		expect(await log.get(ROOM, fresh.message.id)).toBeDefined();
 		expect(await log.get(ELSEWHERE, agent.message.id)).toBeDefined();
 		expect(dir.has(kept.id)).toBe(false);
 		expect((await cards.list(ROOM)).map((card) => card.id)).toEqual([
+			heldCard.id,
 			newCard.id,
 		]);
 	});

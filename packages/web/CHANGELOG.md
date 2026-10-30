@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `HostCard.keep`: a card the host still wants (a ticket's pinned card while the ticket is open) survives its kind's `retention.textDays` sweep for as long as `card` or `updateCard` passes `keep: true`; `updateCard` without it makes the card ordinary again. Adds the migration `web-host-cards-keep` (a `keep` column).
+- `WebApp.rooms.context(room, { limit?, messageChars? })`: a host room's recent messages as the channel-context block `CHANNEL_CONTEXT.read` gives a turn, for a host that starts a turn from a room's `send` hook and has no addressing message. It marks nothing handed over, so a retry reads the same.
+- `auth.onSessionVerified(principalId)` for `oidc`: called when a request or an open socket proves a live session, at most once per session every five minutes, so a host can count a person who only has the app open as present. It is not awaited; an error it throws is logged and never fails the request.
 - Internal notes in an agent or group room: an agent or group room that more than one person reads (the host has more than one owner) gets an `@AI` switch on the composer, on by default. Off, the message is an internal note: it is stored in the room's log with its author, shown live to every other owner and in the history with the author's name and picture and an "Internal note" marker (zh-TW has its own wording), and never given to the agent: no turn runs, it is not in the agent's session, and it is not in any channel context. The server says which rooms take notes: `RoomView.notes` is `true` on the agent and group rooms of a host with more than one owner, absent otherwise, so the page does not guess. A note is a `send` frame with `mode: "note"` (the frame the host rooms already use); a stored note carries `RoomMessage.note: true` (additive column `web_room_messages.note`, migration `web-room-messages-note`). A host with one owner behaves exactly as before: no switch, no new field in the room list or the history, and a `note` frame is still refused as `bad_frame`. The fixture takes `FIXTURE_OWNERS=2` to try it with Ada and Bob.
 - The package entry exports the host-facing API: `WEB_APP` and the types `WebApp`, `HostRoomKind`, `HostPage`, `HostCard`, `Viewer`, `OpenTarget`, `ActionResult`, `LinkProver`, `OnboardingStep` and `Notices`, so a host plugin no longer mirrors them.
 - The `description` option, and `<meta name="description">`, `og:title`, `og:description` and `og:image` on the page, so a search result and a link preview have a title, a line and the mark. Without `description` a line is derived from `title`.
@@ -15,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- README and the `Notices.raise` doc: a notice's `tag` is the dedupe key, the push tag and the acknowledgement key, visible to the people the notice is for; put no private id in it.
 - `HostRoomKind.buttons` may return a promise, for a host whose rights source is async.
 - README: `WebApp.rooms`, `.notices`, `.pages`, `.onboarding` and `.push` throw until the plugin started; `notices.onAck` is available only after start.
 - An ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).

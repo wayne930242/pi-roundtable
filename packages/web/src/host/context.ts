@@ -54,22 +54,46 @@ function sourceOf(message: RoomMessage): Source {
 	};
 }
 
+/** What `WebApp.rooms.context` takes. */
+export interface HostRoomContextOptions {
+	/** The most messages to return, newest kept; default 15, at most 100. */
+	limit?: number;
+	/** The most characters of one message before it is cut with `…`; default 500. */
+	messageChars?: number;
+}
+
+/** The two ways a host room's recent messages are read. */
+export interface HostRoomContext {
+	/** For a turn the room's message addressed: marks what it returns as handed over. */
+	read(
+		message: InboundMessage,
+		options?: ChannelContextOptions,
+	): Promise<ChannelContext | undefined>;
+	/** For a host with no addressing message: the same block, and nothing is marked handed over. */
+	peek(
+		room: string,
+		options?: HostRoomContextOptions,
+	): Promise<ChannelContext | undefined>;
+}
+
 /**
- * The app surface's `channelContext` for a host room: what was said in it since the assistant
+ * The app surface's channel context of a host room: what was said in it since the assistant
  * last posted, before the message that addressed it, as the core's block of channel messages. An
  * outsider's words read as `external`, a notice line is not in the channel as far as the context
  * goes, and a message already handed to the conversation is not handed again. Anything but a host
- * room has none: an agent room is one person's.
+ * room has none: an agent room is one person's. `peek` reads the same block for the end of the
+ * room and leaves the handed-over marks alone, so a retry gets the same.
  */
-export function hostChannelContext(
+export function hostRoomContext(
 	ctx: Pick<HostContext, "registry" | "log">,
-): (
-	message: InboundMessage,
-	options?: ChannelContextOptions,
-) => Promise<ChannelContext | undefined> {
+): HostRoomContext {
 	const seen = new Map<string, Set<string>>();
-	return async (message, options = {}) => {
-		const room = message.channel;
+	const build = async (
+		room: string,
+		addressed: number | undefined,
+		options: ChannelContextOptions,
+		consume: boolean,
+	): Promise<ChannelContext | undefined> => {
 		if (!ctx.registry.isHostRoom(room)) return undefined;
 		const fetch = positive("fetch", options.fetch ?? DEFAULT_FETCH, PAGE_LIMIT);
 		const keep = positive("keep", options.keep ?? DEFAULT_KEEP, 100);
@@ -78,12 +102,7 @@ export function hostChannelContext(
 			options.messageChars ?? DEFAULT_CHARS,
 			20_000,
 		);
-		const addressed = /^app-(\d+)$/.exec(message.messageId)?.[1];
-		const page = await ctx.log.page(
-			room,
-			addressed === undefined ? undefined : Number(addressed),
-			fetch,
-		);
+		const page = await ctx.log.page(room, addressed, fetch);
 		const sources = page.messages.map((one) => ({
 			source: sourceOf(one),
 			notice: authorKindOf(one) === "notice",
@@ -99,24 +118,26 @@ export function hostChannelContext(
 		const lastEnd = considered.findLastIndex(
 			(entry) => verdict(entry) === "end",
 		);
-		const known = seen.get(room) ?? new Set<string>();
+		const known = consume ? (seen.get(room) ?? new Set<string>()) : undefined;
 		const fresh = considered
 			.slice(lastEnd + 1)
 			.filter(
 				(entry) =>
 					verdict(entry) === "keep" &&
-					!known.has(entry.source.id) &&
+					!known?.has(entry.source.id) &&
 					entry.source.text !== "",
 			)
 			.slice(-keep);
-		// What was in the window is not handed over again, kept or not.
-		for (const entry of considered.slice(lastEnd + 1))
-			known.add(entry.source.id);
-		seen.delete(room);
-		seen.set(room, new Set([...known].slice(-SEEN_PER_ROOM)));
-		if (seen.size > SEEN_ROOMS) {
-			const oldest = seen.keys().next().value;
-			if (oldest !== undefined) seen.delete(oldest);
+		if (known) {
+			// What was in the window is not handed over again, kept or not.
+			for (const entry of considered.slice(lastEnd + 1))
+				known.add(entry.source.id);
+			seen.delete(room);
+			seen.set(room, new Set([...known].slice(-SEEN_PER_ROOM)));
+			if (seen.size > SEEN_ROOMS) {
+				const oldest = seen.keys().next().value;
+				if (oldest !== undefined) seen.delete(oldest);
+			}
 		}
 		if (fresh.length === 0) return undefined;
 		const messages: ChannelContextMessage[] = fresh.map(({ source }) => ({
@@ -137,5 +158,31 @@ export function hostChannelContext(
 			})),
 		}));
 		return { messages, text: formatChannelContext(messages) };
+	};
+	return {
+		read(message, options = {}) {
+			const addressed = /^app-(\d+)$/.exec(message.messageId)?.[1];
+			return build(
+				message.channel,
+				addressed === undefined ? undefined : Number(addressed),
+				options,
+				true,
+			);
+		},
+		peek(room, options = {}) {
+			const limit = options.limit ?? DEFAULT_KEEP;
+			return build(
+				room,
+				undefined,
+				{
+					keep: limit,
+					fetch: Math.min(PAGE_LIMIT, Math.max(DEFAULT_FETCH, limit * 3)),
+					...(options.messageChars === undefined
+						? {}
+						: { messageChars: options.messageChars }),
+				},
+				false,
+			);
+		},
 	};
 }

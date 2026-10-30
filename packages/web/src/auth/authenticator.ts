@@ -78,7 +78,7 @@ export interface AuthenticatorOptions {
 	listener: { id: string; address: Readonly<ListenerAddress> | undefined };
 	/** The sign-in flow and the session store, for `oidc`. */
 	oidc?: {
-		login: Pick<OidcLogin, "open" | "credential">;
+		login: Pick<OidcLogin, "open" | "credential" | "verified">;
 		sessions: Pick<WebSessions, "alive">;
 	};
 	/** Where the password is read from; default `process.env`. */
@@ -205,6 +205,8 @@ export function createAuthenticator(
 			)
 				return denied("foreign origin");
 			const { session } = checked as Admitted;
+			if (session)
+				options.oidc?.login.verified(session, identified.visitor.principal.id);
 			return {
 				visitor: identified.visitor,
 				...(checked.actor ? { actor: checked.actor } : {}),
@@ -222,9 +224,13 @@ export function createAuthenticator(
 				}
 			}
 			const identified = await identify(held.actor);
-			return "refusal" in identified
-				? denied(String(identified.refusal))
-				: { visitor: identified.visitor };
+			if ("refusal" in identified) return denied(String(identified.refusal));
+			if (held.session)
+				options.oidc?.login.verified(
+					held.session,
+					identified.visitor.principal.id,
+				);
+			return { visitor: identified.visitor };
 		},
 	};
 }

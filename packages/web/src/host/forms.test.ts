@@ -141,6 +141,10 @@ test("a card's links are https or this origin's paths, and only an open card has
 			/must be https or a path/,
 		);
 	expect(() => checkCard({ ...card, state: "later" })).toThrow(/state is open/);
+	expect(() => checkCard({ ...card, keep: true })).not.toThrow();
+	expect(() => checkCard({ ...card, keep: "yes" as never })).toThrow(
+		/keep is true or false/,
+	);
 	expect([undefined, "open"].map((state) => pressable({ state }))).toEqual([
 		true,
 		true,

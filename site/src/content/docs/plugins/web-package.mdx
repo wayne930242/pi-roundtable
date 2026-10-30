@@ -142,6 +142,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `auth.endSession` | `false` | `oidc` only: whether Log out also signs out at the provider. |
 | `auth.reauthHours` | never | `oidc` only: ask the provider again after this many hours. |
 | `auth.storeClaims` | none | `oidc` only: `id_token` claims kept with the session. |
+| `auth.onSessionVerified` | none | `oidc` only: `(principalId) => void`, called when a request or socket proves a live session (once per session per five minutes). |
 | `push.preview` | `true` | Whether a notification shows the first 120 characters. |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | When an agent's post and a notice are not pushed, as `HH:MM` times on the console's time zone; cards always are. `false` turns it off. |
 | `push.endpointHosts` | none | Extra push-service hosts; a leading `*.` allows subdomains. |
@@ -156,7 +157,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 
 ## Notices and an external push sender
 
-A notice waits on one person. A host raises it with `Notices.raise` and an `open` target, `{ room, message? }` or `{ page, query? }`, and takes it back with `Notices.resolve`. It shows in the bell and on the app icon, and a normal one waits in the bell during the person's quiet hours while an urgent one rings. Tapping a notice or a notification opens exactly that room or page, with the app open or closed.
+A notice waits on one person. A host raises it with `Notices.raise` and an `open` target, `{ room, message? }` or `{ page, query? }`, and takes it back with `Notices.resolve`. Its `tag` is the dedupe key, the push tag and the acknowledgement key, and the people the notice is for can see it, so put no private id in it. It shows in the bell and on the app icon, and a normal one waits in the bell during the person's quiet hours while an urgent one rings. Tapping a notice or a notification opens exactly that room or page, with the app open or closed.
 
 What a person owes before the app opens is set with `onboarding` (`links`, `push` and `pushWaiver`, above).
 The profile page lists the accounts a person linked, lets them link or unlink the ones the host's `LinkProver`s allow, choose which account names them (**Shown as**), and set their quiet hours.
@@ -175,7 +176,7 @@ A member's socket receives nothing from an agent room, not as it happens and not
 A required onboarding step closes the app on it: only the profile, settings and the pages that finish the step answer, until the last one is done.
 A link may carry `?next=` with `profile`, `notices`, `settings`, `room:<key>` or `p:<page>`; any other value is dropped.
 
-OpenID Connect signs in with the authorization code flow and PKCE, checks the `id_token` once at the callback, and keeps its own server-side session in `web_sessions`: a random id in an `HttpOnly` cookie, of which only the SHA-256 is stored. The session ends after `sessionDays` without a visit; Log out deletes it. `reauthHours` makes the provider vouch again, silently when it can, and `storeClaims` keeps named claims with the session.
+OpenID Connect signs in with the authorization code flow and PKCE, checks the `id_token` once at the callback, and keeps its own server-side session in `web_sessions`: a random id in an `HttpOnly` cookie, of which only the SHA-256 is stored. The session ends after `sessionDays` without a visit; Log out deletes it. `reauthHours` makes the provider vouch again, silently when it can, and `storeClaims` keeps named claims with the session. `onSessionVerified(principalId)` hears a live session at most once per session every five minutes, so a host can count a person who only has the app open as present; an error it throws is logged, never failing the request.
 
 ## Authentication and the threat model
 
@@ -207,12 +208,13 @@ A host plugin that is not an agent can own rooms in the app, such as a support i
 
 - **Access** is the kind's `access(viewer, id)`, asked on every read, frame, send, card answer, upload and file; `undefined` is a `404`. It answers what the person may do: read, send a `note` or a `turn`, press buttons.
 - **Messages** are posted with `app.rooms.post` by an author kind: `external` (plain text, shown with the host's label such as "Customer"), `member`, `assistant` or `notice` (Markdown). `reference` finds a message again; `edit` and `remove` change it.
+- **Recent messages**: `app.rooms.context(room, { limit?, messageChars? })` gives a room's recent messages as the block `CHANNEL_CONTEXT.read` gives a turn (`{ messages, text }`): what was said since the assistant last posted, the newest `limit` of it (default 15, at most 100), an outsider's words marked `external`, notices left out. For a turn that starts from a room's `send` hook, where no message addressed the assistant. It marks nothing handed over, so a retry reads the same.
 - **Cards** carry a title, body, tone, state, links and buttons; a button may open a form (text, textarea, url, select with `initial` and `search`, multiselect) checked on the server before the kind's `act` runs. Buttons show only while the card is `open`. Approval and question cards of an agent keep the agent's own prompt scope.
 - **Writing**: where a viewer may send both a `note` and a `turn`, the room shows one `@AI` toggle over the composer's bar (off = a note for the room's people only, on = the agent answers) and the box's hint follows it; a viewer who may send one way only has no toggle. A kind words it with `sendWording: { note?: { placeholder }, turn?: { label, placeholder } }`, text only, a label cut to 40 characters and a placeholder to 100.
 - **Icons**: a page or a kind may give `icon`, one of `HOST_ICONS` (type `HostIconName`): `chat`, `link`, `activity`, `users`, `megaphone`, `qr`, `settings`, `bell`, `file`, `list`, `shield`, `lock`, `sparkle`. A page's icon shows in the navigation, a kind's beside its section in the room list; a name outside the list shows the default.
 - **Links and images**: `app.rooms.link(room, messageId?)` gives the address that opens a room and highlights a message; `![alt](file:<id>)` shows a PNG, JPEG or WebP saved with `saveFile` or `app.pages.saveAsset`, to those who may see the room or page.
 - **Pages** at `<mount>/p/<id>` are built from Markdown, list, form and card sections; `visible(viewer)` is asked every time and `app.pages.changed(id?)` makes viewers fetch again.
-- **Retention**: a kind's `retention: { textDays, fileDays }` deletes its messages, author names, cards and files, counted from each message's time.
+- **Retention**: a kind's `retention: { textDays, fileDays }` deletes its messages, author names, cards and files, counted from each message's time (a card's from when it was first posted). A card marked `keep: true` in `card` or `updateCard`, such as a ticket's pinned card while the ticket is open, is skipped by the sweep for as long as the host passes it.
 - **Read marks**: the app keeps how far each person has read in every room (host and agent rooms alike). The list and drawer show unread counts, a room opens with a "new messages" divider, and each message shows who has read up to it ("Seen by 2", with pictures).
 
 The room, list and page code loads when first opened; the app's first load does not grow.

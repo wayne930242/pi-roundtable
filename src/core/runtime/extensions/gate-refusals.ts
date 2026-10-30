@@ -37,6 +37,8 @@ export type Needing =
 			supersede?: AbortSignal;
 			/** The card is the speaker's alone; see `HoldDescription`. */
 			speakerOnly?: true;
+			/** Called when the call's card is declined; see `HoldDescription`. */
+			onDeclined?: () => void | Promise<void>;
 	  }
 	| { released: Release };
 
@@ -74,6 +76,36 @@ export function awaitingText(addressee: OwnerIdentity, call: HeldCall): string {
 export function declinedText(addressee: OwnerIdentity, call: HeldCall): string {
 	const o = ownerWords(addressee);
 	return `${o.name} declined this on its approval card: it would ${call.action}. Do not retry it; go on without it, or ask ${o.him} what ${o.he} wants instead.`;
+}
+
+/**
+ * Tells the plugin that held a call that its card was declined (`HoldDescription.onDeclined`).
+ * The call is refused whatever the plugin does, so what its hook throws or rejects with is ignored.
+ */
+export function notifyDeclined(
+	onDeclined: (() => void | Promise<void>) | undefined,
+): void {
+	if (!onDeclined) return;
+	try {
+		Promise.resolve(onDeclined()).catch(() => undefined);
+	} catch {
+		// A hook that throws changes nothing: the call is refused already.
+	}
+}
+
+/**
+ * The refusal of a call declined on its card the turn was still waiting on: ends the plugin's
+ * watch of the call, tells it through `onDeclined`, and gives the turn the text and the reason.
+ */
+export function declinedRefusal(
+	addressee: OwnerIdentity,
+	call: HeldCall,
+	watch: { end(): void } | undefined,
+	onDeclined: (() => void | Promise<void>) | undefined,
+): { reason: string; refused: "declined" } {
+	watch?.end();
+	notifyDeclined(onDeclined);
+	return { reason: declinedText(addressee, call), refused: "declined" };
 }
 
 /** The text for a held call that the speaker's own message confirms. */

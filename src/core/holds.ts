@@ -47,6 +47,14 @@ export interface HoldContext {
  *
  * `classes` are the hold classes of the call, for a rule that describes it in a turn (see
  * `HoldRule.holdClasses`); a rule that leaves them out leaves its call unclassed.
+ *
+ * `onDeclined` is called once when the call's approval card is declined, whether the turn was
+ * still waiting on it or the owner declined after the turn stopped waiting, so a plugin can close
+ * what it opened for the call, such as its own notice that asks for the approval. It is not
+ * called when the call is withdrawn through `supersede` (the plugin did that itself), approved,
+ * left unanswered or expired, or dropped by a message that does not confirm it: only a declined
+ * card calls it, in the process that holds the card (a restart loses it with the card). It
+ * must not throw; whatever it throws or rejects with is ignored, and the call is refused either way.
  */
 export type HoldDescription =
 	| string
@@ -56,6 +64,7 @@ export type HoldDescription =
 			supersede?: AbortSignal;
 			approval?: "speaker";
 			classes?: readonly string[];
+			onDeclined?: () => void | Promise<void>;
 	  };
 
 /**

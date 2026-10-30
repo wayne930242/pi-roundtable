@@ -142,6 +142,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `auth.endSession` | `false` | 只用於 `oidc`：登出時是否一併登出提供者。 |
 | `auth.reauthHours` | 不會 | 只用於 `oidc`：過了這麼多小時就再向提供者確認。 |
 | `auth.storeClaims` | 無 | 只用於 `oidc`：隨 session 保存的 `id_token` claims。 |
+| `auth.onSessionVerified` | 無 | 只用於 `oidc`：`(principalId) => void`，request 或 socket 證明 session 仍有效時呼叫（每個 session 每五分鐘最多一次）。 |
 | `push.preview` | `true` | 通知是否顯示訊息的前 120 個字元。 |
 | `push.quietHours` | `{ start: "23:00", end: "08:00" }` | 不推播 agent 發話與通知的時段，以主控台時區的 `HH:MM` 表示；卡片一律推播。`false` 關閉勿擾時段。 |
 | `push.endpointHosts` | 無 | 額外允許的推播服務主機；開頭的 `*.` 代表所有子網域。 |
@@ -156,7 +157,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 
 ## 通知與外部推播送出行程
 
-通知是等某一個人處理的事。host 用 `Notices.raise` 發出，並帶 `open` 目標，也就是 `{ room, message? }` 或 `{ page, query? }`，處理完用 `Notices.resolve` 收回。它會出現在通知鈴與 app 圖示上；一般通知在對方的勿擾時段只留在通知鈴，緊急通知照常響。點通知或推播，不論 app 開著或關著，都會打開確切的那個房間或頁面。
+通知是等某一個人處理的事。host 用 `Notices.raise` 發出，並帶 `open` 目標，也就是 `{ room, message? }` 或 `{ page, query? }`，處理完用 `Notices.resolve` 收回。它的 `tag` 同時是去重的鍵、推播的標籤與確認的鍵，通知對象的瀏覽器看得到它，所以別把不該讓他們看到的私有 id 放進去。它會出現在通知鈴與 app 圖示上；一般通知在對方的勿擾時段只留在通知鈴，緊急通知照常響。點通知或推播，不論 app 開著或關著，都會打開確切的那個房間或頁面。
 
 對方在開啟 app 前要完成什麼，由 `onboarding` 設定（上表的 `links`、`push` 與 `pushWaiver`）。
 個人資料頁會列出對方連結過的帳號，讓他連結或解除 host 的 `LinkProver` 允許的帳號，選擇用哪個帳號當作他在 app 裡的名稱（**顯示為**），並設定自己的勿擾時段。
@@ -175,7 +176,7 @@ owner 能用夥伴房間、總覽與其他僅限 owner 的頁面；成員能用�
 還有必要的設定步驟沒做完時，app 會停在那些步驟上：只有個人資料、設定，以及完成步驟的頁面能用，直到最後一步完成。
 連結可以帶 `?next=`，值可以是 `profile`、`notices`、`settings`、`room:<key>` 或 `p:<page>`；其他值一律捨棄。
 
-OpenID Connect 用 authorization code 加 PKCE 登入，在 callback 只檢查一次 `id_token`，之後由 app 自己在 `web_sessions` 保存伺服器端的 session：`HttpOnly` cookie 裡是隨機 id，資料庫只存它的 SHA-256。`sessionDays` 天沒有來訪 session 就結束；登出會刪除它。`reauthHours` 會讓提供者再確認一次（能的話無聲完成），`storeClaims` 則把指定的 claims 跟 session 一起保存。
+OpenID Connect 用 authorization code 加 PKCE 登入，在 callback 只檢查一次 `id_token`，之後由 app 自己在 `web_sessions` 保存伺服器端的 session：`HttpOnly` cookie 裡是隨機 id，資料庫只存它的 SHA-256。`sessionDays` 天沒有來訪 session 就結束；登出會刪除它。`reauthHours` 會讓提供者再確認一次（能的話無聲完成），`storeClaims` 則把指定的 claims 跟 session 一起保存。`onSessionVerified(principalId)` 在 session 仍有效時被呼叫（每個 session 每五分鐘最多一次），讓 host 把只開著 app 的人也算作在線；它丟出的錯誤只會記進日誌，不會讓 request 失敗。
 
 ## 驗證與威脅模型
 
@@ -207,12 +208,13 @@ Transcript 會顯示 tool arguments 和結果，工具處理過的 secret 可能
 
 - **存取權**由房間種類的 `access(viewer, id)` 決定，每次讀取、frame、傳訊、卡片回應、上傳與取檔都會重問；回傳 `undefined` 就是 `404`。它回答這個人能做什麼：讀、傳 `note` 或 `turn`、按按鈕。
 - **訊息**用 `app.rooms.post` 發出，作者種類有 `external`（純文字，附宿主給的標籤，例如「客戶」）、`member`、`assistant` 與 `notice`（Markdown）。`reference` 用來再找到同一則訊息，`edit` 與 `remove` 修改或刪除。
+- **近期訊息**：`app.rooms.context(room, { limit?, messageChars? })` 以 `CHANNEL_CONTEXT.read` 給 turn 的同一種區塊（`{ messages, text }`）回傳房間近期的訊息：夥伴上次發言之後說的話，最新的 `limit` 則（預設 15，最多 100），外人的話標為 `external`，不含通知行。用在 turn 由房間的 `send` hook 發起、沒有任何訊息指向夥伴的時候。它不會把訊息標成已交付，所以重試時讀到的一樣。
 - **卡片**有標題、內文、色調、狀態、連結與按鈕；按鈕可以開表單（文字、多行文字、網址、可設 `initial` 與 `search` 的單選、複選），伺服器會先檢查再交給房間種類的 `act`。只有卡片狀態是 `open` 時才顯示按鈕。夥伴的核准與提問卡片沿用夥伴自己的提示範圍。
 - **寫入方式**：檢視者能傳 `note` 也能傳 `turn` 時，房間在輸入列上方只顯示一個 `@AI` 開關（關 = 只給房間裡的人看的內部備註，開 = 請夥伴回應），輸入框的提示跟著開關變；只能用一種方式傳的人沒有開關。房間種類可以用 `sendWording: { note?: { placeholder }, turn?: { label, placeholder } }` 自訂用字，只收純文字，label 最多 40 字、placeholder 最多 100 字。
 - **圖示**：頁面或房間種類可以給 `icon`，值是 `HOST_ICONS` 的其中一個（型別 `HostIconName`）：`chat`、`link`、`activity`、`users`、`megaphone`、`qr`、`settings`、`bell`、`file`、`list`、`shield`、`lock`、`sparkle`。頁面的圖示顯示在導覽列，房間種類的圖示顯示在聊天室清單的區段標題旁；不在清單內的名稱會顯示預設圖示。
 - **連結與圖片**：`app.rooms.link(room, messageId?)` 回傳開啟房間並標出該則訊息的網址；`![alt](file:<id>)` 顯示用 `saveFile` 或 `app.pages.saveAsset` 存下的 PNG、JPEG、WebP，只給有權看該房間或頁面的人。
 - **頁面**在 `<mount>/p/<id>`，由 Markdown、清單、表單與卡片區塊組成；`visible(viewer)` 每次都會重問，`app.pages.changed(id?)` 讓檢視者重新取得內容。
-- **保留期限**：房間種類的 `retention: { textDays, fileDays }` 會刪除過期的訊息、作者名稱、卡片與檔案，從每則訊息的時間起算。
+- **保留期限**：房間種類的 `retention: { textDays, fileDays }` 會刪除過期的訊息、作者名稱、卡片與檔案，從每則訊息的時間起算（卡片從首次發出時起算）。在 `card` 或 `updateCard` 帶 `keep: true` 的卡片（例如工單未結案時釘住的那張）只要宿主持續帶著它，清理就會略過。
 - **已讀標記**：app 記錄每個人在每個房間讀到哪裡（宿主房間與夥伴房間一樣）。清單與側欄顯示未讀數，進房間時在新訊息處出現「新訊息」分隔線，每則訊息下方顯示讀到這裡的人（「已讀 2」，附頭像）。
 
 房間、清單與頁面的程式碼在第一次開啟時才載入，app 的首次載入大小不變。

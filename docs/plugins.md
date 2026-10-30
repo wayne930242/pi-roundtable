@@ -1006,6 +1006,22 @@ A rule whose verdict depends on the input, such as one that holds only a `delete
 It is asked when the input is not known yet, as for a [precheck script](#precheck-scripts-prechecks-the-agent-writes)'s call whose arguments are computed when it runs; a rule without it is judged by `describe` with an empty input.
 A rule whose held call stands for others can answer `approvalTier(tool, input, context)`: the lowest tier that may approve it when higher than the tool's own. The held call keeps it as `minTier`, and both its card and a confirming message require it. A card is answered, and a confirming message accepted, from the speaker whose turn held the call, when their tier is at least `minTier`, and from the owners where the conversation is shared ([who answers a prompt](#who-answers-a-prompt-promptscope)); nobody else in the channel may approve it. The held call records that speaker as `PendingConfirmation.speakerId` and their principal as `principalId`, so a confirming message from another identity of theirs counts after a restart too; a call held without them is the owners' to approve, and one held before 0.9, without a principal, is matched by `speakerId`.
 
+#### Hearing that the card was declined
+
+A hold that opened something of its own for the call, such as a notice that asks for the approval, closes it when the owner declines the card by answering `{ text, onDeclined }` (`HoldDescription.onDeclined`, beside `supersede`; a tool's `hold` and a rule's `describeInTurn` both may):
+
+```ts
+hold: (args) => {
+	const notice = openNotice(`Send ${args.to} the quote?`);
+	return { text: `send ${args.to} the quote`, onDeclined: () => notice.close() };
+},
+```
+
+`onDeclined` is called once when the call's approval card is declined, whether the turn was still waiting on it or the owner declined after the turn stopped waiting (the call is refused either way, as before).
+It is not called when the card is approved, goes unanswered or expires, is cancelled with the turn, or when the plugin withdrew the call with `supersede` first (the plugin did that itself), and a held call that a message does not confirm is simply dropped without it.
+A hook belongs to the process that holds the card: a restart loses it with the card, so a plugin that must clean up after a restart does so when the hold describes the repeated call again.
+What the hook throws or rejects with is ignored, and so is anything but a function.
+
 #### A hold that makes its card the speaker's alone
 
 By default the speaker whose turn made a held call may answer its card, and in a shared conversation so may every owner. A hold that wants only the speaker to press, such as one whose tool books something under the speaker's name, answers `{ text, approval: "speaker" }` (`HoldDescription.approval`, beside `copy` and `supersede`; a tool's `hold` and a rule's `describeInTurn` both may):
@@ -2223,6 +2239,17 @@ The key is a conversation's kind (`ConversationRecord.kind`) and the value a who
 A sweep runs when the host starts and once a day after: for each recorded conversation of a listed kind past its days, it calls `ConversationPort.deleteConversation`, which its claim carries out, and then forgets the record (`ConversationRegistry.remove`, optional on a hand-built registry).
 A conversation with a turn running or waiting (`"busy"`) is skipped and tried again at the next sweep; one whose claim cannot delete it is logged and kept.
 A kind not listed, and a host without the key, keeps its conversations as before.
+
+A conversation can be wanted for longer than its kind's days, such as a support conversation whose ticket is still open.
+`conversations.keep(record)` is asked for each conversation past its days, before it is deleted; answering `true` keeps it for now, and it is asked again at the next sweep, so the conversation goes once the host stops wanting it.
+A `keep` that throws or rejects keeps the conversation for this sweep and is logged.
+
+```ts
+conversations: {
+	keepDays: { support: 365 },
+	keep: async (conversation) => (await tickets.isOpen(conversation.key)),
+},
+```
 The agents' own channels are not recorded conversations and are not touched.
 
 ### `piPackages`: Pi extensions every session loads

@@ -99,6 +99,8 @@ export default {
 | `agentDir` | string | `<dataDir>/pi` | Pi 的 agent 目錄，放模型登入。見[模型](/zh-tw/configure/models/)。 |
 | `scratchDir` | string | `<作業系統暫存目錄>/<slug>-scratch`，slug 是 `discord.rootCommand`，沒有 Discord 時是小寫的 `name` | agent 的暫存目錄：它們的 shell 以 `TMPDIR` 指向這裡，在裡面寫入和刪除不需要核准。 |
 | `attachments.retention` | `{ maxAgeMs, sweepEveryMs? }` | 無 | 檔案被某一輪用過、滿 `maxAgeMs` 之後就移除，並在啟動時以及每隔 `sweepEveryMs`（預設一小時）清一次。沒設的話，用過的檔案跟著它的對話保留。 |
+| `conversations.keepDays` | 以對話種類為鍵、值為整數天數的物件 | 無 | 每天掃一次，刪除所列種類中、最後活動已超過天數的已記錄對話。沒列出的種類一律保留。 |
+| `conversations.keep` | 由對話紀錄回傳 `true` 或 `false` 的函式 | 無 | 掃描要刪除某則對話前會先問它；回傳 `true` 就暫時保留（例如客服單還沒結案的對話），下次掃描會再問一次。函式丟出錯誤時對話會被保留並記進日誌。 |
 
 ## 模型
 
