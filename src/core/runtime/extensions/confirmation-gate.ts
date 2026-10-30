@@ -41,7 +41,7 @@ import {
 } from "./held-calls.ts";
 import { HoldDescriber } from "./hold-describer.ts";
 import { type HoldTurn, type Judgment, STOPPED } from "./hold-lookups.ts";
-import { lateOutcome } from "./late-answer.ts";
+import { lateOutcome, notifyDeclined } from "./late-answer.ts";
 
 export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
 export {
@@ -339,6 +339,7 @@ export class ConfirmationGate {
 					late: (late) => {
 						const outcome = lateOutcome(call, late, watch);
 						if (outcome?.release) this.#lateApproved.push(outcome.release);
+						if (outcome?.declined) notifyDeclined(needing.onDeclined);
 						return outcome?.text;
 					},
 				},
@@ -373,6 +374,7 @@ export class ConfirmationGate {
 				refused: "pending",
 			};
 		if (answer === "declined") {
+			notifyDeclined(needing.onDeclined);
 			watch?.end();
 			return {
 				reason: declinedText(this.#addressee, call),
@@ -449,6 +451,7 @@ export class ConfirmationGate {
 			...(judged.copy ? { copy: judged.copy } : {}),
 			...(judged.supersede ? { supersede: judged.supersede } : {}),
 			...(judged.speakerOnly ? { speakerOnly: judged.speakerOnly } : {}),
+			...(judged.onDeclined ? { onDeclined: judged.onDeclined } : {}),
 		};
 	}
 

@@ -36,6 +36,8 @@ export interface Judgment {
 	speakerOnly?: true;
 	/** The hold classes of the call; see `HoldRule.holdClasses`. Absent when the holds gave none. */
 	classes?: readonly string[] | undefined;
+	/** Called when the call's card is declined; see `HoldDescription`. */
+	onDeclined?: () => void | Promise<void>;
 }
 
 export type Judged = Judgment | undefined | typeof STOPPED;
@@ -59,11 +61,14 @@ function isSignal(value: unknown): value is AbortSignal {
 export function described(
 	answer: HoldDescription,
 	tool: string,
-): Pick<Judgment, "action" | "copy" | "supersede" | "speakerOnly" | "classes"> {
+): Pick<
+	Judgment,
+	"action" | "copy" | "supersede" | "speakerOnly" | "classes" | "onDeclined"
+> {
 	if (typeof answer === "string") return { action: answer };
 	if (typeof answer !== "object" || answer === null)
 		return { action: messages().holdGeneric(tool) };
-	const { text, copy, supersede, approval, classes } = answer;
+	const { text, copy, supersede, approval, classes, onDeclined } = answer;
 	if (typeof text !== "string") return { action: messages().holdGeneric(tool) };
 	const named = Array.isArray(classes)
 		? classes.filter((id): id is string => typeof id === "string" && id !== "")
@@ -72,6 +77,7 @@ export function described(
 		...(isSignal(supersede) ? { supersede } : {}),
 		...(approval === "speaker" ? { speakerOnly: true as const } : {}),
 		...(named.length > 0 ? { classes: named } : {}),
+		...(typeof onDeclined === "function" ? { onDeclined } : {}),
 	};
 	if (
 		!copy ||
@@ -142,6 +148,7 @@ export function joinApprovers(
 			supersede,
 			speakerOnly,
 			classes,
+			onDeclined,
 		} = described(action, tool);
 		const joined = (approvers: readonly string[] | undefined): Judgment => ({
 			action: text,
@@ -149,6 +156,7 @@ export function joinApprovers(
 			...(supersede ? { supersede } : {}),
 			...(speakerOnly ? { speakerOnly } : {}),
 			...(classes ? { classes } : {}),
+			...(onDeclined ? { onDeclined } : {}),
 			...(approvers ? { approvers } : {}),
 		});
 		const controller = new AbortController();

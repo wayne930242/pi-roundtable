@@ -37,6 +37,8 @@ export type Needing =
 			supersede?: AbortSignal;
 			/** The card is the speaker's alone; see `HoldDescription`. */
 			speakerOnly?: true;
+			/** Called when the call's card is declined; see `HoldDescription`. */
+			onDeclined?: () => void | Promise<void>;
 	  }
 	| { released: Release };
 
