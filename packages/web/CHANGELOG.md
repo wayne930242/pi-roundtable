@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The package entry exports the host-facing API: `WEB_APP` and the types `WebApp`, `HostRoomKind`, `HostPage`, `HostCard`, `Viewer`, `OpenTarget`, `ActionResult`, `LinkProver`, `OnboardingStep` and `Notices`, so a host plugin no longer mirrors them.
+
+### Changed
+
+- `HostRoomKind.buttons` may return a promise, for a host whose rights source is async.
+- README: `WebApp.rooms`, `.notices`, `.pages`, `.onboarding` and `.push` throw until the plugin started; `notices.onAck` is available only after start.
+
 ### Fixed
 
 - A folder's header no longer turns into an unreadable light fill with white text when the pointer rests on it (on a phone the highlight stuck after a tap), and its title is left-aligned, not centered. The base rule `button:hover:not(:disabled)` out-specified the header's own style; its hover, press and keyboard focus now tint the label and keep its text colour in every look and scheme.
