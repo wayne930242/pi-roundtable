@@ -374,9 +374,11 @@ test("the shortcut list is worded in zh-TW with the knight vocabulary", async ()
 			until(() => document.querySelector(".shortcut-list") !== null),
 		);
 		const text = document.querySelector("dialog")?.textContent ?? "";
-		expect(text).toContain("鍵盤快速鍵");
-		expect(text).toContain("上一個有未讀訊息的聊天室");
-		expect(text).not.toMatch(/夥伴|助理/);
+		expect(text).toContain("\u9375\u76e4\u5feb\u901f\u9375");
+		expect(text).toContain(
+			"\u4e0a\u4e00\u500b\u6709\u672a\u8b80\u8a0a\u606f\u7684\u804a\u5929\u5ba4",
+		);
+		expect(text).not.toMatch(/\u5925\u4f34|\u52a9\u7406/);
 	} finally {
 		setPresentation({ title: "Console", panes: [], timeZone: "UTC" });
 		await loadBuiltInMessages(undefined);
