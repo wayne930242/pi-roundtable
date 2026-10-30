@@ -168,6 +168,7 @@ const hostFixture = definePlugin({
 		web.registerRoomKind({
 			kind: "inbox",
 			label: "Inbox",
+			icon: "users",
 			list: async () => ({
 				rooms: rooms.map((room) => ({
 					...room,
@@ -189,6 +190,7 @@ const hostFixture = definePlugin({
 		web.registerPage({
 			id: "mailboxes",
 			label: "Mailboxes",
+			icon: "megaphone",
 			place: "main",
 			visible: () => true,
 			view: async () => ({

@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - An owner can take a finished dispatch thread off the room list: a remove button on each finished row, and "Clear all" in the fold of a room's finished threads. The thread leaves the list for every owner and every open page at once; it is hidden, not deleted, and stays readable by its address and through the links in its room. An open thread cannot be removed (409). The mark is the new column `web_threads.dismissed_at` (migration `web-threads-dismissed`, additive). Routes: `POST api/rooms/<thread>/dismiss`, `POST api/rooms/<room>/dismiss-threads`, and `GET api/rooms/<thread>` for the view of a thread the list does not carry (owners only, like the rest of `api/rooms`).
+- `HostPage.icon` and `HostRoomKind.icon`: an optional name from the console's own icon set (`HOST_ICONS`, type `HostIconName`, exported): `chat`, `link`, `activity`, `users`, `megaphone`, `qr`, `settings`, `bell`, `file`, `list`, `shield`, `lock`, `sparkle`. A page's icon shows in the navigation (the list icon stays the default), a kind's beside its section in the room list. A name outside the set is dropped and the default shows. `ConfigView.pages[].icon` and `.kinds[].icon` carry it. The new glyphs load only when a page names one.
 
 ### Fixed
 

@@ -226,6 +226,12 @@ function Console({ config }: { config: ConfigView }) {
 	const stage = useRef<HTMLDivElement>(null);
 	useViewportSize();
 	useRoomsSync(hasApp, live.version);
+	// The icons a host names for its pages load once one does, and the navigation draws again with them.
+	const [, setHostIcons] = useState(false);
+	const namesIcon = (config.pages ?? []).some((page) => page.icon);
+	useEffect(() => {
+		if (namesIcon) import("./lib/host-icons.ts").then(() => setHostIcons(true));
+	}, [namesIcon]);
 
 	const connection = useSelector((state) => state.connection);
 	const forbidden = useSelector((state) => state.forbidden);
@@ -273,7 +279,7 @@ function Console({ config }: { config: ConfigView }) {
 				.map((page) => ({
 					pane: `p/${page.id}`,
 					label: page.label,
-					icon: "list" as IconName,
+					icon: (page.icon ?? "list") as IconName,
 				})),
 			...(hasApp
 				? [

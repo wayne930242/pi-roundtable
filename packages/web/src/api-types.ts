@@ -87,17 +87,40 @@ export interface GateStepView {
 	waiver?: { label: string; confirm: string };
 }
 
+/**
+ * The icons a host may give a page or a kind of room: names from the console's own icon set. A
+ * name outside the list, or none, shows the default (a list for a page, no icon for a kind).
+ */
+export const HOST_ICONS = [
+	"chat",
+	"link",
+	"activity",
+	"users",
+	"megaphone",
+	"qr",
+	"settings",
+	"bell",
+	"file",
+	"list",
+	"shield",
+	"lock",
+	"sparkle",
+] as const;
+export type HostIconName = (typeof HOST_ICONS)[number];
+
 /** A host page that is not a room, in the places the shell lists it. */
 export interface PageLinkView {
 	id: string;
 	label: string;
 	place: "main" | "settings" | "hidden";
+	icon?: HostIconName;
 }
 
 /** A kind of host room, listed by its label. */
 export interface KindLinkView {
 	kind: string;
 	label: string;
+	icon?: HostIconName;
 }
 
 export type ChannelName =

@@ -343,6 +343,11 @@ export const HOST_CSS = `
 	cursor: pointer;
 }
 
+.section-icon {
+	margin-right: var(--space-1);
+	vertical-align: -2px;
+}
+
 /* The chips sit in the composer's column, over its left edge, wherever the pane is wide. */
 .mode-switch {
 	display: flex;
