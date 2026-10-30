@@ -1,4 +1,5 @@
 import {
+	type ChangeEvent,
 	type ClipboardEvent,
 	type KeyboardEvent,
 	type ReactNode,
@@ -23,6 +24,7 @@ import {
 import { draftOf, keepDraft, onDraftInserted } from "../lib/drafts.ts";
 import { size as bytes } from "../lib/format.ts";
 import { composingKey } from "../lib/ime.ts";
+import { hasLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { RoomsState } from "../lib/rooms.ts";
 import { toast } from "../lib/toast.ts";
@@ -56,8 +58,11 @@ export function Composer(props: {
 	draftKey?: string;
 	limits: RoomsState["limits"];
 	stoppable: boolean;
-	onSend(text: string, files: UploadView[]): void;
+	/** `addressed`: the person typed `@AI` at the start of the text (see `Composer`'s note on what counts). */
+	onSend(text: string, files: UploadView[], addressed: boolean): void;
 	onStop(): void;
+	/** Hears whether the person is addressing the agent with a leading `@AI`, as it starts and stops. */
+	onAddressed?(addressed: boolean): void;
 	/** Files dropped on the room come here as the composer's own. */
 	incoming?: File[];
 	onIncomingTaken?(): void;
@@ -65,10 +70,25 @@ export function Composer(props: {
 	const [text, setText] = useState(() =>
 		props.draftKey === undefined ? "" : draftOf(props.draftKey),
 	);
-	const { draftKey } = props;
+	const { draftKey, onAddressed } = props;
 	useEffect(() => {
 		if (draftKey !== undefined) keepDraft(draftKey, text);
 	}, [draftKey, text]);
+	// A leading `@AI` addresses the agent only when the person typed it: a paste, a drop, a quote, a
+	// kept draft or a text put back from a chip carry whatever they carry and never switch it on.
+	const [addressed, setAddressed] = useState(false);
+	/** The text the last typing produced; a text that differs came from somewhere else. */
+	const typed = useRef(text);
+	/** A paste or a drop is landing: the next input event is not typing. */
+	const inserting = useRef(false);
+	useEffect(() => {
+		if (typed.current === text) return;
+		typed.current = text;
+		setAddressed(false);
+	}, [text]);
+	useEffect(() => {
+		onAddressed?.(addressed);
+	}, [onAddressed, addressed]);
 	/** A quote came in from outside: the caret goes to the end of the box once it shows the text. */
 	const caretToEnd = useRef(false);
 	useEffect(() => {
@@ -207,6 +227,7 @@ export function Composer(props: {
 			props.onSend(
 				plan.overflow !== undefined ? t(plan.text) : plan.text,
 				uploads,
+				addressed,
 			);
 			setText("");
 			setFiles(() => []);
@@ -238,6 +259,20 @@ export function Composer(props: {
 		}
 	};
 
+	const onChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+		const next = event.target.value;
+		const inputType = (event.nativeEvent as InputEvent).inputType ?? "";
+		const landed = inserting.current || /^insertFrom/.test(inputType);
+		inserting.current = false;
+		// Once the token is there it stays as it began: typed, or pasted and so ignored, until it is gone.
+		setAddressed(
+			hasLeadingAiMention(next) &&
+				(hasLeadingAiMention(text) ? addressed : !landed),
+		);
+		typed.current = next;
+		setText(next);
+	};
+
 	const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
 		if (sendingNow.current) {
 			event.preventDefault();
@@ -253,6 +288,7 @@ export function Composer(props: {
 		);
 		switch (plan.kind) {
 			case "insert":
+				inserting.current = true;
 				return;
 			case "files":
 				event.preventDefault();
@@ -382,9 +418,12 @@ export function Composer(props: {
 					aria-label={hint}
 					enterKeyHint="send"
 					readOnly={sending}
-					onChange={(event) => setText(event.target.value)}
+					onChange={onChange}
 					onKeyDown={onKeyDown}
 					onPaste={onPaste}
+					onDrop={() => {
+						inserting.current = true;
+					}}
 				/>
 				{props.stoppable ? (
 					<button

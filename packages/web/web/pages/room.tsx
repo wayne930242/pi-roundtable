@@ -30,6 +30,7 @@ import {
 } from "../lib/characters.ts";
 import { hostUi } from "../lib/frame-taps.ts";
 import { useMedia } from "../lib/media.ts";
+import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
@@ -143,6 +144,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const [dropped, setDropped] = useState<File[]>();
 	/** The room where the person turned @AI off, to leave notes; every room opens with it on. */
 	const [noting, setNoting] = useState<string>();
+	/** The person typed `@AI` at the start of the box: where notes are on offer, the message goes to the agent whatever the switch says. */
+	const [addressed, setAddressed] = useState(false);
 	const [scene, setScene] = useTableMode(roomKey);
 	const inScene = view?.kind === "group" && scene;
 	const menuButton = useRef<HTMLButtonElement>(null);
@@ -259,7 +262,9 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const groupName = view?.kind === "group" ? view.name : undefined;
 	const parent = view?.kind === "thread" ? view.parent : undefined;
 	// Where more than one person reads the room, a message can be a note for them that the agent does not get.
-	const note = view?.notes === true && noting === roomKey;
+	const toggled = view?.notes === true;
+	const mentioned = toggled && addressed;
+	const note = toggled && noting === roomKey && !mentioned;
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: dropping files on the room attaches them; the paperclip is the keyboard path
 		<section
@@ -458,7 +463,8 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 							key={roomKey}
 							draftKey={roomKey}
 							name={name}
-							{...(view?.notes
+							onAddressed={setAddressed}
+							{...(toggled
 								? {
 										placeholder: note
 											? t("Write an internal note…")
@@ -468,6 +474,13 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 												<ModeToggle
 													on={!note}
 													label={t("@AI")}
+													{...(mentioned
+														? {
+																locked: t(
+																	"The message starts with @AI, so the agent answers.",
+																),
+															}
+														: {})}
 													onChange={(next) =>
 														setNoting(next ? undefined : roomKey)
 													}
@@ -478,8 +491,23 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 								: {})}
 							limits={limits}
 							stoppable={Boolean(room?.stoppable)}
-							onSend={(text, files) => {
-								connection.say(roomKey, text, files, note ? "note" : undefined);
+							onSend={(text, files, typedAt) => {
+								if (toggled && typedAt) {
+									// Without the token the message may be empty; then it goes as it was typed.
+									const body = withoutLeadingAiMention(text);
+									connection.say(
+										roomKey,
+										body === "" && files.length === 0 ? text : body,
+										files,
+										"turn",
+									);
+								} else
+									connection.say(
+										roomKey,
+										text,
+										files,
+										note ? "note" : undefined,
+									);
 								toEnd(true);
 							}}
 							onStop={() => connection.send({ type: "stop", room: roomKey })}

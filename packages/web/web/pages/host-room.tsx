@@ -22,6 +22,7 @@ import { hostApi, splitRoomKey } from "../lib/host-api.ts";
 import { keepCards, keepReads, noCards, useHost } from "../lib/host-state.ts";
 import { installHostStyle } from "../lib/host-style.ts";
 import { useMedia } from "../lib/media.ts";
+import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { ROOM_PAGE } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
@@ -214,6 +215,8 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [dropped, setDropped] = useState<File[]>();
 	const [mode, setMode] = useState<"note" | "turn" | undefined>(lastMode);
+	/** The person typed `@AI` at the start of the box: with the toggle on offer, the message goes as a turn whatever the toggle says. */
+	const [addressed, setAddressed] = useState(false);
 	const [highlight, setHighlight] = useState<number>();
 	const mountedLast = useRef<number | undefined>(undefined);
 	const prepend = useRef<number | undefined>(undefined);
@@ -338,17 +341,19 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 		);
 
 	const sends = view?.access.send ?? [];
+	const toggled = sends.length > 1;
+	const mentioned = toggled && addressed;
 	const chosen: "note" | "turn" | undefined =
 		mode && sends.includes(mode)
 			? mode
 			: sends.includes("turn")
 				? "turn"
 				: sends[0];
+	const asking = mentioned || chosen === "turn";
 	// The box says what writing here does, never who gets it: the room is not the recipient.
-	const placeholder =
-		chosen === "turn"
-			? (view?.wording?.turn?.placeholder ?? t("Ask AI…"))
-			: (view?.wording?.note?.placeholder ?? t("Write an internal note…"));
+	const placeholder = asking
+		? (view?.wording?.turn?.placeholder ?? t("Ask AI…"))
+		: (view?.wording?.note?.placeholder ?? t("Write an internal note…"));
 	const title = view?.header.title ?? roomKey;
 	const messages = room?.messages ?? [];
 	return (
@@ -451,12 +456,20 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 						draftKey={roomKey}
 						name={title}
 						placeholder={placeholder}
-						{...(sends.length > 1
+						onAddressed={setAddressed}
+						{...(toggled
 							? {
 									above: (
 										<ModeToggle
-											on={chosen === "turn"}
+											on={asking}
 											label={view?.wording?.turn?.label ?? t("@AI")}
+											{...(mentioned
+												? {
+														locked: t(
+															"The message starts with @AI, so the agent answers.",
+														),
+													}
+												: {})}
 											onChange={(next) => {
 												const one = next ? "turn" : "note";
 												lastMode = one;
@@ -468,8 +481,17 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 							: {})}
 						limits={limits}
 						stoppable={Boolean(room?.stoppable)}
-						onSend={(text, files) => {
-							connection.say(roomKey, text, files, chosen);
+						onSend={(text, files, typedAt) => {
+							if (toggled && typedAt) {
+								// Without the token the message may be empty; then it goes as it was typed.
+								const body = withoutLeadingAiMention(text);
+								connection.say(
+									roomKey,
+									body === "" && files.length === 0 ? text : body,
+									files,
+									"turn",
+								);
+							} else connection.say(roomKey, text, files, chosen);
 							toEnd(true);
 						}}
 						onStop={() => connection.send({ type: "stop", room: roomKey })}

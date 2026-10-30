@@ -28,6 +28,10 @@ export const MODE_TOGGLE_CSS = `
 	border-color: transparent;
 }
 
+.mode-toggle:disabled {
+	cursor: default;
+}
+
 .mode-toggle-track {
 	position: relative;
 	flex: none;

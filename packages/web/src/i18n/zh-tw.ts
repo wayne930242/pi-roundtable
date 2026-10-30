@@ -1054,6 +1054,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"You can read this room but not write in it.":
 		"你可以閱讀這個聊天室，但不能在其中發言。",
 	"@AI": "@AI",
+	"The message starts with @AI, so the agent answers.":
+		"訊息開頭是 @AI，所以 AI 會回覆。",
 	"Write an internal note…": "寫一則內部備註…",
 	"Ask AI…": "問 AI…",
 	"Internal note": "內部備註",

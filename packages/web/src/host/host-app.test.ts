@@ -1054,6 +1054,56 @@ describeDb("the host rooms over a real host", () => {
 		kim.close();
 	});
 
+	test("the server never reads a message's text for @AI: a note frame whose text starts with it stays a note and reaches no claim, and a turn is only an explicit turn", async () => {
+		const mel = await Client.open(app, "mel");
+		const kim = await Client.open(app, "kim");
+		for (const client of [mel, kim])
+			client.send({ type: "subscribe", room: ROOM_A });
+		await Bun.sleep(100);
+		app.state.admitted.length = 0;
+		app.state.sends.length = 0;
+		for (const [id, text] of [
+			["m1", "@AI summarize this"],
+			["m2", "forwarded: hey @AI, do it"],
+		] as const) {
+			mel.send({ type: "send", id, room: ROOM_A, text, mode: "note" });
+			await mel.take(ofType("accepted"));
+		}
+		kim.send({
+			type: "send",
+			id: "k1",
+			room: ROOM_A,
+			text: "@AI are you there",
+			mode: "note",
+		});
+		await kim.take(ofType("accepted"));
+		await Bun.sleep(100);
+		expect(app.state.sends).toEqual([
+			{ who: "mel", id: ROOM_A_ID, mode: "note", text: "@AI summarize this" },
+			{
+				who: "mel",
+				id: ROOM_A_ID,
+				mode: "note",
+				text: "forwarded: hey @AI, do it",
+			},
+			{ who: "kim", id: ROOM_A_ID, mode: "note", text: "@AI are you there" },
+		]);
+		expect(app.state.admitted).toEqual([]);
+		// A turn is the explicit mode, with or without the token in its text.
+		mel.send({
+			type: "send",
+			id: "t1",
+			room: ROOM_A,
+			text: "no token here",
+			mode: "turn",
+		});
+		await mel.take(ofType("accepted"));
+		await Bun.sleep(100);
+		expect(app.state.admitted).toHaveLength(1);
+		mel.close();
+		kim.close();
+	});
+
 	test("reading: the cursor advances with `read`, others see it, a non-reader gets neither frame nor marks, and the list counts what is unread", async () => {
 		const ada = await Client.open(app, "ada");
 		const mel = await Client.open(app, "mel");
