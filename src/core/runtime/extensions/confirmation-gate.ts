@@ -20,7 +20,7 @@ import {
 	approverOf,
 	askSpeaker,
 	awaitingText,
-	declinedText,
+	declinedRefusal,
 	type GateDecision,
 	type Needing,
 	namesOf,
@@ -41,7 +41,7 @@ import {
 } from "./held-calls.ts";
 import { HoldDescriber } from "./hold-describer.ts";
 import { type HoldTurn, type Judgment, STOPPED } from "./hold-lookups.ts";
-import { lateOutcome, notifyDeclined } from "./late-answer.ts";
+import { lateOutcome } from "./late-answer.ts";
 
 export { confirmationGateExtension } from "./confirmation-gate-extension.ts";
 export {
@@ -337,9 +337,8 @@ export class ConfirmationGate {
 				wait: {
 					// A late answer on the card: the text of the turn that tells the model, and the release it earned.
 					late: (late) => {
-						const outcome = lateOutcome(call, late, watch);
+						const outcome = lateOutcome(call, late, watch, needing.onDeclined);
 						if (outcome?.release) this.#lateApproved.push(outcome.release);
-						if (outcome?.declined) notifyDeclined(needing.onDeclined);
 						return outcome?.text;
 					},
 				},
@@ -373,14 +372,8 @@ export class ConfirmationGate {
 				reason: awaitingText(this.#addressee, call),
 				refused: "pending",
 			};
-		if (answer === "declined") {
-			notifyDeclined(needing.onDeclined);
-			watch?.end();
-			return {
-				reason: declinedText(this.#addressee, call),
-				refused: "declined",
-			};
-		}
+		if (answer === "declined")
+			return declinedRefusal(this.#addressee, call, watch, needing.onDeclined);
 		if (answer === "cancelled") {
 			watch?.end();
 			return { reason: "The turn was stopped." };
