@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeAll, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ConfigView, RoomMessage, RoomView } from "../src/api-types.ts";
 import { MessageRow } from "./components/message-row.tsx";
@@ -67,6 +67,20 @@ const row = (message: RoomMessage) =>
 			/>
 		</ConfigContext.Provider>,
 	);
+
+// The thread cards load lazily; rendering the list once starts the load, so later renders find it ready.
+beforeAll(async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [view(GUIDE, { home: true }), thread(THREAD, "Warm up")],
+	});
+	renderToStaticMarkup(
+		<ConfigContext.Provider value={config}>
+			<RoomsPage onSearch={() => undefined} />
+		</ConfigContext.Provider>,
+	);
+	await import("./pages/thread-list.tsx");
+});
 
 afterEach(() => {
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
