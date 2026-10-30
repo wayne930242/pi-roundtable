@@ -447,7 +447,11 @@ describe("ConfirmationGate with a card that outlives its turn", () => {
 		});
 		expect(text).toContain("Riley approved");
 		expect(text).toContain(`${MAIL} ${canonicalJson(send)}`);
-		gate.beginTurn("workspace", false);
+		// The turn a surface starts for the answer is spoken by whoever answered.
+		gate.beginTurn("workspace", false, undefined, {
+			id: "s_riley",
+			principalId: "p_riley",
+		});
 		expect(gate.hold(MAIL, { ...send, subject: "other" })).toContain("Held");
 		expect(gate.hold(MAIL, send)).toBeUndefined();
 		expect(gate.hold(MAIL, send)).toContain("Held");
