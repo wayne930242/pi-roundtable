@@ -142,7 +142,15 @@ function PopoverMenu({ menu }: { menu: OpenMenu }) {
 	useLayoutEffect(() => {
 		const element = root.current;
 		if (!element) return;
-		const box = element.getBoundingClientRect();
+		// A fixed box asked for near the window's right edge is squeezed to the room left of it, and its
+		// entrance animation scales it, so it is measured from the left edge by its layout size and
+		// only then put where it fits.
+		const asked = { left: element.style.left, top: element.style.top };
+		element.style.left = "0px";
+		element.style.top = "0px";
+		const box = { width: element.offsetWidth, height: element.offsetHeight };
+		element.style.left = asked.left;
+		element.style.top = asked.top;
 		setPlace({
 			x: Math.max(
 				EDGE,

@@ -226,6 +226,23 @@ test("a thread is a card: a going-on one and a finished one look different, and 
 	expect(page.container.querySelectorAll(".thread-reveal").length).toBe(2);
 });
 
+test("a card's time stands on its status row, so the title keeps the whole row above it", async () => {
+	await show();
+	for (const title of ["Check the disk", "Fix the build"]) {
+		const card = cardOf(title);
+		const time = card.querySelector(".room-row-time");
+		expect(time).not.toBeNull();
+		expect(card.querySelector(".thread-card-top .room-row-time")).toBeNull();
+		expect(card.querySelector(".thread-card-meta .room-row-time")).toBe(time);
+	}
+});
+
+test("only the card's own link is a block: a thread named inside a message stays an inline link", async () => {
+	const css = await Bun.file(new URL("./app.css", import.meta.url)).text();
+	expect(css).not.toMatch(/\n\.thread-link \{[^}]*display:/);
+	expect(css).toMatch(/\n\.thread-card \.thread-link \{[^}]*display: flex/);
+});
+
 test("swiping a finished card right past 40 % clears it, closes the gap, and offers an undo that brings it back", async () => {
 	const send = spyOn(api, "dismissThread").mockResolvedValue({ dismissed: 1 });
 	const back = spyOn(api, "undismissThread").mockResolvedValue({ restored: 1 });

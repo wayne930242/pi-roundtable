@@ -329,6 +329,34 @@ test("on a desktop width it is a popover at the pointer, kept inside the window"
 	expect(top).toBeLessThan(799);
 });
 
+test("a popover asked for at the window's right edge keeps its whole width and the edge's margin", async () => {
+	window.innerWidth = 1440;
+	window.innerHeight = 900;
+	// A fixed box is squeezed to the room left of where it stands, so it measures narrower there.
+	const real = Object.getOwnPropertyDescriptor(
+		HTMLElement.prototype,
+		"offsetWidth",
+	);
+	Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+		configurable: true,
+		get(this: HTMLElement) {
+			return this.classList.contains("action-popover") &&
+				this.style.left !== "0px"
+				? 200
+				: 208;
+		},
+	});
+	try {
+		await page.render(<ActionMenuHost />);
+		await openAt(1400, 300);
+		const left = Number.parseInt(popover()?.style.left ?? "", 10);
+		expect(left).toBe(1440 - 208 - 8);
+	} finally {
+		if (real) Object.defineProperty(HTMLElement.prototype, "offsetWidth", real);
+		else Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+	}
+});
+
 test("choosing an item closes the menu and then runs it, once", async () => {
 	window.innerWidth = 1280;
 	await page.render(<ActionMenuHost />);

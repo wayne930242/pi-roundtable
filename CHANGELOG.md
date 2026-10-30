@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `pi-roundtable-web`: the owner app's small visual faults from the 0.26.2 pass. A popover opened near the window's right edge (the ⋯ menu on a finished thread card) is placed by its own width and keeps the edge's 8px margin, where it used to be measured while squeezed against the edge and sat about 4px from it. A thread card's time moved to its status row, so a long title keeps the whole row above it and no longer truncates beside "1 minute ago" on a phone. A thread named inside a message (the "Started …" line a dispatch posts) is a plain inline link again: it had taken the thread card's block layout, which cut the sentence into fragments in the round table's dialogue box; the box also keeps the newest words of a long line in view while it is typed out, until the person scrolls up. At phone widths every text input, textarea and select is 16px or larger, including the controls inside a label and the full-screen prompt and SKILL.md editor, so iOS no longer zooms in on focus; a test reads the page's styles and fails on any rule that sets a text control smaller.
+- The zh-TW site docs use the same word for an agent as the web app does ("knight", the main agent "main knight"), where they said "assistant" or "partner".
+
 ## [0.26.3] - 2026-10-30
 
 ### Added

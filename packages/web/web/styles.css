@@ -1551,6 +1551,22 @@ dialog.sheet.full {
 		min-height: 0;
 	}
 
+	/* A phone zooms into a control set below 16px when it takes focus; inside a label the control
+	   inherits the label's 13px, so every text control says its size itself. */
+	input:where(
+		:not(
+			[type="checkbox"],
+			[type="radio"],
+			[type="range"],
+			[type="color"],
+			[type="file"]
+		)
+	),
+	select,
+	textarea {
+		font-size: var(--text-md);
+	}
+
 	.switch {
 		min-height: 1.65rem;
 	}

@@ -16,6 +16,7 @@ import {
 	type Line,
 	sliceChars,
 } from "../lib/dialogue.ts";
+import { useFollowEnd } from "../lib/follow-end.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import type { RoomState } from "../lib/rooms.ts";
@@ -204,6 +205,9 @@ export function DialogueBox(props: DialogueBoxProps) {
 			? line.author
 			: (view?.displayName ?? roomKey);
 	const { shown, done, finish } = useReveal(line);
+	// The box is bounded, so a long line scrolls: the newest words stay in view while it is typed out.
+	const body = useRef<HTMLDivElement>(null);
+	useFollowEnd(body, !done, shown);
 	const [log, setLog] = useState(false);
 	const [collapsed, setCollapsed] = useState(false);
 	const style: CSSProperties | undefined =
@@ -286,7 +290,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 					</button>
 				</span>
 			</header>
-			<div className="scene-body">
+			<div className="scene-body" ref={body}>
 				<div
 					className="scene-line"
 					data-live={line?.live || undefined}

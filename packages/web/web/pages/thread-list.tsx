@@ -65,9 +65,6 @@ const ThreadCard = memo(function ThreadCard(
 						<span className="thread-card-top">
 							<strong className="thread-title">{view.displayName}</strong>
 							<Unread room={view.key} />
-							<span className="room-row-time">
-								{props.at ? ago(props.at, props.now, props.timeZone) : ""}
-							</span>
 						</span>
 						<span className="thread-card-meta">
 							{props.typing ? <Typing /> : null}
@@ -75,6 +72,9 @@ const ThreadCard = memo(function ThreadCard(
 								{finished ? t("Finished") : t("In progress")}
 							</span>
 							{props.waiting ? <WaitingBadge count={props.waiting} /> : null}
+							<span className="room-row-time">
+								{props.at ? ago(props.at, props.now, props.timeZone) : ""}
+							</span>
 						</span>
 					</span>
 				</a>

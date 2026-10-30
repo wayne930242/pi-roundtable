@@ -208,6 +208,11 @@
 }
 
 .thread-link {
+	font-weight: 600;
+}
+
+/* The card's link; a thread mentioned inside a message is a plain link of the same class, which must stay inline. */
+.thread-card .thread-link {
 	display: flex;
 	flex: 1;
 	align-items: center;
@@ -221,7 +226,7 @@
 	text-decoration: none;
 }
 
-.thread-link:focus-visible,
+.thread-card .thread-link:focus-visible,
 .thread-more:focus-visible {
 	outline: 2px solid var(--focus, var(--accent));
 	outline-offset: -2px;
@@ -246,6 +251,15 @@
 	align-items: center;
 	gap: var(--space-2);
 	min-width: 0;
+}
+
+/* The time sits on the status row, where there is room, so a long title keeps the whole row above it. */
+.thread-card-meta {
+	flex-wrap: wrap;
+}
+
+.thread-card-meta .room-row-time {
+	white-space: nowrap;
 }
 
 .thread-title {
@@ -355,10 +369,6 @@
 /* The "Clear finished" button sits over the summary's right end. */
 .thread-finished > .thread-closed > summary {
 	padding-right: 6rem;
-}
-
-.thread-link {
-	font-weight: 600;
 }
 
 .line .prose {
@@ -1901,6 +1911,13 @@ textarea.prompt-full {
 	resize: none;
 	font-family: var(--font-mono);
 	font-size: var(--text-sm);
+}
+
+/* A phone zooms into a text box set below 16px when it takes focus. */
+@media (max-width: 719px), (pointer: coarse) {
+	textarea.prompt-full {
+		font-size: var(--text-md);
+	}
 }
 
 .review-fields {
