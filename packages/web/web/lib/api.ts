@@ -17,11 +17,13 @@ import type {
 	PushDevicesView,
 	PushKeyView,
 	RoomMode,
+	RoomOneView,
 	RoomsView,
 	SchedulesView,
 	SessionView,
 	SkillDetailView,
 	SkillView,
+	ThreadsDismissed,
 	TranscriptView,
 	UploadView,
 } from "../../src/api-types.ts";
@@ -198,6 +200,20 @@ export const api = {
 			method: "PUT",
 			body: JSON.stringify({ muted }),
 		}),
+	/** A thread's view, listed or not; a dismissed thread is off the list and still opens. */
+	room: (room: string) =>
+		request<RoomOneView>(`rooms/${encodeURIComponent(room)}`),
+	/** Takes a finished thread off the room list for every owner. */
+	dismissThread: (thread: string) =>
+		request<ThreadsDismissed>(`rooms/${encodeURIComponent(thread)}/dismiss`, {
+			method: "POST",
+		}),
+	/** Takes every finished thread of a room off the room list. */
+	dismissThreads: (room: string) =>
+		request<ThreadsDismissed>(
+			`rooms/${encodeURIComponent(room)}/dismiss-threads`,
+			{ method: "POST" },
+		),
 	startRoomOver: (room: string) =>
 		request<{ ok: true }>(`rooms/${encodeURIComponent(room)}/start-over`, {
 			method: "POST",

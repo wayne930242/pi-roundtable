@@ -518,6 +518,16 @@ export interface LayoutView {
 	folders: FolderView[];
 }
 
+/** `GET api/rooms/<key>` for a thread: its view, listed or dismissed from the list. */
+export interface RoomOneView {
+	room: RoomView;
+}
+
+/** What a dismissal removed from the room list: the finished threads that were listed. */
+export interface ThreadsDismissed {
+	dismissed: number;
+}
+
 export interface RoomsView extends LayoutView {
 	rooms: RoomView[];
 }

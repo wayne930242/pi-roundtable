@@ -147,6 +147,10 @@ export type LocalAction =
 	| { type: "layout_loaded"; pins: string[]; folders: FolderView[] }
 	/** The server took a room's mute or unmute. */
 	| { type: "room_muted"; room: string; muted: boolean }
+	/** A room the list does not carry (a dismissed thread) opened by its address. */
+	| { type: "room_viewed"; view: RoomView }
+	/** Finished threads the owners took off the list. */
+	| { type: "threads_dismissed"; rooms: string[] }
 	| {
 			type: "history_loaded";
 			room: string;
@@ -640,6 +644,17 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			return onRooms(state, action.rooms, action);
 		case "layout_loaded":
 			return { ...state, pins: action.pins, folders: action.folders };
+		case "room_viewed":
+			return withRoom(state, action.view.key, (room) => ({
+				...room,
+				view: action.view,
+				mode: action.view.mode,
+			}));
+		case "threads_dismissed":
+			return {
+				...state,
+				order: state.order.filter((key) => !action.rooms.includes(key)),
+			};
 		case "room_muted": {
 			const held = state.rooms[action.room]?.view;
 			if (!held || (held.muted === true) === action.muted) return state;

@@ -198,24 +198,31 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	useEffect(() => {
 		if (!unknown || rechecked) return;
 		let current = true;
-		api.rooms().then(
-			(listing) => {
+		const recheck = async () => {
+			try {
+				const listing = await api.rooms();
 				store.dispatch({
 					type: "rooms_loaded",
 					rooms: listing.rooms,
 					pins: listing.pins,
 					folders: listing.folders,
 				});
-				if (current) setRechecked(true);
-			},
-			() => {
-				if (current) setRechecked(true);
-			},
-		);
+				// A thread dismissed from the list is not in it and still opens by its address.
+				if (!listing.rooms.some((one) => one.key === roomKey))
+					store.dispatch({
+						type: "room_viewed",
+						view: (await api.room(roomKey)).room,
+					});
+			} catch {
+				// The room stays unavailable.
+			}
+			if (current) setRechecked(true);
+		};
+		recheck();
 		return () => {
 			current = false;
 		};
-	}, [unknown, rechecked]);
+	}, [unknown, rechecked, roomKey]);
 
 	if (unknown && rechecked)
 		return (

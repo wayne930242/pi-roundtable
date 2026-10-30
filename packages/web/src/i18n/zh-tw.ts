@@ -580,6 +580,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} cards waiting": "{count} 張卡片等待中",
 	"{count} finished thread": "{count} 個已結束的討論串",
 	"{count} finished threads": "{count} 個已結束的討論串",
+	"Clear all": "清除全部",
+	"The thread is still open.": "這個討論串還在進行中。",
 
 	// 排程
 	"{days} at {time}": "每{days} {time}",
