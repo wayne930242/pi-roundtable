@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-10-30
+
+### Changed
+
+- `ChatSurface.label`: LINE names itself so an agent's prompt says where the conversation is.
+- Release in lockstep with pi-roundtable 0.26.2. The core peer range stays `>=0.26.0 <0.27.0`.
+
 ## [0.26.1] - 2026-10-30
 
 - Release in lockstep with pi-roundtable 0.26.1; no package-specific behavior changes. The core peer range stays `>=0.26.0 <0.27.0`.

@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-10-30
+
 ### Added
 
 - Opening a room from a seat of the round table is a dive: the view zooms toward the seat that was tapped, creeping at first and then rushing in (`cubic-bezier(0.7, 0, 0.84, 0)`, about 380 ms), and the room settles in already at full size, with no blank frame. A mouse click, a tap and a key press on a seat all do it, and the camera of the 3D table dives into a seat from the whole ring the same way. It uses transform and opacity only, a second tap during the zoom is dropped, Back or leaving the table mid-zoom gives the view back and opens nothing, and `prefers-reduced-motion: reduce` switches at once. The code is part of the round table's lazy chunk, not the first load.

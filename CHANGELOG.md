@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-10-30
+
 ### Fixed
 
 - An agent answering in a room of another surface (the web app's `app:agent.<name>`, group and host rooms) no longer believes it is on Discord. The agent addendum and the group seat text now say where this conversation is, from the new optional `ChatSurface.label` (Discord, the web app, the web chat and LINE supply theirs; the key prefix is the fallback), and which other surfaces the agent has places on, and the shared prompts no longer carry Discord's Markdown guidance: how a reply renders comes from each surface's `formatting`, as before. The tool description of an agent's display name no longer says "Discord messages".
