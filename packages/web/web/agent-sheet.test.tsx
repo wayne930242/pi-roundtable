@@ -202,13 +202,13 @@ async function open(options: { look?: boolean; creator?: boolean } = {}) {
 	}
 }
 
-test("the sheet is a wide sheet titled Edit agent, with the agent's fields, chips and look", async () => {
+test("the sheet is a wide sheet titled Edit knight, with the knight's fields, chips and look", async () => {
 	await open();
 	const dialog = q<HTMLDialogElement>("dialog.sheet");
 	expect(dialog?.open).toBe(true);
 	expect(dialog?.classList.contains("wide")).toBe(true);
 	expect(q(".agent-sheet")).not.toBeNull();
-	expect(dialog?.getAttribute("aria-label")).toBe("Edit agent");
+	expect(dialog?.getAttribute("aria-label")).toBe("Edit knight");
 	expect(agent).toHaveBeenCalledWith("scout");
 	expect(q<HTMLInputElement>(".agent-sheet input")?.value).toBe("Scout");
 	expect(q<HTMLTextAreaElement>(".agent-sheet textarea")?.value).toBe(
@@ -216,10 +216,10 @@ test("the sheet is a wide sheet titled Edit agent, with the agent's fields, chip
 	);
 	// Model and thinking are chips; the saved choice is the pressed one.
 	expect(all("button.option-chip").map((one) => one.textContent)).toEqual([
-		"Follow the assistant",
+		"Default model (model-a)",
 		"model-a",
 		"model-b",
-		"Follow the assistant (automatic)",
+		"Default",
 		"Off",
 		"Minimal",
 		"Low",
@@ -227,7 +227,7 @@ test("the sheet is a wide sheet titled Edit agent, with the agent's fields, chip
 		"High",
 		"Very high",
 	]);
-	expect(chip("Follow the assistant")?.getAttribute("aria-pressed")).toBe(
+	expect(chip("Default model (model-a)")?.getAttribute("aria-pressed")).toBe(
 		"true",
 	);
 	expect(chip("model-b")?.getAttribute("aria-pressed")).toBe("false");
@@ -239,7 +239,7 @@ test("choosing a model saves just the model, with no review step", async () => {
 	expect(submit()?.disabled).toBe(true);
 	await page.click(chip("model-b"));
 	expect(chip("model-b")?.getAttribute("aria-pressed")).toBe("true");
-	expect(chip("Follow the assistant")?.getAttribute("aria-pressed")).toBe(
+	expect(chip("Default model (model-a)")?.getAttribute("aria-pressed")).toBe(
 		"false",
 	);
 	expect(submit()?.textContent).toBe("Save");
@@ -297,7 +297,7 @@ test("the review lists a changed name and model beside the prompt diff", async (
 	const fields = all(".review-fields li").map((one) => one.textContent);
 	expect(fields).toEqual([
 		"NameScout→Scout II",
-		"ModelFollow the assistant→model-a",
+		"ModelDefault model (model-a)→model-a",
 	]);
 	await page.click(inReview("Save"));
 	expect(update).toHaveBeenCalledWith("scout", {
@@ -504,7 +504,7 @@ test("Change look opens the sheet scrolled to the creator", async () => {
 	}
 });
 
-test("Change look after Edit agent for the same agent scrolls to the creator", async () => {
+test("Change look after Edit knight for the same knight scrolls to the creator", async () => {
 	const scrolled: Element[] = [];
 	const original = Element.prototype.scrollIntoView;
 	Element.prototype.scrollIntoView = function (this: Element) {
@@ -559,10 +559,10 @@ test("the system Back takes the sheet away with the page it was opened on", asyn
 });
 
 test("a profile that cannot be read says so", async () => {
-	agent.mockRejectedValue(new Error("There is no such room, agent or file."));
+	agent.mockRejectedValue(new Error("There is no such room, knight or file."));
 	await open({ creator: false });
 	expect(q("dialog.sheet")?.textContent).toContain(
-		"There is no such room, agent or file.",
+		"There is no such room, knight or file.",
 	);
 });
 

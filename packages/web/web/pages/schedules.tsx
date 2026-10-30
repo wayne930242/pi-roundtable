@@ -71,7 +71,7 @@ export function SchedulesPage() {
 			{data && data.schedules.length === 0 ? (
 				<Empty>
 					{t(
-						"Nothing is scheduled. Ask an agent to remind you or to run something later.",
+						"Nothing is scheduled. Ask a knight to remind you or to run something later.",
 					)}
 				</Empty>
 			) : null}

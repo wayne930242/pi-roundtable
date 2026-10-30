@@ -34,7 +34,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"binary file": "二進位檔",
 	"too large": "檔案太大",
 	"not UTF-8": "不是 UTF-8",
-	"Agents' workspace": "夥伴工作區",
+	"Knights' workspace": "騎士工作區",
 	Scratch: "暫存區",
 	Path: "路徑",
 	"This folder is empty": "這個資料夾是空的",
@@ -59,7 +59,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Read only: {reason}": "唯讀：{reason}",
 	"File menu": "檔案選單",
 	"This file is gone": "這個檔案已經不見了",
-	"A partner is changing this file": "夥伴正在改這個檔案",
+	"A knight is changing this file": "騎士正在改這個檔案",
 	"Reload (discard my edits)": "重新載入（放棄我的修改）",
 	"This file is too large to show here.": "這個檔案太大，無法在這裡顯示。",
 	"This file is not text, so it cannot be shown here.":
@@ -82,7 +82,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Copy my text": "複製我的內容",
 	"Save mine as a new file": "存成新檔案",
 	"Save mine anyway": "仍用我的版本覆蓋",
-	"Replace the partner's changes?": "要蓋掉夥伴的修改嗎？",
+	"Replace the knight's changes?": "要蓋掉騎士的修改嗎？",
 	"The file has been changed since you opened it. Saving yours writes over those changes.":
 		"你開啟後，這個檔案又被改過。存下你的版本會蓋掉那些修改。",
 	"Unsaved changes, leave?": "還沒存檔，要離開嗎？",
@@ -257,7 +257,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Yolo mode on": "Yolo 模式已開啟",
 
 	// 命令面板
-	Agent: "夥伴",
 	"Find a room or page": "尋找聊天室或頁面",
 	"Nothing matches.": "沒有符合的項目。",
 	Page: "頁面",
@@ -280,19 +279,19 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"讓回合可超過時間上限繼續進行，最多到主機設定的上限。提問仍會等你回應。",
 	"Long-running mode": "長時間執行模式",
 	"Name, prompt, model and picture": "名稱、提示詞、模型與圖像",
-	"Reply to the agent that started this thread.": "回覆開啟這個討論串的夥伴。",
+	"Reply to the knight that started this thread.": "回覆開啟這個討論串的騎士。",
 	"Yolo mode": "Yolo 模式",
-	"No agents are seated yet.": "圓桌上還沒有夥伴入座。",
+	"No knights are seated yet.": "圓桌上還沒有騎士入座。",
 	"Who's at the table": "誰上桌",
 	"Off the table": "離席中",
 	"Leave the table": "離席",
 	"{name} left the table": "{name}已離席",
 	"The table is empty": "圓桌空了",
 	"There are no rooms to seat yet.": "還沒有可以入座的聊天室。",
-	"Every agent has left the table. Choose who sits down.":
-		"所有夥伴都離席了。選擇誰要上桌。",
-	"An agent who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.":
-		"離席的夥伴會被靜音：它的聊天室不再推播給你。等你回應的卡片仍會推播。",
+	"Every knight has left the table. Choose who sits down.":
+		"所有騎士都離席了。選擇誰要上桌。",
+	"A knight who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.":
+		"離席的騎士會被靜音：它的聊天室不再推播給你。等你回應的卡片仍會推播。",
 
 	// 通知
 	"A file is no longer available. Attach it again.":
@@ -328,11 +327,13 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Today: "今天",
 	Yesterday: "昨天",
 
-	// 夥伴
+	// 騎士
 	"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.":
 		"職業、配色與部件。這裡、聊天室與 Discord 的圖像都會跟著改變。",
-	"Follow the assistant (automatic)": "跟隨夥伴（自動）",
-	"Follow the assistant": "跟隨夥伴",
+	Default: "預設",
+	"Default model": "預設模型",
+	"Default model ({current})": "預設模型（{current}）",
+	"Default model (server setting)": "預設模型（跟著伺服器設定）",
 	Look: "造型",
 	Name: "名稱",
 	Prompt: "提示詞",
@@ -350,8 +351,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Tool list": "工具清單",
 	Unreachable: "無法連線",
 	"Upstream gateways": "上游閘道",
-	"Upstream MCP gateways and virtual servers used by the assistant.":
-		"夥伴使用的上游 MCP 閘道與虛擬伺服器。",
+	"Upstream MCP gateways and virtual servers used by the knights.":
+		"騎士使用的上游 MCP 閘道與虛擬伺服器。",
 	"Used by": "使用者",
 	"Virtual servers": "虛擬伺服器",
 
@@ -361,15 +362,15 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"None stored.": "沒有儲存的內容。",
 	running: "進行中",
 	"Owner channels": "擁有者頻道",
-	"Direct messages and channels where the owner talks to the assistant.":
-		"擁有者與夥伴交談的私訊與頻道。",
-	"Agent channels": "夥伴頻道",
-	"The agent server's one-to-one channels.": "夥伴伺服器的一對一頻道。",
+	"Direct messages and channels where the owner talks to a knight.":
+		"擁有者與騎士交談的私訊與頻道。",
+	"Bot server channels": "Bot 伺服器頻道",
+	"The bot server's one-to-one channels.": "Bot 伺服器的一對一頻道。",
 	"Group channels": "群組頻道",
-	"The agent server's group channels.": "夥伴伺服器的群組頻道。",
-	"Outside agents": "外部夥伴",
-	"Conversations an agent outside Discord holds over MCP.":
-		"Discord 以外的夥伴透過 MCP 進行的對話。",
+	"The bot server's group channels.": "Bot 伺服器的群組頻道。",
+	"Outside AI clients": "外部 AI 用戶端",
+	"Conversations an outside AI client holds over MCP.":
+		"Discord 以外的 AI 用戶端透過 MCP 進行的對話。",
 	"Plugin conversations": "外掛對話",
 	"Conversations a plugin runs, such as a web chat, as the host recorded them.":
 		"外掛（例如網頁聊天）進行的對話，內容為主機所記錄。",
@@ -398,28 +399,28 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Search (words separated by spaces)": "搜尋（以空格分隔關鍵字）",
 	"Search notes": "搜尋記憶",
 	Text: "內容",
-	"What the assistant remembers. A change applies from the next turn.":
-		"夥伴記得的內容。變更會從下一個回合起生效。",
+	"What a knight remembers. A change applies from the next turn.":
+		"騎士記得的內容。變更會從下一個回合起生效。",
 	"Whose notes": "誰的記憶",
 	Core: "核心",
 	"Carried into every turn.": "每個回合都會帶入。",
 	Note: "備忘",
-	"Searched when the assistant needs them.": "夥伴需要時才會搜尋。",
+	"Searched when a knight needs them.": "騎士需要時才會搜尋。",
 	Events: "事件",
 	"Carried into every turn until their date.": "到期日之前每個回合都會帶入。",
 
 	// 總覽
 	"(No messages)": "（沒有訊息）",
 	"{count} waiting": "{count} 項等待中",
-	"Agent and group status; starting over archives the conversation and preserves memory.":
-		"夥伴與群組的狀態；重新開始會封存對話並保留記憶。",
-	"Agent server": "夥伴伺服器",
+	"Knight and group status; starting over archives the conversation and preserves memory.":
+		"騎士與群組的狀態；重新開始會封存對話並保留記憶。",
+	"Bot server": "Bot 伺服器",
 	Context: "上下文",
 	"Conversation {size} · Archives {count}": "對話 {size} · 封存 {count} 筆",
 	"Conversations opened through remote MCP; after deletion the session ID cannot be resumed.":
 		"透過遠端 MCP 開啟的對話；刪除後無法再用該工作階段 ID 接續。",
-	"Direct messages and channels where you mention the assistant. Start over archives; delete removes every archive permanently.":
-		"你在私訊與頻道中提及夥伴的對話。重新開始會封存；刪除會永久移除所有封存。",
+	"Direct messages and channels where you mention a knight. Start over archives; delete removes every archive permanently.":
+		"你在私訊與頻道中提及騎士的對話。重新開始會封存；刪除會永久移除所有封存。",
 	"Enabled by {name} at {time}": "由{name}於 {time} 啟用",
 	idle: "閒置",
 	"Just compacted (limit {limit})": "剛完成壓縮（上限 {limit}）",
@@ -427,13 +428,13 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Members: {members} | Host: {host}": "成員：{members}｜主持：{host}",
 	Model: "模型",
 	"My workspaces": "我的工作區",
-	"No agents.": "沒有夥伴。",
+	"No knights.": "沒有騎士。",
 	"No live conversation · Archives {count}":
 		"沒有進行中的對話 · 封存 {count} 筆",
-	"No outside-agent conversations.": "沒有外部夥伴的對話。",
+	"No outside AI client conversations.": "沒有外部 AI 用戶端的對話。",
 	"No party channels.": "沒有派對頻道。",
 	"No workspaces.": "沒有工作區。",
-	"Outside-agent conversations": "外部夥伴的對話",
+	"Outside AI client conversations": "外部 AI 用戶端的對話",
 	"Party channels": "派對頻道",
 	"Replying in {name}'s channel": "正在{name}的頻道中回覆",
 	"Replying in another channel": "正在其他頻道中回覆",
@@ -452,8 +453,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Back to rooms": "回到聊天室列表",
 	"Every approval it makes is written into the conversation, and a banner stays up while yolo mode is on.":
 		"它做的每一次核准都會寫進對話，而且 Yolo 模式開啟期間會一直顯示橫幅。",
-	"In this room, the agent's held actions are approved for you, without a card, as soon as they come up.":
-		"在這個聊天室中，夥伴保留的操作一出現就會替你核准，不會顯示卡片。",
+	"In this room, the knight's held actions are approved for you, without a card, as soon as they come up.":
+		"在這個聊天室中，騎士保留的操作一出現就會替你核准，不會顯示卡片。",
 	Latest: "最新",
 	"Load earlier messages": "載入更早的訊息",
 	"Loading…": "載入中…",
@@ -479,7 +480,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Working…": "處理中…",
 
 	// 長按與右鍵選單
-	"Edit agent": "編輯夥伴",
+	"Edit knight": "編輯騎士",
 	"Change look": "換外觀",
 	"Notifications are off": "通知已關閉",
 	"Notifications are on for {name}": "已開啟{name}的通知",
@@ -503,27 +504,27 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Quote reply": "引用回覆",
 	"Select text": "選取文字",
 	Share: "分享",
-	"Agent profile": "夥伴資料",
+	"Knight profile": "騎士資料",
 	"Copy details": "複製細節",
 	Download: "下載",
 	"Could not copy.": "無法複製。",
 	"Could not share.": "無法分享。",
 
 	// 新增、封存與群組
-	"New agent": "新增夥伴",
+	"New knight": "新增騎士",
 	"New group": "新增群組",
 	Archived: "已封存",
 	Archive: "封存",
 	"Archive {name}": "封存{name}",
 	"Archive {name}?": "要封存{name}嗎？",
-	"Archive agent": "封存夥伴",
+	"Archive knight": "封存騎士",
 	"Archive group": "封存群組",
 	"Archived {name}.": "已封存{name}。",
 	"Restored {name}.": "已還原{name}。",
 	"Deleted {name}.": "已刪除{name}。",
 	"Delete {name}?": "要刪除{name}嗎？",
 	"Made {name}.": "已建立{name}。",
-	"Make agent": "建立夥伴",
+	"Make knight": "建立騎士",
 	"Make group": "建立群組",
 	"Making…": "建立中…",
 	"Permanent name": "固定名稱",
@@ -532,8 +533,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Its job, its sources, its limits and how it reports.":
 		"它的工作、資料來源、限制，以及怎麼回報。",
 	"Opening task": "開場任務",
-	"Optional. The agent starts on it as soon as it is made.":
-		"可不填。夥伴建立後會立刻開始做。",
+	"Optional. The knight starts on it as soon as it is made.":
+		"可不填。騎士建立後會立刻開始做。",
 	"Your look": "你選的外觀",
 	"Suggested from its role": "依角色建議的外觀",
 	"Choose a look": "選擇外觀",
@@ -541,31 +542,31 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Edit group": "編輯群組",
 	"Name, members and host": "名稱、成員與主持人",
 	Members: "成員",
-	"Pick 2 to 6 agents. They take turns in the order picked.":
-		"選 2 到 6 位夥伴。他們依選取的順序輪流發言。",
+	"Pick 2 to 6 knights. They take turns in the order picked.":
+		"選 2 到 6 位騎士。他們依選取的順序輪流發言。",
 	Host: "主持人",
 	"It stops answering. The history is kept and it can be restored.":
 		"它會停止回應。歷史會保留，之後可以還原。",
-	"An archived agent stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.":
-		"封存後的夥伴不再回應，排程也會取消。歷史會保留，之後可以從「已封存」還原。",
+	"An archived knight stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.":
+		"封存後的騎士不再回應，排程也會取消。歷史會保留，之後可以從「已封存」還原。",
 	"{name} stops answering and its schedules are cancelled. A group loses it as a member. The history is kept, and Archived in the room list restores it.":
 		"{name}會停止回應，排程也會取消；群組會少掉這位成員。歷史會保留，可以從聊天室列表的「已封存」還原。",
-	"Archived agents and groups no longer answer. Their history is kept until you delete them.":
-		"已封存的夥伴與群組不再回應。歷史會保留，直到你刪除它們。",
+	"Archived knights and groups no longer answer. Their history is kept until you delete them.":
+		"已封存的騎士與群組不再回應。歷史會保留，直到你刪除它們。",
 	"Nothing is archived.": "沒有已封存的項目。",
 	"{name} and its messages in this app are deleted for good, and the name can be used again. This cannot be undone.":
 		"{name}和它在這個應用程式裡的訊息會永久刪除，名稱可以再使用。此動作無法復原。",
-	"What the agent can load when a task calls for it. It applies from its next turn.":
-		"夥伴在任務需要時可以載入的技能。下一輪對話起生效。",
+	"What the knight can load when a task calls for it. It applies from its next turn.":
+		"騎士在任務需要時可以載入的技能。下一輪對話起生效。",
 	"Its file cannot be read.": "讀不到它的檔案。",
-	"Built in: every agent carries it.": "內建：每位夥伴都有。",
+	"Built in: every knight carries it.": "內建：每位騎士都有。",
 	"This host has no skills.": "這個主機沒有技能。",
 	"Give add or remove.": "請給 add 或 remove。",
 	"members must be a list of text.": "members 必須是文字清單。",
 	"Give displayName, members or host.": "請給 displayName、members 或 host。",
 
 	// 聊天室列表
-	Agents: "夥伴",
+	Knights: "騎士",
 	"Dispatch threads": "派工討論串",
 	"Find a room": "尋找聊天室",
 	"Switch rooms": "切換聊天室",
@@ -574,8 +575,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Home: "首頁",
 	"Long-running": "長時間執行",
 	"No messages yet": "還沒有訊息",
-	"No rooms yet. Rooms appear when the team has an agent.":
-		"還沒有聊天室。團隊有夥伴後，聊天室就會出現。",
+	"No rooms yet. Rooms appear when the team has a knight.":
+		"還沒有聊天室。團隊有騎士後，聊天室就會出現。",
 	Yolo: "Yolo",
 	"{count} card waiting": "{count} 張卡片等待中",
 	"{count} cards waiting": "{count} 張卡片等待中",
@@ -594,8 +595,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Every {count} days at {time}": "每 {count} 天 {time}",
 	"Every day at {time}": "每天 {time}",
 	"next {when}": "下次：{when}",
-	"Nothing is scheduled. Ask an agent to remind you or to run something later.":
-		"目前沒有排程。你可以請夥伴提醒你，或稍後執行某件事。",
+	"Nothing is scheduled. Ask a knight to remind you or to run something later.":
+		"目前沒有排程。你可以請騎士提醒你，或稍後執行某件事。",
 	"Once on {date} at {time}": "{date} {time}（僅一次）",
 	"Schedule cancelled.": "排程已取消。",
 	"set by {name}": "由{name}設定",
@@ -613,8 +614,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Appearance: "外觀",
 	"Color scheme": "色彩配置",
 	Device: "裝置",
-	"Get a notification on this device when a card waits for you or an agent reports on its own, while the app is not open.":
-		"應用程式未開啟時，只要有卡片等你處理，或夥伴主動回報，這台裝置就會收到通知。",
+	"Get a notification on this device when a card waits for you or a knight reports on its own, while the app is not open.":
+		"應用程式未開啟時，只要有卡片等你處理，或騎士主動回報，這台裝置就會收到通知。",
 	"Install it to open from your home screen or dock, in its own window.":
 		"安裝後可從主畫面或 Dock 直接開啟，並使用獨立的視窗。",
 	"Install the app": "安裝應用程式",
@@ -625,8 +626,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Notifications were not allowed. Allow them in the browser's site settings.":
 		"通知未獲允許。請在瀏覽器的網站設定中允許通知。",
 	Notifications: "通知",
-	"Quiet hours, {start} to {end} ({zone}): no notification for an agent's report or a notice. A card waiting for you still notifies. The server sets the hours.":
-		"勿擾時段 {start} 至 {end}（{zone}）：這段時間內，夥伴的回報與通知不會推播；等你處理的卡片仍會推播。時段由伺服器設定。",
+	"Quiet hours, {start} to {end} ({zone}): no notification for a knight's report or a notice. A card waiting for you still notifies. The server sets the hours.":
+		"勿擾時段 {start} 至 {end}（{zone}）：這段時間內，騎士的回報與通知不會推播；等你處理的卡片仍會推播。時段由伺服器設定。",
 	Remove: "移除",
 	"Signed in as {name}.": "目前登入身分：{name}。",
 	"This browser cannot get push notifications. On iPhone and iPad, install the app from Share, Add to Home Screen, and open it from there.":
@@ -647,15 +648,15 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"白天是羊皮紙，夜晚是夜間城堡，搭配金色分隔線、盾形頭像與蠟封印章。",
 
 	// 技能
-	"All agents": "所有夥伴",
-	"Assistant-written": "夥伴撰寫",
+	"All knights": "所有騎士",
+	"Knight-written": "騎士撰寫",
 	"Built-in": "內建",
 	Carriers: "搭載對象",
 	"File missing": "檔案遺失",
 	"No skills.": "沒有技能。",
 	None: "無",
-	"Registered skills and their carriers; ask an agent on Discord to edit their contents.":
-		"已登錄的技能與搭載對象；如要修改內容，請在 Discord 上請夥伴編輯。",
+	"Registered skills and their carriers; ask a knight on Discord to edit their contents.":
+		"已登錄的技能與搭載對象；如要修改內容，請在 Discord 上請騎士編輯。",
 
 	// 圓桌
 	"Reset view": "重設視角",
@@ -671,18 +672,19 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Archived {name}": "已封存的{name}",
 	"Current conversation": "目前的對話",
 	"Nothing to show.": "沒有可顯示的內容。",
-	"Outside agent · {id}": "外部夥伴 · {id}",
+	"Outside AI client · {id}": "外部 AI 用戶端 · {id}",
 	Showing: "顯示",
 	"This conversation is longer than the console reads; the oldest entries are not shown.":
 		"這段對話比主控台能讀取的長度還長，最舊的紀錄不會顯示。",
 	"Tool failed": "工具執行失敗",
 	"Tool result": "工具結果",
 	User: "使用者",
-	Assistant: "夥伴",
+	// 命令面板與對話紀錄共用
+	Knight: "騎士",
 	"Summary of earlier conversation": "先前對話的摘要",
 
 	// 伺服器回應
-	"There is no such room, agent or file.": "找不到這個聊天室、夥伴或檔案。",
+	"There is no such room, knight or file.": "找不到這個聊天室、騎士或檔案。",
 	"The body is too large.": "內容太大。",
 	"The body is not JSON.": "內容不是 JSON。",
 	"The body is not an object.": "內容不是物件。",
@@ -846,7 +848,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.class.paladin": "聖騎士",
 	"character.class.archivist": "檔案管理員",
 	// 職業適合的工作
-	"character.jobs.wizard": "協調者、規劃者、主要夥伴",
+	"character.jobs.wizard": "協調者、規劃者、主騎士",
 	"character.jobs.knight": "審查者、品質把關、守護者",
 	"character.jobs.scholar": "研究員、文獻回顧",
 	"character.jobs.smith": "程式開發、建置、重構",
@@ -968,14 +970,14 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	// 主要提示詞與技能內容的編輯
 	"Main prompts": "主要提示詞",
 	"Edit the main prompts": "編輯主要提示詞",
-	"The texts the assistant and the agents start from, with a diff to read before you save and a way back to the file's text.":
-		"夥伴們開始工作時所依據的文字；儲存前可檢視差異，也能回到檔案裡的版本。",
-	"The texts the assistant and the agents start from. A text you save here replaces the one from the file from the next turn on, until you go back to the file's.":
-		"夥伴們開始工作時所依據的文字。你在這裡儲存的文字，從下一回合起取代檔案裡的版本，直到你回到檔案版本為止。",
+	"The texts the main knight and the other knights start from, with a diff to read before you save and a way back to the file's text.":
+		"主騎士與其他騎士開始工作時所依據的文字；儲存前可檢視差異，也能回到檔案裡的版本。",
+	"The texts the main knight and the other knights start from. A text you save here replaces the one from the file from the next turn on, until you go back to the file's.":
+		"主騎士與其他騎士開始工作時所依據的文字。你在這裡儲存的文字，從下一回合起取代檔案裡的版本，直到你回到檔案版本為止。",
 	"Shared prompt": "共用提示詞",
 	"Guest prompt": "訪客提示詞",
-	"The base every agent's prompt starts with, the main assistant's included.":
-		"每位夥伴的提示詞都以它開頭，主要夥伴也不例外。",
+	"The base every knight's prompt starts with, the main knight's included.":
+		"每位騎士的提示詞都以它開頭，主騎士也不例外。",
 	"Used instead of the shared prompt when the person speaking is not the owner.":
 		"說話的人不是擁有者時，改用它取代共用提示詞。",
 	"No prompts to edit.": "沒有可編輯的提示詞。",
@@ -1006,8 +1008,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"這個技能在你編輯時被更動了。下方的差異是對照目前的版本；再儲存一次會取代它，或回去繼續編輯。",
 	"Frontmatter holds the name, which cannot change, and a description that starts with “Use when”. The rest is the skill.":
 		"Frontmatter 含有名稱（不能更改）與以「Use when」開頭的描述，其餘就是技能內容。",
-	"Registered skills and their carriers. A skill an agent wrote can be edited here; the others are read-only.":
-		"已登錄的技能與攜帶者。夥伴撰寫的技能可以在這裡編輯，其他的唯讀。",
+	"Registered skills and their carriers. A skill a knight wrote can be edited here; the others are read-only.":
+		"已登錄的技能與攜帶者。騎士撰寫的技能可以在這裡編輯，其他的唯讀。",
 	"Built in with the release; it changes with the release.":
 		"隨版本內建；要隨版本更新才會改變。",
 	"From the package {package}; it changes when the package is upgraded.":
@@ -1054,7 +1056,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"You can read this room but not write in it.":
 		"你可以閱讀這個聊天室，但不能在其中發言。",
 	"@AI": "@AI",
-	"The message starts with @AI, so the agent answers.":
+	"The message starts with @AI, so the knight answers.":
 		"訊息開頭是 @AI，所以 AI 會回覆。",
 	"Write an internal note…": "寫一則內部備註…",
 	"Ask AI…": "問 AI…",

@@ -59,7 +59,7 @@ const REASONS: Record<WorkspaceReadOnlyReason, string> = {
 
 /** A root's name as the pane shows it: the agents' two places are worded here, a host's own as given. */
 function rootLabel(root: WorkspaceRootView): string {
-	if (root.id === "agents") return t("Agents' workspace");
+	if (root.id === "agents") return t("Knights' workspace");
 	if (root.id === "scratch") return t("Scratch");
 	return root.label;
 }
@@ -704,7 +704,7 @@ function FileView(props: {
 					<span className="ws-banner-text">
 						{remote === "gone"
 							? t("This file is gone")
-							: t("A partner is changing this file")}
+							: t("A knight is changing this file")}
 					</span>
 					{remote === "changed" ? (
 						<>
@@ -930,7 +930,7 @@ function FileView(props: {
 
 			<Confirm
 				open={overwrite !== undefined}
-				title={t("Replace the partner's changes?")}
+				title={t("Replace the knight's changes?")}
 				confirmLabel={t("Save mine anyway")}
 				tone="danger"
 				onClose={() => setOverwrite(undefined)}

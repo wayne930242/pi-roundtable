@@ -47,7 +47,7 @@ describeDb("the app surface's dispatch threads", () => {
 		const stored = await log.append({
 			room: PARENT,
 			kind: "system",
-			author: "Assistant",
+			author: "Knight",
 			text: "before",
 		});
 		expect(

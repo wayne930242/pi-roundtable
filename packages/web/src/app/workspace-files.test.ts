@@ -41,7 +41,7 @@ const OWNER = "owner:1";
 
 function files(extra: Partial<WorkspaceRoot>[] = []) {
 	const roots: WorkspaceRoot[] = [
-		{ id: "agents", label: "Agents", dir: root, writable: true },
+		{ id: "agents", label: "Knights", dir: root, writable: true },
 		...extra.map(
 			(part, index) =>
 				({
@@ -105,7 +105,7 @@ describe("the roots", () => {
 	test("are listed by id, label and whether they can be written, never by path", () => {
 		const view = files([{ writable: false }]).roots();
 		expect(view).toEqual([
-			{ id: "agents", label: "Agents", writable: true },
+			{ id: "agents", label: "Knights", writable: true },
 			{ id: "extra0", label: "Extra 0", writable: false },
 		]);
 		expect(JSON.stringify(view)).not.toContain(base);

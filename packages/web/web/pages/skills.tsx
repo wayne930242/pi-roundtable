@@ -53,10 +53,10 @@ export function SkillsPage() {
 			<p className="hint">
 				{canEdit
 					? t(
-							"Registered skills and their carriers. A skill an agent wrote can be edited here; the others are read-only.",
+							"Registered skills and their carriers. A skill a knight wrote can be edited here; the others are read-only.",
 						)
 					: t(
-							"Registered skills and their carriers; ask an agent on Discord to edit their contents.",
+							"Registered skills and their carriers; ask a knight on Discord to edit their contents.",
 						)}
 			</p>
 			{error ? <Failure message={error} /> : null}
@@ -124,7 +124,7 @@ function SkillCard({
 		skill.source.kind === "builtin"
 			? t("Built-in")
 			: skill.source.kind === "written"
-				? t("Assistant-written")
+				? t("Knight-written")
 				: skill.source.kind === "package"
 					? skill.source.package
 					: `${skill.source.repo}:${skill.source.path}`;
@@ -171,7 +171,7 @@ function SkillCard({
 			<p className="hint">
 				{t("Carriers")}:{" "}
 				{skill.source.kind === "builtin"
-					? t("All agents")
+					? t("All knights")
 					: skill.carriers.join(", ") || t("None")}
 			</p>
 			{skill.groups.length ? (

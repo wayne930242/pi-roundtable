@@ -33,9 +33,9 @@ const missing = (keys: Iterable<string>): string[] =>
 	[...keys].filter((key) => !(key in ZH_TW));
 
 describe("the built-in zh-TW catalog", () => {
-	test("says 夥伴, never 助理", () => {
-		const hits = Object.entries(ZH_TW).filter(([, text]) =>
-			text.includes("助理"),
+	test("says 騎士, never 夥伴 or 助理", () => {
+		const hits = Object.entries(ZH_TW).filter(
+			([, text]) => text.includes("助理") || text.includes("夥伴"),
 		);
 		expect(hits).toEqual([]);
 	});
@@ -112,7 +112,7 @@ describe("the built-in zh-TW catalog", () => {
 	});
 
 	test("words the boss's terms as decided", () => {
-		expect(ZH_TW.Agents).toBe("夥伴");
+		expect(ZH_TW.Knights).toBe("騎士");
 		expect(ZH_TW.Rooms).toBe("聊天室");
 		expect(ZH_TW["Round table"]).toBe("圓桌");
 		expect(ZH_TW.More).toBe("更多");

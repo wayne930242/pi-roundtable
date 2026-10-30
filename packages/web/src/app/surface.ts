@@ -31,7 +31,7 @@ const APP_FORMATTING =
 	"Reply formatting (web app): Markdown renders, including tables, headings, lists, quotes, links, inline code and fenced code blocks. Raw HTML does not render. Files you attach appear under your message.";
 
 /** The name a reply shows when its sender names none. */
-const ASSISTANT = "Assistant";
+const ASSISTANT = "Knight";
 
 export interface AppSurfaceOptions {
 	/** The key prefix of the rooms, such as `app`. */

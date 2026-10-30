@@ -14,7 +14,7 @@ export class HttpError extends Error {
 
 export const bad = (message: string) => new HttpError(400, message);
 export const notFound = () =>
-	new HttpError(404, "There is no such room, agent or file.");
+	new HttpError(404, "There is no such room, knight or file.");
 
 export async function bodyOf(
 	request: Request,

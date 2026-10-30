@@ -17,7 +17,7 @@ export function ConnectorsPage() {
 					<h2>{t("Connectors")}</h2>
 					<p className="hint">
 						{t(
-							"Upstream MCP gateways and virtual servers used by the assistant.",
+							"Upstream MCP gateways and virtual servers used by the knights.",
 						)}
 					</p>
 				</div>

@@ -52,7 +52,7 @@ export function TableSeatsSheet(props: { open: boolean; onClose(): void }) {
 			<div className="stack table-seats">
 				<p className="meta">
 					{t(
-						"An agent who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.",
+						"A knight who leaves the table is muted: its room stops pushing to you. A card that waits for you is always pushed.",
 					)}
 				</p>
 				<ul className="menu">

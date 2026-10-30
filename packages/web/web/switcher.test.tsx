@@ -241,7 +241,7 @@ test("the drawer's + button offers the add menu; choosing New agent closes the d
 		...document.querySelectorAll<HTMLElement>('[role^="menuitem"]'),
 	];
 	expect(items.map((one) => one.textContent)).toEqual([
-		"New agent",
+		"New knight",
 		"New group",
 		"Archived",
 	]);

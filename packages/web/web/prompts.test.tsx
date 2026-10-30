@@ -68,7 +68,7 @@ const view = (over: Partial<PromptView> = {}): PromptView => ({
 	id: "shared",
 	label: "Shared prompt",
 	description:
-		"The base every agent's prompt starts with, the main assistant's included.",
+		"The base every knight's prompt starts with, the main knight's included.",
 	differs: false,
 	text: FILE,
 	fileText: FILE,
@@ -188,7 +188,7 @@ test("lists the documents with a mark on the ones that differ from the file, and
 	expect(cards[0]?.textContent).not.toContain("Differs from the file version");
 	expect(cards[1]?.textContent).toContain("Differs from the file version");
 	expect(cards[1]?.textContent).toContain("Set by Riley, ");
-	expect(cards[0]?.textContent).toContain("The base every agent's prompt");
+	expect(cards[0]?.textContent).toContain("The base every knight's prompt");
 });
 
 test("says so when a host has nothing to edit, and shows a failure to read the list", async () => {

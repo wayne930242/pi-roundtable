@@ -261,7 +261,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 			) : null}
 			{listed && none && !hosted ? (
 				<Empty>
-					{t("No rooms yet. Rooms appear when the team has an agent.")}
+					{t("No rooms yet. Rooms appear when the team has a knight.")}
 				</Empty>
 			) : null}
 			{!listed ? (
@@ -307,7 +307,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 			) : (
 				<>
 					<Section
-						title={t("Agents")}
+						title={t("Knights")}
 						rooms={restAgents}
 						zone={{ kind: "rest", id: "rest-agents" }}
 						{...common}

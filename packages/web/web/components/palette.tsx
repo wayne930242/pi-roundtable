@@ -52,7 +52,7 @@ export function Palette(props: {
 				label: room.name,
 				hint:
 					room.kind === "agent"
-						? t("Agent")
+						? t("Knight")
 						: room.kind === "group"
 							? t("Group")
 							: t("Thread"),

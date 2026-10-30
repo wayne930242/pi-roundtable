@@ -75,7 +75,7 @@ function setup(withWorkspace = true) {
 			? {
 					workspace: new WorkspaceFiles({
 						roots: [
-							{ id: "agents", label: "Agents", dir: root, writable: true },
+							{ id: "agents", label: "Knights", dir: root, writable: true },
 							{ id: "docs", label: "Docs", dir: ro, writable: false },
 						],
 						logger: recorder.logger,
@@ -159,7 +159,7 @@ describe("the workspace API", () => {
 		expect(response.headers.get("cache-control")).toBe("no-store");
 		const view = (await response.json()) as WorkspaceRootsView;
 		expect(view.roots).toEqual([
-			{ id: "agents", label: "Agents", writable: true },
+			{ id: "agents", label: "Knights", writable: true },
 			{ id: "docs", label: "Docs", writable: false },
 		]);
 		expect(JSON.stringify(view)).not.toContain(base);
@@ -518,7 +518,7 @@ describe("the workspace options", () => {
 
 	test("the default pane list leaves out an agents' directory that holds the host's data, and keeps the host's own roots for checkRoots to fail", () => {
 		const roots = [
-			{ id: "agents", label: "Agents", dir: "/srv", writable: true },
+			{ id: "agents", label: "Knights", dir: "/srv", writable: true },
 			{ id: "scratch", label: "Scratch", dir: "/srv/scratch", writable: true },
 			{ id: "shelf", label: "Shelf", dir: "/srv", writable: false },
 		];

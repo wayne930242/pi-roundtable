@@ -151,7 +151,7 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 					<div className="table-empty-state">
 						<strong>{t("The table is empty")}</strong>
 						<p className="meta">
-							{t("Every agent has left the table. Choose who sits down.")}
+							{t("Every knight has left the table. Choose who sits down.")}
 						</p>
 						<button type="button" onClick={choose}>
 							{t("Who's at the table")}

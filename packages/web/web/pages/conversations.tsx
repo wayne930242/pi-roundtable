@@ -22,23 +22,23 @@ const SECTIONS: { kind: ConversationKind; title: string; note: string }[] = [
 		kind: "owner",
 		title: wording("Owner channels"),
 		note: wording(
-			"Direct messages and channels where the owner talks to the assistant.",
+			"Direct messages and channels where the owner talks to a knight.",
 		),
 	},
 	{
 		kind: "agent",
-		title: wording("Agent channels"),
-		note: wording("The agent server's one-to-one channels."),
+		title: wording("Bot server channels"),
+		note: wording("The bot server's one-to-one channels."),
 	},
 	{
 		kind: "group",
 		title: wording("Group channels"),
-		note: wording("The agent server's group channels."),
+		note: wording("The bot server's group channels."),
 	},
 	{
 		kind: "outside",
-		title: wording("Outside agents"),
-		note: wording("Conversations an agent outside Discord holds over MCP."),
+		title: wording("Outside AI clients"),
+		note: wording("Conversations an outside AI client holds over MCP."),
 	},
 	{
 		kind: "plugin",

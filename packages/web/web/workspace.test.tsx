@@ -114,7 +114,7 @@ function fakeFetch(
 		return Promise.resolve(
 			answer({
 				roots: [
-					{ id: "agents", label: "Agents", writable: true },
+					{ id: "agents", label: "Knights", writable: true },
 					{ id: "docs", label: "Docs", writable: false },
 				],
 			}),
@@ -277,7 +277,7 @@ test("on a desktop the tree stands beside the folder, and the breadcrumbs link t
 		one.getAttribute("href"),
 	]);
 	expect(crumbs).toEqual([
-		["Agents' workspace", "#/workspace/agents%3A"],
+		["Knights' workspace", "#/workspace/agents%3A"],
 		["src", "#/workspace/agents%3Asrc%2F"],
 	]);
 	expect(query(".ws-crumbs a[aria-current='page']")?.textContent).toBe("src");
@@ -545,7 +545,7 @@ test("Save mine anyway asks a second time, then writes with the hash the conflic
 	);
 	await settle(50);
 	// Not yet: the second question comes first.
-	expect(dialogs()).toContain("Replace the partner's changes?");
+	expect(dialogs()).toContain("Replace the knight's changes?");
 	expect(files.get("README.md")?.text).toBe("partner's text\n");
 	await page.click(
 		all("dialog button")

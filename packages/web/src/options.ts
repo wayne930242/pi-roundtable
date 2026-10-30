@@ -1105,7 +1105,7 @@ export function workspaceRootsOf(
 	if (agents && settings.workspace.agents)
 		roots.push({
 			id: "agents",
-			label: "Agents' workspace",
+			label: "Knights' workspace",
 			dir: agents.workDir,
 			writable: true,
 		});
