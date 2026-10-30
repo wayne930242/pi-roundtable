@@ -24,35 +24,97 @@ export const ARRANGED_CSS = `
 	gap: var(--space-2);
 }
 
+/* An ordinary folder is a light section header, tappable, like the Home and Pinned labels: no box. */
 .folder-head {
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
 	min-height: 2.75rem;
-	padding: 0 var(--space-1) 0 var(--space-2);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
-	background: var(--surface-2);
+	padding: 0;
 }
 
-.folder-toggle {
+/*
+ * The fold button wears the section label. It sits under the base "button:hover:not(:disabled)"
+ * (an accent fill), which a plain class would lose to; so each state is named here, and none of them
+ * changes the text colour away from the page's own text.
+ */
+.folder-head .folder-toggle {
 	display: flex;
 	flex: 1;
 	align-items: center;
+	justify-content: flex-start;
 	gap: var(--space-2);
 	min-width: 0;
 	min-height: 2.75rem;
-	padding: 0;
+	padding: 0 var(--space-2);
 	border: 0;
+	border-radius: var(--radius);
 	background: transparent;
-	color: inherit;
+	color: var(--muted);
+	font-weight: var(--weight-medium);
 	text-align: left;
+}
+
+.folder-head .folder-toggle:hover:not(:disabled),
+.folder-head .folder-toggle:active:not(:disabled),
+.folder-head .folder-toggle:focus-visible {
+	border: 0;
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	color: var(--text);
+}
+
+.folder-head .folder-toggle:active:not(:disabled) {
+	transform: none;
 }
 
 .folder-toggle strong {
 	overflow: hidden;
+	color: inherit;
+	font-size: var(--text-xs);
+	letter-spacing: 0.06em;
 	text-overflow: ellipsis;
+	text-transform: uppercase;
 	white-space: nowrap;
+}
+
+.folder-toggle .meta {
+	flex: none;
+	color: inherit;
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+
+/* The pictures of a folded folder's rooms, overlapping, then how many more. */
+.folder-stack {
+	display: flex;
+	flex: none;
+	align-items: center;
+	margin-left: var(--space-1);
+}
+
+.folder-stack > * + * {
+	margin-left: -0.5rem;
+}
+
+.folder-stack-item,
+.folder-stack-more {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 1.75rem;
+	overflow: hidden;
+	border-radius: 50%;
+	background: var(--surface);
+	box-shadow: 0 0 0 2px var(--bg);
+}
+
+.folder-stack-more {
+	background: var(--surface-2);
+	color: var(--muted);
+	font-size: var(--text-xs);
+	font-weight: var(--weight-medium);
 }
 
 .folder-chevron {

@@ -302,6 +302,31 @@ test("a swipe left, a tap outside and Escape each close it", async () => {
 	expect(drawer()).toBe("closed");
 });
 
+test("a message in a room lower in the drawer moves it up at once, with no reload", async () => {
+	// Rooms of their own, so what they say does not reach the other tests through the store.
+	const first = "app:agent.zeta";
+	const second = "app:agent.eta";
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			view(GUIDE),
+			view(first, { last: said(first, "2026-10-28T12:00:00.000Z") }),
+			view(second, { last: said(second, "2026-10-28T11:00:00.000Z") }),
+		],
+	});
+	await page.render(<Room />);
+	await page.click(element("avatar"));
+	expect(rowNames()).toEqual(["guide", "zeta", "eta"]);
+	await page.act(() => {
+		store.dispatch({
+			type: "message",
+			room: second,
+			message: { ...said(second, "2026-10-30T10:00:00.000Z"), id: 2 },
+		});
+	});
+	expect(rowNames()).toEqual(["guide", "eta", "zeta"]);
+});
+
 test("rooms with a waiting card sit on top, the rest by latest activity", async () => {
 	await page.render(<Room />);
 	await page.click(element("avatar"));

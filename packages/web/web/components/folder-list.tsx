@@ -5,6 +5,32 @@ import { waitingCards } from "../lib/rooms.ts";
 import { type FolderSection, muteState } from "../lib/sections.ts";
 import { Typing, WaitingBadge } from "../pages/rooms.tsx";
 import { FolderBlock } from "./folder-header.tsx";
+import { RoomPicture } from "./room-picture.tsx";
+
+/** How many pictures a folded folder shows before it says how many more rooms it holds. */
+const STACKED = 4;
+
+/** A folded folder's rooms as a small overlapping stack of their pictures, then how many more. */
+function FolderStack(props: { rooms: string[] }) {
+	const shown = props.rooms.slice(0, STACKED);
+	const views = useSelector(
+		(state) => shown.map((key) => state.rooms[key]?.view),
+		shown.join(","),
+	);
+	const more = props.rooms.length - shown.length;
+	return (
+		<span className="folder-stack" aria-hidden="true">
+			{views.map((view) =>
+				view ? (
+					<span key={view.key} className="folder-stack-item">
+						<RoomPicture view={view} size={28} />
+					</span>
+				) : null,
+			)}
+			{more > 0 ? <span className="folder-stack-more">+{more}</span> : null}
+		</span>
+	);
+}
 
 /** What waits or works in a folded folder's rooms, so the fold hides nothing that needs the owner. */
 function FolderSummary(props: { rooms: string[] }) {
@@ -73,6 +99,7 @@ function FolderRoomsBlock(props: {
 			}
 			muted={muted}
 			summary={<FolderSummary rooms={folder.rooms} />}
+			stack={<FolderStack rooms={folder.rooms} />}
 		>
 			{props.rooms(folder.rooms)}
 		</FolderBlock>

@@ -3,7 +3,7 @@
 // as it always did; a mouse drags as soon as it moves. The lift code loads on the first press.
 
 import type { DragEvent, MouseEvent, PointerEvent } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { openMenu } from "./action-menu.ts";
 import type { Outcome } from "./drag.ts";
 import { type PressProps, useLongPress } from "./long-press.ts";
@@ -39,6 +39,24 @@ export function loadDragWith(load: typeof dragModule): () => void {
 	};
 }
 
+const keepTouchmove = () => undefined;
+let armed = 0;
+
+/**
+ * While a row that can be lifted is on the page, the page holds a touchmove listener that may cancel.
+ * iOS Safari decides when a finger goes down whether the page can stop that finger's scroll, from the
+ * listeners there are at that moment: the lift adds its own only after the hold, so without this one
+ * the first move after a hold scrolls the page, the browser cancels the pointer, and the row is
+ * dropped where it was. The listener does nothing itself; the lift's does the stopping.
+ */
+function armTouches(): () => void {
+	if (armed++ === 0)
+		window.addEventListener("touchmove", keepTouchmove, { passive: false });
+	return () => {
+		if (--armed === 0) window.removeEventListener("touchmove", keepTouchmove);
+	};
+}
+
 export type RowPressProps = PressProps & {
 	onDragStart(event: DragEvent<HTMLElement>): void;
 };
@@ -49,6 +67,8 @@ export function useRowPress(
 ): RowPressProps {
 	const latest = useRef(lifting);
 	latest.current = lifting;
+	const liftable = lifting !== undefined;
+	useEffect(() => (liftable ? armTouches() : undefined), [liftable]);
 	const finger = useRef<{
 		id: number;
 		x: number;

@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `pi-roundtable-web`: a folder's header no longer turns into an unreadable light fill with white text when the pointer rests on it (on a phone the highlight stuck after a tap), and its title is left-aligned, not centered. The base rule `button:hover:not(:disabled)` out-specified the header's own style; its hover, press and keyboard focus now tint the label and keep its text colour in every look and scheme.
+- `pi-roundtable-web`: a row of the room list that is held and dragged on an iPhone now lifts and reorders. iOS Safari lets a page stop a finger's scroll only if a non-passive `touchmove` listener existed when the finger went down; the lift added its own after the hold, so the first move scrolled the page and the browser cancelled the drag. While a row that can be lifted is on the page, a no-op non-passive `touchmove` listener is now held.
+- `pi-roundtable-web`: the plain room list (no pin and no folder yet) keeps Agents and Groups by latest activity, as the arranged list and the drawer do. Before, it kept the order the server listed them in, so a room you had just talked to did not move up, even after a reload.
+
+### Changed
+
+- `pi-roundtable-web`: an ordinary folder is a light section header (chevron, name, count, ⋯), left-aligned like the Home and Pinned labels, not the boxed grey card, which stays for the archive. A folded folder shows a small overlapping stack of the pictures of its first four rooms and, when it holds more, how many more (`+2`).
+
 ## [0.26.0] - 2026-10-30
 
 ### Added
