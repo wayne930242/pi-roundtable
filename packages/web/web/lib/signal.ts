@@ -11,6 +11,7 @@ export function signal() {
 		return () => listeners.delete(listener);
 	};
 	return {
+		subscribe,
 		emit(): void {
 			for (const listener of listeners) listener();
 		},

@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The package entry exports the host-facing API: `WEB_APP` and the types `WebApp`, `HostRoomKind`, `HostPage`, `HostCard`, `Viewer`, `OpenTarget`, `ActionResult`, `LinkProver`, `OnboardingStep` and `Notices`, so a host plugin no longer mirrors them.
 - The `description` option, and `<meta name="description">`, `og:title`, `og:description` and `og:image` on the page, so a search result and a link preview have a title, a line and the mark. Without `description` a line is derived from `title`.
 - `<mount>/icons/mark.svg`, the round-table mark.
+- The tab shows a small red dot on its icon, top-right with a white ring, while anything waits (cards waiting, notices, unread messages), and the title leads with `(N) `. The dotted icon is drawn in the browser from the page's own icon, so a host's `icons.dir` keeps its look; Safari ignores a changed tab icon, so there the title's count is the signal. It is a lazy chunk that loads after the first paint. Unread messages now count in the title too, not only cards.
 
 ### Changed
 
