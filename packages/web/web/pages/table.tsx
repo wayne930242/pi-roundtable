@@ -13,6 +13,7 @@ import {
 	useHostedTable,
 	useHostSeats,
 	useHostSeatsSync,
+	useSeatsHostRooms,
 } from "../lib/host-seats.ts";
 import type { Via } from "../lib/long-press.ts";
 import { seatMenuOf } from "../lib/menus.ts";
@@ -64,7 +65,7 @@ function openSeatMenu(
 	);
 }
 
-/** Keeps the seats of a table whose person is not an owner: the rooms of the kinds they may list. */
+/** Keeps the host rooms of a table: the rooms of the kinds the person may list. */
 function HostSeatsSync() {
 	useHostSeatsSync(
 		(useContext(ConfigContext)?.kinds ?? []).map((kind) => kind.kind),
@@ -90,12 +91,20 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 	// Mounted when first asked for and kept, so the sheet can slide away.
 	const [asked, setAsked] = useState(false);
 	const hosted = useHostedTable();
+	const seatsHostRooms = useSeatsHostRooms();
 	const hostSeats = useHostSeats();
 	const ownerListed = useSelector((state) => state.listed);
-	const listed = hosted ? hostSeats.loaded : ownerListed;
+	const listed = hosted
+		? hostSeats.loaded
+		: ownerListed && (!seatsHostRooms || hostSeats.loaded);
+	// An owner's table also seats host rooms; they are not agents, so the camera, box and menu skip them.
+	const hostKeys = new Set(hostSeats.views.map((one) => one.key));
+	const agentRoster = hosted
+		? roster
+		: roster.filter((one) => !hostKeys.has(one.key));
 	// A hosted seat opens its room's page; the camera and the dialogue box are the owners'.
-	const target = hosted ? null : resolveFocus(focus, roster);
-	const view = roster.find((seat) => seat.name === target);
+	const target = hosted ? null : resolveFocus(focus, agentRoster);
+	const view = agentRoster.find((seat) => seat.name === target);
 	// An address that names nobody seated goes back to the whole ring, in place: Back does not return to it.
 	useEffect(() => {
 		if (focus && listed && target === null)
@@ -107,6 +116,11 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 			// A hosted seat opens its room's own page; there is no close-up to turn the camera to.
 			const seated = roster.find((one) => one.name === name);
 			if (seated) navigate("room", seated.key);
+			return;
+		}
+		const hostRoom = roster.find((one) => one.name === name);
+		if (hostRoom && hostKeys.has(hostRoom.key)) {
+			navigate("room", hostRoom.key);
 			return;
 		}
 		if (name === target) return;
@@ -172,7 +186,7 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 							? { onMore: () => navigate("rooms") }
 							: {
 									onSeatMenu: (request: SeatMenuRequest) => {
-										const seated = roster.find(
+										const seated = agentRoster.find(
 											(one) => one.name === request.id,
 										);
 										if (seated)
@@ -186,7 +200,7 @@ export function TablePage({ focus }: { focus?: string | undefined }) {
 								})}
 					/>
 				)}
-				{hosted ? <HostSeatsSync /> : null}
+				{seatsHostRooms ? <HostSeatsSync /> : null}
 				{view ? (
 					<DialogueBox
 						key={view.key}

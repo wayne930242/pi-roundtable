@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `pi-roundtable-web`: the owners' round table also seats the host rooms the owner may list, so a host whose assistants live in host rooms (for example a support desk's ticket rooms) and has no core agent team no longer shows an empty table. The agents sit first as before, then the host rooms of every kind the owner may list, newest first, by the same lists and `access` as the member and admin table; a room the kind does not list for the owner is no seat. A seat opens the room's own page. The server decides what is seated: the page seats host rooms only where the config names kinds of room for the visitor, so a host with no host room kinds sees exactly what it saw before, and there is no new option.
+
 ## [0.26.1] - 2026-10-30
 
 ### Added
