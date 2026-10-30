@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `message_agent` delivers into the conversation the target agent used most recently, not always its Discord channel. An agent has a conversation on each surface (`discord:<id>`, `app:agent.<name>`), so a reminder to an agent that was working in the web app now lands there, and the agent answers in the web app. The answer and the follow-up turn it wakes return to the conversation the sender wrote from. The last conversation of each agent is kept in the table `agent_latest_conversation` (additive migration `agent-latest-conversation`), so it survives a restart. An agent that has run no turn yet is reached on the sender's surface, as before.
+- `schedule_list`, `schedule_update` and `schedule_cancel` of an agent now cover all its own schedules across its conversations (Discord channel and rooms), not only the current channel's. A schedule made in the web conversation can be listed and edited from Discord, and the list says where each one fires. Another agent's schedules are still read-only by name (`agent`) and never changed.
+
+### Changed
+
+- `message_agent` takes an optional `conversation` to choose the target's conversation: `"discord"`, `"web"` (or the name of a surface that hosts rooms), or one of the keys `agent_get` lists, which now has a `Conversations:` line marking the most recent. A conversation the target does not have is refused with the ones it has. `AgentOps.message` and `AgentTeam.message` take the same optional fourth argument; `schedulesExtension` takes an optional fifth, the agent's conversations.
+
 ## [0.26.1] - 2026-10-30
 
 ### Added

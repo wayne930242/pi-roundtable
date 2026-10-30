@@ -125,6 +125,9 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			// Another agent's channel, for schedule_list; asked when a tool runs, after the agent server set up.
 			const agentChannelOf = (agent: string, near: ChannelKey) =>
 				services.get(AGENTS).team.channelOf(agent, near);
+			// All of an agent's conversations, for its own schedules; asked when a tool runs.
+			const ownConversations = (agent: string) =>
+				services.get(AGENTS).team.roomsOf(agent);
 			// A conversation no chat surface carries keeps its runs in the creator's direct messages, where
 			// a claim must take them; anyone's elsewhere would run in a conversation that is not theirs.
 			const channelFor = async (
@@ -303,6 +306,9 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 								session.homeChannel,
 								session.agent ? agentChannelOf : undefined,
 								session.speaker,
+								session.agent
+									? () => ownConversations(session.agent?.name ?? "")
+									: undefined,
 							),
 						),
 					),

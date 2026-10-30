@@ -366,8 +366,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#turns.announce(text);
 	}
 
-	message(caller: AgentTurnScope, to: string, text: string): string {
-		return this.#turns.message(caller, to, text);
+	message(...args: Parameters<TeamTurns["message"]>): string {
+		return this.#turns.message(...args);
 	}
 
 	async read(
@@ -426,10 +426,14 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		const agent = store.agent(name);
 		if (!agent)
 			throw new AgentError(`There is no agent "${name}"; see agent_list.`);
+		const latest = store.conversations.latest(agent.name);
 		return agentDetails(
 			agent,
 			models.defaults,
 			skills?.describeCarried(agent.name),
+			this.roomsOf(name).map((key) =>
+				key === latest ? `${key} (most recent)` : key,
+			),
 		);
 	}
 

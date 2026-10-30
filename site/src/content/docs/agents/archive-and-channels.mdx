@@ -73,13 +73,15 @@ Any speaker can use it.
 
 An agent can hand a request to another agent with `message_agent`.
 It takes `to`, the other agent's name, and `text`, a self-contained request of up to 4,000 characters.
+An agent has one conversation on each surface, its Discord channel and its room in the web app, and the request lands in the one the target used most recently, so work it started in the web app is answered there.
+An optional `conversation` picks another: `discord`, `web`, or one of the conversation keys `agent_get` lists.
 
 1. The call returns at once, so the sender keeps going.
-2. The request appears in the other agent's channel under the sender's name.
+2. The request appears in that conversation under the sender's name.
    The target works there, in its own conversation.
 3. Where a thread can be opened, the exchange also appears in a thread in the sender's channel, named `→` and the target's display name.
    The target's answer is posted in that thread, and the thread is archived when the exchange ends.
-4. The answer comes back to the sender as a new turn, and the sender tells you what matters.
+4. The answer comes back to the sender as a new turn, in the conversation the sender wrote from, and the sender tells you what matters.
 
 A chain of agent messages stops at 8 messages without you in between.
 The agent then tells you what was done and asks whether to continue.

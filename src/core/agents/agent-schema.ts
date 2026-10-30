@@ -3,6 +3,7 @@ import { scopeToGuild } from "../db/guild-scope.ts";
 import type { Migration } from "../db/migrations.ts";
 import type { ThinkingLevel } from "../models.ts";
 import { promptHistoryMigration } from "../modules/prompts/prompt-history.ts";
+import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent, AgentGroup, AgentStatus } from "./agent-rules.ts";
 
 export interface AgentRow {
@@ -136,5 +137,7 @@ export function agentMigrations(guildId: string): Migration[] {
 		},
 		// The change history of the agents' prompts; the prompts plugin creates the same table for its documents.
 		promptHistoryMigration("agent-prompt-history"),
+		// Where each agent last ran a turn, so a message to it finds that conversation after a restart.
+		AgentConversations.migration,
 	];
 }

@@ -19,6 +19,8 @@ function fakeDatabase() {
 			return snapshot;
 		}
 		if (text.startsWith("SELECT * FROM agent_groups")) return [];
+		if (text.startsWith("SELECT agent_name, channel_key FROM agent_latest"))
+			return [];
 		if (text.startsWith("INSERT INTO agents")) {
 			await Bun.sleep(latency.insertMs);
 			const v = values as (string | null)[];

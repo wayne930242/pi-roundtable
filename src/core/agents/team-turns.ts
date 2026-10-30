@@ -216,6 +216,16 @@ export class TeamTurns {
 		this.#chains.set(scope.session, chain);
 		this.#posting.set(scope.session, postTo);
 		this.#working.set(agent.name, postTo);
+		// A message to the agent lands in the conversation it last ran a turn in; a group round is none.
+		if (!scope.group)
+			this.#options.store.conversations
+				.note(agent.name, postTo)
+				.catch((error: unknown) =>
+					logger.warn(
+						{ agent: agent.name, err: error },
+						"latest conversation not kept",
+					),
+				);
 		this.#active(agent.name, scope.group);
 		const turn = {
 			agent: agent.name,
@@ -459,8 +469,8 @@ export class TeamTurns {
 		await this.#post(home, coordinator, { chunks: splitReply(text) });
 	}
 
-	message(caller: AgentTurnScope, to: string, text: string): string {
-		return this.#messages.message(caller, to, text);
+	message(...args: Parameters<AgentMessages["message"]>): string {
+		return this.#messages.message(...args);
 	}
 
 	/**

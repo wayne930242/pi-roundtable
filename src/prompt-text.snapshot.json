@@ -1923,7 +1923,7 @@
 			},
 			{
 				"name": "message_agent",
-				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own channel and its answer comes back to you as a new turn. Its channel shows the exchange, and so does a thread in your channel.",
+				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in the one it used most recently, so work it started in the web app is answered there. Give conversation to choose another: \"discord\", \"web\", or one of the conversation keys agent_get lists for it. The exchange shows in its conversation, and a thread in yours.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -1939,6 +1939,10 @@
 							"type": "string",
 							"minLength": 1,
 							"maxLength": 4000
+						},
+						"conversation": {
+							"type": "string",
+							"description": "Which of the agent's conversations to deliver into: \"discord\", \"web\" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach the one it used most recently."
 						}
 					}
 				}
@@ -1985,7 +1989,7 @@
 			},
 			{
 				"name": "schedule_cancel",
-				"description": "Delete one of this channel's schedules.",
+				"description": "Delete one of this channel's schedules. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -2085,7 +2089,7 @@
 			},
 			{
 				"name": "schedule_list",
-				"description": "List this channel's schedules with their next run, and the current UTC time, and the prechecks a schedule may attach. Give id to read one schedule's full prompt. Give agent to read another agent's schedules instead; you can change only your own, so ask that agent to change its.",
+				"description": "List this channel's schedules with their next run, and the current UTC time, and the prechecks a schedule may attach. Give id to read one schedule's full prompt. Give agent to read another agent's schedules instead; you can change only your own, so ask that agent to change its. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"properties": {
@@ -2102,7 +2106,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4354,7 +4358,7 @@
 			},
 			{
 				"name": "schedule_cancel",
-				"description": "Delete one of this channel's schedules.",
+				"description": "Delete one of this channel's schedules. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4454,7 +4458,7 @@
 			},
 			{
 				"name": "schedule_list",
-				"description": "List this channel's schedules with their next run, and the current UTC time, and the prechecks a schedule may attach. Give id to read one schedule's full prompt. Give agent to read another agent's schedules instead; you can change only your own, so ask that agent to change its.",
+				"description": "List this channel's schedules with their next run, and the current UTC time, and the prechecks a schedule may attach. Give id to read one schedule's full prompt. Give agent to read another agent's schedules instead; you can change only your own, so ask that agent to change its. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"properties": {
@@ -4471,7 +4475,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8373,7 +8377,7 @@
 			},
 			{
 				"name": "message_agent",
-				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own channel and its answer comes back to you as a new turn. Its channel shows the exchange, and so does a thread in your channel.",
+				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in the one it used most recently, so work it started in the web app is answered there. Give conversation to choose another: \"discord\", \"web\", or one of the conversation keys agent_get lists for it. The exchange shows in its conversation, and a thread in yours.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8389,6 +8393,10 @@
 							"type": "string",
 							"minLength": 1,
 							"maxLength": 4000
+						},
+						"conversation": {
+							"type": "string",
+							"description": "Which of the agent's conversations to deliver into: \"discord\", \"web\" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach the one it used most recently."
 						}
 					}
 				}
@@ -8435,7 +8443,7 @@
 			},
 			{
 				"name": "schedule_cancel",
-				"description": "Delete one of this channel's schedules.",
+				"description": "Delete one of this channel's schedules. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8535,7 +8543,7 @@
 			},
 			{
 				"name": "schedule_list",
-				"description": "List this channel's schedules with their next run, and the current UTC time, and the prechecks a schedule may attach. Give id to read one schedule's full prompt. Give agent to read another agent's schedules instead; you can change only your own, so ask that agent to change its.",
+				"description": "List this channel's schedules with their next run, and the current UTC time, and the prechecks a schedule may attach. Give id to read one schedule's full prompt. Give agent to read another agent's schedules instead; you can change only your own, so ask that agent to change its. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"properties": {
@@ -8552,7 +8560,7 @@
 			},
 			{
 				"name": "schedule_update",
-				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported.",
+				"description": "Change one of this channel's schedules: its title, its prompt, its timing (timing fields replace the old timing), or its precheck. A run can use this to keep its own prompt current, such as adding what it already reported. As an agent you reach all your own schedules, whichever of your conversations (Discord, the web app) they were made in; schedule_list says where each fires. A new schedule belongs to the conversation you are in.",
 				"parameters": {
 					"type": "object",
 					"required": [

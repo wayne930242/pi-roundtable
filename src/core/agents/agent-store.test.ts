@@ -31,6 +31,7 @@ describeDb("PostgreSQL", () => {
 			"agent_groups",
 			"agent_group_messages",
 			"agent_group_cursors",
+			"agent_latest_conversation",
 			"prompt_history",
 		])
 			await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
@@ -45,6 +46,29 @@ describeDb("PostgreSQL", () => {
 
 	afterAll(async () => {
 		await store.close();
+	});
+
+	describe("conversations", () => {
+		test("the conversation an agent last ran a turn in survives a restart, per agent and per guild", async () => {
+			await store.conversations.note("infra", "app:agent.infra");
+			await store.conversations.note("doctor", "discord:300");
+			await store.conversations.note("infra", "discord:200");
+			await store.conversations.note("infra", "app:agent.infra");
+			const restarted = await openTestStore(PgAgentStore, TEST_GUILD);
+			try {
+				expect(restarted.conversations.latest("infra")).toBe("app:agent.infra");
+				expect(restarted.conversations.latest("doctor")).toBe("discord:300");
+				expect(restarted.conversations.latest("coordinator")).toBeUndefined();
+			} finally {
+				await restarted.close();
+			}
+			const other = await openTestStore(PgAgentStore, "another-guild");
+			try {
+				expect(other.conversations.latest("infra")).toBeUndefined();
+			} finally {
+				await other.close();
+			}
+		});
 	});
 
 	describe("agents", () => {

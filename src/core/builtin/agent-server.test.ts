@@ -227,6 +227,7 @@ describe("the agent server's runtime", () => {
 			"agent-groups-channel-optional",
 			"agents-character",
 			"agent-prompt-history",
+			"agent-latest-conversation",
 		]);
 	});
 });

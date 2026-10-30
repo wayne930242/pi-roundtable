@@ -8,12 +8,9 @@ import type { ScheduleStore } from "../../services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
 import { type Tier, tierAtLeast } from "../../speakers.ts";
 import { timeZone, zonedStamp } from "../../time.ts";
+import { precheckCatalog } from "./precheck-catalog.ts";
 import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
-import {
-	PRECHECK_SCRIPT_CHARS,
-	type PrecheckFinding,
-	type PrecheckRegistry,
-} from "./prechecks.ts";
+import type { PrecheckFinding, PrecheckRegistry } from "./prechecks.ts";
 import {
 	describeRecurrence,
 	nextRun,
@@ -25,8 +22,6 @@ import type { NewSchedule, Schedule } from "./schedule-store.ts";
 
 const TITLE_CHARS = 80;
 const LIST_PROMPT_PREVIEW = 200;
-/** How long schedule_list waits for the script runner to say what a script may call. */
-const DESCRIBE_TIMEOUT_MS = 10_000;
 const DAY_MS = 86_400_000;
 
 export interface ScheduleToolContext {
@@ -40,6 +35,12 @@ export interface ScheduleToolContext {
 	> &
 		Partial<Pick<ScheduleStore, "all" | "createWithin">>;
 	channel: ChannelKey;
+	/**
+	 * Every conversation whose schedules the asker lists, changes, and cancels, `channel` among
+	 * them: an agent's own across all its conversations. Without it, `channel` alone. A new
+	 * schedule is always made in `channel`.
+	 */
+	channels?: readonly ChannelKey[];
 	/** Whose schedules these are; its `schedules` limits apply, and without them nothing is scheduled. */
 	target: BackgroundTarget;
 	/**
@@ -158,48 +159,6 @@ function toolsText(tools: readonly PrecheckTool[] | undefined): string {
 		.join(", ");
 }
 
-/** The prechecks a schedule may name or write, for schedule_list; empty when the host offers neither. */
-async function precheckCatalog(ctx: ScheduleToolContext): Promise<string> {
-	const all = ctx.prechecks?.list() ?? [];
-	const runner = ctx.prechecks?.scriptRunner?.();
-	const named =
-		all.length === 0
-			? ""
-			: `\n\nPrechecks you can attach with precheck on schedule_create or schedule_update; the host runs one before each turn and wakes you only when it finds something:\n${all.map((p) => `- ${p.name}: ${p.description.replace(/\n/g, " ")}`).join("\n")}`;
-	if (!runner) return named;
-	// The list still answers when the host cannot say, or is slow to say, what a script may reach here.
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const late = new Promise<string>((resolve) => {
-		timer = setTimeout(
-			() => resolve("it did not answer in time"),
-			DESCRIBE_TIMEOUT_MS,
-		);
-	});
-	const described = Promise.resolve()
-		.then(() =>
-			runner.describe({
-				channel: ctx.channel,
-				target: ctx.target.name,
-				tier: ctx.author.tier,
-			}),
-		)
-		.then(
-			(text) => ({ text }),
-			(error: unknown) => ({
-				error: error instanceof Error ? error.message : String(error),
-			}),
-		);
-	const answer = await Promise.race([
-		described,
-		late.then((error) => ({ error })),
-	]).finally(() => clearTimeout(timer));
-	const guide =
-		"text" in answer
-			? answer.text
-			: `The host could not say what a script may call here (${answer.error}); a script set now may fail when it runs.`;
-	return `${named}\n\nYou can write a precheck of your own instead, with precheck_script on schedule_create or schedule_update (null removes it): a JavaScript module, at most ${PRECHECK_SCRIPT_CHARS} characters, that the host runs in a sandbox before each turn. A schedule has a precheck or a precheck_script, not both.\n${guide}`;
-}
-
 function hasTiming(input: Input): boolean {
 	return [
 		"in_minutes",
@@ -225,7 +184,7 @@ function timing(ctx: ScheduleToolContext, input: Input): [Recurrence, Date] {
 	return [recurrence, next];
 }
 
-function line(schedule: Schedule): string {
+function line(schedule: Schedule, where?: ChannelKey): string {
 	const prompt =
 		schedule.prompt.length > LIST_PROMPT_PREVIEW
 			? `${schedule.prompt.slice(0, LIST_PROMPT_PREVIEW)}…`
@@ -238,7 +197,8 @@ function line(schedule: Schedule): string {
 	const last = schedule.lastRun
 		? `; last run ${zonedStamp(schedule.lastRun)} (${schedule.lastStatus ?? "?"})`
 		: "";
-	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}; set by ${schedule.createdByName}${precheck}${last}\n  ${prompt.replace(/\n/g, " ")}`;
+	const fires = where ? `; fires in ${where}` : "";
+	return `- #${schedule.id} ${schedule.title}: ${describeRecurrence(schedule.recurrence)}, next ${zonedStamp(schedule.nextRun)}${fires}; set by ${schedule.createdByName}${precheck}${last}\n  ${prompt.replace(/\n/g, " ")}`;
 }
 
 /** The principal who created a schedule. */
@@ -262,11 +222,15 @@ async function visible(
 	);
 }
 
+/** The conversations whose schedules the asker reaches. */
+const scopeOf = (ctx: ScheduleToolContext): readonly ChannelKey[] =>
+	ctx.channels ?? [ctx.channel];
+
 async function own(ctx: ScheduleToolContext, input: Input): Promise<Schedule> {
 	const schedule = await ctx.store.get(id(input));
 	if (
 		!schedule ||
-		schedule.channel !== ctx.channel ||
+		!scopeOf(ctx).includes(schedule.channel) ||
 		!(await visible(ctx, schedule))
 	)
 		throw new ScheduleError(
@@ -404,12 +368,18 @@ export async function callScheduleTool(
 				return `${line(schedule).split("\n")[0]}\n\nPrompt:\n${schedule.prompt}${script}`;
 			}
 			const all: Schedule[] = [];
-			for (const schedule of await ctx.store.forChannel(ctx.channel))
-				if (await visible(ctx, schedule)) all.push(schedule);
+			for (const channel of scopeOf(ctx))
+				for (const schedule of await ctx.store.forChannel(channel))
+					if (await visible(ctx, schedule)) all.push(schedule);
+			// Across several conversations each line says where it fires.
+			const across = scopeOf(ctx).length > 1;
+			if (across) all.sort((a, b) => a.nextRun.getTime() - b.nextRun.getTime());
 			const listed =
 				all.length === 0
-					? "This channel has no schedules."
-					: `It is ${zonedStamp(ctx.now)} in ${messages().zoneName(timeZone())}.\n${all.map(line).join("\n")}`;
+					? across
+						? "You have no schedules in any of your conversations."
+						: "This channel has no schedules."
+					: `It is ${zonedStamp(ctx.now)} in ${messages().zoneName(timeZone())}.\n${all.map((s) => line(s, across ? s.channel : undefined)).join("\n")}`;
 			return `${listed}${await precheckCatalog(ctx)}`;
 		}
 		case "schedule_update": {
@@ -448,7 +418,11 @@ export async function callScheduleTool(
 				throw new ScheduleError(
 					"give a title, prompt, timing, precheck, or precheck_script to change",
 				);
-			const updated = await ctx.store.update(ctx.channel, schedule.id, change);
+			const updated = await ctx.store.update(
+				schedule.channel,
+				schedule.id,
+				change,
+			);
 			if (!updated) throw new ScheduleError(`schedule #${schedule.id} is gone`);
 			const checked = updated.precheck
 				? `; precheck ${updated.precheck} runs first`
@@ -460,7 +434,7 @@ export async function callScheduleTool(
 		case "schedule_cancel": {
 			notTheHost(ctx, "cancel no schedules; ask the owner to cancel it");
 			const schedule = changeable(ctx, await own(ctx, input));
-			await ctx.store.remove(schedule.id, ctx.channel);
+			await ctx.store.remove(schedule.id, schedule.channel);
 			return `Cancelled #${schedule.id} "${schedule.title}".`;
 		}
 		default:

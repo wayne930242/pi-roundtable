@@ -9,6 +9,7 @@ import {
 } from "../modules/prompts/prompt-history.ts";
 import type { AgentDirectory } from "../services.ts";
 import { AgentBook } from "./agent-book.ts";
+import { AgentConversations } from "./agent-conversations.ts";
 import {
 	type Agent,
 	type AgentGroup,
@@ -68,9 +69,16 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	readonly #statements: AgentStatements;
 	readonly #messages: GroupMessages;
 	readonly #prompts: PromptHistory;
+	/** The conversation each agent last ran a turn in. */
+	readonly conversations: AgentConversations;
 
-	private constructor(sql: SQL, guildId: string) {
+	private constructor(
+		sql: SQL,
+		guildId: string,
+		conversations: AgentConversations,
+	) {
 		super();
+		this.conversations = conversations;
 		this.#sql = sql;
 		this.#guild = guildId;
 		this.#statements = new AgentStatements(sql, guildId);
@@ -88,9 +96,16 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 
 	/** The store over the host's migrated pool, holding the rows of one guild. */
 	static async attach(sql: SQL, guildId: string): Promise<PgAgentStore> {
-		const store = new PgAgentStore(sql, guildId);
 		// `Roundtable.check()` has no database to read the rows from: the store starts empty.
-		if (!isCheckDatabase(sql)) await store.#reload();
+		const checking = isCheckDatabase(sql);
+		const store = new PgAgentStore(
+			sql,
+			guildId,
+			checking
+				? AgentConversations.memory()
+				: await AgentConversations.load(sql, guildId),
+		);
+		if (!checking) await store.#reload();
 		return store;
 	}
 
