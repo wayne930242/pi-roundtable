@@ -31,6 +31,7 @@ import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, setRouting, useRoute } from "./lib/router.ts";
 import { initSkins } from "./lib/skins.ts";
+import { openCards, tabTitle, useTabUnread } from "./lib/tab-count.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
@@ -245,13 +246,20 @@ function Console({ config }: { config: ConfigView }) {
 		if (wasGated.current && !gated) window.location.reload();
 		wasGated.current = gated;
 	}, [gated]);
-	const waiting = useSelector(
-		(state) => state.cardOrder.filter((id) => !state.cards[id]?.outcome).length,
-	);
+	const waiting = useSelector(openCards);
+	// The notices and unread messages, counted by the tab dot's module (a chunk that loads after the first paint).
+	const unread = useTabUnread();
+	useEffect(() => {
+		import("./lib/tab-dot.ts")
+			.then((tab) => tab.startPageTabDot())
+			.catch((failure: unknown) =>
+				console.warn("the tab icon's dot failed to load", failure),
+			);
+	}, []);
 
 	useEffect(() => {
-		document.title = waiting ? `(${waiting}) ${config.title}` : config.title;
-	}, [waiting, config.title]);
+		document.title = tabTitle(config.title, waiting + unread);
+	}, [waiting, unread, config.title]);
 
 	// Ctrl+K or ⌘K opens the room switcher from anywhere.
 	useEffect(() => {
