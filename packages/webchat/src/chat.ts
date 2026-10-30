@@ -803,6 +803,10 @@ export class WebChat {
 					text: turn.text,
 					speaker,
 					interactive: turn.report === true,
+					unattended: turn.report !== true,
+					...(turn.timeLimitMs === undefined
+						? {}
+						: { timeLimitMs: turn.timeLimitMs }),
 					conversation: { visibility: "private" },
 					...(persona.selection
 						? {

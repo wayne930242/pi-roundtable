@@ -76,6 +76,9 @@ export class ConversationBackgroundTurns implements BackgroundTurns {
 			tier: schedule.createdTier,
 			turnId: `schedule-${schedule.id}-${firedAt.getTime()}`,
 			text: scheduledTurnText(schedule, firedAt, finding),
+			...(schedule.timeLimitMinutes
+				? { timeLimitMs: schedule.timeLimitMinutes * 60_000 }
+				: {}),
 		};
 	}
 

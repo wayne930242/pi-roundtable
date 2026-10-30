@@ -29,9 +29,9 @@ On Mondays and Thursdays at 17:30, ask me what I got done.
 
 | Tool | What it does |
 | --- | --- |
-| `schedule_create` | Makes a schedule from a `title`, a `prompt`, and one kind of timing, and optionally a `precheck`. |
+| `schedule_create` | Makes a schedule from a `title`, a `prompt`, and one kind of timing, and optionally a `precheck` and a `time_limit_minutes`. |
 | `schedule_list` | Lists the channel's schedules with their next run and the prechecks the host offers, or one schedule in full with `id`. An agent can read another agent's schedules with `agent`. |
-| `schedule_update` | Changes the title, the prompt, the timing, or the precheck of one schedule (`precheck: null` removes it). A run may use it to keep its own prompt current. |
+| `schedule_update` | Changes the title, the prompt, the timing, the precheck, or the time limit of one schedule (`precheck: null` and `time_limit_minutes: null` remove them). A run may use it to keep its own prompt current. |
 | `schedule_cancel` | Deletes one schedule. |
 
 Owners and admins can create, change, and cancel schedules.
@@ -55,6 +55,16 @@ The timing is one of these:
 - The scheduler skips a run it finds more than 12 hours late, for example after the bot was down.
 - A schedule runs with the tier of the person who made it, so someone of a lower tier cannot rewrite it.
 - Archiving an agent cancels its schedules.
+
+### Time limit and quiet runs
+
+A scheduled run is stopped after 10 minutes of work, as any turn is, because nobody is in the conversation to be asked for more time.
+Give a schedule that works longer its own limit with `time_limit_minutes`, from 1 to 240 (four hours); it applies to every run of that schedule and never passes the host's long-running cap.
+Turning on **long-running** for the agent's room does the same for all its turns.
+A run that is stopped at its limit posts a notice in the channel that says where it stopped and how to allow more time.
+
+A run that has nothing to report may answer with nothing: the channel gets no message and the run counts as done.
+A prompt such as "send nothing if there is no progress" therefore works as written.
 
 ### Prechecks
 

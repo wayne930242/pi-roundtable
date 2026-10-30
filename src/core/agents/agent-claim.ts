@@ -252,6 +252,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 					speaker,
 					turn.text,
 					turn.report === true,
+					turn.timeLimitMs,
 				),
 			);
 		},

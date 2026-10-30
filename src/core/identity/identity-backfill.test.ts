@@ -66,7 +66,12 @@ async function hostPlugins(
 async function personRows(sql: SQL) {
 	return {
 		memory: await sql`SELECT * FROM owner_memory ORDER BY id`,
-		schedules: await sql`SELECT * FROM schedules ORDER BY id`,
+		// 0.8's columns: later migrations add more (time_limit_minutes), empty on these rows.
+		schedules: await sql`
+			SELECT id, channel_key, mode, title, prompt, recurrence, next_run, created_by_id,
+				created_by_name, created_at, last_run, last_status, created_tier, precheck,
+				precheck_script, precheck_tools
+			FROM schedules ORDER BY id`,
 		conversations: await sql`SELECT * FROM conversations ORDER BY key`,
 		// 0.8's columns: the runtime's migrations add principal_id and principal_held_at, empty on these rows.
 		held: await sql`

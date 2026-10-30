@@ -77,11 +77,14 @@ export function thinkingOf(messages: readonly Message[]): string {
 
 /**
  * A finished turn's result from the messages it added. A steered run may have answered before
- * the steer arrived, so every final answer of it is kept.
+ * the steer arrived, so every final answer of it is kept. A turn nobody waits on (`attended`
+ * false: a schedule's, an agent's message) may end with nothing to say, such as "send nothing if
+ * there is no progress"; that is an empty answer, not a failure. For an attended turn it is one.
  */
 export function turnAnswer(
 	messages: readonly Message[],
 	steered: boolean,
+	attended: boolean,
 ): TurnResult {
 	const last = lastAssistant(messages);
 	if (!last.ok) return { ok: false, error: new AgentRunError(last.error) };
@@ -97,6 +100,7 @@ export function turnAnswer(
 					.join("\n\n")
 			: textOf(last.message.content)
 	).trim();
+	if (!text && !hasReplyFiles() && !attended) return { ok: true, text: "" };
 	if (!text && !hasReplyFiles())
 		return {
 			ok: false,

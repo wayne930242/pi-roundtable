@@ -79,6 +79,8 @@ export interface AgentOps {
 			task: string;
 			category?: string;
 			skills?: string[];
+			/** Turn long-running mode on for its conversations; an owner's turn only. */
+			longRunning?: boolean;
 		},
 	): Promise<string>;
 	/** Changes an agent's look; a field left out stays as it is. */
@@ -263,7 +265,7 @@ function toolDefs(
 			name: "agent_create",
 			label: "Create agent",
 			description:
-				"Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel. Its name is permanent.",
+				"Create a new agent with its own channel and a character picture; its look follows its role unless class and color are given. It starts at once on the opening task in its channel, which is stopped after 10 minutes unless long_running is set. Its name is permanent.",
 			parameters: Type.Object({
 				name: Type.String({
 					pattern: "^[a-z0-9-]{1,32}$",
@@ -280,6 +282,11 @@ function toolDefs(
 					description: "Its opening task, self-contained.",
 				}),
 				category: Type.Optional(category("Agents")),
+				long_running: Type.Optional(
+					Type.Boolean({
+						description: `Turn on long-running mode for its conversations: its turns, such as the opening task, go on past the usual 10-minute limit by themselves, up to the host's cap (four hours by default). Set it for an agent whose tasks run long, such as research or large changes.`,
+					}),
+				),
 				...(skillsOn
 					? {
 							skills: Type.Optional(
@@ -295,6 +302,7 @@ function toolDefs(
 				const category = optionalString(i, "category");
 				const skills = stringList(i, "skills");
 				const look = lookOf(i);
+				const longRunning = i.long_running === true;
 				return ops.create(scope, {
 					name: requiredString(i, "name"),
 					displayName: requiredString(i, "display_name"),
@@ -303,6 +311,7 @@ function toolDefs(
 					task: requiredString(i, "task"),
 					...(category ? { category } : {}),
 					...(skills && skills.length > 0 ? { skills } : {}),
+					...(longRunning ? { longRunning } : {}),
 				});
 			},
 		},

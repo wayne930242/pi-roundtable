@@ -104,3 +104,30 @@ test("a background turn after restart runs privately and pushes only to its prin
 	chat.closed(a);
 	chat.closed(b);
 });
+
+test("a schedule's turn is unattended and carries its own time limit; a report's is not", async () => {
+	const runs: ConversationTurnInput[] = [];
+	const { chat, registry, connect } = testChat({
+		turns: () => ({
+			run: async (input) => {
+				runs.push(input);
+				return { ok: true, text: "" };
+			},
+		}),
+	});
+	await registry.register({
+		key: "web:saved",
+		kind: "helper",
+		visibility: "private",
+		principalId: "p_ada",
+	});
+	const a = connect("web-a", ["User"], "p_ada");
+	const claim = chat.claim();
+	await claim.background?.({ ...turn(), timeLimitMs: 45 * 60_000 });
+	await claim.background?.({ ...turn(), report: true });
+	expect(runs[0]).toMatchObject({ unattended: true, timeLimitMs: 45 * 60_000 });
+	expect(runs[0]).not.toHaveProperty("interactive", true);
+	expect(runs[1]).toMatchObject({ interactive: true, unattended: false });
+	expect(runs[1]).not.toHaveProperty("timeLimitMs");
+	chat.closed(a);
+});

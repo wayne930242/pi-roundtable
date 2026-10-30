@@ -47,6 +47,7 @@ The agent calls `agent_create` with these fields filled in from your request:
 | `color` | Optional. Its color palette: `azure`, `gules`, `vert`, `purpure`, `amber`, `sable`, `teal`, or `rose`. |
 | `task` | Its opening task, up to 4,000 characters, written so it makes sense on its own. |
 | `category` | Optional. Where its channel goes: `Agents`, which is the default, or `Agents-<suffix>`. A missing category is created. |
+| `long_running` | Optional. `true` turns on long-running mode for its conversations before its opening task starts, so its turns go past the usual 10-minute limit by themselves (up to the host's cap, four hours by default). Only the owner's request may set it. |
 | `skills` | Optional. Names of skills it carries, from the skill list. Only offered while the skills addon is on; see [Skills and memory](/agents/skills-and-memory/). |
 
 <Aside type="caution" title="Names are permanent">

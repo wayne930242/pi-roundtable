@@ -135,7 +135,7 @@ describe("ask_user", () => {
 	test("a turn he did not start tells the model to ask in its reply", async () => {
 		const { asked, call } = askUser({ choices: ["x"] }, false);
 		expect(await call({ question: "?" })).toContain(
-			"Ask him in your reply instead",
+			"Write the question as your final answer instead",
 		);
 		expect(asked).toHaveLength(0);
 	});
@@ -240,8 +240,8 @@ describe("ask_user, the questions form", () => {
 
 describe("ask_user, review fixes", () => {
 	const noCards =
-		"Riley cannot answer buttons in this turn, such as a schedule's. Ask him in your reply instead.";
-	test("no prompts: the 0.19 text, in both forms", async () => {
+		"Riley cannot answer buttons in this turn: no one wrote to you, a schedule or another agent started it, so nothing waits. Do not call ask_user again. Write the question as your final answer instead; it is posted to this channel for him to read, and his answer comes in a new turn.";
+	test("no prompts: the turn is unattended, so it refuses at once, in both forms", async () => {
 		const { call } = askUser({ choices: ["x"] }, false);
 		expect(await call({ question: "?" })).toBe(noCards);
 		expect(await call({ questions: [{ question: "?" }] })).toBe(noCards);

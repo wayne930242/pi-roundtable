@@ -326,15 +326,12 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/**
 	 * A schedule's or a report's turn in an agent's channel; call inside its queue. A report's
-	 * turn is interactive: it may ask the owner on cards.
+	 * turn is interactive: it may ask the owner on cards. `timeLimitMs` is a schedule's own limit.
 	 */
 	answerBackground(
-		channel: ChannelKey,
-		speaker: Speaker,
-		text: string,
-		interactive = false,
+		...args: Parameters<TeamTurns["answerBackground"]>
 	): Promise<TurnResult> {
-		return this.#turns.answerBackground(channel, speaker, text, interactive);
+		return this.#turns.answerBackground(...args);
 	}
 
 	/** One owner message in a group channel, answered by a round of members; call inside the queue. */

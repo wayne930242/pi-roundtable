@@ -24,6 +24,8 @@ export interface TurnTimeout {
 	/** How long the timeout card waits for an answer. */
 	graceMs: number;
 	end: TurnTimeoutEnd;
+	/** No timeout card could be shown, as in a schedule's turn, so nobody was asked whether to go on. */
+	unasked?: true;
 }
 
 /** A turn aborted at a time limit; `timeout` says why, and the message says it in English. */

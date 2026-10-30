@@ -1,5 +1,6 @@
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { ThinkingSetting } from "../models.ts";
+import type { ConversationModes } from "../modes/conversation-modes.ts";
 import type { AgentTools, PromptSection } from "../plugin.ts";
 import type { AvatarStudio, SkillRegistry } from "../services.ts";
 import type { ToolSelection } from "../sessions.ts";
@@ -61,6 +62,8 @@ export interface AgentTeamOptions
 	guestPrompt?: string | (() => string);
 	/** The skill registry: what each agent carries. Absent when the skills addon is off. */
 	skills?: SkillRegistry;
+	/** The conversation modes, read when an agent is created with long-running on; none, none is set. */
+	modes?: () => ConversationModes | undefined;
 }
 
 /** What the team's collaborators share: its options, its turns, and its change signal. */

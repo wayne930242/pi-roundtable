@@ -30,6 +30,8 @@ export interface Schedule {
 	 * absent for a script saved before tools were recorded, which must be saved again if it calls a held tool.
 	 */
 	precheckTools?: PrecheckTool[];
+	/** How long, in minutes, each of its turns may work; absent, the runtime's default time limit. */
+	timeLimitMinutes?: number;
 	lastRun?: Date;
 	lastStatus?: string;
 }
@@ -50,6 +52,8 @@ export interface NewSchedule {
 	precheckScript?: string;
 	/** The tools the script may call, as approved; required with `precheckScript`. */
 	precheckTools?: PrecheckTool[];
+	/** How long, in minutes, each of its turns may work. */
+	timeLimitMinutes?: number;
 }
 
 export interface ScheduleChange {
@@ -63,6 +67,8 @@ export interface ScheduleChange {
 	precheckScript?: string | null;
 	/** The tools a new script may call, as approved; required with a new `precheckScript`. */
 	precheckTools?: PrecheckTool[];
+	/** How long, in minutes, each turn may work; null returns it to the runtime's default. */
+	timeLimitMinutes?: number | null;
 }
 
 interface Row {
@@ -81,6 +87,7 @@ interface Row {
 	precheck: string | null;
 	precheck_script: string | null;
 	precheck_tools: string | null;
+	time_limit_minutes: number | null;
 	last_run: Date | null;
 	last_status: string | null;
 }
@@ -105,6 +112,9 @@ function toSchedule(row: Row): Schedule {
 			? // pi-lens-ignore: unchecked-throwing-call — this store wrote the JSON; a corrupt row should fail loudly
 				{ precheckTools: JSON.parse(row.precheck_tools) as PrecheckTool[] }
 			: {}),
+		...(row.time_limit_minutes
+			? { timeLimitMinutes: row.time_limit_minutes }
+			: {}),
 		...(row.last_run ? { lastRun: row.last_run } : {}),
 		...(row.last_status ? { lastStatus: row.last_status } : {}),
 	};
@@ -126,12 +136,14 @@ async function insert(sql: SQL, schedule: NewSchedule): Promise<Schedule> {
 	checked(schedule);
 	const rows: Row[] = await sql`
 		INSERT INTO schedules (channel_key, mode, title, prompt, recurrence, next_run,
-			created_by_id, created_by_name, created_tier, precheck, precheck_script, precheck_tools)
+			created_by_id, created_by_name, created_tier, precheck, precheck_script, precheck_tools,
+			time_limit_minutes)
 		VALUES (${schedule.channel}, ${schedule.target}, ${schedule.title}, ${schedule.prompt},
 			${JSON.stringify(schedule.recurrence)}, ${schedule.nextRun},
 			${schedule.createdById}, ${schedule.createdByName}, ${schedule.createdTier},
 			${schedule.precheck ?? null}, ${schedule.precheckScript ?? null},
-			${schedule.precheckScript ? JSON.stringify(schedule.precheckTools) : null})
+			${schedule.precheckScript ? JSON.stringify(schedule.precheckTools) : null},
+			${schedule.timeLimitMinutes ?? null})
 		RETURNING *`;
 	const [row] = rows;
 	if (!row) throw new Error("the schedule insert returned no row");
@@ -193,6 +205,13 @@ export class PgScheduleStore implements ScheduleStore {
 				name: "schedules-precheck-tools",
 				up: async (sql) => {
 					await sql`ALTER TABLE schedules ADD COLUMN IF NOT EXISTS precheck_tools text`;
+				},
+			},
+			{
+				// Schedules made before have none: their turns keep the runtime's default time limit.
+				name: "schedules-time-limit",
+				up: async (sql) => {
+					await sql`ALTER TABLE schedules ADD COLUMN IF NOT EXISTS time_limit_minutes integer`;
 				},
 			},
 		];
@@ -282,6 +301,10 @@ export class PgScheduleStore implements ScheduleStore {
 				: current.precheckTools
 					? JSON.stringify(current.precheckTools)
 					: null;
+		const timeLimit =
+			change.timeLimitMinutes === undefined
+				? (current.timeLimitMinutes ?? null)
+				: change.timeLimitMinutes;
 		const rows: Row[] = await this.#sql`
 			UPDATE schedules SET
 				title = ${change.title ?? current.title},
@@ -290,7 +313,8 @@ export class PgScheduleStore implements ScheduleStore {
 				next_run = ${change.nextRun ?? current.nextRun},
 				precheck = ${precheck},
 				precheck_script = ${precheckScript},
-				precheck_tools = ${precheckTools}
+				precheck_tools = ${precheckTools},
+				time_limit_minutes = ${timeLimit}
 			WHERE id = ${id}
 			RETURNING *`;
 		return rows[0] ? toSchedule(rows[0]) : undefined;

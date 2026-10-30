@@ -13,7 +13,7 @@ import { HostStoppingError, PluginError } from "../errors.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Logger } from "../log.ts";
 import type { EventSink } from "../plugin.ts";
-import { replyBody } from "../presentation/reply-body.ts";
+import { isQuiet, replyBody } from "../presentation/reply-body.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import type { ChannelKey, ToolSelection, TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
@@ -47,6 +47,13 @@ export interface ConversationTurnInput {
 	steerable?: boolean;
 	/** The turn may ask the owner on the surface's prompts, such as approvals of held actions. */
 	interactive?: boolean;
+	/**
+	 * No person waits on the answer, as for a schedule's turn: an empty final answer then ends the
+	 * turn quietly, with nothing posted and `reply` not called, instead of failing it.
+	 */
+	unattended?: boolean;
+	/** How long the turn may work, in ms, in place of the runtime's default; a schedule's own limit. */
+	timeLimitMs?: number;
 	/**
 	 * The speaker confirmed the channel's held actions, so they may run in this turn, except those
 	 * that named approvers the speaker is neither among nor an owner of, which stay held.
@@ -206,6 +213,10 @@ export function conversationTurns(
 								...(input.confirmed ? { confirmed: true } : {}),
 								...(input.steerable ? { steerable: true } : {}),
 								...(input.interactive ? { interactive: true } : {}),
+								...(input.unattended ? { unattended: true } : {}),
+								...(input.timeLimitMs === undefined
+									? {}
+									: { timeLimitMs: input.timeLimitMs }),
 								...(interim ? { interim } : {}),
 								progress,
 							}),
@@ -223,7 +234,12 @@ export function conversationTurns(
 			try {
 				if (!result.ok && !result.stopped)
 					logger.error({ channel, kind, err: result.error }, "turn failed");
-				if (input.reply) await input.reply(result);
+				if (isQuiet(result))
+					logger.info(
+						{ channel, kind },
+						"unattended turn had nothing to say; nothing posted",
+					);
+				else if (input.reply) await input.reply(result);
 				else await surfaces.sendReply(channel, replyBody(result));
 			} catch (error) {
 				logger.error({ channel, kind, err: error }, "reply not posted");
