@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Under path routing the manifest and the home-screen icon links come after the page's base, so a page opened at a room's URL (`<mount>/room/<key>`) still finds them.
 - The page now has a tab icon: the round-table mark, linked as `rel="icon"` on the app, the sign-in page and the sign-in flow's pages, so a browser no longer asks the site root for `/favicon.ico` and gets a 404. A host's own `icons.dir` is kept (add a `mark.svg` to it to replace the SVG too).
 - The manifest and the icons answer without a session in `oidc` and `password` mode, so the sign-in page and a link preview have an icon. They were redirected to the sign-in. Nothing else below the mount is open.
 - The served page carries the host's `title` in `<title>` from the first byte; it said `Console` until the script ran.

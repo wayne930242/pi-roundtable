@@ -62,3 +62,16 @@ test("under path routing the icon links follow the base, so they resolve under t
 		}),
 	).toThrow("description is empty");
 });
+
+test("under path routing the install links follow the base, so a deep room URL still finds the manifest and the touch icon", () => {
+	const html = String(presentPage(page, "/app", undefined));
+	const base = html.indexOf('<base href="/app/">');
+	expect(base).toBeGreaterThan(-1);
+	expect(html.indexOf('rel="manifest"')).toBeGreaterThan(base);
+	expect(html.indexOf('rel="apple-touch-icon"')).toBeGreaterThan(base);
+	const at = new URL("https://example.test/app/room/app:agent.guide");
+	const resolved = new URL("/app/", at);
+	expect(new URL("./manifest.webmanifest", resolved).pathname).toBe(
+		"/app/manifest.webmanifest",
+	);
+});
