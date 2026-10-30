@@ -343,19 +343,9 @@ export const HOST_CSS = `
 	cursor: pointer;
 }
 
-.mode-switch {
-	display: flex;
-	margin: 0;
-	border: 0;
-	gap: var(--space-1);
-	padding: var(--space-2) var(--space-4) 0;
-}
-
-.mode-switch button {
-	min-height: 0;
-	padding: var(--space-1) var(--space-3);
-	border-radius: var(--radius-full);
-	font-size: var(--text-sm);
+.section-icon {
+	margin-right: var(--space-1);
+	vertical-align: -2px;
 }
 
 .host-form {

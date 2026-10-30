@@ -50,7 +50,8 @@ export const ROUTES: readonly Rule[] = [
 	row("*", "api/notes", "V"),
 	row("*", "api/notes/:id", "V"),
 	row("*", "api/principals", "V"),
-	// The agent rooms are the owners'. The route says 404, not 403, to anyone else.
+	// The agent rooms are the owners'. The route says 404, not 403, to anyone else. Their threads are under
+	// it too: a thread's view and `…/dismiss`, and `…/dismiss-threads` of its parent.
 	row("*", "api/rooms", "O", true),
 	row("*", "api/rooms/**", "O", true),
 	row("*", "api/folders/**", "O"),

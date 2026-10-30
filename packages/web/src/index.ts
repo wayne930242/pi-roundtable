@@ -12,6 +12,7 @@ export type {
 	ConversationView,
 	DashboardView,
 	GroupView,
+	HostIconName,
 	NoteInput,
 	NoteKind,
 	NoteView,
@@ -26,7 +27,7 @@ export type {
 	TranscriptRole,
 	TranscriptView,
 } from "./api-types.ts";
-export { PANES } from "./api-types.ts";
+export { HOST_ICONS, PANES } from "./api-types.ts";
 export type { CloudflareAccessOptions } from "./cloudflare-access.ts";
 export {
 	cloudflareAccess,

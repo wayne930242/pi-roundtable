@@ -288,7 +288,7 @@ test("on a wide screen the strip of cards starts open", async () => {
 	);
 });
 
-test("a person who may send both ways chooses a note or a turn, and the message goes the way chosen", async () => {
+test("a person who may send both ways has one toggle, on by default, and the message goes the way it is set", async () => {
 	await shown(<HostRoomPage roomKey={ROOM} />);
 	await settle();
 	const write = async (text: string) => {
@@ -304,13 +304,63 @@ test("a person who may send both ways chooses a note or a turn, and the message 
 		await page.click(buttonNamed("Send"));
 		await settle();
 	};
+	const toggle = () =>
+		page.container.querySelector<HTMLElement>('[role="switch"].mode-toggle');
+	expect(page.container.querySelectorAll('[role="switch"]')).toHaveLength(1);
+	expect(toggle()?.textContent).toBe("@AI");
+	expect(toggle()?.getAttribute("aria-checked")).toBe("true");
+	// The box says what writing does, not who receives it.
+	const box = () => page.container.querySelector("textarea");
+	expect(box()?.placeholder).toBe("Ask AI…");
+	expect(box()?.getAttribute("aria-label")).toBe("Ask AI…");
 	await write("for the agent");
-	await page.click(buttonNamed("Note"));
+	await page.click(toggle());
+	expect(toggle()?.getAttribute("aria-checked")).toBe("false");
+	// The label stays, so the control keeps its name; only the state and the box's hint change.
+	expect(toggle()?.textContent).toBe("@AI");
+	expect(box()?.placeholder).toBe("Write an internal note…");
 	await write("for the team");
 	expect(said).toEqual([
 		{ room: ROOM, text: "for the agent", mode: "turn" },
 		{ room: ROOM, text: "for the team", mode: "note" },
 	]);
+});
+
+test("a kind that words the two ways has its label on the toggle and its own hints in the box", async () => {
+	fixture.view = roomView({
+		wording: {
+			note: { placeholder: "Write to the team…" },
+			turn: {
+				label: "Let Atlas answer",
+				placeholder: "Say what Atlas should do…",
+			},
+		},
+	});
+	await shown(<HostRoomPage roomKey={ROOM} />);
+	await settle();
+	const toggle = page.container.querySelector<HTMLElement>('[role="switch"]');
+	expect(toggle?.textContent).toBe("Let Atlas answer");
+	// A room opens in the way the person last wrote in; the test before left it on notes.
+	if (toggle?.getAttribute("aria-checked") !== "true") await page.click(toggle);
+	expect(page.container.querySelector("textarea")?.placeholder).toBe(
+		"Say what Atlas should do…",
+	);
+	await page.click(toggle);
+	expect(page.container.querySelector("textarea")?.placeholder).toBe(
+		"Write to the team…",
+	);
+	// A kind that words only one way keeps the console's words for the other.
+	await page.render(null);
+	fixture.view = roomView({ wording: { turn: { label: "Ask Atlas" } } });
+	await shown(<HostRoomPage roomKey={ROOM} />);
+	await settle();
+	expect(page.container.querySelector('[role="switch"]')?.textContent).toBe(
+		"Ask Atlas",
+	);
+	// The last test left this room on notes; turn it on to read the other way's hint.
+	const again = page.container.querySelector<HTMLElement>('[role="switch"]');
+	if (again?.getAttribute("aria-checked") !== "true") await page.click(again);
+	expect(page.container.querySelector("textarea")?.placeholder).toBe("Ask AI…");
 });
 
 test("a person who may only read has no box, and one who may only write notes has no choice", async () => {
@@ -325,8 +375,11 @@ test("a person who may only read has no box, and one who may only write notes ha
 	fixture.view = roomView({ access: { send: ["note"], act: true } });
 	await shown(<HostRoomPage roomKey={ROOM} />);
 	await settle();
-	expect(buttonNamed("Ask the agent")).toBeNull();
-	expect(page.container.querySelector("textarea")).not.toBeNull();
+	expect(page.container.querySelector('[role="switch"]')).toBeNull();
+	// A room open to notes only says so in its box, and does not name itself as the recipient.
+	expect(page.container.querySelector("textarea")?.placeholder).toBe(
+		"Write an internal note…",
+	);
 });
 
 test("a room that is not there for this person says so and follows nothing", async () => {

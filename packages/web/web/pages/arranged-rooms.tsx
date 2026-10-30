@@ -119,6 +119,7 @@ function RoomList(props: {
 											open={threads.open}
 											closed={threads.closed}
 											active={props.active}
+											parent={key}
 										/>
 									),
 								}

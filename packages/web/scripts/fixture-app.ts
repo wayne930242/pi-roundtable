@@ -10,6 +10,8 @@
 //                                 two written ones made at start) so the skill editor works; default: the fake catalog below
 //
 // The page is built into dist/ at start when dist/ has none.
+//   FIXTURE_HOST                  `1` registers a host room kind ("inbox": an empty room and one with a message,
+//                                 both open to notes and turns) and a host page, for trying the host rooms
 //   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
@@ -59,6 +61,8 @@ const { AGENTS, MODES, promptScope, SCHEDULES, SKILLS, THREADS } = await import(
 );
 const { testHost } = await import("pi-roundtable/testing");
 const { webConsole } = await import("../src/web-plugin.ts");
+const { WEB_APP } = await import("../src/web-app.ts");
+const { definePlugin } = await import("pi-roundtable");
 type SkillRegistry = import("pi-roundtable").SkillRegistry;
 type TurnProgress = import("pi-roundtable").TurnProgress;
 type TurnRequest = Parameters<
@@ -150,6 +154,53 @@ const registrySkills = (registry: SkillRegistry) => ({
 });
 
 const origin = `http://127.0.0.1:${port}`;
+
+/** A host room kind and a page, as a plugin that sits on the web app would register them. */
+const hostFixture = definePlugin({
+	name: "fixture-host",
+	requires: [WEB_APP],
+	setup: (context) => {
+		const web = context.services.get(WEB_APP);
+		const rooms = [
+			{ id: "inbox-empty", title: "Empty thread" },
+			{ id: "inbox-busy", title: "Support thread" },
+		];
+		web.registerRoomKind({
+			kind: "inbox",
+			label: "Inbox",
+			icon: "users",
+			list: async () => ({
+				rooms: rooms.map((room) => ({
+					...room,
+					subtitle: "Support",
+					picture: { initials: "IN", color: "#336699" },
+				})),
+			}),
+			access: async (_viewer, id) =>
+				rooms.some((room) => room.id === id)
+					? { read: true, send: ["note", "turn"], act: true }
+					: undefined,
+			header: async (_viewer, id) => ({
+				title: rooms.find((room) => room.id === id)?.title ?? id,
+				fields: [{ label: "Status", value: "Open" }],
+				actions: [],
+			}),
+			send: async () => "accepted",
+		});
+		web.registerPage({
+			id: "mailboxes",
+			label: "Mailboxes",
+			icon: "megaphone",
+			place: "main",
+			visible: () => true,
+			view: async () => ({
+				title: "Mailboxes",
+				sections: [{ kind: "markdown", text: "Two mailboxes." }],
+			}),
+		});
+		return {};
+	},
+});
 const seats = Math.min(
 	12,
 	Math.max(3, Number(process.env.FIXTURE_AGENTS ?? 3)),
@@ -572,6 +623,7 @@ host = await testHost({
 				? { appearance: { look: "camelot" as const } }
 				: {}),
 		}),
+		...(process.env.FIXTURE_HOST === "1" ? [hostFixture] : []),
 	],
 });
 
