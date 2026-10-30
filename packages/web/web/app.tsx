@@ -30,6 +30,7 @@ import {
 import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, pageKey, setRouting, useRoute } from "./lib/router.ts";
+import { isSearchKey } from "./lib/search-key.ts";
 import { initSkins } from "./lib/skins.ts";
 import { openCards, tabTitle, useTabUnread } from "./lib/tab-count.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
@@ -265,7 +266,7 @@ function Console({ config }: { config: ConfigView }) {
 	useEffect(() => {
 		if (!hasApp) return;
 		const onKey = (event: KeyboardEvent) => {
-			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+			if (isSearchKey(event)) {
 				event.preventDefault();
 				setPalette((open) => !open);
 			}
@@ -273,6 +274,25 @@ function Console({ config }: { config: ConfigView }) {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [hasApp]);
+
+	// The other shortcuts (room switching, the help sheet, Esc) are a part of their own that loads after the first paint.
+	const shortcuts = hasApp && !gated;
+	useEffect(() => {
+		if (!shortcuts) return;
+		let stop: (() => void) | undefined;
+		let gone = false;
+		import("./lib/shortcuts.ts")
+			.then((module) => {
+				if (!gone) stop = module.startShortcuts();
+			})
+			.catch((failure: unknown) =>
+				console.warn("the keyboard shortcuts failed to load", failure),
+			);
+		return () => {
+			gone = true;
+			stop?.();
+		};
+	}, [shortcuts]);
 
 	const items: NavItem[] = useMemo(() => {
 		const all: NavItem[] = [
