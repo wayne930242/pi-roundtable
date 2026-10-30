@@ -12,8 +12,12 @@ import type { ConsoleApi } from "./console-api.ts";
 import { type ConsolePresentation, message } from "./features.ts";
 import type { Gate } from "./gate.ts";
 import { json } from "./http.ts";
-import { presentPage } from "./page-presentation.ts";
-import { servePwa } from "./pwa.ts";
+import {
+	defaultDescription,
+	type PageMeta,
+	presentPage,
+} from "./page-presentation.ts";
+import { hasMarkSvg, isPublicStatic, servePwa } from "./pwa.ts";
 import type { Visitor } from "./visitors.ts";
 import { viewerOf } from "./web-app.ts";
 
@@ -76,6 +80,10 @@ export interface ConsoleServerOptions {
 	/** Where the install icons come from; default the ones this package ships. */
 	iconsDir?: string;
 	look?: "modern" | "camelot";
+	/** The console's own origin, for the absolute `og:image` of a link preview. */
+	origin?: string;
+	/** What the page says about itself in a search result and a link preview; default derived from the title. */
+	description?: string;
 }
 
 /**
@@ -89,6 +97,7 @@ export interface ConsoleServerOptions {
 export class ConsoleServer {
 	readonly #options: ConsoleServerOptions;
 	readonly #base: string;
+	readonly #meta: PageMeta | undefined;
 	readonly #streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
 	#pending: ReturnType<typeof setTimeout> | undefined;
 	#ping: ReturnType<typeof setInterval> | undefined;
@@ -96,6 +105,16 @@ export class ConsoleServer {
 	constructor(options: ConsoleServerOptions) {
 		this.#options = options;
 		this.#base = `${options.mount}/`;
+		const title = options.title ?? "Roundtable";
+		this.#meta = options.origin
+			? {
+					title,
+					description: options.description ?? defaultDescription(title),
+					origin: options.origin,
+					mount: options.mount,
+					svg: hasMarkSvg(options.iconsDir),
+				}
+			: undefined;
 		options.subscribe(() => this.#changed());
 	}
 
@@ -157,6 +176,11 @@ export class ConsoleServer {
 		if (path !== this.#options.mount && !path.startsWith(this.#base))
 			return new Response("Not found", { status: 404 });
 		const rest = path.slice(this.#base.length);
+		// Static and the same for everyone: a sign-in page and a link preview show the icon without a session.
+		if (READ_METHODS.has(request.method) && isPublicStatic(rest)) {
+			const shown = servePwa(rest, this.#pwa());
+			if (shown) return shown;
+		}
 		const open = await this.#options.authenticator.open?.(request, rest);
 		if (open) return open;
 		const admission = await this.#options.authenticator.authenticate(request);
@@ -183,10 +207,7 @@ export class ConsoleServer {
 			);
 		if (!READ_METHODS.has(request.method))
 			return new Response("Method not allowed", { status: 405 });
-		const installable = servePwa(rest, {
-			...this.#options,
-			title: this.#options.title ?? "Roundtable",
-		});
+		const installable = servePwa(rest, this.#pwa());
 		if (installable) return installable;
 		const asset = this.#options.assets.get(rest);
 		if (asset && rest !== "index.html" && rest !== "sw.js")
@@ -205,6 +226,7 @@ export class ConsoleServer {
 						this.#options.pathRouting ? this.#options.mount : undefined,
 						this.#options.presentation,
 						this.#options.look,
+						this.#meta,
 					),
 					{
 						headers: {
@@ -221,6 +243,10 @@ export class ConsoleServer {
 				);
 		}
 		return new Response("Not found", { status: 404 });
+	}
+
+	#pwa(): Parameters<typeof servePwa>[1] {
+		return { ...this.#options, title: this.#options.title ?? "Roundtable" };
 	}
 
 	async #gated(visitor: Visitor): Promise<boolean> {

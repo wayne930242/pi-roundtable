@@ -40,3 +40,25 @@ test("default HTML only gains the install tags, and path routing/locales fail fa
 		resolveOptions({ ...base, routing: "invalid" as never }),
 	).toThrow("routing");
 });
+
+test("under path routing the icon links follow the base, so they resolve under the mount; an empty description is refused", () => {
+	const html = String(
+		presentPage(page, "/console", undefined, "modern", {
+			title: "Team",
+			description: "About the team",
+			origin: "https://console.example.test",
+			mount: "/console",
+			svg: true,
+		}),
+	);
+	expect(html.indexOf("<base ")).toBeLessThan(html.indexOf('rel="icon"'));
+	expect(html).toContain("<title>Team</title>");
+	expect(() =>
+		resolveOptions({
+			verifier: admit,
+			origin: "https://console.example.test",
+			panes: ["overview"],
+			description: "  ",
+		}),
+	).toThrow("description is empty");
+});

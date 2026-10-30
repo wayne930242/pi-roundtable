@@ -1,9 +1,10 @@
 import { type ConsolePresentation, message } from "../features.ts";
 import { escapeHtml } from "../http.ts";
+import { iconLinks } from "../page-presentation.ts";
 
-/** The login page's CSP: no script at all, one inline style, and the form posts only to this origin. */
+/** The login page's CSP: no script at all, one inline style, its own icon, and the form posts only to this origin. */
 export const LOGIN_CSP =
-	"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+	"default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 /** The login page, as one server-rendered document with no script; `note` is a line above the field. */
 export function loginPage(
@@ -19,6 +20,7 @@ export function loginPage(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+${iconLinks(mount, false)}
 <title>${escapeHtml(title)}</title>
 <style>
 body{font:16px/1.5 system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f6f4;color:#1c1c1a}

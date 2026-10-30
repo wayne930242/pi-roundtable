@@ -331,6 +331,11 @@ export interface WebConsoleOptions {
 	uploads?: { keepDays?: number };
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
+	/**
+	 * The page's description for search results and link previews (`description` and
+	 * `og:description`); default a line derived from the title.
+	 */
+	description?: string;
 	/** Where the install icons come from; default the ones this package ships. */
 	icons?: { dir: string };
 	/** How the page looks: `modern` (default) or `camelot`. The page's owner can switch it in the app. */
@@ -397,6 +402,7 @@ export interface ResolvedOptions {
 	modes: boolean;
 	uploadKeepDays: number;
 	title: string;
+	description: string | undefined;
 	iconsDir: string | undefined;
 	look: "modern" | "camelot";
 	relayNotes: readonly string[];
@@ -1028,6 +1034,12 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		fail("appearance.look must be modern or camelot");
 	const title = options.title?.trim() ?? "Roundtable";
 	if (!title) fail("title is empty");
+	const description = options.description?.trim();
+	if (
+		options.description !== undefined &&
+		(typeof options.description !== "string" || !description)
+	)
+		fail("description is empty. Leave it out for the default");
 	return {
 		auth,
 		origin,
@@ -1050,6 +1062,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		modes: options.modes !== false,
 		uploadKeepDays: checkUploads(options),
 		title,
+		description,
 		iconsDir: options.icons?.dir,
 		look,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],

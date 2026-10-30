@@ -81,7 +81,7 @@ agent 都以組合出來的角色呈現。
 
 ## 安裝到裝置與通知
 
-app 是 PWA：manifest 的範圍限於 mount 路徑，service worker 只快取頁面外殼、不快取資料，圖示可用 `icons.dir` 換掉內建的一組。
+app 是 PWA：manifest 的範圍限於 mount 路徑，service worker 只快取頁面外殼、不快取資料，圖示可用 `icons.dir` 換掉內建的一組。分頁圖示預設是圓桌的標誌；manifest 與圖示不需登入就能取得，登入頁與連結預覽才有圖示。
 從瀏覽器的安裝選項或 Settings 安裝；iPhone 和 iPad 要用「分享」再「加入主畫面」，並從主畫面開啟。
 
 Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置：卡片開啟時（「Card waiting」，或「Long-running cap reached」）、agent 自己在房間發話時，以及 host 發出的通知。
@@ -114,7 +114,8 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `push` | https origin 時開啟 | Web Push；金鑰見下表。 |
 | `icons` | 內建圖示 | `{ dir }`：放五個安裝圖示的目錄。 |
 | `appearance` | `{ look: "modern" }` | `{ look }`：`modern` 或 `camelot`。 |
-| `title` | `Roundtable` | 頁面標題，也是安裝後 app 的名稱。 |
+| `title` | `Roundtable` | 頁面標題（直接寫在送出的 HTML 裡，也是 `og:title`），也是安裝後 app 的名稱。 |
+| `description` | 由 `title` 推得 | `<meta name="description">` 與 `og:description`，給搜尋結果與連結預覽用。 |
 | `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。`zh-TW` 會使用內建的繁體中文（臺灣）文字，`messages` 可逐個 key 覆寫。 |
 | `features` | 無 | 物件或接收公開 setup context 的 factory，提供 party 狀態、排程數、對話清理、skills 與 connectors。 |
 | `relayNotes` | remote MCP relay note | 顯示訊息前要移除的 relay 前綴。 |

@@ -1,5 +1,6 @@
 import { type ConsolePresentation, message } from "../features.ts";
 import { escapeHtml } from "../http.ts";
+import { iconLinks } from "../page-presentation.ts";
 import { LOGIN_CSP } from "./login-page.ts";
 
 /** What a page of the sign-in flow tells, and the link it offers. */
@@ -30,6 +31,7 @@ export function oidcPage(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+${iconLinks(mount, false)}
 <title>${escapeHtml(title)}</title>
 <style>
 body{font:16px/1.5 system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f6f4;color:#1c1c1a}
