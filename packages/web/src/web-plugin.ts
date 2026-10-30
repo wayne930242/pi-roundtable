@@ -335,7 +335,10 @@ async function build(settings: ResolvedOptions, context: Context) {
 					oidc: {
 						login: oidc,
 						sessions,
-						reauthHours: settings.auth.reauthHours,
+						reauthHours:
+							settings.auth.mode === "oidc"
+								? settings.auth.reauthHours
+								: undefined,
 					},
 				}
 			: {}),
