@@ -6,6 +6,7 @@ import type {
 	RoomOneView,
 	RoomView,
 	ThreadsDismissed,
+	ThreadsDismissedAll,
 	ThreadsRestored,
 } from "./api-types.ts";
 import type { ResolvedRoom } from "./app/rooms.ts";
@@ -22,6 +23,8 @@ const GUIDE = "app:agent.guide";
 const DONE = "app:thread.0b5e7c1a-0000-4000-8000-000000000001";
 const OPEN = "app:thread.0b5e7c1a-0000-4000-8000-000000000002";
 const NONE = "app:thread.0b5e7c1a-0000-4000-8000-000000000003";
+const OTHER = "app:agent.other";
+const DONE_OTHER = "app:thread.0b5e7c1a-0000-4000-8000-000000000004";
 
 const assets: AssetBundle = new Map([
 	["index.html", { body: Buffer.from("<html></html>"), type: "text/html" }],
@@ -39,6 +42,8 @@ const known = new Map([
 	[DONE, room(DONE, "thread")],
 	[OPEN, room(OPEN, "thread")],
 	[NONE, room(NONE, "thread")],
+	[OTHER, room(OTHER, "agent")],
+	[DONE_OTHER, room(DONE_OTHER, "thread")],
 ]);
 
 let who: { id: string; tier: Tier };
@@ -55,7 +60,7 @@ function setup() {
 		roles: [],
 	});
 	const api = new AppApi({
-		surface: {} as never,
+		surface: { surface: "app" } as never,
 		rooms: {
 			resolve: async (key: string) => known.get(key),
 			threadView: async (key: string) =>
@@ -64,7 +69,11 @@ function setup() {
 					: undefined,
 			placeable: () => new Set(),
 			homeKey: () => GUIDE,
-			list: async () => [],
+			list: async () =>
+				[GUIDE, OTHER, DONE].map((key) => ({
+					key,
+					kind: known.get(key)?.kind,
+				})),
 		} as never,
 		log: {} as never,
 		cards: {} as never,
@@ -95,6 +104,15 @@ function setup() {
 						count += 1;
 					}
 				return count;
+			},
+			dismissFinishedUnder: async (parents: readonly string[]) => {
+				const done: { id: string; parent: string }[] = [];
+				for (const [id, one] of stored)
+					if (parents.includes(one.parent) && !one.open && !one.dismissed) {
+						one.dismissed = true;
+						done.push({ id, parent: one.parent });
+					}
+				return done;
 			},
 			restore: async (id: string) => {
 				const one = stored.get(id);
@@ -152,6 +170,7 @@ beforeEach(() => {
 	stored = new Map([
 		[DONE.slice(4), { parent: GUIDE, open: false, dismissed: false }],
 		[OPEN.slice(4), { parent: GUIDE, open: true, dismissed: false }],
+		[DONE_OTHER.slice(4), { parent: OTHER, open: false, dismissed: false }],
 	]);
 });
 
@@ -302,6 +321,67 @@ describe("dismissing dispatch threads from the room list", () => {
 		).toBe(404);
 	});
 
+	test("clearing every room's finished threads dismisses the finished ones only and names them by room, so each can be taken back", async () => {
+		const server = setup();
+		const response = await call(
+			server,
+			"POST",
+			"rooms/dismiss-finished-threads",
+			{},
+		);
+		expect(response.status).toBe(200);
+		expect((await response.json()) as ThreadsDismissedAll).toEqual({
+			dismissed: 2,
+			threads: { [GUIDE]: [DONE], [OTHER]: [DONE_OTHER] },
+		});
+		expect(stored.get(OPEN.slice(4))?.dismissed).toBe(false);
+		expect(changes).toBe(1);
+		const again = await call(
+			server,
+			"POST",
+			"rooms/dismiss-finished-threads",
+			{},
+		);
+		expect((await again.json()) as ThreadsDismissedAll).toEqual({
+			dismissed: 0,
+			threads: {},
+		});
+		expect(changes).toBe(1);
+		// The per-room undo puts back exactly what was named.
+		const undo = await call(server, "POST", at(GUIDE, "undismiss-threads"), {
+			threads: [DONE],
+		});
+		expect((await undo.json()) as ThreadsRestored).toEqual({ restored: 1 });
+		expect(stored.get(DONE.slice(4))?.dismissed).toBe(false);
+		expect(stored.get(DONE_OTHER.slice(4))?.dismissed).toBe(true);
+	});
+
+	test("a clear-all across rooms keeps to the rooms named, and passes over a key that is no room or is a thread", async () => {
+		const server = setup();
+		const response = await call(
+			server,
+			"POST",
+			"rooms/dismiss-finished-threads",
+			{
+				rooms: [OTHER, DONE, "app:agent.nobody", "elsewhere:agent.guide"],
+			},
+		);
+		expect((await response.json()) as ThreadsDismissedAll).toEqual({
+			dismissed: 1,
+			threads: { [OTHER]: [DONE_OTHER] },
+		});
+		expect(stored.get(DONE.slice(4))?.dismissed).toBe(false);
+		for (const body of [
+			{ rooms: "x" },
+			{ rooms: [1] },
+			{ rooms: Array(501).fill(GUIDE) },
+		])
+			expect(
+				(await call(server, "POST", "rooms/dismiss-finished-threads", body))
+					.status,
+			).toBe(400);
+	});
+
 	test("nobody but an owner can ask: the routes do not exist for anyone else", async () => {
 		stored.set(DONE.slice(4), { parent: GUIDE, open: false, dismissed: true });
 		for (const tier of ["admin", "member"] as const) {
@@ -313,6 +393,7 @@ describe("dismissing dispatch threads from the room list", () => {
 				["POST", at(DONE, "undismiss")],
 				["POST", at(GUIDE, "undismiss-threads"), { threads: [DONE] }],
 				["GET", at(DONE)],
+				["POST", "rooms/dismiss-finished-threads", {}],
 			] as const)
 				expect((await call(server, method, path, body)).status).toBe(404);
 		}

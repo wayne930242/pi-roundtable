@@ -573,6 +573,28 @@ export interface ThreadsDismissed {
 	dismissed: number;
 }
 
+/** What one clear-all across rooms dismissed: the finished threads' room keys, by the room they hang under. */
+export interface ThreadsDismissedAll extends ThreadsDismissed {
+	threads: Record<string, string[]>;
+}
+
+/** A cursor that marking rooms read moved: where it was (0 for a room never read) and where it is. */
+export interface ReadMove {
+	room: string;
+	from: number;
+	to: number;
+}
+
+/** What marking rooms read moved; the page keeps it to undo the marking. */
+export interface ReadAllView {
+	moved: ReadMove[];
+}
+
+/** What undoing a marking put back: the rooms whose cursor went back. */
+export interface ReadAllUndone {
+	restored: string[];
+}
+
 /** What taking dismissed threads back onto the room list restored. */
 export interface ThreadsRestored {
 	restored: number;

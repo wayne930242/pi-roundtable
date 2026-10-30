@@ -76,6 +76,8 @@ const EXPECTED: [string, string, Record<string, Outcome>][] = [
 	["POST", "api/rooms/app%3Aagent.guide/dismiss-threads", HIDDEN],
 	["POST", "api/rooms/app%3Athread.0b5e7c1a/undismiss", HIDDEN],
 	["POST", "api/rooms/app%3Aagent.guide/undismiss-threads", HIDDEN],
+	["POST", "api/rooms/read-all", HIDDEN],
+	["POST", "api/rooms/dismiss-finished-threads", HIDDEN],
 	["POST", "api/folders", O],
 	["PATCH", "api/folders/folder.x", O],
 	["PUT", "api/folders/folder.x/mute", O],
@@ -239,6 +241,8 @@ describe("the authorization table", () => {
 			for (const [method, path] of [
 				["GET", "api/rooms"],
 				["PUT", "api/rooms/app:agent.guide/mute"],
+				["POST", "api/rooms/read-all"],
+				["POST", "api/rooms/dismiss-finished-threads"],
 				["GET", "api/rooms/app:agent.guide"],
 				["GET", "api/agents/guide"],
 				["GET", "api/groups/crew"],

@@ -299,6 +299,30 @@ test("an arriving message counts as unread unless it is the person's own or the 
 	expect(counts()).toBe(0);
 });
 
+test("marking everything read on another device clears the counts of every room here, tab count included, and its undo makes the lists be asked for again", () => {
+	const rooms = ["app:inbox.markall-room-001", "app:inbox.markall-room-002"];
+	for (const room of rooms)
+		for (const id of [10, 11])
+			onFrame({ type: "host_message", room, message: message(id, { room }) });
+	const before = hostState.totalUnread();
+	expect(before).toBeGreaterThanOrEqual(4);
+	for (const room of rooms)
+		onFrame({
+			type: "read",
+			room,
+			principal: "p-ada",
+			name: "Ada",
+			upTo: 11,
+			at: "2026-10-29T10:07:00.000Z",
+		});
+	expect(hostState.totalUnread()).toBe(before - 4);
+	for (const room of rooms)
+		expect(peek((state) => state.unread[room] ?? 0)).toBe(0);
+	const asked = peek((state) => state.lists.inbox ?? 0);
+	onFrame({ type: "list_changed", kind: "inbox" });
+	expect(peek((state) => state.lists.inbox ?? 0)).toBe(asked + 1);
+});
+
 test("another person's read moves their mark forward and never back", () => {
 	const room = "app:inbox.reads-room-00001";
 	const read = (

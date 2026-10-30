@@ -24,7 +24,8 @@ import { installFrames } from "./frames.ts";
 import type { HostContext } from "./host-context.ts";
 import { hostArea, pagesArea } from "./host-routes.ts";
 import { HostPagesService, PAGE_BINDING } from "./pages.ts";
-import type { RoomReads } from "./reads.ts";
+import { readAll, unreadAll } from "./read-all.ts";
+import type { MovedMark, RoomReads } from "./reads.ts";
 import { type HostSweep, sweepHostKinds } from "./retention.ts";
 import { HostRoomsService, ListedKinds } from "./rooms-service.ts";
 
@@ -169,6 +170,19 @@ export class HostApp {
 			);
 		if (!this.#context.registry.isHostRoom(binding)) return false;
 		return this.access.read(viewer, binding as ChannelKey);
+	}
+
+	/** Reads the named rooms the viewer may read up to their newest message; the cursors that moved. */
+	readAll(viewer: Viewer, rooms: readonly string[]): Promise<MovedMark[]> {
+		return readAll(this.#context, viewer, rooms);
+	}
+
+	/** Puts back cursors that `readAll` moved, where the viewer has not read on since; the rooms put back. */
+	unreadAll(
+		viewer: Viewer,
+		moves: readonly { room: string; from: number; to: number }[],
+	): Promise<string[]> {
+		return unreadAll(this.#context, viewer, moves);
 	}
 
 	/** Applies the kinds' retention; the counts of what it removed. */

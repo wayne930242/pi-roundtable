@@ -25,6 +25,7 @@ describeDb("what the host rooms store", () => {
 		sql = new SQL(testDatabaseUrl, { max: 2 });
 		await RoomLog.migration.up(sql);
 		await RoomLog.hostMigration.up(sql);
+		await RoomLog.noteMigration.up(sql);
 		await HostCardLog.migration.up(sql);
 		await HostCardLog.keepMigration.up(sql);
 		await RoomReads.migration.up(sql);
@@ -255,6 +256,111 @@ describeDb("what the host rooms store", () => {
 		});
 		// A second look at the room does not move the cursor on to the newest message.
 		expect((await reads.unread(person, [fresh], baseline)).get(fresh)).toBe(1);
+	});
+
+	test("reading many rooms moves each cursor to the room's newest message, reports where it was, and leaves read rooms and other people alone", async () => {
+		const run = Math.random().toString(36).slice(2, 8);
+		const person = `bulk-${run}`;
+		const [fresh, behind, caught, empty] = [
+			"fresh",
+			"behind",
+			"caught",
+			"empty",
+		].map((name) => `app:inbox.${name}${run}`);
+		const idsOf: Record<string, number[]> = {};
+		for (const room of [fresh, behind, caught] as string[]) {
+			idsOf[room] = [];
+			for (const text of ["a", "b", "c"])
+				idsOf[room]?.push(
+					(
+						await log.appendOnce({
+							room,
+							kind: "agent",
+							author: "A",
+							text,
+						})
+					).message.id,
+				);
+		}
+		await reads.advance(
+			behind as string,
+			person,
+			idsOf[behind as string]?.[0] as number,
+		);
+		await reads.advance(
+			caught as string,
+			person,
+			idsOf[caught as string]?.[2] as number,
+		);
+		await reads.advance(
+			fresh as string,
+			"someone-else",
+			idsOf[fresh as string]?.[2] as number,
+		);
+		const moved = await reads.advanceAll(person, [
+			fresh as string,
+			behind as string,
+			caught as string,
+			empty as string,
+		]);
+		const byRoom = new Map(moved.map((one) => [one.room, one]));
+		expect([...byRoom.keys()].sort()).toEqual(
+			[fresh, behind].sort() as string[],
+		);
+		expect(byRoom.get(fresh as string)).toMatchObject({
+			from: 0,
+			to: idsOf[fresh as string]?.[2],
+		});
+		expect(byRoom.get(behind as string)).toMatchObject({
+			from: idsOf[behind as string]?.[0],
+			to: idsOf[behind as string]?.[2],
+		});
+		const unread = await reads.unread(person, [
+			fresh as string,
+			behind as string,
+			caught as string,
+		]);
+		expect(unread.size).toBe(0);
+		// A second call finds nothing to move, and an empty list asks nothing.
+		expect(await reads.advanceAll(person, [fresh as string])).toEqual([]);
+		expect(await reads.advanceAll(person, [])).toEqual([]);
+		// Another person's cursor is their own.
+		expect(await reads.cursorOf(fresh as string, "someone-else")).toBe(
+			idsOf[fresh as string]?.[2],
+		);
+	});
+
+	test("rewinding puts a cursor back where the bulk read found it, unless the person read on since", async () => {
+		const run = Math.random().toString(36).slice(2, 8);
+		const person = `rewind-${run}`;
+		const [one, two] = [`app:inbox.rewa${run}`, `app:inbox.rewb${run}`];
+		for (const room of [one, two] as string[])
+			for (const text of ["a", "b"])
+				await log.appendOnce({ room, kind: "agent", author: "A", text });
+		const moved = await reads.advanceAll(person, [one, two] as string[]);
+		expect(moved).toHaveLength(2);
+		// Both were never read, so they go back to nothing read: every message unread again.
+		// A third message arrives in `two` and the person reads it before the undo.
+		const later = (
+			await log.appendOnce({
+				room: two as string,
+				kind: "agent",
+				author: "A",
+				text: "c",
+			})
+		).message.id;
+		await reads.advance(two as string, person, later);
+		const restored = await reads.rewind(person, moved);
+		expect(restored).toEqual([one]);
+		expect(
+			(await reads.unread(person, [one, two] as string[])).get(one as string),
+		).toBe(2);
+		expect(
+			(await reads.unread(person, [one, two] as string[])).has(two as string),
+		).toBe(false);
+		// Putting back twice changes nothing more.
+		expect(await reads.rewind(person, moved)).toEqual([]);
+		expect(await reads.rewind(person, [])).toEqual([]);
 	});
 
 	test("the reads of a room are everyone's cursors", async () => {

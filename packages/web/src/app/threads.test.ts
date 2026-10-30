@@ -169,6 +169,35 @@ describeDb("dispatch threads of the app", () => {
 		await threads.removeUnder("app:agent.sweep-too");
 	});
 
+	test("dismissing the finished threads under several rooms at once names each one, and leaves open, already dismissed and unnamed rooms' threads alone", async () => {
+		const run = Math.random().toString(36).slice(2, 8);
+		const [a, b, c] = [
+			`app:agent.bulk-a-${run}`,
+			`app:agent.bulk-b-${run}`,
+			`app:agent.bulk-c-${run}`,
+		];
+		const open = await threads.open(a, "Running");
+		const doneA = await threads.open(a, "Done A");
+		const doneB = await threads.open(b, "Done B");
+		const already = await threads.open(b, "Already");
+		const unnamed = await threads.open(c, "Unnamed room");
+		for (const one of [doneA, doneB, already, unnamed])
+			await threads.close(one.id);
+		await threads.dismiss(already.id);
+		const done = await threads.dismissFinishedUnder([a, b]);
+		expect(done.map((one) => one.id).sort()).toEqual(
+			[doneA.id, doneB.id].sort(),
+		);
+		expect(done.find((one) => one.id === doneB.id)?.parent).toBe(b);
+		expect(await threads.dismissFinishedUnder([a, b])).toEqual([]);
+		expect(await threads.dismissFinishedUnder([])).toEqual([]);
+		const listed = (await threads.list()).map((t) => t.id);
+		expect(listed).toContain(open.id);
+		expect(listed).toContain(unnamed.id);
+		expect(listed).not.toContain(doneA.id);
+		for (const parent of [a, b, c]) await threads.removeUnder(parent);
+	});
+
 	test("a dismissed thread is off the room list and still a room with a view of its own", async () => {
 		const thread = await threads.open("app:agent.guide", "Gone from view");
 		await threads.close(thread.id);
