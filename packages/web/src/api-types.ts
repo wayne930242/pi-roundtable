@@ -398,6 +398,11 @@ export interface RoomMessage {
 	picture?: PictureRef;
 	/** The text was changed after it was stored. */
 	edited?: true;
+	/**
+	 * An internal note: written for the humans who read the room, never handed to the agent. Only
+	 * an `owner` message of an agent or group room that has `notes` can be one.
+	 */
+	note?: true;
 	/** Files of the message that were deleted by retention. */
 	expiredFiles?: number;
 }
@@ -502,6 +507,12 @@ export interface RoomView {
 	parent?: string;
 	/** A thread's room takes no messages from the page. */
 	readOnly: boolean;
+	/**
+	 * More than one person reads this agent or group room, so the composer offers `@AI` off: a
+	 * message sent with `mode: "note"` is kept for them and not given to the agent. Absent in a
+	 * room only one person reads.
+	 */
+	notes?: true;
 	/** A thread whose dispatch has ended; its room stays readable. */
 	closed?: boolean;
 	mode: RoomMode;
@@ -1108,7 +1119,7 @@ export type ClientFrame =
 			text: string;
 			/** Files uploaded with `POST api/uploads`, by the `id` each returned. */
 			uploads?: string[];
-			/** Host rooms: a `note` only records, a `turn` is also delivered to the host's claim. Default `turn`; an agent room takes only `turn`. */
+			/** Host rooms: a `note` only records, a `turn` is also delivered to the host's claim. Default `turn`. An agent or group room takes a `note` only where its view has `notes`. */
 			mode?: "note" | "turn";
 	  }
 	| { type: "stop"; room: string }

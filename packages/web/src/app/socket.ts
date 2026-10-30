@@ -559,7 +559,9 @@ export class SocketRoute {
 			this.#refuse(connection, code, frame.id);
 		// The agent rooms are the owners', and they take only turns.
 		if (who.tier !== "owner") return refuse("forbidden");
-		if (frame.mode === "note") return refuse("bad_frame");
+		// A note is for the other people who read the rooms; where nobody else does, it is no frame.
+		const note = frame.mode === "note";
+		if (note && !(await rooms.notesOn())) return refuse("bad_frame");
 		const room = await rooms.resolve(frame.room);
 		if (!room) return refuse("unknown_room");
 		if (room.readOnly) return refuse("read_only");
@@ -567,18 +569,22 @@ export class SocketRoute {
 		if (text.length > MAX_MESSAGE_CHARS) return refuse("too_long");
 		const ids = frame.uploads ?? [];
 		if (text === "" && ids.length === 0) return refuse("empty");
-		// Without the actor the credential vouched for, the router cannot tell whose message it is.
-		if (!who.actor) return refuse("forbidden");
+		// Without the actor the credential vouched for, the router cannot tell whose message it is;
+		// a note goes to no router.
+		if (!note && !who.actor) return refuse("forbidden");
 		const files = uploads.claim(ids, who.principalId);
 		if (!files) return refuse("unknown_upload");
 		if (!surface.started) return refuse("not_accepted");
 		try {
-			await this.say(room.key, who, text, files, connection, (message) =>
-				sockets.deliver(
-					{ type: "accepted", id: frame.id, room: room.key, message },
-					{ connection },
-				),
-			);
+			if (note)
+				await this.#note(connection, who, room.key, frame.id, text, files);
+			else
+				await this.say(room.key, who, text, files, connection, (message) =>
+					sockets.deliver(
+						{ type: "accepted", id: frame.id, room: room.key, message },
+						{ connection },
+					),
+				);
 		} catch (error) {
 			logger.warn(
 				{ room: room.key, err: error },
@@ -586,6 +592,36 @@ export class SocketRoute {
 			);
 			refuse("not_accepted");
 		}
+	}
+
+	/**
+	 * Keeps an owner's internal note in a room: stored and shown to the other readers, and given to
+	 * no one else. It does not reach the host, so the agent runs no turn, the note is not in its
+	 * conversation, and nothing about the room reads as asked.
+	 */
+	async #note(
+		connection: AppSocket,
+		who: Answerer,
+		room: ChannelKey,
+		id: string,
+		text: string,
+		files: readonly RoomFile[],
+	): Promise<void> {
+		const { surface, uploads, sockets } = this.#options;
+		const message = await surface.publish(
+			{
+				room,
+				kind: "owner",
+				principalId: who.principalId,
+				author: who.name,
+				text,
+				files: [...files],
+				note: true,
+			},
+			connection,
+		);
+		uploads.use(files.map((file) => file.id));
+		sockets.deliver({ type: "accepted", id, room, message }, { connection });
 	}
 
 	/**

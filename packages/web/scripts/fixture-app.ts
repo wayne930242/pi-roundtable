@@ -12,6 +12,8 @@
 // The page is built into dist/ at start when dist/ has none.
 //   FIXTURE_HOST                  `1` registers a host room kind ("inbox": an empty room and one with a message,
 //                                 both open to notes and turns) and a host page, for trying the host rooms
+//   FIXTURE_OWNERS                `2` makes two owners, Ada and Bob, who sign in by the `fixture_owner` cookie (`ada`, the default, or `bob`),
+//                                 so the agent rooms have two readers and the composer offers @AI and notes
 //   FIXTURE_AGENTS                how many agents sit at the round table, 3 to 12 (default 3)
 //
 // The agents are scripts: start a message with a keyword and the agent acts it out.
@@ -62,6 +64,7 @@ const { AGENTS, MODES, promptScope, SCHEDULES, SKILLS, THREADS } = await import(
 const { testHost } = await import("pi-roundtable/testing");
 const { webConsole } = await import("../src/web-plugin.ts");
 const { WEB_APP } = await import("../src/web-app.ts");
+const { admitAs, refuse } = await import("../src/verifier.ts");
 const { definePlugin } = await import("pi-roundtable");
 type SkillRegistry = import("pi-roundtable").SkillRegistry;
 type TurnProgress = import("pi-roundtable").TurnProgress;
@@ -548,12 +551,40 @@ const runtime = {
 	recentTranscript: async () => [],
 };
 
+// Two owners sign in by a cookie the fixture's verifier reads; one owner is the console's `none`.
+const OWNERS = [
+	{ name: "Ada", subject: "100000000000000001" },
+	{ name: "Bob", subject: "300000000000000003" },
+];
+const twoOwners = process.env.FIXTURE_OWNERS === "2";
+const cookieVerifier = (request: Request) => {
+	const chosen = /(?:^|;\s*)fixture_owner=(\w+)/.exec(
+		request.headers.get("cookie") ?? "",
+	)?.[1];
+	const owner =
+		OWNERS.find((one) => one.name.toLowerCase() === chosen) ?? OWNERS[0];
+	return owner
+		? admitAs({ provider: "discord", subject: owner.subject, name: owner.name })
+		: refuse("no owner");
+};
+
 host = await testHost({
 	discord: false,
 	runtime: runtime as never,
 	config: {
 		dataDir,
 		http: { port, hostname: "127.0.0.1" },
+		...(twoOwners
+			? {
+					access: {
+						owners: OWNERS.map((one) => ({
+							name: one.name,
+							principal: one.subject,
+							identities: [`discord:${one.subject}`],
+						})),
+					},
+				}
+			: {}),
 		agents: [
 			{
 				name: "guide",
@@ -583,7 +614,9 @@ host = await testHost({
 	} as never,
 	plugins: [
 		webConsole({
-			auth: { mode: "none" },
+			...(twoOwners
+				? { verifier: cookieVerifier }
+				: { auth: { mode: "none" as const } }),
 			origin,
 			dataDir,
 			title: "Roundtable",
