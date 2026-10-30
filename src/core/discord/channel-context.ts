@@ -14,6 +14,7 @@ import { parseChannelKey } from "../contract/surface.ts";
 import { MAX_TURN_IMAGES } from "../domain/attachment.ts";
 import type { Logger } from "../log.ts";
 import { contextImages, type SkippedImage } from "./context-images.ts";
+import { embedText } from "./embed-text.ts";
 import type { BotIdentity } from "./inbound-message.ts";
 
 /** The most bytes one image may be: the core's limit for any attachment. */
@@ -122,7 +123,8 @@ export function contextSourceOf(
 		if (!user) return mention;
 		return `@${members?.get(id)?.displayName ?? user.globalName ?? user.username}`;
 	});
-	const parts = text.trim() ? [text.trim()] : [];
+	const embeds = embedText(message.embeds);
+	const parts = [text.trim(), embeds].filter(Boolean);
 	for (const sticker of message.stickers.values())
 		parts.push(`[sticker: ${sticker.name}]`);
 	for (const file of message.attachments.values())
