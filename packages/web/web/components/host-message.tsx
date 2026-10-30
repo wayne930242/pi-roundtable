@@ -18,6 +18,8 @@ export const HostMessageRow = memo(function HostMessageRow(props: {
 	/** Show the author's name and picture: the author changed, or a pause came. */
 	header: boolean;
 	enter: boolean;
+	/** The message was unread as the room opened or arrived out of sight: it wears a frame until seen. */
+	unread?: boolean;
 	timeZone: string;
 	/** The signed-in person's principal, whose own messages stand at the right. */
 	me: string | undefined;
@@ -50,6 +52,7 @@ export const HostMessageRow = memo(function HostMessageRow(props: {
 			data-mine={mine || undefined}
 			data-header={props.header || undefined}
 			data-enter={props.enter || undefined}
+			data-unread={props.unread || undefined}
 			data-highlight={props.highlighted || undefined}
 		>
 			{mine ? null : (

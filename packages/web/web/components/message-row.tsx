@@ -110,6 +110,8 @@ export const MessageRow = memo(function MessageRow(props: {
 	header: boolean;
 	/** The message arrived while the room was open, so it slides in. */
 	enter: boolean;
+	/** The message was unread as the room opened or arrived out of sight: it wears a frame until seen. */
+	unread?: boolean;
 	timeZone: string;
 	/** The room takes a reply, so a message can be quoted into its box. */
 	quotable: boolean;
@@ -165,6 +167,7 @@ export const MessageRow = memo(function MessageRow(props: {
 			data-mine={mine || undefined}
 			data-header={props.header || undefined}
 			data-enter={props.enter || undefined}
+			data-unread={props.unread || undefined}
 		>
 			{mine ? null : (
 				<span

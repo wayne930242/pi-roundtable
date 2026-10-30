@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A message nobody has seen yet wears an unread frame: a soft ring and glow in the accent colour, uniform on every side (no thick or one-sided border), in the modern and camelot looks, light and dark. It marks the messages past the person's read marker as the room opened, and those that arrive while the tab is hidden or the log is scrolled away from its end, in agent, group, thread and host rooms. The person's own messages, lines the server wrote, internal notes and a message that arrives while they are watching the end of the log do not get one. Passing a pointer over a message, focusing it with the keyboard, or tapping it clears its frame, each message on its own; on a touch screen a frame also clears once the message has stood at least half in view (or half of the screen, for a long one) for one and a half seconds, through one IntersectionObserver. It is only a look: what the server counts as read, the read API and the "New messages" divider are unchanged, a cleared frame stays cleared until the page is reloaded, and `prefers-reduced-motion: reduce` removes it without the fade. The code and its styles load with the read marks (the lazy host chunk), not with the first page.
+
 ## [0.26.2] - 2026-10-30
 
 ### Added

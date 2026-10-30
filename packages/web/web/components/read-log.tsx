@@ -8,6 +8,7 @@ import { useConnection } from "../lib/socket.ts";
 import { HostMessageRow } from "./host-message.tsx";
 import { HostPicture } from "./host-picture.tsx";
 import { RoomLog, type RowDecor } from "./room-log.tsx";
+import { useUnreadFrames } from "./unread-frames.ts";
 
 installHostStyle();
 
@@ -126,6 +127,19 @@ export default function ReadLog(props: {
 	const began = useRef<number | undefined>(undefined);
 	if (began.current === undefined && cursor !== undefined)
 		began.current = cursor;
+	// Where several people read an agent room, an old message without an author's principal is nobody's own.
+	const notes = useSelector(
+		(state) => state.rooms[roomKey]?.view?.notes === true,
+	);
+	const framed = useUnreadFrames({
+		room: roomKey,
+		scroller: props.scroller,
+		messages,
+		began: began.current,
+		enterAfter: props.enterAfter,
+		me,
+		shared: props.host === true || notes,
+	});
 
 	const decor = useMemo<RowDecor>(() => {
 		const list: readonly RoomMessage[] = messages ?? [];
@@ -155,6 +169,7 @@ export default function ReadLog(props: {
 				const marks = under.get(message.id);
 				return marks ? <Seen marks={marks} /> : null;
 			},
+			unread: (message) => framed.has(message.id),
 			...(props.host
 				? {
 						message: (message: RoomMessage, look) =>
@@ -164,6 +179,7 @@ export default function ReadLog(props: {
 									message={message}
 									header={look.header}
 									enter={look.enter}
+									unread={look.unread}
 									timeZone={look.timeZone}
 									me={me}
 									highlighted={props.highlight === message.id}
@@ -172,7 +188,7 @@ export default function ReadLog(props: {
 					}
 				: {}),
 		};
-	}, [messages, reads, me, props.host, props.highlight]);
+	}, [messages, reads, me, props.host, props.highlight, framed]);
 	return (
 		<RoomLog
 			roomKey={roomKey}

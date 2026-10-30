@@ -72,6 +72,22 @@ export const HOST_CSS = `
 	background: var(--surface-2);
 }
 
+.message .bubble {
+	transition: box-shadow var(--dur) var(--ease-out);
+}
+
+/* A message not seen yet: a soft ring and glow in the accent, uniform on every side, gone once seen.
+   The row is drawn in full so its paint containment does not cut the glow off at the bubble's edge. */
+.message[data-unread] {
+	content-visibility: visible;
+}
+
+.message[data-unread] .bubble {
+	box-shadow:
+		0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
+		0 0 14px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
 .message[data-highlight] .bubble {
 	animation: host-highlight 2.4s var(--ease-out) both;
 }
