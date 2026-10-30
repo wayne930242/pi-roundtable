@@ -8,7 +8,7 @@ describe("hasLeadingAiMention", () => {
 			"@ai summarize this",
 			"  @Ai: go",
 			"@AI, please",
-			"@AI，請看",
+			"@AI，look",
 			"@AI\nnext line",
 		])
 			expect(hasLeadingAiMention(text)).toBe(true);
@@ -37,7 +37,7 @@ describe("withoutLeadingAiMention", () => {
 		expect(withoutLeadingAiMention("@AI summarize")).toBe("summarize");
 		expect(withoutLeadingAiMention("@ai: summarize")).toBe("summarize");
 		expect(withoutLeadingAiMention("  @AI , summarize")).toBe("summarize");
-		expect(withoutLeadingAiMention("@AI，請看")).toBe("請看");
+		expect(withoutLeadingAiMention("@AI，look")).toBe("look");
 		expect(withoutLeadingAiMention("@AI")).toBe("");
 	});
 
