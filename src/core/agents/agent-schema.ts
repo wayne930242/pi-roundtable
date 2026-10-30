@@ -3,6 +3,7 @@ import { scopeToGuild } from "../db/guild-scope.ts";
 import type { Migration } from "../db/migrations.ts";
 import type { ThinkingLevel } from "../models.ts";
 import { promptHistoryMigration } from "../modules/prompts/prompt-history.ts";
+import { outboxMigration } from "./agent-outbox.ts";
 import type { Agent, AgentGroup, AgentStatus } from "./agent-rules.ts";
 
 export interface AgentRow {
@@ -136,5 +137,7 @@ export function agentMigrations(guildId: string): Migration[] {
 		},
 		// The change history of the agents' prompts; the prompts plugin creates the same table for its documents.
 		promptHistoryMigration("agent-prompt-history"),
+		// Agent messages the host refused while it stopped, replayed at the next start.
+		outboxMigration(),
 	];
 }

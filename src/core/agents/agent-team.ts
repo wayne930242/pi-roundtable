@@ -264,7 +264,12 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	 * character in the background.
 	 */
 	start(): Promise<void> {
-		return this.#lifecycle.start();
+		return this.#lifecycle.start().then(() => this.#turns.replayMessages());
+	}
+
+	/** What the team still writes that a shutdown must wait for. */
+	busy(): string[] {
+		return this.#turns.busy();
 	}
 
 	/** Ends the background work the team started. */

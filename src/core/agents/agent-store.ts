@@ -9,6 +9,7 @@ import {
 } from "../modules/prompts/prompt-history.ts";
 import type { AgentDirectory } from "../services.ts";
 import { AgentBook } from "./agent-book.ts";
+import { AgentOutbox } from "./agent-outbox.ts";
 import {
 	type Agent,
 	type AgentGroup,
@@ -68,6 +69,8 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	readonly #statements: AgentStatements;
 	readonly #messages: GroupMessages;
 	readonly #prompts: PromptHistory;
+	/** Agent messages the host stopped before delivering them. */
+	readonly outbox: AgentOutbox;
 
 	private constructor(sql: SQL, guildId: string) {
 		super();
@@ -76,6 +79,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		this.#statements = new AgentStatements(sql, guildId);
 		this.#messages = new GroupMessages(sql, guildId);
 		this.#prompts = new PromptHistory(sql, guildId);
+		this.outbox = new AgentOutbox(sql, guildId);
 	}
 
 	/** The store's tables; the host runs this before any store attaches. */

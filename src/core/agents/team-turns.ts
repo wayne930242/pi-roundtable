@@ -463,6 +463,16 @@ export class TeamTurns {
 		return this.#messages.message(caller, to, text);
 	}
 
+	/** Delivers the agent messages the last run kept while it stopped; never rejects. */
+	replayMessages(): Promise<void> {
+		return this.#messages.replay();
+	}
+
+	/** What the team still writes that a shutdown must wait for. */
+	busy(): string[] {
+		return this.#messages.busy();
+	}
+
 	/**
 	 * One owner message in a group channel: scored, then answered by the chosen members one at
 	 * a time, each seeing every group message since its last turn. Call inside the queue.

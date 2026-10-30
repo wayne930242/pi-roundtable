@@ -37,12 +37,12 @@ import type {
 	CategoryLayout,
 	ChannelMessage,
 } from "./agent-ports.ts";
-import type { AgentSeed } from "./agent-rules.ts";
 import { PgAgentStore as AgentStore } from "./agent-store.ts";
 import {
 	DiscordAgentTeam as AgentTeam,
 	type AgentTeamOptions,
 } from "./agent-team.ts";
+import { seeds } from "./agent-team-seeds.ts";
 import { discordKey } from "./team-keys.ts";
 
 export const ENTRY = "1000";
@@ -261,6 +261,7 @@ export const script: {
 };
 let queue: ChannelQueue;
 let team: AgentTeam;
+let build: () => AgentTeam;
 let skillStore: TestStore<SkillStore>;
 let skills: SkillRegistry;
 export const removedSchedules: number[] = [];
@@ -270,34 +271,6 @@ export const eventLog: string[] = [];
 
 /** What a plugin adds to every agent's tools: a tool of its own and a group of another server's. */
 const PLUGIN_SELECTION = { tools: ["memory_add"], groups: ["workspace"] };
-
-/** The team a fresh database starts with: a coordinator in the entry channel, then two specialists. */
-function seeds(entryChannelId: string | undefined): AgentSeed[] {
-	return [
-		{
-			name: "coordinator",
-			displayName: "Coordinator",
-			...(entryChannelId ? { channelId: entryChannelId } : {}),
-			prompt:
-				"You are the chief of staff of the owner's agent team. You hand work that belongs to a specialist to that agent with message_agent, one owner per task, and propose a new agent when a lasting responsibility has no owner.",
-			character: { class: "navigator", palette: "amber" },
-		},
-		{
-			name: "doctor",
-			displayName: "Doctor",
-			prompt:
-				"You keep the owner's agents healthy: read an agent's prompt with agent_get, find the instruction that caused a misbehavior, and fix it with agent_update.",
-			character: { class: "healer", palette: "rose" },
-		},
-		{
-			name: "infra",
-			displayName: "Infra",
-			prompt:
-				"You manage the owner's servers. Check before you change: read state first, state what you will change and why, then act.",
-			character: { class: "engineer", palette: "purpure" },
-		},
-	];
-}
 
 /**
  * Waits until every queued channel task has settled and every active agent has its avatar,
@@ -337,6 +310,7 @@ export function useTeamFixture(
 			"agent_groups",
 			"agent_group_messages",
 			"agent_group_cursors",
+			"agent_outbox",
 			"prompt_history",
 			"skills",
 			"skill_versions",
@@ -383,66 +357,68 @@ export function useTeamFixture(
 		removedSchedules.length = 0;
 		stops.length = 0;
 		eventLog.length = 0;
-		team = new AgentTeam({
-			owner: TEST_OWNER,
-			toolTiers: FIXTURE_TIERS,
-			shellUser: "mcops",
-			guildId: local ? "local" : "1",
-			...(local
-				? { coordinator: "coordinator" }
-				: { entryChannelId: ENTRY, channels }),
-			seeds: () => seeds(local ? undefined : ENTRY),
-			store,
-			surfaces,
-			studio: options.studio?.() ?? {
-				url: (hash) => `https://x/avatars/${hash ?? "default"}.png`,
-				render: async (spec) =>
-					new Bun.CryptoHasher("sha256")
-						.update(JSON.stringify(spec))
-						.digest("hex"),
-				draw: async () => "a".repeat(64),
-				edit: async () => "b".repeat(64),
-			},
-			runtime: () => runtime,
-			pluginSelection: () => PLUGIN_SELECTION,
-			confirmations: { approves: async (_p, reply) => reply.includes("yes") },
-			scorer: { score: async () => script.scores },
-			events: {
-				turnStarted: (turn) => eventLog.push(`turnStarted ${turn.agent}`),
-				turnEnded: (turn) =>
-					eventLog.push(`turnEnded ${turn.agent} ${turn.result}`),
-				changed: () => eventLog.push("changed"),
-			},
-			promptSections: () => script.prompt,
-			pluginTools: () => script.tools,
-			models: {
-				defaults: {
-					model: "claude-bridge/claude-opus-5-5",
-					thinking: "medium",
+		build = () =>
+			new AgentTeam({
+				owner: TEST_OWNER,
+				toolTiers: FIXTURE_TIERS,
+				shellUser: "mcops",
+				guildId: local ? "local" : "1",
+				...(local
+					? { coordinator: "coordinator" }
+					: { entryChannelId: ENTRY, channels }),
+				seeds: () => seeds(local ? undefined : ENTRY),
+				store,
+				surfaces,
+				studio: options.studio?.() ?? {
+					url: (hash) => `https://x/avatars/${hash ?? "default"}.png`,
+					render: async (spec) =>
+						new Bun.CryptoHasher("sha256")
+							.update(JSON.stringify(spec))
+							.digest("hex"),
+					draw: async () => "a".repeat(64),
+					edit: async () => "b".repeat(64),
 				},
-				usable: async () => USABLE,
-			},
-			schedules: {
-				forChannel: async (channel) =>
-					channel === discordKey("2000")
-						? [{ id: 7 }]
-						: channel === "app:agent.doctor"
-							? [{ id: 8 }]
-							: [],
-				remove: async (id) => removedSchedules.push(id),
-			},
-			queue,
-			startTyping: () => () => undefined,
-			showStop: (channel) => {
-				stops.push(`show ${channel}`);
-				return () => stops.push(`hide ${channel}`);
-			},
-			workDir: "/tmp/agents/work",
-			sharedPrompt: () => script.shared,
-			guestPrompt: () => script.guest,
-			skills,
-			logger: silentLogger(),
-		});
+				runtime: () => runtime,
+				pluginSelection: () => PLUGIN_SELECTION,
+				confirmations: { approves: async (_p, reply) => reply.includes("yes") },
+				scorer: { score: async () => script.scores },
+				events: {
+					turnStarted: (turn) => eventLog.push(`turnStarted ${turn.agent}`),
+					turnEnded: (turn) =>
+						eventLog.push(`turnEnded ${turn.agent} ${turn.result}`),
+					changed: () => eventLog.push("changed"),
+				},
+				promptSections: () => script.prompt,
+				pluginTools: () => script.tools,
+				models: {
+					defaults: {
+						model: "claude-bridge/claude-opus-5-5",
+						thinking: "medium",
+					},
+					usable: async () => USABLE,
+				},
+				schedules: {
+					forChannel: async (channel) =>
+						channel === discordKey("2000")
+							? [{ id: 7 }]
+							: channel === "app:agent.doctor"
+								? [{ id: 8 }]
+								: [],
+					remove: async (id) => removedSchedules.push(id),
+				},
+				queue,
+				startTyping: () => () => undefined,
+				showStop: (channel) => {
+					stops.push(`show ${channel}`);
+					return () => stops.push(`hide ${channel}`);
+				},
+				workDir: "/tmp/agents/work",
+				sharedPrompt: () => script.shared,
+				guestPrompt: () => script.guest,
+				skills,
+				logger: silentLogger(),
+			});
+		team = build();
 		await team.start();
 		Object.assign(fx, {
 			store,
@@ -456,6 +432,16 @@ export function useTeamFixture(
 		});
 		await settle();
 	}, HOOK_TIMEOUT_MS);
+}
+
+/** Starts the team again over the same database, as a restarted host: a new queue, runtime and team. */
+export async function restart(): Promise<void> {
+	queue = channelQueue();
+	runtime = new FakeRuntime();
+	team = build();
+	await team.start();
+	Object.assign(fx, { queue, runtime, team });
+	await settle();
 }
 
 export const opsGroup = () => {

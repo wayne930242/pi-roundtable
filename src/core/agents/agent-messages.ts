@@ -1,9 +1,11 @@
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import { HostStoppingError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { addressee } from "../speakers.ts";
+import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
 	agentMessageText,
@@ -30,9 +32,18 @@ import {
 /** Messages between agents: each runs the target's turn, then wakes the sender with the answer. */
 export class AgentMessages {
 	readonly #host: TurnHost;
+	/** The writes of entries the host refused while it stopped, which the shutdown waits for. */
+	readonly #keeping = new Set<Promise<void>>();
+	/** The last write, which the next waits for: ids follow the order the queue refused the entries in. */
+	#lastKept: Promise<void> = Promise.resolve();
 
 	constructor(host: TurnHost) {
 		this.#host = host;
+	}
+
+	/** What is still being written to the outbox; the shutdown drain waits until it is empty. */
+	busy(): string[] {
+		return this.#keeping.size > 0 ? ["agent messages being kept"] : [];
 	}
 
 	message(caller: AgentTurnScope, to: string, text: string): string {
@@ -66,12 +77,27 @@ export class AgentMessages {
 			.run(targetChannel, async () =>
 				this.#deliver(sender, target, text, chain, await exchange, via),
 			)
-			.catch((error: unknown) =>
+			.catch((error: unknown) => {
+				if (error instanceof HostStoppingError) {
+					// Refused before it started: the thread it opened has nothing more to hold.
+					void exchange.then((opened) => opened?.thread.close());
+					this.#keep({
+						kind: "message",
+						sender: sender.name,
+						target: target.name,
+						channel: targetChannel,
+						text,
+						...(via === undefined ? {} : { via }),
+						speaker: chain.speaker,
+						messages: chain.messages,
+					});
+					return;
+				}
 				logger.error(
 					{ from: sender.name, to: target.name, err: error },
 					"agent message not delivered",
-				),
-			);
+				);
+			});
 		logger.info(
 			{ from: sender.name, to: target.name, chain: chain.messages },
 			"agent message queued",
@@ -197,21 +223,139 @@ export class AgentMessages {
 		// The answer is a report back to the sender, so its turn may ask the owner on cards.
 		void queue
 			.run(senderChannel, () =>
-				this.#host.turn(
-					current,
-					via === undefined
-						? homeScope(current)
-						: roomScope(current, senderChannel),
-					senderChannel,
-					followUp,
-					chain,
-					{
-						interactive: true,
-					},
-				),
+				this.#followUp(current, senderChannel, followUp, chain, via),
 			)
-			.catch((error: unknown) =>
-				logger.error({ err: error }, "agent follow-up failed"),
+			.catch((error: unknown) => {
+				if (error instanceof HostStoppingError) {
+					// The sender would wait for this answer forever, so it waits in the outbox for the next start.
+					this.#keep({
+						kind: "reply",
+						sender: current.name,
+						target: target.name,
+						channel: senderChannel,
+						text: followUp,
+						...(via === undefined ? {} : { via }),
+						speaker: chain.speaker,
+						messages: chain.messages,
+					});
+					return;
+				}
+				logger.error({ err: error }, "agent follow-up failed");
+			});
+	}
+
+	/** The sender's turn that carries the target's answer; it may ask the owner on cards, as a report back does. */
+	#followUp(
+		sender: Agent,
+		channel: ChannelKey,
+		text: string,
+		chain: Chain,
+		via: string | undefined,
+	) {
+		return this.#host.turn(
+			sender,
+			via === undefined ? homeScope(sender) : roomScope(sender, channel),
+			channel,
+			text,
+			chain,
+			{ interactive: true },
+		);
+	}
+
+	/** Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. */
+	#keep(entry: OutboxEntry): void {
+		const { store, logger } = this.#host.options;
+		const write = this.#lastKept
+			.then(() => store.outbox.keep(entry))
+			.then(
+				() =>
+					logger.info(
+						{ kind: entry.kind, from: entry.sender, to: entry.target },
+						"agent message kept for the next start",
+					),
+				(error: unknown) =>
+					logger.error(
+						{
+							kind: entry.kind,
+							from: entry.sender,
+							to: entry.target,
+							err: error,
+						},
+						"agent message lost: not kept for the next start",
+					),
 			);
+		this.#lastKept = write;
+		this.#keeping.add(write);
+		void write.finally(() => this.#keeping.delete(write));
+	}
+
+	/**
+	 * Delivers what the last run kept, oldest first, each through the queue of the conversation it
+	 * addressed; never rejects. An entry is taken out of the outbox when its turn starts, so it runs
+	 * once even with a second replay or another host reading the same table; one the queue refuses
+	 * stays for the next start.
+	 */
+	async replay(): Promise<void> {
+		const { store, queue, logger } = this.#host.options;
+		// A failed read leaves the entries kept for the next start and does not fail this one.
+		const entries = await store.outbox.pending().catch((error: unknown) => {
+			logger.error({ err: error }, "kept agent messages not read");
+			return [];
+		});
+		if (entries.length === 0) return;
+		logger.info({ count: entries.length }, "replaying agent messages");
+		for (const entry of entries)
+			void queue
+				.run(entry.channel, () => this.#replayOne(entry))
+				.catch((error: unknown) => {
+					if (error instanceof HostStoppingError)
+						logger.info(
+							{ id: entry.id },
+							"agent message stays kept: the host is stopping",
+						);
+					else
+						logger.error(
+							{ id: entry.id, err: error },
+							"agent message not replayed",
+						);
+				});
+	}
+
+	async #replayOne(entry: StoredOutboxEntry): Promise<void> {
+		const { store, logger } = this.#host.options;
+		if (!(await store.outbox.claim(entry.id))) return;
+		const sender = store.agent(entry.sender);
+		const target = store.agent(entry.target);
+		// An agent archived or moved to another channel since has no turn to give the entry.
+		const home = (agent: Agent | undefined) =>
+			agent?.status === "active" && (entry.via !== undefined || agent.channelId)
+				? this.#home(agent, entry.via)
+				: undefined;
+		const owner = entry.kind === "message" ? target : sender;
+		if (!sender || !target || home(owner) !== entry.channel) {
+			logger.warn(
+				{ id: entry.id, from: entry.sender, to: entry.target },
+				"kept agent message dropped: its agent or channel is gone",
+			);
+			return;
+		}
+		logger.info(
+			{ id: entry.id, kind: entry.kind, from: entry.sender, to: entry.target },
+			"replaying a kept agent message",
+		);
+		const chain: Chain = { messages: entry.messages, speaker: entry.speaker };
+		if (entry.kind === "reply") {
+			await this.#followUp(sender, entry.channel, entry.text, chain, entry.via);
+			return;
+		}
+		// Its thread was closed when the host refused it, so the answer returns to the sender's room.
+		await this.#exchange(
+			sender,
+			target,
+			entry.text,
+			chain,
+			undefined,
+			entry.via,
+		);
 	}
 }
