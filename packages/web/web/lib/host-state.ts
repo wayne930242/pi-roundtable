@@ -36,7 +36,9 @@ let state: HostState = {
 	lists: {},
 	pages: {},
 };
-const { emit, use } = signal();
+const { emit, use, subscribe: subscribeHost } = signal();
+
+export { subscribeHost };
 
 function set(change: Partial<HostState>): void {
 	state = { ...state, ...change };
@@ -46,6 +48,10 @@ function set(change: Partial<HostState>): void {
 /** What a component reads of the host state; `select` returns a held value, never a new object. */
 export const useHost = <T>(select: (current: HostState) => T): T =>
 	use(() => select(state));
+
+/** Every room's unread messages together, for the tab's title and icon. */
+export const totalUnread = (): number =>
+	Object.values(state.unread).reduce((sum, count) => sum + count, 0);
 
 const NONE: readonly never[] = [];
 export const noReads: readonly ReadMarkView[] = NONE;

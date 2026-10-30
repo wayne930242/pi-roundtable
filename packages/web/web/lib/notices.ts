@@ -91,6 +91,9 @@ function subscribe(listener: Listener): () => void {
 	return () => listeners.delete(listener);
 }
 
+/** Calls `listener` after the notices or the count change; returns how to stop. */
+export const subscribeNotices = subscribe;
+
 export function useNotices(): NoticeState {
 	return useSyncExternalStore(subscribe, noticeState, noticeState);
 }
