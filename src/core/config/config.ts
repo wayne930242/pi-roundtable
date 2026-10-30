@@ -31,8 +31,13 @@ import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema } from "./config-schema.ts";
 import type { ConversationsConfig } from "./conversations.ts";
 import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
-import { opsOf, type ResolvedOps } from "./ops.ts";
+import { opsOf, opsOfPlace, type ResolvedOps } from "./ops.ts";
 import { type ProfilesConfig, profileRulesOf } from "./profiles.ts";
+import {
+	type ResolvedRouting,
+	type RoutingConfig,
+	routingOf,
+} from "./routing.ts";
 import type { SkillsConfig } from "./skills-config.ts";
 
 export type { DiscordConfig };
@@ -217,8 +222,16 @@ export interface RoundtableConfig extends LimitsConfig {
 	 * `discord`), or to a conversation, by its key `<surface>:<id>`, as a visible message and a
 	 * report turn its claim answers. The host does not start when no chat surface serves the
 	 * conversation or no plugin's claim owns it; the web chat takes no error reports.
+	 * @deprecated An alias of `routing.places.ops` since 0.27, which also accepts an agent whose
+	 * primary place is not Discord; removed in 1.0. Setting both stops the start.
 	 */
 	ops?: { agent: string } | { conversation: string };
+	/**
+	 * Where events no person waits on land: the agents' primary places, where a webhook's report,
+	 * a `message_agent` call and an opening task go, and the named places such as `ops`. Left out,
+	 * every one lands where it did before the key existed.
+	 */
+	routing?: RoutingConfig;
 	/**
 	 * Seconds a shutdown waits for running turns before stopping them; default 180. Give the
 	 * service manager a stop timeout a minute longer, such as systemd's `TimeoutStopSec`.
@@ -234,6 +247,10 @@ export interface RoundtableConfig extends LimitsConfig {
 	interimPrimaryChars?: number;
 	plugins?: RoundtablePlugin[];
 }
+
+/** Logged once when the top-level `ops` is set: it is an alias of the `ops` place. */
+export const OPS_DEPRECATION =
+	"`ops` is an alias of `routing.places.ops` since 0.27 and goes away in 1.0; move it there";
 
 /** Logged once when `avatar` is set: agents are composed characters and no picture is drawn from it. */
 export const AVATAR_DEPRECATION =
@@ -310,6 +327,10 @@ export interface ResolvedConfig extends ResolvedLimits {
 	skills: false | SkillsConfig;
 	memory: boolean;
 	ops?: ResolvedOps;
+	/** The config key `ops` came from, as error messages name it. */
+	opsKey: "ops" | "routing.places.ops";
+	/** The checked `routing` block; undefined when the configuration has none. */
+	routing?: ResolvedRouting;
 	drainMs: number;
 	interimText: InterimTextMode;
 	interimPrimaryChars: number;
@@ -353,7 +374,15 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 	checkAgentTeamKeys(config, discord !== undefined);
 	const slug =
 		discord?.rootCommand ?? name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-	const ops = opsOf(config.ops, discord !== undefined);
+	const routing = routingOf(config.routing, {
+		withDiscord: discord !== undefined,
+		agentServer:
+			agentServer &&
+			(discord !== undefined || (config.agents?.length ?? 0) > 0),
+		topLevelOps: config.ops !== undefined,
+	});
+	const ops =
+		opsOf(config.ops, discord !== undefined) ?? opsOfPlace(routing?.places.ops);
 	const access = accessOf(config, discord !== undefined);
 	const { primaryOwner } = access;
 	return {
@@ -364,6 +393,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		deprecations: [
 			...access.deprecations,
 			...(config.avatar ? [AVATAR_DEPRECATION] : []),
+			...(config.ops ? [OPS_DEPRECATION] : []),
 		],
 		owner: {
 			id: primaryOwner.id,
@@ -444,6 +474,8 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			: false,
 		memory: config.memory ?? true,
 		...(ops ? { ops } : {}),
+		opsKey: config.ops ? "ops" : "routing.places.ops",
+		...(routing ? { routing } : {}),
 		drainMs: (config.drainSeconds ?? DRAIN_LIMIT_MS / 1_000) * 1_000,
 		...limitsOf(config),
 		interimText: config.interimText ?? "on",

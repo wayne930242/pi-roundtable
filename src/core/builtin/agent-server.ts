@@ -9,8 +9,10 @@ import { DiscordAgentTeam } from "../agents/agent-team.ts";
 import { AGENT_TOOLS } from "../agents/agent-tools.ts";
 import { FileAvatarStudio } from "../agents/avatar-studio.ts";
 import { RelevanceScorer } from "../agents/group-round.ts";
-import { discordKey } from "../agents/team-keys.ts";
+import { Routes } from "../agents/routes.ts";
+import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
+import type { ResolvedRouting } from "../config/routing.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
@@ -116,6 +118,8 @@ export interface AgentServerOptions {
 	avatarNeutral?: string;
 	/** Reports the process's own errors to an agent; without one nothing is reported. */
 	errorReporter?: ErrorReporter;
+	/** The checked `routing` block: where work no person started lands. Without it every place is what it was before `routing`. */
+	routing?: ResolvedRouting;
 }
 
 /** The name of the agent server's plugin, as `serviceStarted` events name it. */
@@ -186,6 +190,7 @@ export function agentServerPlugin(
 	const teamId = options.guildId ?? LOCAL_TEAM_ID;
 	/** Set once the plugin has set up; the preflight reads it after every plugin linked. */
 	let hostsRooms: (() => boolean) | undefined;
+	let linkRoutes: (() => void) | undefined;
 	return {
 		name: AGENT_SERVER_PLUGIN,
 		// The agent server's own tables; the host runs them before any setup, in this order. The
@@ -200,6 +205,8 @@ export function agentServerPlugin(
 				throw new ConfigError(
 					"the agents need a surface that hosts their rooms, such as pi-roundtable-web, and none is installed. Without Discord channels there is nowhere to talk to them; add a plugin whose chat surface declares agentRooms: true, or configure discord.",
 				);
+			// The surfaces the rules name exist only once every plugin has registered its own.
+			linkRoutes?.();
 		},
 		setup: async (context) => {
 			// Absent on a host without Discord: then the team has no channels or dashboard.
@@ -261,7 +268,21 @@ export function agentServerPlugin(
 					: undefined;
 			const sharedPrompt = shared ? () => shared.text() : undefined;
 			const guestPrompt = guest ? () => guest.text() : undefined;
+			const routes = new Routes({
+				routing: options.routing,
+				store,
+				roomSurfaces: () => surfaces.roomSurfaces(),
+				latest: (agent) => store.conversations.latest(agent),
+				logger,
+			});
+			// The surfaces the rules name are registered by the time every plugin has set up.
+			linkRoutes = () =>
+				routes.validate({
+					names: surfaces.names?.() ?? [],
+					discordChannels: connection !== undefined,
+				});
 			const built: DiscordAgentTeam = new DiscordAgentTeam({
+				routes,
 				guildId: teamId,
 				...(options.entryChannelId !== undefined
 					? { entryChannelId: options.entryChannelId }
@@ -349,6 +370,7 @@ export function agentServerPlugin(
 				runtime: running,
 				approvals: confirmations,
 				avatars: studio,
+				routes,
 				workspace: {
 					workDir: options.workDir,
 					...(agentSessions.scratchDir
@@ -373,7 +395,7 @@ export function agentServerPlugin(
 				options.errorReporter?.connect({
 					channelOf: (name) =>
 						store.agent(name)?.status === "active"
-							? built.roomsOf(name)[0]
+							? routes.primary(name)
 							: undefined,
 					post: (channel, text) =>
 						surfaces.sendReply(channel, { chunks: splitReply(text) }),
@@ -411,6 +433,12 @@ export function agentServerPlugin(
 						team: built,
 						runtime: running,
 						surface: context.surfaces,
+						integrationChannel: (origin) => {
+							const agent = agentOfChannel(store, surfaces, origin);
+							return agent
+								? routes.of(agent.name, "integration", origin)
+								: origin;
+						},
 						attachmentDir,
 						...(options.attachmentDownload
 							? { attachmentDownload: options.attachmentDownload }

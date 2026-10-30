@@ -62,6 +62,7 @@ export class AgentMessages {
 				roomSurfaces: surfaces?.roomSurfaces() ?? [],
 				latest: store.conversations.latest(target.name),
 				from: parent,
+				routes: this.#host.routes,
 			},
 			target,
 			conversation,

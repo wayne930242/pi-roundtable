@@ -60,6 +60,7 @@ export function surfacePort(
 			linked()
 				.filter((surface) => surface.agentRooms === true)
 				.map((surface) => surface.surface),
+		names: () => linked().map((surface) => surface.surface),
 		interim: (channel, as) => of(channel)?.interim?.(channel, as),
 		progress: async (channel, event) => {
 			await of(channel)?.progress?.(channel, event);

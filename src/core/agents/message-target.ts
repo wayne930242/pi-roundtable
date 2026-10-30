@@ -2,13 +2,8 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentDirectory } from "../services.ts";
 import type { Agent } from "./agent-store.ts";
-import {
-	agentRoomKey,
-	discordIdOf,
-	discordKey,
-	keysOf,
-	roomSurfaceOf,
-} from "./team-keys.ts";
+import { Routes } from "./routes.ts";
+import { agentRoomKey, discordKey, keysOf } from "./team-keys.ts";
 
 /** What the choice of a message's conversation reads. */
 export interface MessageTargetContext {
@@ -19,6 +14,8 @@ export interface MessageTargetContext {
 	latest: ChannelKey | undefined;
 	/** The conversation the sender writes from. */
 	from: ChannelKey;
+	/** The host's routing table; without it the defaults every host had before `routing`. */
+	routes?: Pick<Routes, "of">;
 }
 
 /** The word for the web app's conversation, accepted when exactly one surface hosts rooms. */
@@ -27,8 +24,9 @@ const WEB = "web";
 /**
  * The conversation of `target` that a message is delivered into. With `ask` (a surface name such
  * as "discord", "web", or the surface of a room, or one of the target's conversation keys) that
- * one; otherwise the conversation the target used most recently, except that a message from a room
- * never follows it out to Discord, and, when it has run none yet, the sender's own surface, so a message between rooms stays among the rooms.
+ * one; otherwise the conversation the routing table picks (`Routes.of`): by default the one the
+ * target used most recently, which a message from a room never follows out to Discord, and, when
+ * it has run none yet, the sender's own surface, so a message between rooms stays among the rooms.
  */
 export function messageTarget(
 	ctx: MessageTargetContext,
@@ -38,20 +36,14 @@ export function messageTarget(
 	const keys = keysOf(ctx.store, target.name, ctx.roomSurfaces);
 	const has = keys.length > 0 ? keys.join(", ") : "none";
 	if (ask === undefined || ask.trim() === "") {
-		const via = roomSurfaceOf(ctx.from);
-		// From a room, never out to Discord: its content may be for the owners alone.
-		const outward =
-			via !== undefined &&
-			ctx.latest !== undefined &&
-			discordIdOf(ctx.latest) !== undefined;
-		if (ctx.latest !== undefined && keys.includes(ctx.latest) && !outward)
-			return ctx.latest;
-		if (via === undefined) {
-			if (!target.channelId)
-				throw new AgentError(`${target.name} has no channel yet.`);
-			return discordKey(target.channelId);
-		}
-		return agentRoomKey(via, target.name);
+		const routes =
+			ctx.routes ??
+			new Routes({
+				store: ctx.store,
+				roomSurfaces: () => ctx.roomSurfaces,
+				latest: () => ctx.latest,
+			});
+		return routes.of(target.name, "agentMessage", ctx.from);
 	}
 	const wanted = ask.trim();
 	const exact = keys.find((key) => key === wanted);

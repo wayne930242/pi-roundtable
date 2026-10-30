@@ -245,6 +245,7 @@ function agentAssembly(
 			...(config.characters.refreshAvatars ? { refreshAvatars: true } : {}),
 			avatarReference: join(ASSETS, "neutral.png"),
 			avatarNeutral: join(ASSETS, "neutral.png"),
+			...(config.routing ? { routing: config.routing } : {}),
 			// An ops agent's reports are the agent server's to deliver.
 			...(errorReporter && "agent" in errorReporter.destination
 				? { errorReporter }
@@ -280,7 +281,11 @@ export async function defineRoundtable(
 		}));
 	const registry = new ModelRegistry(modelRuntime);
 	const errorReporter = config.ops
-		? new ErrorReporter({ destination: config.ops, app: name })
+		? new ErrorReporter({
+				destination: config.ops,
+				app: name,
+				configKey: config.opsKey === "ops" ? "ops.conversation" : config.opsKey,
+			})
 		: undefined;
 	const { errorSink } = overrides;
 	const logger: Logger =

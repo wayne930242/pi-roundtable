@@ -10,6 +10,7 @@ import type { Pronouns } from "./config.ts";
 import { conversationsShape } from "./conversations.ts";
 import { limitsShape } from "./limits.ts";
 import { profilesShape } from "./profiles.ts";
+import { routingShape } from "./routing.ts";
 import {
 	bool,
 	characterInput,
@@ -142,6 +143,7 @@ export const configSchema = shape({
 	skills: optional(skillsField),
 	memory: optional(bool),
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
+	routing: routingShape,
 	drainSeconds: optional(integer(1, 3_600)),
 	...limitsShape,
 	interimText: optional(oneOf<InterimTextMode>("on", "off")),

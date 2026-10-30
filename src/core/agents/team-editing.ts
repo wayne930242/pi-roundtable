@@ -17,7 +17,8 @@ import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
-import { agentRoomKey, discordKey, keysOf, seatsOf } from "./team-keys.ts";
+import { routesOf } from "./routes.ts";
+import { agentRoomKey, keysOf, seatsOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 
@@ -269,14 +270,15 @@ export class TeamEditing {
 				agent,
 				text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}.`,
 			};
-		// The opening task runs in the room of the surface that asked, else where the agent is first
-		// reached: its channel, else its first room.
-		const home =
-			who.openIn !== undefined && rooms.includes(who.openIn)
-				? agentRoomKey(who.openIn, agent.name)
-				: channelId
-					? discordKey(channelId)
-					: keysOf(store, agent.name, rooms)[0];
+		// The opening task runs where the routing table puts it: by default the agent's place on the
+		// surface that asked, else its primary place.
+		const home = routesOf(this.#ctx.options).of(
+			agent.name,
+			"opening",
+			who.openIn === undefined
+				? undefined
+				: agentRoomKey(who.openIn, agent.name),
+		);
 		if (!home) {
 			logger.warn(
 				{ agent: agent.name },

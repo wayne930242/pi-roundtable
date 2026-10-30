@@ -32,3 +32,11 @@ export function opsOf(
 		);
 	return { conversation: conversation as ChannelKey };
 }
+
+/** The error reports' destination that `routing.places.ops` names: a conversation, or an agent's primary place. */
+export function opsOfPlace(
+	place: ChannelKey | { agent: string } | undefined,
+): ResolvedOps | undefined {
+	if (place === undefined) return undefined;
+	return typeof place === "string" ? { conversation: place } : place;
+}

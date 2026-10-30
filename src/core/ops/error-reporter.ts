@@ -46,6 +46,8 @@ export interface ErrorReporterOptions {
 	destination: ErrorReportDestination;
 	/** The name the reports give the process, such as "Roundtable". */
 	app: string;
+	/** The configuration key the destination was written under, as startup errors name it; default `ops.conversation`. */
+	configKey?: string;
 	ignored?: readonly RegExp[];
 	/** Replaceable in tests. */
 	now?: () => number;
@@ -62,6 +64,7 @@ export interface ErrorReporterOptions {
  */
 export class ErrorReporter {
 	readonly destination: ErrorReportDestination;
+	readonly configKey: string;
 	readonly #app: string;
 	readonly #ignored: readonly RegExp[];
 	readonly #now: () => number;
@@ -80,6 +83,7 @@ export class ErrorReporter {
 
 	constructor(options: ErrorReporterOptions) {
 		this.destination = options.destination;
+		this.configKey = options.configKey ?? "ops.conversation";
 		this.#app = options.app;
 		this.#ignored = options.ignored ?? IGNORED_ERRORS;
 		this.#now = options.now ?? Date.now;
