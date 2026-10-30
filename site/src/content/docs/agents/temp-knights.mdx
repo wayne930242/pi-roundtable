@@ -1,0 +1,73 @@
+---
+title: Temp knights
+description: Let a knight make helpers for one task, see them under it, and clear them when they are done.
+sidebar:
+  order: 7
+---
+
+A temp knight is a helper that a knight makes for one task and clears when the task is done.
+It is a real agent, with its own prompt, picture and conversation, so you can open its room and talk to it.
+It is not a member of the team: it takes no seat in a group and no seat at the round table.
+
+## Ask for helpers
+
+You do not make one yourself.
+Ask a knight for work that splits into parts that can run on their own:
+
+```text
+Compare these three papers. Give each paper to its own helper, then merge what they find.
+```
+
+The knight calls `helper_create` once per part, and ends its turn.
+Each temp knight starts at once.
+Its answer comes back to the knight's conversation as a new turn, the way a `message_agent` answer does.
+When the answers are in, the knight merges them and calls `helper_end` to clear the helpers that are done.
+
+| Field of `helper_create` | What it is |
+| --- | --- |
+| `display_name` | The name shown on its messages, 1 to 32 characters. |
+| `prompt` | Who the helper is. |
+| `task` | The task, self-contained: what to do, what to read, and what to answer with. |
+| `name` | Optional. The permanent name. Without one, it is the knight's name and the next free number, such as `researcher-1`. |
+| `class`, `color` | Optional. Its look. |
+| `model`, `thinking` | Optional. They default to the knight's own. |
+| `skills` | Optional. Skills from `skill_list`, while the skills addon is on. |
+
+A temp knight has no agent, group, archive, channel-arrange or schedule tools, and it cannot make temp knights of its own.
+Both tools are on the `member` tier.
+
+## Limits and cleanup
+
+- A knight has at most 4 temp knights at once, and the host at most 12.
+  At a limit, the knight's oldest finished temp knight is archived to make room.
+  The call is refused only when every one of them is busy.
+- A temp knight is *finished* when nothing runs for it, nothing is queued, no card waits for you and no message from its knight is unanswered.
+  The knight does not have to say so.
+- A finished temp knight is archived by itself after 24 hours.
+- An archived temp knight keeps its history.
+  Restore it from the archive page, or with **Undo** in the notice that follows a clearing.
+
+Change the numbers, or turn the tools off, with the `helpers` setting:
+
+```ts
+defineRoundtable({
+	helpers: { perParent: 4, perHost: 12, archiveFinishedAfterHours: 24 },
+	// helpers: false,  // offers neither helper_create nor helper_end
+});
+```
+
+`perParent` is 1 to 8, `perHost` 1 to 50 and `archiveFinishedAfterHours` 1 to 720, or `false` to keep them until you clear them.
+A value out of range stops the start, and so does a `perParent` above `perHost`.
+
+## Where they live
+
+On Discord, a temp knight is a thread under its knight's channel.
+Its messages show under its own name and picture.
+Archiving it archives and locks the thread, and restoring it opens the thread again.
+In the web app, a temp knight is a room, listed under its knight.
+
+In the owner app, the temp knights hang under their knight in the room list, each with a small face and a state: working, waiting for you, or ended.
+**Clear finished temp knights** is in the room list's menu, in a folder's menu and in a knight's menu.
+It archives them at once, and the notice offers **Undo**.
+A temp knight's own menu has **Archive this temp knight**.
+When a knight clears its helpers itself, its room shows a line that names them, with an **Undo** too.

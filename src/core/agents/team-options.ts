@@ -1,3 +1,4 @@
+import type { ResolvedHelpers } from "../config/helpers.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { ThinkingSetting } from "../models.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
@@ -64,6 +65,11 @@ export interface AgentTeamOptions
 	skills?: SkillRegistry;
 	/** The conversation modes, read when an agent is created with long-running on; none, none is set. */
 	modes?: () => ConversationModes | undefined;
+	/**
+	 * The temp knights' limits; `false` leaves `helper_create` and `helper_end` out. Without it the
+	 * defaults apply.
+	 */
+	helpers?: ResolvedHelpers | false;
 }
 
 /** What the team's collaborators share: its options, its turns, and its change signal. */
@@ -76,4 +82,6 @@ export interface TeamContext {
 	modelOf(name: string): { model: string; thinking: ThinkingSetting };
 	/** Writes a group's members and host into its channel topic, without waiting on Discord. */
 	retitle(group: AgentGroup): void;
+	/** Archives temp knights, closing their threads; says which were archived. */
+	archiveHelpers(names: readonly string[]): Promise<string[]>;
 }

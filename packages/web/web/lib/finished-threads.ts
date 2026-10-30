@@ -31,3 +31,24 @@ export const finishedUnder = (
 /** Every listed thread, open or finished, under the named rooms. */
 export const threadsUnder = (parents: readonly string[]): string[] =>
 	[...threadsByRoom(new Set(parents), () => true).values()].flat();
+
+/**
+ * The names of the finished temp knights the list shows under each room, by that room; with
+ * `parents`, only those rooms'. A temp knight whose room the list does not hold is left out.
+ */
+export function finishedHelpersUnder(
+	parents?: readonly string[],
+): Map<string, string[]> {
+	const state = store.getState();
+	const wanted = parents && new Set(parents);
+	const byRoom = new Map<string, string[]>();
+	for (const key of state.order) {
+		const view = state.rooms[key]?.view;
+		const parent = view?.helper?.parent;
+		if (!view || !parent || view.helper?.finished !== true) continue;
+		if (wanted && !wanted.has(parent)) continue;
+		if (!state.rooms[parent]?.view) continue;
+		byRoom.set(parent, [...(byRoom.get(parent) ?? []), view.name]);
+	}
+	return byRoom;
+}

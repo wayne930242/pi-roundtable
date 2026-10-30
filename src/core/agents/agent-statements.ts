@@ -40,12 +40,22 @@ export class AgentStatements {
 		channelId: string | null;
 		avatarHash: string | null;
 		character: CharacterSpec | null;
+		/** The knight that made it as a temp knight, which starts out working. */
+		parent: string | null;
 	}): Promise<AgentRow[]> {
 		return this.#sql`
-			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character)
+			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character, parent)
 			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName}, ${agent.prompt}, ${agent.avatarPrompt},
 				${agent.channelId}, ${agent.avatarHash},
-				${agent.character}::jsonb)
+				${agent.character}::jsonb, ${agent.parent})
+			RETURNING *`;
+	}
+
+	/** Stamps a temp knight finished at `at`, or clears the stamp with null; a permanent knight is left alone. */
+	setFinished(name: string, at: Date | null): Promise<AgentRow[]> {
+		return this.#sql`
+			UPDATE agents SET finished_at = ${at}
+			WHERE guild_id = ${this.#guild} AND name = ${name} AND parent IS NOT NULL
 			RETURNING *`;
 	}
 
@@ -85,9 +95,11 @@ export class AgentStatements {
 			WHERE guild_id = ${this.#guild} AND name = ${name} RETURNING *`;
 	}
 
+	/** A restored temp knight has nothing running, so it comes back finished. */
 	restoreAgent(name: string, channelId: string | null): Promise<AgentRow[]> {
 		return this.#sql`
 			UPDATE agents SET status = 'active', channel_id = ${channelId},
+				finished_at = CASE WHEN parent IS NULL THEN NULL ELSE now() END,
 				updated_at = now()
 			WHERE guild_id = ${this.#guild} AND name = ${name}
 			RETURNING *`;

@@ -20,6 +20,8 @@ export function dashboardEn(ctx: CatalogContext) {
 		dashNotActive: "No activity since startup",
 		dashAgentFooter: (schedules: number, last: string) =>
 			`-# Schedules ${schedules} · ${last}`,
+		dashHelpers: (count: number, working: number) =>
+			`-# ${count} temp knight${count === 1 ? "" : "s"}, ${working} working`,
 		dashGroupBusy: (busy: number) => `🟠 ${busy} in progress`,
 		dashGroupMembers: (members: readonly string[], host: string) =>
 			`Members: ${members.join(", ")} | Host: ${host}`,
@@ -56,6 +58,8 @@ export function dashboardZhTW(
 		dashNotActive: "啟動後尚未活動",
 		dashAgentFooter: (schedules: number, last: string) =>
 			`-# 排程 ${schedules} · ${last}`,
+		dashHelpers: (count: number, working: number) =>
+			`-# 臨時騎士 ${count} 位，${working} 位工作中`,
 		dashGroupBusy: (busy: number) => `🟠 進行中（${busy} 則）`,
 		dashGroupMembers: (members: readonly string[], host: string) =>
 			`成員：${members.join("、")}｜主持：${host}`,

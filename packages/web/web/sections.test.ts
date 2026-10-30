@@ -188,3 +188,55 @@ test("a folder's mute is none, some or all of its rooms, and an empty folder is 
 	expect(muteState([A, C], is)).toBe("some");
 	expect(muteState([A, B], is)).toBe("all");
 });
+
+const helperOf = (name: string, parent: string, over: Partial<RoomView> = {}) =>
+	view(`app:agent.${name}`, {
+		helper: { parent, parentName: parent.slice(parent.indexOf(".") + 1) },
+		muted: true,
+		...over,
+	});
+
+test("a temp knight hangs under its knight's room among the open threads and is no room of its own", () => {
+	const one = helperOf("a-1", A);
+	const two = helperOf("a-2", A);
+	const arrangement = sections(
+		input([view(HOME, { home: true }), view(A), one, two, view(B)]),
+		at,
+	);
+	expect(arrangement.rest).toEqual([A, B]);
+	expect(arrangement.restAgents).toEqual([A, B]);
+	expect(arrangement.threads[A]).toEqual({
+		open: [one.key, two.key],
+		closed: [],
+	});
+	expect(arrangement.orphans).toEqual({ open: [], closed: [] });
+});
+
+test("a temp knight follows its knight's pin and folder, and a pin naming it is ignored", () => {
+	const one = helperOf("a-1", A);
+	const arrangement = sections(
+		input(
+			[view(HOME, { home: true }), view(A), one, view(B)],
+			[A, one.key],
+			[{ id: "folder.x", name: "Work", rooms: [B] }],
+		),
+		at,
+	);
+	expect(arrangement.pinned).toEqual([A]);
+	expect(arrangement.threads[A]?.open).toEqual([one.key]);
+	expect(arrangement.folders[0]?.rooms).toEqual([B]);
+});
+
+test("a temp knight whose knight the list does not hold is listed as a room, and the switcher lists no temp knight under a knight", () => {
+	const lost = helperOf("z-1", "app:agent.gone");
+	expect(sections(input([view(HOME, { home: true }), lost]), at).rest).toEqual([
+		lost.key,
+	]);
+	const kept = helperOf("a-1", A);
+	const groups = drawerGroups(
+		input([view(HOME, { home: true }), view(A), kept]),
+		at,
+		() => false,
+	);
+	expect(groups.flatMap((group) => group.keys)).toEqual([HOME, A]);
+});

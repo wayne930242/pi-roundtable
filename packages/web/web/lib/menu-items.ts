@@ -13,6 +13,7 @@ import { type MenuItem, openMenu } from "./action-menu.ts";
 import { openAgentSheet } from "./agent-sheet.ts";
 import { messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
+import { helperItems } from "./bulk-items.ts";
 import { COUNCIL_MIN } from "./council.ts";
 import { quoteInto } from "./drafts.ts";
 import { translate as t } from "./messages.ts";
@@ -56,6 +57,8 @@ async function share(data: ShareData): Promise<void> {
 	}
 }
 
+const actions = () => import("./bulk-actions.ts");
+
 const canShare = (): boolean => typeof navigator.share === "function";
 
 // ── A room row ───────────────────────────────────────────────────────────────────────────────
@@ -69,8 +72,9 @@ export function roomMenu(
 	const view = room?.view;
 	if (!view || view.kind === "thread") return undefined;
 	const mode = room.mode;
-	// Home stays at the top; every other room can be pinned or put in a folder.
-	const items: MenuItem[] = view.home ? [] : placementItems(key, leave);
+	// Home stays at the top; every other room can be pinned or put in a folder. A temp knight follows its knight's place.
+	const items: MenuItem[] =
+		view.home || view.helper ? [] : placementItems(key, leave);
 	if (view.kind === "agent") {
 		const name = view.name;
 		items.push(
@@ -97,21 +101,24 @@ export function roomMenu(
 			run: () => leave(() => openTeamSheet({ kind: "group", name })),
 		});
 	}
-	items.push({
-		id: "notifications",
-		label: t("Notifications"),
-		icon: view.muted ? "bell-off" : "bell",
-		checked: !view.muted,
-		run: async () => {
-			const muted = view.muted !== true;
-			if (!(await setRoomMuted(key, muted))) return;
-			toast(
-				muted
-					? t("Notifications are off for {name}", { name: view.displayName })
-					: t("Notifications are on for {name}", { name: view.displayName }),
-			);
-		},
-	});
+	if (view.kind === "agent") items.push(...helperItems([key]));
+	// A temp knight's push is held back by default, as its knight's room pushes for it.
+	if (!view.helper)
+		items.push({
+			id: "notifications",
+			label: t("Notifications"),
+			icon: view.muted ? "bell-off" : "bell",
+			checked: !view.muted,
+			run: async () => {
+				const muted = view.muted !== true;
+				if (!(await setRoomMuted(key, muted))) return;
+				toast(
+					muted
+						? t("Notifications are off for {name}", { name: view.displayName })
+						: t("Notifications are on for {name}", { name: view.displayName }),
+				);
+			},
+		});
 	if (!view.readOnly)
 		items.push(
 			{
@@ -146,8 +153,19 @@ export function roomMenu(
 					}),
 			},
 		);
+	// A temp knight is archived at once; the notice's Undo is the way back.
+	if (view.helper) {
+		const { name, displayName } = view;
+		items.push({
+			id: "archive-helper",
+			label: t("Archive this temp knight"),
+			icon: "archive",
+			tone: "danger",
+			run: () => actions().then((one) => one.archiveHelper(name, displayName)),
+		});
+	}
 	// The coordinator is the team's entry and stays.
-	if (!view.readOnly && !view.coordinator)
+	else if (!view.readOnly && !view.coordinator)
 		items.push({
 			id: "archive",
 			label: view.kind === "group" ? t("Archive group") : t("Archive knight"),

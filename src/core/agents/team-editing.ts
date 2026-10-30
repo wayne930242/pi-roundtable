@@ -17,6 +17,7 @@ import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
+import { createHelper } from "./helper-create.ts";
 import { routesOf } from "./routes.ts";
 import { agentRoomKey, keysOf, seatsOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
@@ -122,6 +123,19 @@ export class TeamEditing {
 		return made.text;
 	}
 
+	/** The agent tool: a knight makes a temp knight for one task; see `createHelper`. */
+	createHelper(
+		caller: AgentTurnScope,
+		input: Parameters<typeof createHelper>[3],
+	): Promise<string> {
+		return createHelper(
+			this.#ctx,
+			(who, fields, settings) => this.#create(who, fields, settings),
+			caller,
+			input,
+		);
+	}
+
 	/**
 	 * An owner creates an agent from outside any agent turn (the web app's form; any other tier is
 	 * refused, since the opening task runs as `speaker`): the same checks,
@@ -186,6 +200,8 @@ export class TeamEditing {
 			creator: Agent | undefined;
 			/** The surface whose room runs the opening task. */
 			openIn?: string | undefined;
+			/** Makes the agent a temp knight of this knight: its place is a thread of the parent's channel, and it settles on the parent's model. */
+			parent?: Agent | undefined;
 		},
 		input: {
 			name: string;
@@ -217,14 +233,21 @@ export class TeamEditing {
 			...fields
 		} = input;
 		const modes = longRunning ? this.#longRunning(who.speaker) : undefined;
-		const parent = teamCategory(category, "Agents");
+		const categoryName = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
 		// A model or thinking level the host cannot run fails the create, before anything is made.
-		const model = await modelSetting(settings.model, () =>
-			this.#ctx.options.models.usable(),
-		);
-		const thinking = thinkingSetting(settings.thinking);
+		// A temp knight runs the parent's, as it stands, unless told otherwise.
+		const model =
+			settings.model === undefined && who.parent
+				? who.parent.model
+				: await modelSetting(settings.model, () =>
+						this.#ctx.options.models.usable(),
+					);
+		const thinking =
+			settings.thinking === undefined && who.parent
+				? who.parent.thinking
+				: thinkingSetting(settings.thinking);
 		// The picture comes before the row and the channel: a render failure fails the create.
 		const taken = store
 			.agents()
@@ -234,17 +257,23 @@ export class TeamEditing {
 		const suggested = suggestCharacter(input, taken);
 		const character = this.#resolve(wanted ?? {}, suggested);
 		const avatarHash = await studio.render(character);
-		// Without Discord channels the agent lives in its rooms, which exist as soon as it does.
-		const channelId = await channels?.createChannel(
-			input.name,
-			input.displayName,
-			parent,
-		);
+		// Without Discord channels the agent lives in its rooms, which exist as soon as it does. A
+		// temp knight lives in a thread of its parent's channel, or in rooms alone without one.
+		const channelId = who.parent
+			? who.parent.channelId && channels?.createThread
+				? await channels.createThread(who.parent.channelId, input.displayName)
+				: undefined
+			: await channels?.createChannel(
+					input.name,
+					input.displayName,
+					categoryName,
+				);
 		let agent = await store.createAgent({
 			...fields,
 			character,
 			avatarHash,
 			...(channelId ? { channelId } : {}),
+			...(who.parent ? { parent: who.parent.name } : {}),
 		});
 		if (model || thinking)
 			agent = await store.updateAgent(agent.name, {

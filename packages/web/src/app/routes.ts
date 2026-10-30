@@ -51,6 +51,7 @@ import { viewerOf, type WebAppRegistry } from "../web-app.ts";
 import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
+import { HelperRoutes } from "./helper-routes.ts";
 import type { LayoutStore } from "./layout.ts";
 import { LayoutRoutes } from "./layout-routes.ts";
 import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
@@ -118,6 +119,9 @@ export interface AppApiOptions {
 		| "remove"
 		| "createGroup"
 		| "updateGroup"
+		| "finishedHelpers"
+		| "archiveHelpers"
+		| "restoreHelpers"
 	>;
 	/** Present when the host has the skills addon: the catalog an agent's skills are chosen from, and the change of what it carries. */
 	skills?: {
@@ -272,6 +276,7 @@ export class AppApi {
 	readonly #options: AppApiOptions;
 	readonly #team: TeamApi;
 	readonly #layout: LayoutRoutes;
+	readonly #helpers: HelperRoutes;
 	readonly #prompts: PromptApi | undefined;
 	readonly #skillDocs: SkillDocApi | undefined;
 
@@ -283,6 +288,12 @@ export class AppApi {
 			placeable: () => options.rooms.placeable(),
 			home: () => options.rooms.homeKey(),
 			owner: (admission) => this.#owner(admission),
+			changed: () => options.changed(),
+		});
+		this.#helpers = new HelperRoutes({
+			surface: options.surface.surface,
+			directory: options.directory,
+			team: options.team,
 			changed: () => options.changed(),
 		});
 		this.#prompts = options.prompts
@@ -536,6 +547,15 @@ export class AppApi {
 			return this.#readAll(request, admission);
 		if (key === "dismiss-finished-threads" && !action && method === "POST")
 			return this.#dismissAllFinished(request, admission);
+		if (key === "archive-finished-helpers" && !action && method === "POST")
+			return this.#helpers.archiveFinished(
+				request,
+				await this.#owner(admission),
+			);
+		if (key === "restore-helpers" && !action && method === "POST") {
+			await this.#owner(admission);
+			return this.#helpers.restore(request);
+		}
 		const room = await rooms.resolve(key);
 		if (!room) throw notFound();
 		if (!action && method === "GET") {

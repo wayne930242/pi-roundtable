@@ -30,6 +30,11 @@ import { checkAgentServerOff, checkAgentTeamKeys } from "./agent-team.ts";
 import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema } from "./config-schema.ts";
 import type { ConversationsConfig } from "./conversations.ts";
+import {
+	type HelpersConfig,
+	helpersOf,
+	type ResolvedHelpers,
+} from "./helpers.ts";
 import { type LimitsConfig, limitsOf, type ResolvedLimits } from "./limits.ts";
 import { opsOf, opsOfPlace, type ResolvedOps } from "./ops.ts";
 import { type ProfilesConfig, profileRulesOf } from "./profiles.ts";
@@ -233,6 +238,12 @@ export interface RoundtableConfig extends LimitsConfig {
 	 */
 	routing?: RoutingConfig;
 	/**
+	 * Temp knights: helper knights an agent makes for a task with `helper_create` and clears with
+	 * `helper_end`. Left out, the defaults apply (4 per knight, 12 on the host, finished ones
+	 * archived after 24 hours); `false` leaves the tools out.
+	 */
+	helpers?: false | HelpersConfig;
+	/**
 	 * Seconds a shutdown waits for running turns before stopping them; default 180. Give the
 	 * service manager a stop timeout a minute longer, such as systemd's `TimeoutStopSec`.
 	 */
@@ -331,6 +342,8 @@ export interface ResolvedConfig extends ResolvedLimits {
 	opsKey: "ops" | "routing.places.ops";
 	/** The checked `routing` block; undefined when the configuration has none. */
 	routing?: ResolvedRouting;
+	/** The temp knights' limits, or `false` when the tools are left out. */
+	helpers: ResolvedHelpers | false;
 	drainMs: number;
 	interimText: InterimTextMode;
 	interimPrimaryChars: number;
@@ -476,6 +489,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		...(ops ? { ops } : {}),
 		opsKey: config.ops ? "ops" : "routing.places.ops",
 		...(routing ? { routing } : {}),
+		helpers: agentServer ? helpersOf(config.helpers) : false,
 		drainMs: (config.drainSeconds ?? DRAIN_LIMIT_MS / 1_000) * 1_000,
 		...limitsOf(config),
 		interimText: config.interimText ?? "on",

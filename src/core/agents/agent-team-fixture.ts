@@ -3,18 +3,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SQL } from "bun";
-import type { ContextUse } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
 	OutboundReply,
-	PendingConfirmation,
 	PostAuthor,
-	TurnResult,
 } from "../domain/conversation.ts";
-import { AgentRunError } from "../domain/errors.ts";
-import type { TurnRequest } from "../domain/ports.ts";
 import type { RoundProgress } from "../domain/round.ts";
 import type { IdentityService } from "../identity/identity-port.ts";
 import { silentLogger } from "../log.ts";
@@ -35,7 +30,6 @@ import type {
 	AgentCategory,
 	AgentChannels,
 	AgentPost,
-	AgentTurnRunner,
 	CategoryLayout,
 	ChannelMessage,
 } from "./agent-ports.ts";
@@ -89,6 +83,24 @@ export class FakeChannels implements AgentChannels {
 		this.topics.set(id, topic);
 		this.put(id, category);
 		return id;
+	}
+	/** The threads made under a channel for temp knights, by id; `archived` once closed. */
+	threads = new Map<
+		string,
+		{ parent: string; name: string; archived: boolean }
+	>();
+	async createThread(parentChannelId: string, name: string) {
+		const id = String(this.#next++);
+		this.threads.set(id, { parent: parentChannelId, name, archived: false });
+		return id;
+	}
+	async closeThread(threadId: string) {
+		const thread = this.threads.get(threadId);
+		if (thread) thread.archived = true;
+	}
+	async openThread(threadId: string) {
+		const thread = this.threads.get(threadId);
+		if (thread) thread.archived = false;
 	}
 	async placeIn(channelId: string, category: AgentCategory) {
 		if (this.categoryOf(channelId) === category) return false;
@@ -183,44 +195,9 @@ class FakeSurfaces {
 	}
 }
 
-/** Answers every turn with a scripted reply; records what each turn received. */
-export class FakeRuntime implements AgentTurnRunner {
-	turns: TurnRequest[] = [];
-	reply: (request: TurnRequest) => string = (r) => `${r.agent?.name} ok`;
-	held = new Map<ChannelKey, PendingConfirmation>();
-	fresh: ChannelKey[] = [];
-	/** Runs inside a turn, like a tool call the model makes. */
-	during?: (request: TurnRequest) => unknown;
-	/** The next turn ends as if the owner pressed stop. */
-	stopNext = false;
-	async runTurn(request: TurnRequest): Promise<TurnResult> {
-		this.turns.push(request);
-		await this.during?.(request);
-		if (this.stopNext) {
-			this.stopNext = false;
-			return {
-				ok: false,
-				error: new AgentRunError("stopped by the owner"),
-				stopped: true,
-			};
-		}
-		return { ok: true, text: this.reply(request) };
-	}
-	async heldActions(session: ChannelKey) {
-		return this.held.get(session);
-	}
-	async startFresh(session: ChannelKey) {
-		this.fresh.push(session);
-	}
-	deleted: ChannelKey[] = [];
-	async deleteConversation(session: ChannelKey) {
-		this.deleted.push(session);
-	}
-	usage = new Map<ChannelKey, ContextUse>();
-	contextUsage(session: ChannelKey) {
-		return this.usage.get(session);
-	}
-}
+export { FakeRuntime } from "./agent-team-fake-runtime.ts";
+
+import { FakeRuntime } from "./agent-team-fake-runtime.ts";
 
 // CI runs the setup below about ten times slower than a laptop, and bun's 5 s hook limit
 // left a timed-out hook running while the next test dropped its tables.
@@ -305,6 +282,8 @@ export function useTeamFixture(
 		local?: boolean;
 		/** The studio the team renders with, called each test; the default fakes pictures. */
 		studio?: () => AgentTeamOptions["studio"];
+		/** The temp knights' limits the team is built with; left out, the defaults. */
+		helpers?: AgentTeamOptions["helpers"];
 	} = {},
 ): void {
 	const { local = false } = options;
@@ -428,6 +407,7 @@ export function useTeamFixture(
 				sharedPrompt: () => script.shared,
 				guestPrompt: () => script.guest,
 				skills,
+				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
 				logger: silentLogger(),
 			});
 		team = build();

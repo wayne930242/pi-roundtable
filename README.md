@@ -200,6 +200,7 @@ Without `discord` the agents still run when `agents` lists them, in the rooms of
 | `agents` | none | The first team, created once. Without `discord`, a seed has no `channelId` and the team's rows are kept under the id `local` |
 | `coordinator` | the first of `agents` | Without `discord`, the agent the owner's general requests come to; it cannot be archived. With `discord` it is an error: the entry channel's agent coordinates |
 | `skills` | on with `agents` | The skills addon; without `discord` it is on only when `agents` lists some |
+| `helpers` | 4 per knight, 12 in all, archived 24 hours after finishing | Temp knights, the helpers a knight makes with `helper_create` for one task and clears with `helper_end`: `{ perParent, perHost, archiveFinishedAfterHours }`; `false` offers neither tool |
 
 Work no person is waiting on (a foreign webhook's post in an agent's channel, a `message_agent` call that names no conversation, an agent's opening task, the error reports) lands where it always did, unless the optional `routing` block says otherwise.
 It names each agent's primary place, which surface each kind of event goes to, and the host's named places such as `ops`; a message, a card or a schedule's firing is never routed and stays where its person is.

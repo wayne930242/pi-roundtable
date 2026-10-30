@@ -5,7 +5,7 @@ import type { ThinkingSetting } from "../models.ts";
 import type { AgentDirectory } from "../services.ts";
 import { zonedStamp } from "../time.ts";
 import type { ChannelMessage } from "./agent-ports.ts";
-import { characterOf } from "./agent-rules.ts";
+import { characterOf, isHelper } from "./agent-rules.ts";
 import { describeThinking } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 
@@ -34,10 +34,21 @@ export function channelIdFromRef(channel: string): string {
 
 /** Every agent and group as agent_list shows them, before the category layout. */
 export function teamListText(store: Pick<AgentDirectory, "agents" | "groups">) {
-	const agents = store.agents().map((a) => {
+	const all = store.agents();
+	const line = (a: Agent, indent: string) => {
 		const channel = a.channelId ? `<#${a.channelId}>` : "no channel";
-		return `- ${a.name} "${a.displayName}" — ${channel}, ${a.status}`;
-	});
+		const temp = isHelper(a)
+			? ` (temp, of ${a.parent}, ${a.finishedAt ? "finished" : "working"})`
+			: "";
+		return `${indent}- ${a.name}${temp} "${a.displayName}" — ${channel}, ${a.status}`;
+	};
+	// A temp knight is listed under its parent.
+	const agents = all
+		.filter((a) => !isHelper(a))
+		.flatMap((a) => [
+			line(a, ""),
+			...all.filter((h) => h.parent === a.name).map((h) => line(h, "  ")),
+		]);
 	const groups = store
 		.groups()
 		.map(
@@ -63,6 +74,11 @@ export function agentDetails(
 		`Name: ${agent.name}`,
 		`Display name: ${agent.displayName}`,
 		`Status: ${agent.status}`,
+		...(isHelper(agent)
+			? [
+					`Temp knight of: ${agent.parent} (${agent.finishedAt ? "finished" : "working"})`,
+				]
+			: []),
 		`Channel: ${agent.channelId ? `<#${agent.channelId}>` : "none"}`,
 		...(conversations.length === 0
 			? []

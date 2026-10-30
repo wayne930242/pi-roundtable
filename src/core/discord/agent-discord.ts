@@ -13,6 +13,7 @@ import {
 	SeparatorSpacingSize,
 	type TextChannel,
 	TextDisplayBuilder,
+	ThreadAutoArchiveDuration,
 	type Webhook,
 } from "discord.js";
 import type {
@@ -39,19 +40,41 @@ export class DiscordAgentChannels implements AgentChannels {
 	readonly #client: Client;
 	readonly #guildId: string;
 	readonly #webhooks = new Map<string, Promise<Webhook>>();
+	/** The parent channel of each thread the agents live in, and null for a channel that is none. */
+	readonly #parents = new Map<string, string | null>();
 
 	constructor(client: Client, guildId: string) {
 		this.#client = client;
 		this.#guildId = guildId;
 	}
 
+	/**
+	 * Where a post to `channelId` is sent: the channel whose webhook speaks, and the thread it
+	 * speaks into. A temp knight's place is a thread, which has no webhook of its own.
+	 */
+	async #route(
+		channelId: string,
+		threadId: string | undefined,
+	): Promise<{ hook: string; threadId?: string }> {
+		let parent = this.#parents.get(channelId);
+		if (parent === undefined) {
+			const channel = await this.#client.channels.fetch(channelId);
+			parent = channel?.isThread() ? (channel.parentId ?? null) : null;
+			this.#parents.set(channelId, parent);
+		}
+		if (parent === null)
+			return { hook: channelId, ...(threadId ? { threadId } : {}) };
+		return { hook: parent, threadId: channelId };
+	}
+
 	async post(channelId: string, post: AgentPost): Promise<void> {
-		const webhook = await this.#webhook(channelId);
+		const route = await this.#route(channelId, post.threadId);
+		const webhook = await this.#webhook(route.hook);
 		const as = {
 			username: post.name,
 			avatarURL: post.avatarUrl,
 			allowedMentions: { parse: ["users" as const] },
-			...(post.threadId ? { threadId: post.threadId } : {}),
+			...(route.threadId ? { threadId: route.threadId } : {}),
 		};
 		try {
 			if (post.thinking) await webhook.send({ ...as, content: post.thinking });
@@ -66,7 +89,7 @@ export class DiscordAgentChannels implements AgentChannels {
 				});
 		} catch (error) {
 			// A webhook deleted by hand is found or made again on the next post.
-			this.#webhooks.delete(channelId);
+			this.#webhooks.delete(route.hook);
 			throw error;
 		}
 	}
@@ -75,10 +98,11 @@ export class DiscordAgentChannels implements AgentChannels {
 		channelId: string,
 		as: Omit<AgentPost, "thinking" | "chunks" | "files">,
 	): InterimPosts {
-		const threadId = as.threadId ? { threadId: as.threadId } : {};
 		return {
 			post: async (text) => {
-				const webhook = await this.#webhook(channelId);
+				const route = await this.#route(channelId, as.threadId);
+				const threadId = route.threadId ? { threadId: route.threadId } : {};
+				const webhook = await this.#webhook(route.hook);
 				try {
 					const message = await webhook.send({
 						username: as.name,
@@ -96,11 +120,41 @@ export class DiscordAgentChannels implements AgentChannels {
 						},
 					};
 				} catch (error) {
-					this.#webhooks.delete(channelId);
+					this.#webhooks.delete(route.hook);
 					throw error;
 				}
 			},
 		};
+	}
+
+	async createThread(parentChannelId: string, name: string): Promise<string> {
+		const parent = await this.#text(parentChannelId);
+		const thread = await parent.threads.create({
+			name: name.slice(0, 100),
+			// The longest a thread stays open untouched, so a quiet helper's place is not archived under it.
+			autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+		});
+		this.#parents.set(thread.id, parentChannelId);
+		return thread.id;
+	}
+
+	async closeThread(threadId: string): Promise<void> {
+		const thread = await this.#thread(threadId);
+		// Locking needs Manage Threads; without it the thread is only archived.
+		try {
+			await thread.edit({ archived: true, locked: true });
+		} catch {
+			await thread.setArchived(true);
+		}
+	}
+
+	async openThread(threadId: string): Promise<void> {
+		const thread = await this.#thread(threadId);
+		try {
+			await thread.edit({ archived: false, locked: false });
+		} catch {
+			await thread.setArchived(false);
+		}
 	}
 
 	async createChannel(
@@ -237,6 +291,13 @@ export class DiscordAgentChannels implements AgentChannels {
 			) ??
 			(await guild.channels.create({ name, type: ChannelType.GuildCategory }))
 		);
+	}
+
+	async #thread(threadId: string) {
+		const channel = await this.#client.channels.fetch(threadId);
+		if (!channel?.isThread())
+			throw new AgentError(`channel ${threadId} is not a thread`);
+		return channel;
 	}
 
 	async #text(channelId: string): Promise<TextChannel> {

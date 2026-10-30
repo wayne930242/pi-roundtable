@@ -1,4 +1,6 @@
 import type {
+	HelpersArchived,
+	HelpersRestored,
 	ReadAllUndone,
 	ReadAllView,
 	ReadMove,
@@ -13,6 +15,18 @@ export const bulkApi = {
 		request<ThreadsDismissedAll>("rooms/dismiss-finished-threads", {
 			method: "POST",
 			body: JSON.stringify({ rooms }),
+		}),
+	/** Archives the finished temp knights of each of `rooms` (every knight's when none are named); names them by room. */
+	archiveFinishedHelpers: (rooms?: readonly string[]) =>
+		request<HelpersArchived>("rooms/archive-finished-helpers", {
+			method: "POST",
+			body: JSON.stringify(rooms ? { rooms } : {}),
+		}),
+	/** Puts back the archived temp knights named. */
+	restoreHelpers: (names: readonly string[]) =>
+		request<HelpersRestored>("rooms/restore-helpers", {
+			method: "POST",
+			body: JSON.stringify({ names }),
 		}),
 	/** Reads each of `rooms` up to its newest message; names the cursors that moved. */
 	readAll: (rooms: readonly string[]) =>

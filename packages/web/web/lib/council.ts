@@ -95,7 +95,7 @@ export function councilOf(
 /** The agents a ticked list starts from when there is no council yet: the unmuted ones, the coordinator first, at most a table's worth. */
 export function startingTicks(agents: readonly RoomView[]): string[] {
 	return [...agents]
-		.filter((view) => view.muted !== true)
+		.filter((view) => view.muted !== true && !view.helper)
 		.sort((a, b) => Number(b.home) - Number(a.home))
 		.slice(0, COUNCIL_MAX)
 		.map((view) => view.name);

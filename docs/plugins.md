@@ -3080,6 +3080,35 @@ Work a person started, or that waits on a person (a message, a card, a late answ
 `SurfacePort.names()` lists every registered surface by name, after link; the agent server uses it to refuse a `routing` key that names one nobody registered, naming the key and the registered surfaces.
 `mirror` (a read-only copy of a primary place's posts) and an answerer per surface are defined terms with a position in the block, but they are not built: setting either stops the start.
 
+#### Temp knights: helpers an agent makes for one task
+
+A knight (an agent) can make *temp knights*, helper agents for one self-contained task that can run on its own, and clear them when they are done.
+It calls `helper_create { display_name, prompt, task, name?, class?, color?, model?, thinking?, skills? }` once per task and ends its turn; each temp knight starts at once and its answer returns to the knight's conversation as a new turn, as a `message_agent` answer does.
+It merges the answers and calls `helper_end { names }`, where `names` is a list of its own temp knights or `"finished"`.
+Both tools are on the `member` tier and are offered to every agent that is not itself a temp knight.
+
+A temp knight is a real agent: an ordinary row of the agent table with a nullable `parent` and `finished_at` (the migration `agents-helpers`, additive), its own prompt, picture and sessions, and a name that defaults to `<parent>-<n>`.
+Its model and thinking level are its knight's unless the call names others.
+It has no group seat, and no agent, group, archive, channel-arrange or schedule tools.
+It follows its knight's routing rules, and whether it counts as a long-running conversation follows the conversation that made it.
+
+| Rule | What happens |
+|---|---|
+| Place | On Discord a temp knight lives in a thread under its knight's channel, whose posts go through the channel's webhook under the temp knight's own name and picture; a knight with no Discord channel gives it a room on a surface that hosts rooms. Archiving a temp knight archives and locks its thread, and restoring it unarchives the thread. |
+| Finished | Derived, never set by the knight: nothing runs, nothing is queued, no card waits for the owner and no message from its knight is still unanswered. `Agent.finishedAt` carries the stamp. |
+| Limits | `helpers.perParent` (default 4) and `helpers.perHost` (default 12) count active temp knights; depth is one, so a temp knight cannot make one. At a limit the knight's oldest finished temp knight is archived to make room, and the call is refused only when every one of them is busy. |
+| Cleanup | `helper_end`, the owner's clearing in a surface, a knight's own archive (which archives its temp knights first), and, after `helpers.archiveFinishedAfterHours` (default 24), an hourly sweep. An archived temp knight keeps its history and comes back with `restoreHelpers`. Deleting an archived knight deletes its temp knights. |
+
+`AgentTeam` offers `helpersOf(parent)`, `finishedHelpers(parents?)`, `archiveHelpers(names, by)`, `restoreHelpers(names)` (only a name that is still an archived temp knight of an active knight is restored) and `onHelpersEnded(listener)`, which hears a knight's own `helper_end` and nothing else, so a surface can offer the owner an undo.
+`isHelper(agent)` tells a temp knight, for a surface that lists agents; a group never takes one.
+The `helpers` block of the configuration turns the limits and the sweep; `helpers: false` offers neither tool, and a value out of its range, or a `perParent` above `perHost`, stops the start with a `ConfigError`:
+
+```ts
+defineRoundtable({
+	helpers: { perParent: 4, perHost: 12, archiveFinishedAfterHours: 24 },
+});
+```
+
 #### Dispatch threads on any surface
 
 A background dispatch (a coding task, a delegated task, a message between agents) gets a thread beside the channel that started it: one start line in the channel, then the dispatch's progress and report inside the thread.
@@ -4359,6 +4388,7 @@ Import from the entries listed below; source area files are internal.
 | `AvatarStudio` | `pi-roundtable` | type |
 | `PROMPTS` | `pi-roundtable` | value |
 | `characterOf` | `pi-roundtable` | value |
+| `isHelper` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
 | `CONVERSATIONS` | `pi-roundtable` | value |
 | `BackgroundConfig` | `pi-roundtable` | type |
@@ -4410,6 +4440,9 @@ Import from the entries listed below; source area files are internal.
 | `GroupStatus` | `pi-roundtable` | type |
 | `HeldActionStore` | `pi-roundtable` | type |
 | `HeldCall` | `pi-roundtable` | type |
+| `HelperTeam` | `pi-roundtable` | type |
+| `HelpersConfig` | `pi-roundtable` | type |
+| `HelpersEnded` | `pi-roundtable` | type |
 | `HoldCheck` | `pi-roundtable` | type |
 | `HoldContext` | `pi-roundtable` | type |
 | `HoldDescription` | `pi-roundtable` | type |

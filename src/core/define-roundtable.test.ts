@@ -326,6 +326,7 @@ describe("defineRoundtable", () => {
 			"agents-guild",
 			"agent-groups-channel-optional",
 			"agents-character",
+			"agents-helpers",
 			"agent-prompt-history",
 			"agent-outbox",
 			"agent-latest-conversation",

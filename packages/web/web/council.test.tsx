@@ -295,6 +295,23 @@ test("with no group at all the table says there is no council, and the sheet sta
 	expect(button("Make council")?.disabled).toBe(true);
 });
 
+test("a temp knight is not in the tick list, the starting ticks or the seats of the table", async () => {
+	const helper = agent("scout-1", {
+		helper: { parent: "app:agent.scout", parentName: "scout" },
+	});
+	expect(startingTicks([...everyone.slice(0, 3), helper])).toEqual([
+		"guide",
+		"scout",
+		"mason",
+	]);
+	load([...everyone.slice(0, 3), helper]);
+	await show();
+	await page.click(button("Pick who sits") ?? null);
+	await settle();
+	expect(tickOf("scout-1")).toBeUndefined();
+	expect(ticks()).toHaveLength(3);
+});
+
 test("saving the first council makes a group, puts it on the table and its address", async () => {
 	load(everyone.slice(0, 3));
 	const create = spyOn(teamApi, "createGroup").mockImplementation(

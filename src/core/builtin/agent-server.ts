@@ -12,6 +12,7 @@ import { RelevanceScorer } from "../agents/group-round.ts";
 import { Routes } from "../agents/routes.ts";
 import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
+import type { ResolvedHelpers } from "../config/helpers.ts";
 import type { ResolvedRouting } from "../config/routing.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
@@ -120,6 +121,8 @@ export interface AgentServerOptions {
 	errorReporter?: ErrorReporter;
 	/** The checked `routing` block: where work no person started lands. Without it every place is what it was before `routing`. */
 	routing?: ResolvedRouting;
+	/** The temp knights' limits; `false` leaves `helper_create` and `helper_end` out. Without it the defaults apply. */
+	helpers?: ResolvedHelpers | false;
 }
 
 /** The name of the agent server's plugin, as `serviceStarted` events name it. */
@@ -151,6 +154,9 @@ const AGENT_TIERS: Readonly<Record<string, Tier>> = {
 	agent_get: "member",
 	message_agent: "member",
 	channel_read: "member",
+	// A knight may make temp knights for whoever is talking to it; the limits hold the cost.
+	helper_create: "member",
+	helper_end: "member",
 };
 
 /** The tables the agent server keeps: its agents and groups. */
@@ -340,6 +346,7 @@ export function agentServerPlugin(
 					: {}),
 				...(skills ? { skills } : {}),
 				modes: () => context.services.find(MODES),
+				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
 				principals: () => context.services.find(IDENTITY),
 				...(threads ? { threads } : {}),
 				logger,

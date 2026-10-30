@@ -246,6 +246,7 @@ function agentAssembly(
 			avatarReference: join(ASSETS, "neutral.png"),
 			avatarNeutral: join(ASSETS, "neutral.png"),
 			...(config.routing ? { routing: config.routing } : {}),
+			helpers: config.helpers,
 			// An ops agent's reports are the agent server's to deliver.
 			...(errorReporter && "agent" in errorReporter.destination
 				? { errorReporter }

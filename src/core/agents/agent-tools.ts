@@ -1,11 +1,6 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import {
-	CATALOG,
-	type CharacterInput,
-	CLASS_IDS,
-	type PaletteName,
-} from "../../characters/index.ts";
+import type { CharacterInput } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { assistantName, messages } from "../i18n/index.ts";
@@ -19,13 +14,17 @@ import {
 	textToolsExtension,
 } from "../runtime/text-tools.ts";
 import { timeZone } from "../time.ts";
+import { MAX_GROUP_MEMBERS, MIN_GROUP_MEMBERS } from "./agent-store.ts";
 import {
-	MAX_GROUP_MEMBERS,
-	MAX_PROMPT_CHARS,
-	MIN_GROUP_MEMBERS,
-} from "./agent-store.ts";
-
-const PALETTE_NAMES = Object.keys(CATALOG.palettes) as PaletteName[];
+	CLASS,
+	COLOR,
+	DISPLAY,
+	lookOf,
+	NAME,
+	PARTS,
+	PROMPT,
+} from "./agent-tool-schema.ts";
+import { helperToolDefs } from "./helper-tools.ts";
 
 /** The tool that hands a request to another agent; a group seat has none. */
 export const MESSAGE_AGENT_TOOL = "message_agent";
@@ -33,11 +32,15 @@ export const MESSAGE_AGENT_TOOL = "message_agent";
 /** The tool that changes an agent's look; every host offers it. */
 export const AVATAR_TOOL = "agent_avatar";
 
+/** The tools that make and end temp knights; `helpers: false` leaves them out. */
+export const HELPER_TOOLS = ["helper_create", "helper_end"] as const;
+
 export const AGENT_TOOLS = [
 	"agent_list",
 	"agent_get",
 	"agent_update",
 	"agent_create",
+	...HELPER_TOOLS,
 	AVATAR_TOOL,
 	MESSAGE_AGENT_TOOL,
 	"group_create",
@@ -46,6 +49,20 @@ export const AGENT_TOOLS = [
 	"channel_arrange",
 	"channel_read",
 ] as const;
+
+/**
+ * The tools a temp knight's turns do not get: making knights, temp knights or groups, archiving,
+ * arranging channels, and scheduling, which would leave work behind with no one to end it.
+ */
+export const WITHHELD_FROM_HELPERS: readonly string[] = [
+	"agent_create",
+	...HELPER_TOOLS,
+	"group_create",
+	"group_update",
+	"archive",
+	"channel_arrange",
+	"schedule_create",
+];
 
 /**
  * @deprecated Agents are composed characters and no longer drawn; use `AgentTeam.dress`.
@@ -83,6 +100,25 @@ export interface AgentOps {
 			longRunning?: boolean;
 		},
 	): Promise<string>;
+	/** Makes a temp knight of the caller for one task; the answer returns to the caller's conversation. */
+	helperCreate(
+		caller: AgentTurnScope,
+		input: {
+			name?: string;
+			displayName: string;
+			prompt: string;
+			task: string;
+			character?: CharacterInput;
+			skills?: string[];
+			model?: string;
+			thinking?: string;
+		},
+	): Promise<string>;
+	/** Archives the caller's own temp knights: the named ones, or every one that is finished. */
+	helperEnd(
+		caller: AgentTurnScope,
+		names: readonly string[] | "finished",
+	): Promise<string>;
 	/** Changes an agent's look; a field left out stays as it is. */
 	avatar(name: string, look: CharacterInput): Promise<string>;
 	/** Queues the message and returns at once. */
@@ -116,50 +152,6 @@ export interface AgentOps {
 	): Promise<string>;
 }
 
-const NAME = Type.String({
-	description:
-		"An agent's name (lowercase, from agent_list), not its display name.",
-});
-const DISPLAY = Type.String({
-	minLength: 1,
-	maxLength: 32,
-	description: "The name shown on its messages; any language.",
-});
-const PROMPT = Type.String({
-	minLength: 1,
-	maxLength: MAX_PROMPT_CHARS,
-	description:
-		"The agent's role prompt, in English: its job, sources, boundaries, and how it reports. Short and stated positively.",
-});
-const enumOf = (ids: readonly string[], description?: string) =>
-	Type.String({ enum: [...ids], ...(description ? { description } : {}) });
-const CLASS = enumOf(
-	CLASS_IDS,
-	`The agent's character class, which sets its outfit, hat, and prop. ${CLASS_IDS.map((id) => `${id}: ${CATALOG.classes[id].jobs}`).join("; ")}.`,
-);
-const COLOR = enumOf(
-	PALETTE_NAMES,
-	"The agent's color palette. Pick one unlike the other agents' (agent_get shows each look).",
-);
-const PARTS = Type.Object(
-	{
-		outfit: Type.Optional(enumOf(CATALOG.outfits)),
-		hat: Type.Optional(enumOf(CATALOG.hats)),
-		prop: Type.Optional(enumOf(CATALOG.props)),
-		hair: Type.Optional(enumOf(CATALOG.hair)),
-		beard: Type.Optional(enumOf([...CATALOG.beards, "none"])),
-		accessory: Type.Optional(enumOf([...CATALOG.accessories, "none"])),
-		build: Type.Optional(enumOf(["slim", "regular", "stout"])),
-		skin: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })),
-		hair_color: Type.Optional(
-			Type.String({
-				pattern: "^#[0-9a-fA-F]{6}$",
-				description: "A hex color such as #3b2a1a.",
-			}),
-		),
-	},
-	{ description: "Single parts to change; any left out stay as they are." },
-);
 const category = (kind: "Agents" | "Groups") =>
 	Type.String({
 		description: `The category its channel opens under: ${kind} (the default) or ${kind}-<suffix>, such as ${kind}-work; made when missing. Keep to the categories agent_list shows unless a new one fits better.`,
@@ -169,34 +161,6 @@ const MEMBERS = Type.Array(Type.String(), {
 	maxItems: MAX_GROUP_MEMBERS,
 	description: "Agent names in speaking-tie order.",
 });
-
-const PART_FIELDS = {
-	outfit: "outfit",
-	hat: "hat",
-	prop: "prop",
-	hair: "hair",
-	beard: "beard",
-	accessory: "accessory",
-	build: "build",
-	skin: "skin",
-	hair_color: "hairColor",
-} as const;
-
-/** The look a tool call names: class, color as palette, and parts; nothing it leaves out. */
-function lookOf(input: Record<string, unknown>): CharacterInput {
-	const look: Record<string, unknown> = {};
-	const klass = optionalString(input, "class");
-	const color = optionalString(input, "color");
-	if (klass) look.class = klass;
-	if (color) look.palette = color;
-	const parts = input.parts;
-	if (parts !== null && typeof parts === "object")
-		for (const [key, field] of Object.entries(PART_FIELDS)) {
-			const value = (parts as Record<string, unknown>)[key];
-			if (value !== undefined) look[field] = value;
-		}
-	return look as CharacterInput;
-}
 
 type AgentToolDef = TextToolDef<(typeof AGENT_TOOLS)[number]>;
 
@@ -324,6 +288,7 @@ function toolDefs(
 				});
 			},
 		},
+		...helperToolDefs(ops, scope, skillsOn),
 		{
 			name: AVATAR_TOOL,
 			label: "Change look",

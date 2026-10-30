@@ -48,6 +48,117 @@ describeDb("PostgreSQL", () => {
 		await store.close();
 	});
 
+	describe("temp knights", () => {
+		test("a temp knight is an ordinary row with a parent, which starts out working", async () => {
+			await store.createAgent({
+				name: "infra-1",
+				displayName: "Scout",
+				prompt: "You scout.",
+				parent: "infra",
+			});
+			const helper = store.agent("infra-1");
+			expect(helper?.parent).toBe("infra");
+			expect(helper?.finishedAt).toBeUndefined();
+			expect(store.agent("infra")?.parent).toBeUndefined();
+			expect(store.helpersOf("infra").map((a) => a.name)).toEqual(["infra-1"]);
+			expect(store.helpersOf("doctor")).toEqual([]);
+		});
+
+		test("the parent must be an active, permanent knight: depth is one", async () => {
+			await expect(
+				store.createAgent({
+					name: "ghost-1",
+					displayName: "Ghost",
+					prompt: "x",
+					parent: "ghost",
+				}),
+			).rejects.toBeInstanceOf(AgentError);
+			await store.createAgent({
+				name: "infra-1",
+				displayName: "Scout",
+				prompt: "x",
+				parent: "infra",
+			});
+			await expect(
+				store.createAgent({
+					name: "infra-2",
+					displayName: "Deeper",
+					prompt: "x",
+					parent: "infra-1",
+				}),
+			).rejects.toThrow("cannot make temp knights");
+			await store.archiveAgent("doctor");
+			await expect(
+				store.createAgent({
+					name: "doctor-1",
+					displayName: "Late",
+					prompt: "x",
+					parent: "doctor",
+				}),
+			).rejects.toThrow("archived");
+		});
+
+		test("setFinished stamps and clears, says whether it changed anything, and leaves a permanent knight alone", async () => {
+			await store.createAgent({
+				name: "infra-1",
+				displayName: "Scout",
+				prompt: "x",
+				parent: "infra",
+			});
+			expect(await store.setFinished("infra-1", true)).toBe(true);
+			expect(await store.setFinished("infra-1", true)).toBe(false);
+			expect(store.agent("infra-1")?.finishedAt).toBeInstanceOf(Date);
+			expect(await store.setFinished("infra-1", false)).toBe(true);
+			expect(store.agent("infra-1")?.finishedAt).toBeUndefined();
+			expect(await store.setFinished("infra", true)).toBe(false);
+			expect(await store.setFinished("nobody", true)).toBe(false);
+			expect(store.agent("infra")?.finishedAt).toBeUndefined();
+		});
+
+		test("the parent and the stamp survive a restart, and a restore comes back finished", async () => {
+			await store.createAgent({
+				name: "infra-1",
+				displayName: "Scout",
+				prompt: "x",
+				parent: "infra",
+			});
+			await store.setFinished("infra-1", true);
+			await store.archiveAgent("infra-1");
+			const again = await openTestStore(PgAgentStore, TEST_GUILD);
+			try {
+				expect(again.agent("infra-1")).toMatchObject({
+					parent: "infra",
+					status: "archived",
+				});
+				expect(again.agent("infra-1")?.finishedAt).toBeInstanceOf(Date);
+				await again.setFinished("infra-1", false);
+				await again.restoreAgent("infra-1");
+				// A restored temp knight has nothing running.
+				expect(again.agent("infra-1")?.finishedAt).toBeInstanceOf(Date);
+				expect(again.agent("infra-1")?.status).toBe("active");
+			} finally {
+				await again.close();
+			}
+		});
+
+		test("a temp knight is no group member", async () => {
+			await store.createAgent({
+				name: "infra-1",
+				displayName: "Scout",
+				prompt: "x",
+				parent: "infra",
+			});
+			await expect(
+				store.createGroup({
+					name: "desk",
+					displayName: "Desk",
+					members: ["infra", "infra-1"],
+					host: "infra",
+				}),
+			).rejects.toThrow("temp knight");
+		});
+	});
+
 	describe("conversations", () => {
 		test("the conversation an agent last ran a turn in survives a restart, per agent and per guild", async () => {
 			await store.conversations.note("infra", "app:agent.infra");

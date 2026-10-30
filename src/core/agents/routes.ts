@@ -94,10 +94,18 @@ export class Routes implements RoutingTable {
 		this.#routing = options.routing;
 	}
 
-	/** The rules of one agent: its own over the `"*"` entry, over the defaults. */
+	/**
+	 * The rules of one agent: its own over the `"*"` entry, over the defaults. A temp knight has
+	 * no row of its own and follows its parent's, so it lives where its parent does.
+	 */
 	rules(agent: string): ResolvedAgentRoutes {
 		const all = this.#routing?.agents;
-		return { ...all?.["*"], ...all?.[agent] };
+		const parent = this.#options.store.agent(agent)?.parent;
+		return {
+			...all?.["*"],
+			...(parent === undefined ? undefined : all?.[parent]),
+			...all?.[agent],
+		};
 	}
 
 	/**

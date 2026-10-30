@@ -620,6 +620,20 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Clear finished": "清除已完成",
 	Finished: "已完成",
 	"In progress": "進行中",
+	Ended: "已結束",
+	"Temp knight": "臨時騎士",
+	"{count} temp knight": "{count} 位臨時騎士",
+	"{count} temp knights": "{count} 位臨時騎士",
+	"Made by {name}": "隸屬 {name}",
+	"Temp knight of {name}": "{name} 的臨時騎士",
+	"Clear finished temp knights": "清除已結束的臨時騎士",
+	"Archived {count} temp knight": "已封存 {count} 位臨時騎士",
+	"Archived {count} temp knights": "已封存 {count} 位臨時騎士",
+	"Archive this temp knight": "封存這位臨時騎士",
+	"{name} archived {count} temp knight: {names}":
+		"{name}封存了 {count} 位臨時騎士：{names}",
+	"{name} archived {count} temp knights: {names}":
+		"{name}封存了 {count} 位臨時騎士：{names}",
 	"More actions for {name}": "{name} 的更多動作",
 	"Cleared “{name}”": "已清除「{name}」",
 	"Cleared {count} finished thread": "已清除 {count} 個已完成的討論串",
@@ -627,6 +641,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"The thread is still open.": "這個討論串還在進行中。",
 	"threads must be a list of at most 100 keys.":
 		"threads 必須是最多 100 個鍵的清單。",
+	"Give names, the temp knights to restore.": "請提供要復原的臨時騎士名稱。",
 	"rooms must be a list of at most 500 keys.":
 		"rooms 必須是最多 500 個鍵的清單。",
 	"restore must be a list of at most 500 moves.":

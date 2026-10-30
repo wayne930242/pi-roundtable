@@ -15,13 +15,14 @@ import { isQuiet, replyBody } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { withReplyFiles } from "../reply-files.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
-import { mayApproveNamed } from "../runtime/extensions/held-calls.ts";
-import { type Speaker, tierAtLeast } from "../speakers.ts";
+import type { Speaker } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { AgentMessages } from "./agent-messages.ts";
 import type { Agent } from "./agent-store.ts";
 import { GroupTurns } from "./group-turns.ts";
+import { HelperWork } from "./helper-work.ts";
 import { type Routes, routesOf } from "./routes.ts";
+import { mayApprove } from "./team-approval.ts";
 import {
 	agentOfChannel,
 	channelIdOf,
@@ -29,7 +30,6 @@ import {
 	coordinatorOf,
 	discordIdOf,
 	discordKey,
-	roomScope,
 	scopeOf,
 } from "./team-keys.ts";
 import {
@@ -50,6 +50,8 @@ export { MAX_CHAIN_MESSAGES, type TeamTurnsOptions };
 export class TeamTurns {
 	readonly #options: TeamTurnsOptions;
 	readonly routes: Routes;
+	/** What keeps each temp knight working, and so when it is finished. */
+	readonly helpers: HelperWork;
 	/** The chain of each running turn, by session key, read by message_agent. */
 	readonly #chains = new Map<ChannelKey, Chain>();
 	/** The channel each working agent's turn posts in. */
@@ -65,9 +67,18 @@ export class TeamTurns {
 	constructor(options: TeamTurnsOptions) {
 		this.#options = options;
 		this.routes = routesOf(options);
+		this.helpers = new HelperWork({
+			store: options.store,
+			queue: options.queue,
+			runtime: options.runtime,
+			roomSurfaces: () => options.surfaces?.roomSurfaces() ?? [],
+			changed: () => options.changed(),
+			logger: options.logger,
+		});
 		const host: TurnHost = {
 			options,
 			routes: this.routes,
+			helpers: this.helpers,
 			chains: this.#chains,
 			turn: (agent, scope, postTo, text, chain, extra) =>
 				this.#turn(agent, scope, postTo, text, chain, extra),
@@ -154,29 +165,8 @@ export class TeamTurns {
 		);
 	}
 
-	/**
-	 * Whether the speaker may approve the held actions by a message, call by call: an owner, as the
-	 * agents' channels are shared, or, for a call whose tool named its approvers, one of those
-	 * principals, or, for any other call, the principal whose turn held them (by their id, for
-	 * actions held before 0.9). Their tier must now hold every call. Nobody else in the channel
-	 * may, so a call that named approvers is not its speaker's to approve unless named. The gate
-	 * checks the named approvers again when the turn begins, whoever asked for the release.
-	 */
 	#mayApprove(speaker: Speaker, pending: PendingConfirmation): boolean {
-		const theirs =
-			pending.principalId !== undefined
-				? speaker.principalId === pending.principalId
-				: speaker.id === pending.speakerId;
-		const tiers = this.#options.toolTiers ?? toolTiers();
-		// Nothing held names an approver to go by: only the owners and the speaker whose turn held it.
-		if (pending.calls.length === 0) return speaker.tier === "owner" || theirs;
-		return pending.calls.every(
-			(call) =>
-				(speaker.tier === "owner" ||
-					(call.approverIds ? mayApproveNamed(speaker, call) : theirs)) &&
-				tiers.allows(speaker.tier, call.tool) &&
-				(!call.minTier || tierAtLeast(speaker.tier, call.minTier)),
-		);
+		return mayApprove(this.#options.toolTiers ?? toolTiers(), speaker, pending);
 	}
 
 	/** The surfaces that host rooms; none for a team without a surface port. */
@@ -210,6 +200,8 @@ export class TeamTurns {
 	): Promise<TurnResult> {
 		const { logger, startTyping, showStop } = this.#options;
 		const stopTyping = startTyping(postTo);
+		// A temp knight is working for as long as a turn of it runs.
+		this.helpers.begin(agent.name);
 		// A group round has several sessions; only an agent's own channel maps to one.
 		const hideStop = scope.group ? undefined : showStop(postTo);
 		this.#chains.set(scope.session, chain);
@@ -253,6 +245,7 @@ export class TeamTurns {
 			this.#posting.delete(scope.session);
 			this.#working.delete(agent.name);
 			this.#active(agent.name, scope.group);
+			this.helpers.end(agent.name);
 		}
 		this.#options.events?.turnEnded({
 			...turn,

@@ -4,7 +4,7 @@ export {
 	AGENT_SERVER_PRIORITY,
 	OWNER_TARGET,
 } from "./core/agents/agent-claim.ts";
-export { characterOf } from "./core/agents/agent-rules.ts";
+export { characterOf, isHelper } from "./core/agents/agent-rules.ts";
 export type {
 	Agent,
 	AgentGroup,
@@ -12,6 +12,7 @@ export type {
 	AgentStatus,
 } from "./core/agents/agent-store.ts";
 export type { AvatarMode } from "./core/agents/agent-tools.ts";
+export type { HelpersEnded, HelperTeam } from "./core/agents/helper-ops.ts";
 export type { RouteKind, RoutingTable } from "./core/agents/routes.ts";
 export {
 	agentRoomKey,
@@ -49,6 +50,7 @@ export type {
 	TierConfig,
 } from "./core/config/config.ts";
 export type { ConversationsConfig } from "./core/config/conversations.ts";
+export type { HelpersConfig } from "./core/config/helpers.ts";
 export type { LimitsConfig } from "./core/config/limits.ts";
 export type { ProfilesConfig } from "./core/config/profiles.ts";
 export type {

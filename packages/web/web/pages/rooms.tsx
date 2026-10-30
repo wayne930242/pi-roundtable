@@ -10,6 +10,7 @@ import { useAccentStyle } from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
 import { hostUi } from "../lib/frame-taps.ts";
+import { nestedHelper } from "../lib/helper-nesting.ts";
 import { useLive } from "../lib/live.ts";
 import type { PressProps } from "../lib/long-press.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
@@ -306,9 +307,9 @@ function PlainRoomsPage(props: RoomsPageProps) {
 		for (const key of state.order) {
 			const view = state.rooms[key]?.view;
 			if (!view) continue;
-			if (view.kind === "thread") {
-				const parentKeys =
-					view.parent && known.has(view.parent) ? view.parent : undefined;
+			if (view.kind === "thread" || nestedHelper(view, known)) {
+				const parent = view.helper?.parent ?? view.parent;
+				const parentKeys = parent && known.has(parent) ? parent : undefined;
 				let into = orphans;
 				if (parentKeys) {
 					into = threads[parentKeys] ?? { open: [], closed: [] };

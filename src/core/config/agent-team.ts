@@ -46,6 +46,7 @@ export function checkAgentTeamKeys(
 interface AgentOnlyKeys {
 	agents?: readonly unknown[];
 	skills?: unknown;
+	helpers?: unknown;
 	ops?: { agent?: string; conversation?: string };
 	discord?: {
 		agentMemory?: unknown;
@@ -63,6 +64,7 @@ export function checkAgentServerOff(config: AgentOnlyKeys): void {
 	const used: [string, boolean][] = [
 		["agents", (config.agents?.length ?? 0) > 0],
 		["skills", config.skills !== undefined && config.skills !== false],
+		["helpers", config.helpers !== undefined && config.helpers !== false],
 		["ops.agent", config.ops?.agent !== undefined],
 		["discord.agentMemory", config.discord?.agentMemory !== undefined],
 		["discord.agentSpeakers", config.discord?.agentSpeakers !== undefined],

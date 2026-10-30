@@ -24,7 +24,8 @@ function useAgents(): { name: string; displayName: string }[] {
 		state.order
 			.flatMap((key) => {
 				const view = state.rooms[key]?.view;
-				return view?.kind === "agent"
+				// A temp knight takes no group seat.
+				return view?.kind === "agent" && !view.helper
 					? [`${view.name}${SEP}${view.displayName}`]
 					: [];
 			})

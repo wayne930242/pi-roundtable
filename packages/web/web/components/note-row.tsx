@@ -4,6 +4,7 @@ import { useSelector } from "../lib/app-store.ts";
 import { clock } from "../lib/format.ts";
 import { translate as t } from "../lib/messages.ts";
 import { installNoteStyle } from "../lib/note-style.ts";
+import { HelpersEndedLine } from "./helpers-ended-line.tsx";
 import { HostPicture } from "./host-picture.tsx";
 import { MessageMarkdown } from "./message-markdown.tsx";
 import { Files } from "./message-row.tsx";
@@ -13,7 +14,7 @@ installNoteStyle();
 /**
  * An internal note of an agent room: written by one of the room's people for the others, never
  * given to the agent. It always names its author, with their picture, and says it is a note. A
- * lazy chunk, loaded when the first note is shown.
+ * lazy chunk, loaded when the first note, or the first line of archived temp knights, is shown.
  */
 const NoteRow = memo(function NoteRow(props: {
 	message: RoomMessage;
@@ -59,4 +60,15 @@ const NoteRow = memo(function NoteRow(props: {
 	);
 });
 
-export default NoteRow;
+/** What the first note, or the first line of a knight's archived temp knights, loads: a note's row, or that line. */
+export default function ExtraRow(props: {
+	message: RoomMessage;
+	enter: boolean;
+	timeZone: string;
+}) {
+	return props.message.kind === "system" ? (
+		<HelpersEndedLine message={props.message} enter={props.enter} />
+	) : (
+		<NoteRow {...props} />
+	);
+}
