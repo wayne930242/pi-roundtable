@@ -1,5 +1,5 @@
 import type { SeatInit, SeatState, TableHandle, TableOptions } from "./types";
-import { ENGLISH_TABLE_LABELS } from "./types";
+import { ENGLISH_TABLE_LABELS, pointOf } from "./types";
 
 export type {
 	SeatInit,
@@ -94,9 +94,14 @@ export async function mountRoundTable(
 				b.type = "button";
 				b.dataset.seat = s.id;
 				const seat = s.id;
-				b.addEventListener("click", () => {
+				b.addEventListener("click", (event) => {
 					const current = seats.get(seat);
-					if (current) opts.onSeatClick({ id: current.id, name: current.name });
+					if (current)
+						opts.onSeatClick({
+							id: current.id,
+							name: current.name,
+							at: pointOf(event, event.currentTarget as Element),
+						});
 				});
 				buttons.set(s.id, b);
 			}

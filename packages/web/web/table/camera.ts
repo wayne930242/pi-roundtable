@@ -343,6 +343,26 @@ export const easeInOut = (t: number): number => {
 	return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
 };
 
+/**
+ * The dive from the whole ring into a seat: `cubic-bezier(0.7, 0, 0.84, 0)`, the same curve the page's
+ * zoom into a room uses (lib/seat-dive.ts). It creeps at first and rushes in at the end.
+ */
+export const easeDive = (t: number): number => {
+	const x = Math.min(1, Math.max(0, t));
+	const axis = (s: number, a: number, b: number) =>
+		3 * (1 - s) * (1 - s) * s * a + 3 * (1 - s) * s * s * b + s * s * s;
+	// Find the curve's parameter whose x is `x`, then read its y.
+	let low = 0;
+	let high = 1;
+	for (let i = 0; i < 24; i++) {
+		const mid = (low + high) / 2;
+		if (axis(mid, 0.7, 0.84) < x) low = mid;
+		else high = mid;
+	}
+	return axis((low + high) / 2, 0, 0);
+};
+
+export const DIVE_TURN_MS = 420;
 export const MIN_TURN_MS = 450;
 export const MAX_TURN_MS = 650;
 
@@ -351,11 +371,19 @@ export interface Move {
 	ms: number;
 	/** Whether the camera jumps instead of moving. */
 	cut: boolean;
+	/** The move is the dive from the whole ring into a seat, which accelerates instead of easing in and out. */
+	dive?: true;
 }
 
 /** A turn takes 450 ms for a short step and 650 ms for half the ring; reduced motion cuts. */
-export function planMove(from: Shot, to: Shot, reduced: boolean): Move {
+export function planMove(
+	from: Shot,
+	to: Shot,
+	reduced: boolean,
+	dive = false,
+): Move {
 	if (reduced) return { ms: 0, cut: true };
+	if (dive) return { ms: DIVE_TURN_MS, cut: false, dive: true };
 	const arc = Math.abs(shortestArc(from.az, to.az)) / Math.PI;
 	return {
 		ms: Math.round(MIN_TURN_MS + (MAX_TURN_MS - MIN_TURN_MS) * arc),

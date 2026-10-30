@@ -11,7 +11,7 @@ import type {
 	TableStats,
 	ThemeName,
 } from "./types";
-import { ENGLISH_TABLE_LABELS } from "./types";
+import { ENGLISH_TABLE_LABELS, pointOf } from "./types";
 
 /**
  * The 2D council hall: the same ring of podiums with standees behind them, drawn as SVG in the hall's
@@ -420,8 +420,12 @@ export function createTable2D(
 				},
 				orbit,
 			);
-			g.addEventListener("click", () =>
-				opts.onSeatClick({ id: s.id, name: s.name }),
+			g.addEventListener("click", (e) =>
+				opts.onSeatClick({
+					id: s.id,
+					name: s.name,
+					at: pointOf(e as MouseEvent, g),
+				}),
 			);
 			g.addEventListener("keydown", (e) => {
 				if (
@@ -429,7 +433,11 @@ export function createTable2D(
 					(e as KeyboardEvent).key === " "
 				) {
 					e.preventDefault();
-					opts.onSeatClick({ id: s.id, name: s.name });
+					opts.onSeatClick({
+						id: s.id,
+						name: s.name,
+						at: pointOf({ clientX: 0, clientY: 0, detail: 0 }, g),
+					});
 				}
 			});
 		});

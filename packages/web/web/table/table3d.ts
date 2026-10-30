@@ -16,6 +16,7 @@ import {
 	blendShot,
 	closeupShot,
 	dragAngle,
+	easeDive,
 	easeInOut,
 	fitFov,
 	type Move,
@@ -153,9 +154,9 @@ export function createTable3D(
 		container.style.position = "relative";
 	container.appendChild(canvasEl);
 	const labels = opts.labels ?? ENGLISH_TABLE_LABELS;
-	const names = new Names(container, labels, (podium) => {
+	const names = new Names(container, labels, (podium, at) => {
 		if (podium.init.kind === "agent" && podium.init.id)
-			opts.onSeatClick({ id: podium.init.id, name: podium.init.name });
+			opts.onSeatClick({ id: podium.init.id, name: podium.init.name, at });
 		else if (podium.init.kind === "more") opts.onMore?.();
 	});
 	const speed: SpeedLines = createSpeedLines(container, () => reduced);
@@ -191,6 +192,7 @@ export function createTable3D(
 	let to: Shot = shot;
 	let moveStart = 0;
 	let moveMs = 0;
+	let moveDive = false;
 	let dragging: { az: number } | undefined;
 	let primed = false;
 
@@ -222,8 +224,9 @@ export function createTable3D(
 			camera.updateProjectionMatrix();
 		}
 	};
-	const moveTo = (target: Shot, cut: boolean): Move => {
-		const plan = planMove(shot, target, reduced || cut);
+	const moveTo = (target: Shot, cut: boolean, dive = false): Move => {
+		const plan = planMove(shot, target, reduced || cut, dive);
+		moveDive = plan.dive === true;
 		if (plan.cut) {
 			shot = target;
 			moveMs = 0;
@@ -568,7 +571,7 @@ export function createTable3D(
 				shot = to;
 				moveMs = 0;
 			} else {
-				shot = blendShot(from, to, easeInOut(t));
+				shot = blendShot(from, to, moveDive ? easeDive(t) : easeInOut(t));
 				moving = true;
 			}
 		} else if (dragging) moving = true;
@@ -702,8 +705,10 @@ export function createTable3D(
 	const setFocus = (id: string | null, cut: boolean, fromPerson: boolean) => {
 		const wanted = id !== null && world?.slotOf.has(id) ? id : null;
 		if (wanted === focusId) return;
+		const entering = wanted !== null && focusId === null;
 		focusId = wanted;
-		const plan = moveTo(targetShot(), cut);
+		// From the whole ring into a seat the camera dives; between seats and back out it turns.
+		const plan = moveTo(targetShot(), cut, entering);
 		if (wanted !== null && primed && !plan.cut) speed.play();
 		if (fromPerson) opts.onFocus?.(wanted);
 	};
@@ -844,7 +849,12 @@ export function createTable3D(
 			if (!found) return;
 			if (found.kind === "agent" && found.seat) {
 				const seat = seats.find((s) => s.id === found.seat);
-				if (seat) opts.onSeatClick({ id: seat.id, name: seat.name });
+				if (seat)
+					opts.onSeatClick({
+						id: seat.id,
+						name: seat.name,
+						at: { x: event.clientX, y: event.clientY },
+					});
 			} else if (found.kind === "more") opts.onMore?.();
 			else if (found.kind === "owner" && focusId !== null)
 				setFocus(null, false, true);
