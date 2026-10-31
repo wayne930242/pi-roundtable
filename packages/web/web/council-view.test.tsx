@@ -156,7 +156,8 @@ const controls = () =>
 				? [...one.querySelectorAll("label")].map((l) => l.textContent).join("/")
 				: (one.getAttribute("aria-label") ?? one.textContent),
 		)
-		.filter(Boolean);
+		// A card another test left waiting adds a button of its own to both headers.
+		.filter((label) => label && !/waiting/.test(label));
 
 const room = async () => {
 	window.location.hash = `#/room/${CREW}`;
@@ -211,7 +212,7 @@ test("the mode switch keeps icon and words in the markup, hides the words on nar
 	for (const one of labels) {
 		expect(one.querySelector("svg")).not.toBeNull();
 		expect(one.querySelector(".mode-label")?.textContent).toBe(
-			one.getAttribute("title"),
+			one.getAttribute("title") ?? undefined,
 		);
 	}
 	const phone = TABLE_PAGE_CSS.slice(
