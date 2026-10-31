@@ -10,6 +10,7 @@ import type { RoomView } from "../../src/api-types.ts";
 import { openMenu } from "../lib/action-menu.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { type CouncilMode, useCouncilMode } from "../lib/council-mode.ts";
+import { mentionInto } from "../lib/drafts.ts";
 import type { Via } from "../lib/long-press.ts";
 import { useLook } from "../lib/look.ts";
 import { useMedia } from "../lib/media.ts";
@@ -227,8 +228,31 @@ export function CouncilView(props: {
 				</button>
 			</header>
 			{look === "camelot" && seated && !scene ? (
-				<div className="group-strip">
-					<RoundTable members={members} groupRoom={roomKey} variant="compact" />
+				// biome-ignore lint/a11y/noStaticElementInteractions: a pointer press on a podium must not take the focus off the message box, where the mention lands; the podiums stay buttons for the keyboard
+				<div
+					className="group-strip"
+					onMouseDown={(event) => event.preventDefault()}
+				>
+					<RoundTable
+						members={members}
+						groupRoom={roomKey}
+						variant="compact"
+						onSeat={(member) => {
+							const one = roster.find((seat) => seat.name === member);
+							if (one) mentionInto(roomKey, one.displayName);
+						}}
+						onSeatMenu={(request: SeatMenuRequest) => {
+							const one = roster.find((seat) => seat.name === request.id);
+							if (one)
+								openSeatMenu(
+									one.key,
+									roomKey,
+									request.at,
+									request.via,
+									request.source,
+								);
+						}}
+					/>
 				</div>
 			) : null}
 			{!open ? (

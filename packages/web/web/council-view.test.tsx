@@ -9,6 +9,7 @@ import {
 } from "bun:test";
 import { partial } from "pi-roundtable/testing";
 import type { ConfigView, RoomView } from "../src/api-types.ts";
+import { ActionMenuHost } from "./components/action-menu.tsx";
 import { CouncilView } from "./components/council-view.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
@@ -290,4 +291,104 @@ test("at 390 px the council's tools take their own row, and a send closes the ke
 	await settle();
 	box = await send("on a desk");
 	expect(document.activeElement).toBe(box);
+});
+
+/** A Camelot council in chat mode over a room of its own, so no other test's draft is in its box. */
+async function strip(key: string, names: Record<string, string> = {}) {
+	setLook("camelot");
+	const room = {
+		...crew,
+		key: `app:group.${key}`,
+		name: key,
+		displayName: key,
+	};
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			{ ...agent("guide"), displayName: names.guide ?? "guide" },
+			{ ...agent("scout"), displayName: names.scout ?? "scout" },
+			room,
+		],
+	});
+	setCouncilMode(room.key, "chat");
+	await page.render(
+		<ConfigContext.Provider value={config}>
+			<ActionMenuHost />
+			<CouncilView roomKey={room.key} lead={null} />
+		</ConfigContext.Provider>,
+	);
+	await settle();
+	const seat = (name: string) =>
+		q<SVGGElement>(`.group-strip g.seat[data-seat="${name}"]`);
+	const box = () => q<HTMLTextAreaElement>("textarea");
+	const type = async (text: string, caret: number) => {
+		const field = box();
+		if (!field) throw new Error("no composer");
+		await page.act(() => {
+			field.focus();
+			Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set?.call(field, text);
+			field.dispatchEvent(new Event("input", { bubbles: true }));
+			field.setSelectionRange(caret, caret);
+		});
+	};
+	const tap = (name: string) =>
+		page.act(() => {
+			seat(name)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		});
+	return { room, seat, box, type, tap };
+}
+
+test("a tap on a podium in the strip mentions the knight in the box, takes the focus there, and stays in the room", async () => {
+	window.location.hash = "#/table/strip-a";
+	const { seat, box, tap } = await strip("strip-a", { scout: "Blog Editor" });
+	expect(seat("scout")).not.toBeNull();
+	await tap("scout");
+	await settle(30);
+	expect(box()?.value).toBe("@Blog Editor ");
+	expect(document.activeElement).toBe(box() ?? undefined);
+	expect(box()?.selectionStart).toBe("@Blog Editor ".length);
+	// It did not navigate away: the page is where it was and the strip still stands.
+	expect(window.location.hash).toBe("#/table/strip-a");
+	expect(q(".group-strip")).not.toBeNull();
+	// A second tap goes after the first, with a space between.
+	await tap("guide");
+	await settle(30);
+	expect(box()?.value).toBe("@Blog Editor @guide ");
+});
+
+test("a tap puts the mention at the caret when the box is the one being typed in, and after the text when it is not", async () => {
+	const { box, type, tap } = await strip("strip-b");
+	await type("hi there", 2);
+	await tap("scout");
+	await settle(30);
+	expect(box()?.value).toBe("hi @scout there");
+	expect(box()?.selectionStart).toBe("hi @scout ".length);
+	// The box lost the focus: the mention goes at the end, and the box takes the focus back.
+	await page.act(() => box()?.blur());
+	await tap("guide");
+	await settle(30);
+	expect(box()?.value).toBe("hi @scout there @guide ");
+	expect(document.activeElement).toBe(box() ?? undefined);
+});
+
+test("a right click on a podium in the strip opens the knight's menu, which has its room", async () => {
+	const { seat } = await strip("strip-c");
+	await page.act(() => {
+		seat("scout")?.dispatchEvent(
+			new MouseEvent("contextmenu", {
+				bubbles: true,
+				cancelable: true,
+				clientX: 40,
+				clientY: 40,
+			}),
+		);
+	});
+	await settle(120);
+	const labels = all('[role="menu"] [role^="menuitem"]').map(
+		(item) => item.textContent,
+	);
+	expect(labels).toContain("Private chat");
 });

@@ -178,7 +178,9 @@ export function createTable2D(
 
 		const slotW = W / perRow;
 		const room = compact ? H * 0.95 : H / (rows + 0.6);
-		const pw = Math.max(46, Math.min(slotW * 0.94, 132, room * 1.05));
+		// A compact figure stands 1.54 podium widths above its foot (0.92 H): the width keeps the whole head in the strip.
+		const fits = compact ? (H * 0.92 - 6) / 1.54 : 132;
+		const pw = Math.max(46, Math.min(slotW * 0.94, 132, room * 1.05, fits));
 		const ph = pw * 0.72;
 		const figure = pw * 1.05;
 		rimFilter(defs, hall, figure);
