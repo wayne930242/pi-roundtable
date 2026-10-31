@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { HoldCheck } from "pi-roundtable";
 import type { CodingJob } from "./coding-desk.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
@@ -178,4 +179,34 @@ test("trusted host prompt and workspace carry into the process without bypassing
 	expect(report).toContain("Do not retry");
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);
+});
+
+test("a held call carries the hold classes of every check that holds it", async () => {
+	const { job, agentDir } = fixture();
+	const seen: (readonly string[] | undefined)[] = [];
+	const run = async (holds?: HoldCheck) => {
+		const worker = new PiCodingWorker({
+			agentDir,
+			packages: [
+				fileURLToPath(new URL("./testing/faux-provider.ts", import.meta.url)),
+			],
+			...(holds ? { holds } : {}),
+		});
+		await worker.run(job, AbortSignal.timeout(10_000), async (call) => {
+			seen.push(call.holdClasses);
+			return "held";
+		});
+	};
+	// The faux worker writes outside its clone, which the shell rule holds.
+	await run();
+	const classed: HoldCheck = Object.assign(() => "Host private action", {
+		classesOf: () => ["host.private"],
+	});
+	await run(classed);
+	await run(() => "Host action without classes");
+	expect(seen).toEqual([
+		["shell.write"],
+		["shell.write", "host.private"],
+		undefined,
+	]);
 });
