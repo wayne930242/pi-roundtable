@@ -5,20 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
+## [0.29.2] - 2026-10-31
 
-- A tap or Enter on a podium in the council's chat-mode strip mentions that knight in the council's message box instead of opening the knight's room: `@<name> ` goes in at the caret when the box is the one being typed in, and after the text when it is not, and the box takes the focus. The strip's podiums now have the knight's menu too (a long press, a right click or the Menu key), where "Private chat" opens the knight's own room. The animated scene is as it was: a tap turns the camera.
-
-### Fixed
-
-- In the council's chat-mode strip the room header no longer cuts the figures off at the chin. The figures were drawn larger than the 120 px strip, so only mouths and bodies showed; the podiums now size to the strip (a podium at most 67 px wide, 46 px at the narrowest) and every head stands whole under the header, from two members to eight, at desktop and 390 px width. The strip is as high as before.
 ### Added
 
 - The groups you pick a room from fold like Discord's categories: the owners' folders, and the headings Pinned, Ungrouped, Knights and Groups in the room list, and the same headings and folders in a phone's room drawer. Tap the heading (a chevron, `aria-expanded`) to fold it; a folded group shows how many rooms it holds. The fold is kept per device in `localStorage`, shared by the list and the drawer for the same folder, Pinned and Ungrouped. Home and the drawer's "Waiting for you" never fold.
 
 ### Changed
 
+- A tap or Enter on a podium in the council's chat-mode strip mentions that knight in the council's message box instead of opening the knight's room: `@<name> ` goes in at the caret when the box is the one being typed in, and after the text when it is not, and the box takes the focus. The strip's podiums now have the knight's menu too (a long press, a right click or the Menu key), where "Private chat" opens the knight's own room. The animated scene is as it was: a tap turns the camera.
 - A folded group keeps its open room under the heading, plus any room with a card waiting for an answer or messages unread, as a Discord category keeps the selected and the unread channels. A folded folder used to open in full while it held the open room; now only that room stays and the others fold away behind the folder's picture stack. Alt+↑/↓ step over the rooms a fold hides. A search (the drawer's field, the room palette) still finds rooms in a folded group.
+
+### Fixed
+
+- In the council's chat-mode strip the room header no longer cuts the figures off at the chin. The figures were drawn larger than the 120 px strip, so only mouths and bodies showed; the podiums now size to the strip (a podium at most 67 px wide, 46 px at the narrowest) and every head stands whole under the header, from two members to eight, at desktop and 390 px width. The strip is as high as before.
 
 ## [0.29.1] - 2026-10-31
 
