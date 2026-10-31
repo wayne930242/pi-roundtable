@@ -161,8 +161,10 @@ export function useRoute(): Route {
 			)
 				return;
 			event.preventDefault();
+			// Every useRoute hears the step: the first listener takes the click and the rest see it prevented,
+			// so a page with a route of its own (the files pane, kept mounted across folders) would stay behind.
 			window.history.pushState(null, "", url);
-			onChange();
+			window.dispatchEvent(new PopStateEvent("popstate"));
 		};
 		document.addEventListener("click", click);
 		return () => {

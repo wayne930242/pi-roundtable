@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
-import { pageKey, useRoute } from "./lib/router.ts";
+import { pageKey, setRouting, useRoute } from "./lib/router.ts";
 
 let page: TestPage;
 let transitions = 0;
@@ -62,4 +62,53 @@ test("the files keep one page name across places, so the tree and the listing ar
 	expect(pageKey("workspace", "x", true)).not.toBe(
 		pageKey("settings", "x", true),
 	);
+});
+
+function Late(props: { show: boolean }) {
+	return props.show ? <Shown /> : null;
+}
+
+function Shown() {
+	const route = useRoute();
+	return (
+		<>
+			<p id="inner">{`${route.pane}/${route.key ?? ""}`}</p>
+			<a id="folder" href="/app/workspace/agents%3Asrc%2F">
+				src
+			</a>
+		</>
+	);
+}
+
+test("a link click reaches every useRoute, also one mounted after the page's own", async () => {
+	setRouting("/app");
+	// The shell's route listens first, as when Files is reached from the tab bar.
+	window.history.replaceState(null, "", "/app/rooms");
+	function Shell() {
+		const route = useRoute();
+		return (
+			<>
+				<p id="outer">{`${route.pane}/${route.key ?? ""}`}</p>
+				<Late show={route.pane === "workspace"} />
+			</>
+		);
+	}
+	try {
+		await page.render(<Shell />);
+		const text = (id: string) =>
+			page.container.querySelector(`#${id}`)?.textContent;
+		await page.act(async () => {
+			window.history.pushState(null, "", "/app/workspace");
+			window.dispatchEvent(new PopStateEvent("popstate"));
+		});
+		expect(text("inner")).toBe("workspace/");
+		await page.act(async () => {
+			(page.container.querySelector("#folder") as HTMLElement).click();
+		});
+		expect(text("outer")).toBe("workspace/agents:src/");
+		expect(text("inner")).toBe("workspace/agents:src/");
+	} finally {
+		setRouting(undefined);
+		window.history.replaceState(null, "", "/");
+	}
 });
