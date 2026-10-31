@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-31
+
+- Release in lockstep with pi-roundtable 0.29.0; no package-specific behavior changes. The core peer range moves to `>=0.29.0 <0.30.0`.
+
 ## [0.28.0] - 2026-10-31
 
 - Release in lockstep with pi-roundtable 0.28.0; no package-specific behavior changes. The core peer range moves to `>=0.28.0 <0.29.0`.

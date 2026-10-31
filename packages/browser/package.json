@@ -1,6 +1,6 @@
 {
 	"name": "pi-roundtable-browser",
-	"version": "0.28.0",
+	"version": "0.29.0",
 	"description": "A browser worker for pi-roundtable agents: agent-browser in a Docker container with no route to the host's networks",
 	"type": "module",
 	"license": "MIT",
@@ -39,12 +39,12 @@
 		"typebox": "1.3.37"
 	},
 	"peerDependencies": {
-		"pi-roundtable": ">=0.28.0 <0.29.0"
+		"pi-roundtable": ">=0.29.0 <0.30.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.3",
-		"pi-roundtable": "0.28.0",
+		"pi-roundtable": "0.29.0",
 		"typescript": "7.0.2"
 	}
 }

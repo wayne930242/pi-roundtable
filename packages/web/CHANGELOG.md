@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-31
+
 ### Added
 
 - Skill groups in the app. The Skills page has a "Skill groups" section that lists each group with its skills and creates, edits (name, description, skills picked from the catalog) and deletes a group after a confirmation. The Edit knight sheet's Skills section has a switch per group, the same switch as each skill's: it shows on when the knight carries all of the group, otherwise what it lacks. Switching it on, after a confirmation, switches on the group's skills the knight lacks through the same path as the per-skill switch; switching it off switches off the group's skills the knight carries, built-in ones excepted. Either names what changed. A knight carries skills, not groups. The routes are under `api/skill-groups/` (list, `PUT` to create or replace with `from` to rename, `DELETE`, `POST …/apply` with `on: false` to switch a group off, answering `added` and `removed`) and answer owners only; `AppApiOptions.skills.groups` takes the registry's `groups`, `setGroup` and `deleteGroup`.

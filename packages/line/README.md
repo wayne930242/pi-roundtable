@@ -11,7 +11,7 @@ It covers intake (the credentials and token source, the webhook, the allowlist o
 
 ## Requirements
 
-- Bun 1.4.4 or later, and pi-roundtable `>=0.28.0 <0.29.0` as a peer dependency.
+- Bun 1.4.4 or later, and pi-roundtable `>=0.29.0 <0.30.0` as a peer dependency.
 - PostgreSQL, which the host already needs.
 - An HTTP listener on the host that LINE can reach over HTTPS (the webhook URL is set in the channel's settings).
 - A Messaging API channel: its channel id and channel secret.
