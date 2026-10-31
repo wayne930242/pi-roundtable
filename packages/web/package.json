@@ -71,7 +71,7 @@
 		"@types/react-dom": "19.3.0",
 		"@types/three": "0.186.0",
 		"pi-roundtable": "0.29.0",
-		"react": "19.3.0",
+		"react": "19.3.1",
 		"react-dom": "19.3.0",
 		"react-markdown": "10.1.0",
 		"remark-gfm": "4.0.1",
