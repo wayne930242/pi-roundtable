@@ -5,6 +5,7 @@ import type {
 } from "../domain/turn-timeout.ts";
 import { messages } from "../i18n/index.ts";
 import type { Approval } from "../interactions/prompts.ts";
+import { DEFAULT_YOLO_TIMEOUT_CARD_GRACE_MS } from "../modes/autonomy.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { PromptSlot } from "./prompt-slot.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
@@ -129,6 +130,14 @@ export interface TurnBudgetSeams {
 	 * fires at it, as the turn's cap, so a long time limit cannot overshoot the long-running cap.
 	 */
 	ceilingMs?: number;
+	/**
+	 * Whether the turn's conversation is in yolo mode, asked when a limit fires: its timeout card
+	 * then waits `yoloCardMs` and, unanswered, extends the turn as Continue would, up to
+	 * `ceilingMs` of work. Past that, or without `ceilingMs`, the card is the usual one.
+	 */
+	yolo?: () => boolean;
+	/** How long a yolo turn's timeout card waits, in ms; default `DEFAULT_YOLO_TIMEOUT_CARD_GRACE_MS`. */
+	yoloCardMs?: number;
 }
 
 /**
@@ -139,6 +148,8 @@ export interface TurnBudgetSeams {
  * no answer within `turnTimeoutCardMs` (default 5 minutes, wall time) aborts. The card closes
  * when the turn ends first. Without a card the turn is aborted at once. `abort` is told why.
  * When `seams.keepGoing` says so, the limit is extended server-side first and neither happens.
+ * In a yolo conversation (`seams.yolo`) short of `seams.ceilingMs`, the card waits
+ * `seams.yoloCardMs` instead, and no answer extends the turn as Continue would, up to the ceiling.
  */
 export function runtimeTurnBudget(
 	options: Pick<
@@ -160,15 +171,24 @@ export function runtimeTurnBudget(
 		limit: TurnLimit,
 		limitMs: number,
 		end: TurnTimeoutEnd,
+		auto = false,
 	): TurnTimeout => ({
 		limit,
 		limitMs,
 		workedMs: budget.workedMs(),
 		...seams.activity.now(clock.now()),
-		graceMs,
+		graceMs: auto
+			? (seams.yoloCardMs ?? DEFAULT_YOLO_TIMEOUT_CARD_GRACE_MS)
+			: graceMs,
 		end,
+		...(auto ? { autoContinue: true as const } : {}),
 		...(slot.cards ? {} : { unasked: true as const }),
 	});
+	/** Whether an unanswered card goes on by itself: a yolo conversation short of the ceiling. */
+	const autoContinues = () =>
+		seams.ceilingMs !== undefined &&
+		budget.workedMs() < seams.ceilingMs &&
+		seams.yolo?.() === true;
 	const stop = (timeout: TurnTimeout) => {
 		logger.warn(
 			{
@@ -202,13 +222,15 @@ export function runtimeTurnBudget(
 			const prompts = slot.cards;
 			if (!prompts) return stop(reason(limit, limitMs, "timeout"));
 			const m = messages();
-			const asked = reason(limit, limitMs, "timeout");
+			const auto = autoContinues();
+			const asked = reason(limit, limitMs, "timeout", auto);
 			logger.info(
 				{
 					channel,
 					limit,
 					workedMs: asked.workedMs,
 					running: asked.running,
+					...(auto ? { yolo: true } : {}),
 				},
 				"turn reached its time limit; asking the owner",
 			);
@@ -223,10 +245,19 @@ export function runtimeTurnBudget(
 			};
 			const cancelGrace = clock.schedule(() => {
 				if (!settle()) return;
+				if (auto) {
+					controller.abort(m.turnTimeoutAutoContinued(asked));
+					budget.extend(limit === "turnMax", seams.ceilingMs);
+					logger.info(
+						{ channel, limit, workedMs: budget.workedMs() },
+						"yolo mode continued the turn; the timeout card went unanswered",
+					);
+					return;
+				}
 				const timeout = reason(limit, limitMs, "unanswered");
 				controller.abort(m.turnTimeoutUnanswered(timeout));
 				stop(timeout);
-			}, graceMs);
+			}, asked.graceMs);
 			closeCard = (footer) => {
 				if (settle()) controller.abort(footer);
 			};

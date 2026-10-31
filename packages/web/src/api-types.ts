@@ -421,6 +421,8 @@ export type RoomKind = "agent" | "group" | "thread";
 export interface RoomMode {
 	yolo: boolean;
 	longRunning: boolean;
+	/** The modes follow another conversation's, named here: a temp knight's follow its parent's, and cannot be switched in its own room. */
+	inheritedFrom?: string;
 }
 
 /** A file in a message, served at `<mount>/api/files/<id>`. */
@@ -1345,7 +1347,7 @@ export type ServerFrame =
 			/** When it ended (ISO 8601, the server's clock). */
 			closedAt?: string;
 	  }
-	| { type: "mode"; room: string; yolo: boolean; longRunning: boolean }
+	| ({ type: "mode"; room: string } & RoomMode)
 	/** Yolo mode approved a held call by itself. */
 	| { type: "auto_approved"; room: string; tool: string; action: string }
 	/** The team or the room list may differ: refetch. */

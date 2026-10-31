@@ -23,6 +23,11 @@ export interface TurnTimeout {
 	tools: [string, number][];
 	/** How long the timeout card waits for an answer. */
 	graceMs: number;
+	/**
+	 * The card goes on by itself when no one answers it in `graceMs`, as Continue would: the
+	 * conversation is in yolo mode and the turn is short of the long-running cap.
+	 */
+	autoContinue?: true;
 	end: TurnTimeoutEnd;
 	/** No timeout card could be shown, as in a schedule's turn, so nobody was asked whether to go on. */
 	unasked?: true;

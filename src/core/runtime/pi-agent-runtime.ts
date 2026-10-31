@@ -266,6 +266,7 @@ export class PiAgentRuntime implements AgentRuntime {
 				: undefined,
 			request.agent?.name ?? assistantName(),
 			interim ? () => interim.flush() : undefined,
+			() => this.#options.modes?.peek(request.channel).yolo === true,
 		);
 		// A model that ignores the abort must not hold the turn: its session is disposed of instead.
 		const guard = new AbortGuard(session, {
@@ -421,8 +422,7 @@ export class PiAgentRuntime implements AgentRuntime {
 		const timer = setTimeout(abort, task.timeoutMs);
 		try {
 			const registered = new Set(session.getAllTools().map((t) => t.name));
-			// A worker that loaded the reader's memory may report it: the call that started it, and the
-			// calls that one runs within, then record their results as the reader's.
+			// A worker that loaded the reader's memory: its starting call and the calls within it report as the reader's.
 			if (memoryReader(conversation, turn.speaker) && loadsMemory(registered)) {
 				parent.draws.drawn(runningCalls());
 				this.#memoryTurns.get(scope.turn)?.();

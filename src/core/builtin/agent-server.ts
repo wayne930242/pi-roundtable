@@ -9,6 +9,7 @@ import { DiscordAgentTeam } from "../agents/agent-team.ts";
 import { AGENT_TOOLS } from "../agents/agent-tools.ts";
 import { FileAvatarStudio } from "../agents/avatar-studio.ts";
 import { RelevanceScorer } from "../agents/group-round.ts";
+import { modeOrigins } from "../agents/helper-modes.ts";
 import { Routes } from "../agents/routes.ts";
 import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
@@ -245,6 +246,8 @@ export function agentServerPlugin(
 			// Absent when the skills addon is off: the agents then carry none.
 			const skills = context.services.find(SKILLS);
 			const { agents: store } = await openStores(context, teamId);
+			// A temp knight's conversations follow the modes of the one that made it.
+			context.services.find(MODES)?.trackOrigins(modeOrigins(store, surfaces));
 			const running = context.services.get(RUNTIME);
 			const judge = providers.judge;
 			const confirmations = new ConfirmationJudge({

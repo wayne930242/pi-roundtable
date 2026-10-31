@@ -72,6 +72,7 @@ describe("a card answered after its turn stopped waiting", () => {
 					prepare = tool.prepareArguments;
 				}
 			},
+			on: () => undefined,
 		} as unknown as ExtensionAPI);
 		const result = await execute?.(
 			"call-1",

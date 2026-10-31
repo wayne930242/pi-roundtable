@@ -22,7 +22,9 @@ import {
  * room for fewer questions, go through `ask`: one question exactly as before 0.20, several one
  * at a time, stopping at the first that does not come back answered. While the host stops
  * (`stopping`), no card is posted, and one left waiting is reported lost: open cards do not
- * survive the restart.
+ * survive the restart. With `yoloGraceMs`, the turn's conversation is in yolo mode: each card
+ * holds the turn that long at most, and one left unanswered tells it to go on with its own best
+ * choice instead of ending its turn; the restart still wins over that.
  */
 export async function askQuestions(
 	prompts: Prompts,
@@ -31,7 +33,10 @@ export async function askQuestions(
 	owner: OwnerIdentity,
 	signal: AbortSignal | undefined,
 	stopping?: () => boolean,
+	yoloGraceMs?: number,
 ): Promise<string> {
+	const yolo = yoloGraceMs !== undefined;
+	const grace = yolo ? { graceMs: yoloGraceMs } : {};
 	const refused = validateQuestionnaire(questionnaire);
 	if (refused !== undefined) return refused;
 	if (stopping?.()) return restartingText(owner, false);
@@ -54,6 +59,7 @@ export async function askQuestions(
 			shapeFor(questionnaire, support),
 			signal,
 			{
+				...grace,
 				late: (late) =>
 					late.kind === "questionnaire"
 						? n === 1
@@ -73,28 +79,30 @@ export async function askQuestions(
 					? answer
 					: (answer.answers[0] ?? { choices: [] }),
 				owner,
+				yolo,
 			);
-		return questionnaireText(answer, questionnaire, owner);
+		return questionnaireText(answer, questionnaire, owner, yolo);
 	}
 	const shaped = shapeFor(questionnaire, SINGLE_QUESTION);
 	const answers: OwnerAnswer[] = [];
 	for (const [i, question] of shaped.questions.entries()) {
 		const text = questionnaire.questions[i]?.question ?? question.question;
 		const answer = await prompts.ask(title, question, signal, {
+			...grace,
 			late: (late) =>
 				late.kind === "question"
 					? lateAnswerText(text, late.answer, late.by)
 					: undefined,
 		});
 		if (lost(answer)) return restartingText(owner, true);
-		if (n === 1) return answerText(answer, owner);
+		if (n === 1) return answerText(answer, owner, yolo);
 		if (answer === "pending" || answer === "declined" || answer === undefined)
 			return sequentialText(
 				questionnaire,
 				answers,
 				answer ?? "unanswered",
 				owner,
-				answerText(answer, owner),
+				answerText(answer, owner, yolo),
 			);
 		answers.push(answer);
 	}

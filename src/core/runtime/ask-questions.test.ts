@@ -185,6 +185,87 @@ describe("askQuestions", () => {
 		).toContain("1. Type: chose Bug");
 	});
 
+	describe("in a yolo conversation", () => {
+		const yolo = (
+			prompts: Prompts,
+			q: Questionnaire,
+			stopping?: () => boolean,
+		) => askQuestions(prompts, "infra", q, OWNER, undefined, stopping, 30_000);
+		const keepWorking = (text: string) => {
+			expect(text).toContain("Riley has not answered yet, and yolo mode is on");
+			expect(text).toContain("do not end your turn and do not ask again");
+			expect(text).toContain("Go on with your recommended option");
+			expect(text).toContain("say in your reply what you assumed");
+			expect(text).toContain("Only a question that truly blocks");
+			expect(text).not.toContain("End your turn now");
+		};
+
+		test("a questionnaire card waits the turn's short grace and pending says to keep working", async () => {
+			const pending = v2("pending");
+			keepWorking(await yolo(pending.prompts, two));
+			expect(pending.waits[0]?.graceMs).toBe(30_000);
+			// The late answer still starts a turn with it.
+			expect(
+				pending.waits[0]?.late({
+					kind: "questionnaire",
+					answer: { answers: [{ choices: ["Bug"] }, undefined, undefined] },
+					by: "Ada",
+				}),
+			).toContain("1. Type: chose Bug");
+		});
+
+		test("one question asked on its own, and the first of several asked one at a time, say the same", async () => {
+			const one = v1(["pending"]);
+			keepWorking(
+				await yolo(one.prompts, {
+					questions: [two.questions[0] as Questionnaire["questions"][number]],
+				}),
+			);
+			expect(one.waits[0]?.graceMs).toBe(30_000);
+			const several = v1([{ choices: ["Bug"] }, "pending"]);
+			const text = await yolo(several.prompts, two);
+			expect(text).toContain("1. Type: chose Bug");
+			keepWorking(text);
+			expect(several.waits.map((w) => w.graceMs)).toEqual([30_000, 30_000]);
+		});
+
+		test("an answer, a cancel and no answer read as outside yolo", async () => {
+			expect(
+				await yolo(
+					v2({ answers: [{ choices: ["Bug"] }, undefined, undefined] }).prompts,
+					two,
+				),
+			).toContain("1. Type: chose Bug");
+			expect(await yolo(v2(undefined).prompts, two)).toStartWith("No answer");
+		});
+
+		test("the restart still wins: no card while the host stops, and a waiting one is lost", async () => {
+			const stopped = v2("pending");
+			expect(await yolo(stopped.prompts, two, () => true)).toStartWith(
+				"The server is restarting, so no card was posted",
+			);
+			expect(stopped.sent).toHaveLength(0);
+			let stopping = false;
+			const waiting: Prompts = {
+				...v2("pending").prompts,
+				questionnaire: async () => {
+					stopping = true;
+					return "pending";
+				},
+			};
+			const lost = await yolo(waiting, two, () => stopping);
+			expect(lost).toContain("the server is restarting");
+			expect(lost).not.toContain("yolo mode is on");
+		});
+
+		test("outside yolo the wait has no grace of its own and pending ends the turn", async () => {
+			const pending = v2("pending");
+			const text = await run(pending.prompts, two);
+			expect(text).toContain("End your turn now");
+			expect(pending.waits[0]?.graceMs).toBeUndefined();
+		});
+	});
+
 	test("a single question with previews uses the card only where previews show", async () => {
 		const one: Questionnaire = {
 			questions: [

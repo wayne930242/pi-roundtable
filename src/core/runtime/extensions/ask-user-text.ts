@@ -9,14 +9,37 @@ import type {
 /** The longest a question's name is when it has no header, in characters. */
 const NAME_CHARS = 120;
 
-/** The tool's result: what the owner chose and wrote. */
+/**
+ * When a question truly blocks a yolo turn: the one case it may end waiting for the answer. Shared
+ * by the unanswered result and the yolo note, so the two never say it differently.
+ */
+function trulyBlocks(o: ReturnType<typeof ownerWords>): string {
+	return `Only a question that truly blocks may end your turn: one with no safe choice without the answer, such as an irreversible or outward-facing step whose direction only ${o.he} can pick. Then first finish every part of the work the answer does not affect, and end your turn saying what you are waiting for.`;
+}
+
+/**
+ * The note a yolo turn's system prompt carries: work on without waiting for the owner, and end the
+ * turn with a question only when it truly blocks.
+ */
+export function yoloAskNote(owner: OwnerIdentity): string {
+	const o = ownerWords(owner);
+	return `Yolo mode is on in this conversation: keep working without waiting for ${o.name}, and do not end your turn with a question. When an ask_user card goes unanswered, go on with your recommended option, or your best judgment where you offered none, and say in your reply what you assumed; ${o.his} later answer comes in a new turn to correct course. ${trulyBlocks(o)}`;
+}
+
+/**
+ * The tool's result: what the owner chose and wrote. `yolo`: the turn's conversation is in yolo
+ * mode, so a question not answered in its short wait does not end the turn.
+ */
 export function answerText(
 	answer: OwnerAnswer | "pending" | "declined" | undefined,
 	owner: OwnerIdentity,
+	yolo = false,
 ): string {
 	const o = ownerWords(owner);
 	if (answer === "declined")
 		return `${o.name} cancelled the question on its card without answering. Do not ask the same question again. Continue without the answer, or, if you cannot go on without it, end your turn saying so.`;
+	if (answer === "pending" && yolo)
+		return `${o.name} has not answered yet, and yolo mode is on in this conversation, so keep working: do not end your turn and do not ask again. Go on with your recommended option, or your best judgment where you offered none, and say in your reply what you assumed. The card stays open; if ${o.he} answers later, a new turn brings you the answer and you correct course from there. ${trulyBlocks(o)}`;
 	if (answer === "pending")
 		return `${o.name} has not answered yet. The card stays open, so do not ask again and do not wait for it. End your turn now: say briefly that you are waiting for ${o.his} answer on the card. When ${o.he} answers, a new turn brings you the answer and you continue from there.`;
 	if (!answer)
@@ -81,14 +104,15 @@ function listOf(
 	];
 }
 
-/** The tool's result for a questionnaire: each question's answer, and the note. */
+/** The tool's result for a questionnaire: each question's answer, and the note; `yolo` as for `answerText`. */
 export function questionnaireText(
 	answer: QuestionnaireAnswer | "pending" | "declined" | undefined,
 	questionnaire: Questionnaire,
 	owner: OwnerIdentity,
+	yolo = false,
 ): string {
 	if (answer === "pending" || answer === "declined" || !answer)
-		return answerText(answer, owner);
+		return answerText(answer, owner, yolo);
 	return [
 		`${owner.name} answered your questions on the card:`,
 		...listOf(questionnaire, answer),

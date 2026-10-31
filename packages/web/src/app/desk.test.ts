@@ -215,6 +215,29 @@ describe("how a card ends", () => {
 		expect(instance.approve(ADA, promptId(), true)).toBe("unknown_prompt");
 	});
 
+	test("a turn's own grace period replaces the desk's, for a question and a questionnaire alike", async () => {
+		const { instance } = desk({ graceMs: 60_000 });
+		const prompts = instance.prompts(ROOM, SCOPE);
+		const question = {
+			question: "q",
+			options: [],
+			multi: false,
+			allowOther: true,
+		};
+		const wait = { late: () => "never", graceMs: 20 };
+		const started = Date.now();
+		expect(await prompts.ask("t", question, undefined, wait)).toBe("pending");
+		expect(
+			await prompts.questionnaire?.(
+				"t",
+				{ questions: [question, { ...question, question: "r" }] },
+				undefined,
+				wait,
+			),
+		).toBe("pending");
+		expect(Date.now() - started).toBeLessThan(5_000);
+	});
+
 	test("cancelling a late question only closes it", async () => {
 		const { instance, frames, resumed, promptId } = desk({ graceMs: 20 });
 		const result = instance

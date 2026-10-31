@@ -44,7 +44,7 @@ import { FileDir } from "./files.ts";
 import { RoomLayout } from "./layout.ts";
 import { Presence } from "./presence.ts";
 import { RoomLog } from "./room-log.ts";
-import { Rooms } from "./rooms.ts";
+import { Rooms, roomModeOf } from "./rooms.ts";
 import { AppApi, type AppApiOptions, partsOf } from "./routes.ts";
 import { SocketRoute } from "./socket.ts";
 import { type AppSocket, type Audience, Sockets } from "./sockets.ts";
@@ -483,12 +483,7 @@ export class OwnerApp {
 			modes.onChange((channel, mode) => {
 				if (!rooms.ownsKey(channel)) return;
 				sockets.deliver(
-					{
-						type: "mode",
-						room: channel,
-						yolo: mode.yolo,
-						longRunning: mode.longRunning,
-					},
+					{ type: "mode", room: channel, ...roomModeOf(mode) },
 					{ owners: true },
 				);
 			}),

@@ -643,7 +643,13 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "mode":
 			return withRoom(state, action.room, (room) => ({
 				...room,
-				mode: { yolo: action.yolo, longRunning: action.longRunning },
+				mode: {
+					yolo: action.yolo,
+					longRunning: action.longRunning,
+					...(action.inheritedFrom === undefined
+						? {}
+						: { inheritedFrom: action.inheritedFrom }),
+				},
 			}));
 		case "auto_approved":
 			return withRoom(state, action.room, (room) => ({

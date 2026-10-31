@@ -45,6 +45,9 @@ export function askPrompts(args: {
 						? {
 								wait: {
 									pending: "pending",
+									...(wait.graceMs === undefined
+										? {}
+										: { graceMs: wait.graceMs }),
 									late: (value, by) =>
 										wait.late({
 											kind: "question",
@@ -80,6 +83,9 @@ export function askPrompts(args: {
 						? {
 								wait: {
 									pending: "pending",
+									...(wait.graceMs === undefined
+										? {}
+										: { graceMs: wait.graceMs }),
 									late: (value, by) =>
 										wait.late({
 											kind: "questionnaire",
@@ -123,6 +129,9 @@ export function askPrompts(args: {
 						? {
 								wait: {
 									pending: "pending",
+									...(wait.graceMs === undefined
+										? {}
+										: { graceMs: wait.graceMs }),
 									late: (value, by) =>
 										wait.late({
 											kind: "questionnaire",

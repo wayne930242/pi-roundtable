@@ -34,7 +34,7 @@ describeDb("PgConversationModes", () => {
 	};
 
 	beforeAll(async () => {
-		sql = await migratedPool(PgConversationModes.migration);
+		sql = await migratedPool(...PgConversationModes.migrations);
 	});
 
 	afterAll(async () => {
@@ -130,6 +130,38 @@ describeDb("PgConversationModes", () => {
 		off();
 		await modes.set(other, { longRunning: false }, owner);
 		expect(heard).toHaveLength(1);
+	});
+
+	test("a follower reads its origin's modes after a fresh attach, refuses its own, and forget drops it", async () => {
+		const origin = `app:agent.parent-${run}` as ChannelKey;
+		const follower = `app:agent.parent-${run}-1` as ChannelKey;
+		const modes = await attach();
+		await modes.set(origin, { yolo: true }, owner);
+		await modes.follow([follower], origin, owner);
+		expect(modes.peek(follower)).toMatchObject({
+			yolo: true,
+			longRunning: false,
+			inheritedFrom: { channel: origin },
+		});
+		await modes.set(origin, { yolo: false, longRunning: true }, owner);
+		const restarted = await attach();
+		expect(restarted.peek(follower)).toMatchObject({
+			yolo: false,
+			longRunning: true,
+			inheritedFrom: { channel: origin },
+		});
+		await expect(
+			restarted.set(follower, { yolo: true }, owner),
+		).rejects.toThrow(PluginError);
+		await restarted.forget(follower);
+		expect(restarted.peek(follower)).toEqual({
+			yolo: false,
+			longRunning: false,
+		});
+		expect((await attach()).peek(follower)).toEqual({
+			yolo: false,
+			longRunning: false,
+		});
 	});
 
 	test("an auto-approval reaches its listeners", async () => {

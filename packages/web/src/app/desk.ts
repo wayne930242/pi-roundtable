@@ -10,6 +10,7 @@ import {
 	type OwnerAnswer,
 	type PromptScope,
 	type Prompts,
+	type PromptWait,
 	QUESTIONNAIRE_LIMITS,
 	type QuestionnaireAnswer,
 	SYSTEM_PRINCIPAL,
@@ -106,6 +107,8 @@ interface Card<T> {
 	supersede: AbortSignal | undefined;
 	/** Present when the turn may stop waiting: what it is told then. */
 	pending?: T;
+	/** How long the turn waits before `pending`, in ms, in place of the desk's `graceMs`. */
+	graceMs?: number;
 	cancelled: T;
 	expired: T;
 	admits(from: Answerer): boolean;
@@ -115,6 +118,18 @@ interface Card<T> {
 	approved?(by: Answerer, prompt: string): void;
 	/** The text a late answer starts a turn with; undefined starts none. */
 	lateText?(ended: Ended, by: Answerer, prompt: string): string | undefined;
+}
+
+/** What a card tells a turn that may stop waiting, and how long it waits first; nothing without a `wait`. */
+function pendingOf(wait: PromptWait | undefined): {
+	pending?: "pending";
+	graceMs?: number;
+} {
+	if (!wait) return {};
+	return {
+		pending: "pending",
+		...(wait.graceMs === undefined ? {} : { graceMs: wait.graceMs }),
+	};
 }
 
 const atLeast = (tier: Tier, least: Tier) =>
@@ -204,7 +219,7 @@ export class OwnerDesk {
 					},
 					signal,
 					supersede: options?.supersede,
-					...(wait ? { pending: "pending" as const } : {}),
+					...pendingOf(wait),
 					cancelled: "cancelled",
 					expired: "expired",
 					admits: audience,
@@ -235,7 +250,7 @@ export class OwnerDesk {
 					frame: askFrame(id, title, question),
 					signal,
 					supersede: undefined,
-					...(wait ? { pending: "pending" as const } : {}),
+					...pendingOf(wait),
 					cancelled: undefined,
 					expired: undefined,
 					admits: this.#questionAudience(scope),
@@ -261,7 +276,7 @@ export class OwnerDesk {
 					frame: questionnaireFrame(id, title, questionnaire),
 					signal,
 					supersede: undefined,
-					...(wait ? { pending: "pending" as const } : {}),
+					...pendingOf(wait),
 					cancelled: undefined,
 					expired: undefined,
 					admits: this.#questionAudience(scope),
@@ -515,7 +530,7 @@ export class OwnerDesk {
 					open.frame = { ...open.frame, late: true } as PromptFrame;
 					broadcast({ type: "prompt", room, prompt: open.frame }, room);
 					resolve(card.pending as T);
-				}, graceMs);
+				}, card.graceMs ?? graceMs);
 			signal?.addEventListener("abort", onAbort, { once: true });
 			supersede?.addEventListener("abort", onWithdraw, { once: true });
 			this.#open.set(id, open);

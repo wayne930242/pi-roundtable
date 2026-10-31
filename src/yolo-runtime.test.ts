@@ -11,7 +11,7 @@ import {
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { definePlugin } from "./core/define.ts";
-import type { TurnResult } from "./core/domain/conversation.ts";
+import type { ChannelKey, TurnResult } from "./core/domain/conversation.ts";
 import { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
 import type { Approval, Prompts } from "./core/interactions/prompts.ts";
 import type { AutoApproval } from "./core/modes/conversation-modes.ts";
@@ -29,6 +29,8 @@ async function fixture(options: {
 	answer?: Approval;
 	/** Whether the hold rule reports a class for its call; a rule that does not leaves it unclassed. */
 	classed?: boolean;
+	/** The conversation follows another's modes, as a temp knight's follows the one that made it. */
+	inherited?: true;
 }) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-yolo-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
@@ -96,7 +98,18 @@ async function fixture(options: {
 						confirmations: deps.confirmations,
 						prompts: deps.prompts,
 						modes: {
-							peek: () => ({ yolo: options.yolo, longRunning: false }),
+							peek: () => ({
+								yolo: options.yolo,
+								longRunning: false,
+								...(options.inherited
+									? {
+											inheritedFrom: {
+												channel: "fake:parent" as ChannelKey,
+												name: "Parent",
+											},
+										}
+									: {}),
+							}),
 							autoApproved: (entry) => void approvals.push(entry),
 						},
 						autonomy: {
@@ -207,6 +220,18 @@ test("in a yolo conversation an owner's held call runs without a card and is rep
 			classes: ["deploy.run"],
 			principalId: OWNER_SPEAKER.principalId,
 		});
+	} finally {
+		await f.close();
+	}
+});
+
+test("a temp knight's conversation approves by its parent's yolo, and the approval names the temp knight's own conversation", async () => {
+	const f = await fixture({ yolo: true, inherited: true });
+	try {
+		expect(await f.run()).toMatchObject({ ok: true, text: "done" });
+		expect(f.ran).toEqual(["ran"]);
+		expect(f.asked).toBe(0);
+		expect(f.approvals.map((entry) => entry.channel)).toEqual(["fake:room"]);
 	} finally {
 		await f.close();
 	}

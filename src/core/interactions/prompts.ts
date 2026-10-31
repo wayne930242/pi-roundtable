@@ -202,6 +202,11 @@ export type LateAnswer = { by: string } & (
  */
 export interface PromptWait {
 	late(answer: LateAnswer): string | undefined;
+	/**
+	 * How long this turn waits before `pending`, in ms, in place of the surface's own grace period;
+	 * a yolo turn asks with a shorter one. A surface that keeps no grace period ignores it.
+	 */
+	graceMs?: number;
 }
 
 /**

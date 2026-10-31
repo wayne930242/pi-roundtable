@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Agent } from "pi-roundtable";
-import { Rooms } from "./rooms.ts";
+import type { Agent, ChannelKey } from "pi-roundtable";
+import { Rooms, roomModeOf } from "./rooms.ts";
 
 const agent = (name: string, status: Agent["status"] = "active"): Agent => ({
 	name,
@@ -52,4 +52,32 @@ test("with no coordinator the first active agent is home, but nobody is the coor
 	expect(
 		listed.map((room) => [room.name, room.home, room.coordinator]),
 	).toEqual([["scout", true, undefined]]);
+});
+
+test("a room shows an inherited mode with the name of where it comes from, or its key without one", () => {
+	expect(roomModeOf({ yolo: true, longRunning: false })).toEqual({
+		yolo: true,
+		longRunning: false,
+	});
+	expect(
+		roomModeOf({
+			yolo: true,
+			longRunning: true,
+			inheritedFrom: {
+				channel: "app:agent.infra" as ChannelKey,
+				name: "Infra",
+			},
+		}),
+	).toEqual({ yolo: true, longRunning: true, inheritedFrom: "Infra" });
+	expect(
+		roomModeOf({
+			yolo: false,
+			longRunning: false,
+			inheritedFrom: { channel: "app:agent.infra" as ChannelKey, gone: true },
+		}),
+	).toEqual({
+		yolo: false,
+		longRunning: false,
+		inheritedFrom: "app:agent.infra",
+	});
 });

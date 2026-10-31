@@ -51,7 +51,9 @@ export function turnTimeoutEn() {
 				`It reached ${limit(t)} and has worked ${durationEn(t.workedMs)}.`,
 				`Now: ${doing(t)}.`,
 				tools(t),
-				`It keeps working while this card is open. Continue gives it another ${durationEn(budgetMs)}; Cancel stops it. With no answer in ${durationEn(t.graceMs)} it stops.`,
+				t.autoContinue
+					? `It keeps working while this card is open. Continue gives it another ${durationEn(budgetMs)}; Cancel stops it. Yolo mode is on: with no answer in ${durationEn(t.graceMs)} it keeps going by itself.`
+					: `It keeps working while this card is open. Continue gives it another ${durationEn(budgetMs)}; Cancel stops it. With no answer in ${durationEn(t.graceMs)} it stops.`,
 			]
 				.filter(Boolean)
 				.join("\n"),
@@ -64,6 +66,8 @@ export function turnTimeoutEn() {
 		turnTimeoutFinished: "✅ The turn finished; nothing to answer.",
 		turnTimeoutUnanswered: (t: TurnTimeout) =>
 			`⏱️ No answer in ${durationEn(t.graceMs)}; the turn was stopped.`,
+		turnTimeoutAutoContinued: (t: TurnTimeout) =>
+			`⏱️ No answer in ${durationEn(t.graceMs)}; yolo mode is on, so the turn continued automatically.`,
 		turnTimedOutNotice: (t: TurnTimeout) => {
 			const what =
 				t.running.length > 0
@@ -105,7 +109,9 @@ export function turnTimeoutZhTW(): ReturnType<typeof turnTimeoutEn> {
 				`已達到${limit(t)}，已工作 ${durationZh(t.workedMs)}。`,
 				`現在：${doing(t)}。`,
 				tools(t),
-				`這張卡片開著時它會繼續工作。按「繼續」再給它 ${durationZh(budgetMs)}；按「取消」停止。${durationZh(t.graceMs)}內沒有回答就會停止。`,
+				t.autoContinue
+					? `這張卡片開著時它會繼續工作。按「繼續」再給它 ${durationZh(budgetMs)}；按「取消」停止。Yolo 模式已開啟：${durationZh(t.graceMs)}內沒有回答，它會自己繼續。`
+					: `這張卡片開著時它會繼續工作。按「繼續」再給它 ${durationZh(budgetMs)}；按「取消」停止。${durationZh(t.graceMs)}內沒有回答就會停止。`,
 			]
 				.filter(Boolean)
 				.join("\n"),
@@ -117,6 +123,8 @@ export function turnTimeoutZhTW(): ReturnType<typeof turnTimeoutEn> {
 		turnTimeoutFinished: "✅ 這一輪已完成，不需要回答。",
 		turnTimeoutUnanswered: (t: TurnTimeout) =>
 			`⏱️ ${durationZh(t.graceMs)}內沒有回答，這一輪已停止。`,
+		turnTimeoutAutoContinued: (t: TurnTimeout) =>
+			`⏱️ ${durationZh(t.graceMs)}內沒有回答；Yolo 模式已開啟，這一輪已自動繼續。`,
 		turnTimedOutNotice: (t: TurnTimeout) => {
 			const what =
 				t.running.length > 0

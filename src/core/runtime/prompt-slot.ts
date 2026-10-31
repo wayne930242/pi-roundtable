@@ -18,6 +18,7 @@ import { turnBudget } from "./turn-budget.ts";
 export class PromptSlot {
 	#prompts: Prompts | undefined;
 	#beforeCard: (() => Promise<void>) | undefined;
+	#yolo: (() => boolean) | undefined;
 	#asker = assistantName();
 	#open = 0;
 	#openSince = 0;
@@ -26,15 +27,18 @@ export class PromptSlot {
 
 	/**
 	 * Binds the turn's prompts; `asker` names who asks, the assistant or an agent. `beforeCard`
-	 * runs before each card opens, such as posting the text the turn wrote before it.
+	 * runs before each card opens, such as posting the text the turn wrote before it. `yolo` says
+	 * whether the turn's conversation is in yolo mode now, read each time a card asks.
 	 */
 	bind(
 		prompts: Prompts | undefined,
 		asker: string,
 		beforeCard?: () => Promise<void>,
+		yolo?: () => boolean,
 	): void {
 		this.#prompts = prompts;
 		this.#beforeCard = beforeCard;
+		this.#yolo = yolo;
 		this.#asker = asker;
 		this.#open = 0;
 		this.#waited = 0;
@@ -56,10 +60,16 @@ export class PromptSlot {
 	unbind(): void {
 		this.#prompts = undefined;
 		this.#beforeCard = undefined;
+		this.#yolo = undefined;
 	}
 
 	get asker(): string {
 		return this.#asker;
+	}
+
+	/** Whether the bound turn's conversation is in yolo mode now; false with none bound. */
+	get yolo(): boolean {
+		return this.#yolo?.() === true;
 	}
 
 	/** The turn's prompts, each open card counted as waiting; undefined when none is bound. */

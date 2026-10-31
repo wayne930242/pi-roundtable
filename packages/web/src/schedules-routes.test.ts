@@ -35,7 +35,7 @@ let stored: ReturnType<typeof row>[];
 let removed: number[];
 let switched: object[];
 
-function setup(modeSwitches = true) {
+function setup(modeSwitches = true, inherited = false) {
 	const recorder = recordingLogger();
 	const visitor = (): Visitor => ({
 		principal: { id: who.id, displayName: who.id, disabled: false },
@@ -69,7 +69,13 @@ function setup(modeSwitches = true) {
 				switched.push(change);
 				return { yolo: true, longRunning: false };
 			},
-			peek: () => ({ yolo: false, longRunning: false }),
+			peek: () => ({
+				yolo: inherited,
+				longRunning: false,
+				...(inherited
+					? { inheritedFrom: { channel: "app:agent.infra", name: "Infra" } }
+					: {}),
+			}),
 		} as never,
 		modeSwitches,
 		conversations: {} as never,
@@ -187,6 +193,16 @@ describe("the mode switches", () => {
 		const answer = await call(setup(), "PUT", mode, { yolo: true });
 		expect(answer.status).toBe(200);
 		expect(switched).toEqual([{ yolo: true }]);
+	});
+
+	test("a room whose modes follow another conversation's refuses a switch and says where to switch them", async () => {
+		who = { id: "owner", tier: "owner" };
+		const answer = await call(setup(true, true), "PUT", mode, { yolo: false });
+		expect(answer.status).toBe(400);
+		expect(JSON.stringify(await answer.json())).toContain(
+			"This room follows the modes of the conversation that made it; switch them there.",
+		);
+		expect(switched).toEqual([]);
 	});
 
 	test("with modes: false the route is not there, even for an owner, and nothing changes", async () => {

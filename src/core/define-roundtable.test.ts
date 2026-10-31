@@ -318,6 +318,7 @@ describe("defineRoundtable", () => {
 			"skills-guild",
 			"conversations",
 			"conversation-modes",
+			"conversation-modes-follows",
 			"held-actions",
 			"held-actions-speaker",
 			"held-actions-speaker-hold",

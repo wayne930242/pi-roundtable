@@ -192,6 +192,8 @@ A turn works 10 minutes by default before it asks you whether to go on, and 30 m
 | `turnLimits.cardSeconds` | `300` | How long that card waits for an answer, 30 to 3600; with none, the turn stops |
 | `autonomy.longRunning.maxSeconds` | `14400` (4 h) | The most a long-running conversation's turn works before it asks or stops, 600 to 604800 |
 | `autonomy.yolo.allow`, `autonomy.yolo.card` | none | Hold classes yolo mode may approve beyond its defaults (`shell.rm`, say), and rule names whose calls it approves although the rule reports no classes (`tool:repo_push`, say), and classes or rule names it never approves (`shell.push`, say). By default yolo approves a plain `git push` and writes outside the workspace and cards the other destructive shell classes; see the [plugin guide](docs/plugins.md#hold-classes-and-yolo-mode) |
+| `autonomy.yolo.questionGraceSeconds` | `30` | In a yolo conversation, how long an `ask_user` card holds the turn, 5 to 600; unanswered, the turn goes on with its own best choice and the card stays open |
+| `autonomy.yolo.timeoutCardSeconds` | `60` | In a yolo conversation, how long the timeout card waits, 10 to 3600; unanswered, the turn goes on as if you pressed Continue, up to `autonomy.longRunning.maxSeconds` |
 
 Without `discord` the agents still run when `agents` lists them, in the rooms of a surface that hosts them, such as pi-roundtable-web; the host refuses to start when none does:
 

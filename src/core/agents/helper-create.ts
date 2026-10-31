@@ -2,12 +2,11 @@ import type { CharacterInput } from "../../characters/index.ts";
 import { helpersOf } from "../config/helpers.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Speaker } from "../speakers.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
-import { keysOf } from "./team-keys.ts";
+import { followOrigin } from "./helper-modes.ts";
 import type { TeamContext } from "./team-options.ts";
 
 /** The team's way of making an agent, which `createHelper` uses to make a temp knight. */
@@ -98,10 +97,10 @@ export async function createHelper(
 	);
 	const helper = made.agent;
 	try {
-		await inheritLongRunning(ctx, caller, speaker, helper);
+		await followOrigin(ctx, caller, speaker, helper);
 		ctx.turns.message(caller, helper.name, task);
 	} catch (error) {
-		// The long-running mode or the task could not be handed over (a chain at its cap): the temp
+		// The modes or the task could not be handed over (a chain at its cap): the temp
 		// knight is not left idle, and its thread is closed.
 		await ctx.archiveHelpers([helper.name]);
 		throw error;
@@ -157,24 +156,4 @@ async function makeRoom(
 		);
 	await ctx.archiveHelpers([oldest.name]);
 	return ` To make room, "${oldest.displayName}" (${oldest.name}), your oldest finished temp knight, was archived.`;
-}
-
-/**
- * Turns long-running on for the temp knight's conversations when the conversation that asked for
- * it has it on, so it works as long as its parent may. This adds no permission: an owner turned
- * it on there. Only a turn of an owner can carry that over, as for any change of modes.
- */
-async function inheritLongRunning(
-	ctx: TeamContext,
-	caller: AgentTurnScope,
-	speaker: Speaker,
-	helper: Agent,
-): Promise<void> {
-	const { store, surfaces } = ctx.options;
-	const modes = ctx.options.modes?.();
-	if (!modes?.peek(ctx.turns.turnChannel(caller)).longRunning) return;
-	if (speaker.tier !== "owner" || speaker.principalId === SYSTEM_PRINCIPAL)
-		return;
-	for (const key of keysOf(store, helper.name, surfaces?.roomSurfaces() ?? []))
-		await modes.set(key, { longRunning: true }, speaker);
 }

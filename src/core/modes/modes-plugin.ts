@@ -13,7 +13,7 @@ export const MODES_PLUGIN = "modes";
 export function modesPlugin(): RoundtablePlugin {
 	return {
 		name: MODES_PLUGIN,
-		migrations: [PgConversationModes.migration],
+		migrations: [...PgConversationModes.migrations],
 		provides: [MODES],
 		setup: ({ database, logger, services }) => {
 			const modes = PgConversationModes.attach(database(), logger);

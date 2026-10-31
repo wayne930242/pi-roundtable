@@ -196,10 +196,11 @@ export class OwnerCards implements InteractionModule {
 		cancelled: T,
 		card: CardSpec<T>,
 	): Promise<T> {
-		const { logger, graceMs = CARD_GRACE_MS, resume } = this.#options;
+		const { logger, resume } = this.#options;
 		if (signal?.aborted || card.supersede?.aborted)
 			return Promise.resolve(cancelled);
 		const wait = resume ? card.wait : undefined;
+		const graceMs = wait?.graceMs ?? this.#options.graceMs ?? CARD_GRACE_MS;
 		const id = randomUUID();
 		if (card.copy !== undefined) this.#copies.remember(id, card.copy);
 		const sections = [
