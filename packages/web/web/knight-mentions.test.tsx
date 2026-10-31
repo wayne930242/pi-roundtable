@@ -121,7 +121,7 @@ async function council(key: string, mode: "chat" | "scene") {
 	setCouncilMode(room.key, mode);
 	await page.render(
 		<ConfigContext.Provider value={config}>
-			<CouncilView roomKey={room.key} lead={null} />
+			<CouncilView roomKey={room.key} />
 		</ConfigContext.Provider>,
 	);
 	await settle();

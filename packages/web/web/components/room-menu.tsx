@@ -38,6 +38,8 @@ export function RoomMenu(props: {
 	readOnly?: boolean;
 	/** The room a thread belongs to. */
 	parent?: string | undefined;
+	/** A council's room: opens the sheet where it is edited or another is picked. */
+	onEditCouncil?(): void;
 	onClose(): void;
 	onAskYolo(): void;
 	onAskStartOver(): void;
@@ -236,6 +238,30 @@ export function RoomMenu(props: {
 							<span className="menu-text">
 								<strong>{t("Edit group")}</strong>
 								<span className="meta">{t("Name, members and host")}</span>
+							</span>
+							<Icon name="chevron" size={16} />
+						</button>
+					</li>
+				) : null}
+				{props.onEditCouncil ? (
+					<li>
+						<button
+							type="button"
+							className="menu-item menu-link"
+							aria-haspopup="dialog"
+							onClick={() => {
+								props.onClose();
+								props.onEditCouncil?.();
+							}}
+						>
+							<span className="menu-icon">
+								<Icon name="table" />
+							</span>
+							<span className="menu-text">
+								<strong>{t("Edit this council")}</strong>
+								<span className="meta">
+									{t("Who sits, or another council")}
+								</span>
 							</span>
 							<Icon name="chevron" size={16} />
 						</button>

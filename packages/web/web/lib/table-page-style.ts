@@ -84,7 +84,7 @@ export const TABLE_PAGE_CSS = `
 	flex-wrap: wrap;
 	justify-content: flex-end;
 }
-/* The switch between the scene and the chat: two short choices that sit beside the council chip. */
+/* The switch between the scene and the chat: two short choices, each an icon and its words. */
 .table-mode {
 	flex: none;
 	margin: 0;
@@ -95,19 +95,37 @@ export const TABLE_PAGE_CSS = `
 	font-size: var(--text-sm);
 	white-space: nowrap;
 }
-/* A council's header: on a phone its tools take a row of their own under the title. */
-@media (max-width: 719px) {
+/* A council's header is one row: its tools stay as wide as they are, the name gives way and is cut. */
+.council-head {
+	gap: var(--space-2);
+}
+.council-head .table-tools {
+	flex: none;
+	flex-wrap: nowrap;
+	gap: var(--space-1);
+}
+.council-head .room-picture {
+	padding: 0;
+}
+/* The round table's name is its council picker: a title that opens the sheet. */
+.council-head button.council-pick {
+	font-weight: var(--weight-bold);
+}
+/* On a narrow or touched screen the switch shows icons only; the words stay for a screen reader and as the tooltip. */
+@media (max-width: 719px), (pointer: coarse) {
+	.table-mode .mode-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+	.table-mode label {
+		padding: 0 var(--space-2);
+	}
 	.council-head {
-		flex-wrap: wrap;
-	}
-	.council-head .table-tools {
-		order: 3;
-		flex-basis: 100%;
-		min-width: 0;
-	}
-	.council-head .council-chip {
-		flex: 1 1 0;
-		min-width: 0;
+		gap: var(--space-1);
 	}
 }
 /* The council's messages as a chat fill the view under its header, like a room's own list. */

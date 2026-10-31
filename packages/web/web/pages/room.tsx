@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { CharacterStack, PageCharacter } from "../components/character.tsx";
+import { PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
 import { HeaderPicture } from "../components/header-picture.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -11,11 +11,7 @@ import { WaitingButton } from "../components/waiting-button.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
-import {
-	useAccentStyle,
-	useCharacters,
-	useRoomState,
-} from "../lib/characters.ts";
+import { useAccentStyle, useRoomState } from "../lib/characters.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -23,7 +19,6 @@ import { useRoomCommands } from "../lib/room-commands.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
-import { openTeamSheet } from "../lib/team-sheet.ts";
 
 // A group room is a council: its view, with the round table's drawing, is read only when one opens.
 const CouncilView = lazy(() =>
@@ -51,7 +46,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const open = useSelector((state) => state.connection === "open");
 	const limits = useSelector((state) => state.limits);
 	const rooms = useSelector((state) => state.rooms);
-	const characters = useCharacters();
 	const state = useRoomState(roomKey);
 	const view = room?.view;
 	const commands = useRoomCommands(
@@ -128,7 +122,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const name = view?.displayName ?? roomKey;
 	const mine = room?.mode;
 	const agentName = view?.kind === "agent" ? view.name : undefined;
-	const groupName = view?.kind === "group" ? view.name : undefined;
 	const parent = view?.kind === "thread" ? view.parent : undefined;
 	// Where more than one person reads the room, a message can be a note for them that the agent does not get.
 	const toggled = view?.notes === true;
@@ -144,38 +137,23 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				<Icon name="back" />
 			</a>
 			<HeaderPicture open={switcher.enabled ? switcher.show : undefined}>
-				{view?.kind === "group" ? (
-					<CharacterStack
-						size={36}
-						members={(view.members ?? []).map((member) => ({
-							name: member,
-							spec: characters[member],
-						}))}
-					/>
-				) : (
-					<PageCharacter
-						spec={character}
-						name={parentView?.name ?? view?.name ?? name}
-						size={44}
-						state={state}
-						label={name}
-					/>
-				)}
+				<PageCharacter
+					spec={character}
+					name={parentView?.name ?? view?.name ?? name}
+					size={44}
+					state={state}
+					label={name}
+				/>
 			</HeaderPicture>
 			<div className="room-title">
 				<h1>
-					{agentName || groupName ? (
+					{agentName ? (
 						<button
 							type="button"
 							className="room-name"
 							aria-haspopup="dialog"
-							title={agentName ? t("Edit knight") : t("Edit group")}
-							onClick={() =>
-								agentName
-									? openAgentSheet(agentName)
-									: groupName &&
-										openTeamSheet({ kind: "group", name: groupName })
-							}
+							title={t("Edit knight")}
+							onClick={() => openAgentSheet(agentName)}
 						>
 							{name}
 						</button>
@@ -213,8 +191,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						t("Read-only")
 					) : room?.typing ? (
 						t("Working…")
-					) : view?.kind === "group" ? (
-						t("Group")
 					) : view?.home ? (
 						t("Home")
 					) : (
@@ -243,7 +219,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				<Suspense fallback={<Loading />}>
 					<CouncilView
 						roomKey={roomKey}
-						lead={lead}
+						room={{ drawer: switcher.enabled ? switcher.show : undefined }}
 						go={(council) => navigate("room", council.key, { replace: true })}
 						incoming={dropped}
 						onIncomingTaken={() => setDropped(undefined)}
@@ -373,7 +349,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						mode={mine}
 						muted={view?.muted === true}
 						agent={agentName}
-						group={groupName}
 						coordinator={view?.coordinator === true}
 						displayName={name}
 						readOnly={view?.readOnly ?? false}

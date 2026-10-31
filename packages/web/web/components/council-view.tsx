@@ -9,7 +9,7 @@ import {
 import type { RoomView } from "../../src/api-types.ts";
 import { openMenu } from "../lib/action-menu.ts";
 import { useSelector } from "../lib/app-store.ts";
-import { type CouncilMode, useCouncilMode } from "../lib/council-mode.ts";
+import { useCouncilMode } from "../lib/council-mode.ts";
 import { mentionInto } from "../lib/drafts.ts";
 import type { Via } from "../lib/long-press.ts";
 import { useLook } from "../lib/look.ts";
@@ -23,13 +23,12 @@ import { useConnection } from "../lib/socket.ts";
 import { installTablePageStyle } from "../lib/table-page-style.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
 import { Composer } from "./composer.tsx";
+import { CouncilHead } from "./council-head.tsx";
 import type { CouncilGo } from "./council-sheet.tsx";
 import { GroupStage, useGroupFocus } from "./group-scene.tsx";
-import { Icon } from "./icons.tsx";
 import { ModeBanner } from "./mode-banner.tsx";
 import { RoomChat } from "./room-chat.tsx";
 import { RoundTable, useRoster } from "./round-table.tsx";
-import { WaitingButton } from "./waiting-button.tsx";
 
 installTablePageStyle();
 
@@ -71,25 +70,6 @@ export function usePhone(): boolean {
 	return narrow || touch;
 }
 
-/** The chip that names the council and opens the council sheet, where another is picked or this one edited. */
-export function CouncilChip(props: {
-	council: RoomView | undefined;
-	onOpen(): void;
-}) {
-	return (
-		<button
-			type="button"
-			className="secondary council-chip"
-			aria-haspopup="dialog"
-			onClick={props.onOpen}
-		>
-			{props.council
-				? t("Council: {name} ▾", { name: props.council.displayName })
-				: t("Pick who sits")}
-		</button>
-	);
-}
-
 /** The council sheet, mounted when first asked for and kept, so it can slide away; `ask` opens it. */
 export function useCouncilSheet(council: RoomView | undefined, go?: CouncilGo) {
 	const [asked, setAsked] = useState(false);
@@ -111,44 +91,19 @@ export function useCouncilSheet(council: RoomView | undefined, go?: CouncilGo) {
 	return { ask, sheet };
 }
 
-/** The switch between the scene with its dialogue box and the council's messages as a chat. */
-function ModeSwitch(props: {
-	mode: CouncilMode;
-	onMode(mode: CouncilMode): void;
-}) {
-	const option = (mode: CouncilMode, label: string) => (
-		<label data-checked={props.mode === mode}>
-			<input
-				type="radio"
-				name="table-mode"
-				value={mode}
-				checked={props.mode === mode}
-				onChange={() => props.onMode(mode)}
-			/>
-			{label}
-		</label>
-	);
-	return (
-		<fieldset className="segmented table-mode">
-			<legend className="visually-hidden">{t("Show the council as")}</legend>
-			{option("scene", t("Animation mode"))}
-			{option("chat", t("Chat mode"))}
-		</fieldset>
-	);
-}
-
 /**
- * A group's council, the one shell the group's room and the round table both show. The header has
- * what the entry puts first (`lead`), the chip that switches councils, the switch between the scene
- * and the chat (kept per council room, the same in both entries), the button that brings the camera
- * back to the whole ring, the waiting cards and the room menu; under it the room's banners. The body
- * is the scene with its dialogue box, or the room's messages as a chat with its composer, a compact
- * strip of the members over it under Camelot. On a phone a message sent closes the keyboard.
+ * A group's council, the one shell the group's room and the round table both show. The header is
+ * `CouncilHead`, the same in both entries: the council's picture and name, the button that brings
+ * the camera back to the whole ring, the switch between the scene and the chat (kept per council
+ * room, the same in both entries), the waiting cards and the room menu; under it the room's
+ * banners. The body is the scene with its dialogue box, or the room's messages as a chat with its
+ * composer, a compact strip of the members over it under Camelot. On a phone a message sent
+ * closes the keyboard.
  */
 export function CouncilView(props: {
 	roomKey: string;
-	/** What the header shows before the council's tools: the entry's way back and the title. */
-	lead: ReactNode;
+	/** The group's room, which has a way back and a drawer; absent on the round table, whose header name picks the council. */
+	room?: { drawer: (() => void) | undefined };
 	/** Where a council picked in the sheet goes. */
 	go?: CouncilGo;
 	/** What stands in the body when no member is left to seat; without it the room still shows. */
@@ -197,38 +152,23 @@ export function CouncilView(props: {
 	const note = toggled && noting === roomKey && !mentioned;
 	return (
 		<>
-			<header className="room-head council-head">
-				{props.lead}
-				<div className="table-tools">
-					{scene && table?.kind === "webgl" ? (
-						<button
-							type="button"
-							className="icon-button"
-							aria-label={t("Reset view")}
-							title={t("Reset view")}
-							onClick={() => turn(null)}
-						>
-							<Icon name="reset" />
-						</button>
-					) : null}
-					{seated ? <ModeSwitch mode={mode} onMode={setMode} /> : null}
-					<CouncilChip council={view} onOpen={ask} />
-				</div>
-				<WaitingButton />
-				<button
-					ref={menuButton}
-					type="button"
-					className="icon-button"
-					aria-label={t("Room menu")}
-					aria-haspopup="dialog"
-					onClick={() => {
-						setMenuOpened(true);
-						setMenu(true);
-					}}
-				>
-					<Icon name="menu" />
-				</button>
-			</header>
+			<CouncilHead
+				view={view}
+				name={name}
+				working={room?.typing === true}
+				room={props.room}
+				onPick={ask}
+				onReset={
+					scene && table?.kind === "webgl" ? () => turn(null) : undefined
+				}
+				mode={seated ? mode : undefined}
+				onMode={setMode}
+				menuButton={menuButton}
+				onMenu={() => {
+					setMenuOpened(true);
+					setMenu(true);
+				}}
+			/>
 			{look === "camelot" && seated && !scene ? (
 				// biome-ignore lint/a11y/noStaticElementInteractions: a pointer press on a podium must not take the focus off the message box, where the mention lands; the podiums stay buttons for the keyboard
 				<div
@@ -382,6 +322,7 @@ export function CouncilView(props: {
 						readOnly={view?.readOnly ?? false}
 						parent={undefined}
 						onClose={() => setMenu(false)}
+						onEditCouncil={ask}
 						onAskYolo={() => {
 							setMenu(false);
 							askRoomConfirm({

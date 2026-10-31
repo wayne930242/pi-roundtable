@@ -1,10 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import type { RoomView } from "../../src/api-types.ts";
-import {
-	CouncilChip,
-	CouncilView,
-	useCouncilSheet,
-} from "../components/council-view.tsx";
+import { CouncilView, useCouncilSheet } from "../components/council-view.tsx";
 import { Icon } from "../components/icons.tsx";
 import {
 	RoundTable,
@@ -125,11 +121,6 @@ function CouncilTable({ named }: { named: string | undefined }) {
 		if (named !== undefined && listed && !known)
 			navigate("table", undefined, { replace: true });
 	}, [named, listed, known]);
-	const title = (
-		<div className="room-title">
-			<h1>{t("Round table")}</h1>
-		</div>
-	);
 	const empty = (
 		<div className="table-empty-state">
 			<strong>
@@ -153,19 +144,14 @@ function CouncilTable({ named }: { named: string | undefined }) {
 	if (council)
 		return (
 			<section className="room council-page">
-				<CouncilView roomKey={council.key} lead={title} empty={empty} />
+				<CouncilView roomKey={council.key} empty={empty} />
 				{sheet}
 			</section>
 		);
 	return (
 		<div className="table-page">
 			<header className="page-head">
-				{title}
-				{agents.length > 0 ? (
-					<div className="table-tools">
-						<CouncilChip council={undefined} onOpen={ask} />
-					</div>
-				) : null}
+				<h1>{t("Round table")}</h1>
 			</header>
 			<div className="table-frame">{empty}</div>
 			{sheet}

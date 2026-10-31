@@ -385,9 +385,9 @@ test("a group is a council: the chip names it, only its members sit, and picking
 	);
 	try {
 		await show();
-		expect(button("Council: Crew")).toBeDefined();
+		expect(button("Crew ▾")).toBeDefined();
 		expect(all("g.seat")).toHaveLength(3);
-		await page.click(button("Council: Crew") ?? null);
+		await page.click(button("Crew ▾") ?? null);
 		await settle();
 		const rows = all<HTMLButtonElement>(".council-row");
 		expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual(
@@ -399,7 +399,7 @@ test("a group is a council: the chip names it, only its members sit, and picking
 		expect(window.localStorage.getItem("rt-table-council")).toBe(
 			"app:group.ops",
 		);
-		expect(button("Council: Ops")).toBeDefined();
+		expect(button("Ops ▾")).toBeDefined();
 		// the seats that leave glide out of the ring before they are gone
 		for (let tries = 0; tries < 30 && all("g.seat").length !== 2; tries += 1)
 			await settle();
@@ -432,7 +432,7 @@ test("ticking edits the council in place: the ninth tick is refused, and Done se
 	);
 	try {
 		await show();
-		await page.click(button("Council: Crew") ?? null);
+		await page.click(button("Crew ▾") ?? null);
 		await settle();
 		expect(q(".council-count")?.textContent).toContain("3 of 8 picked");
 		expect(button("Done")?.disabled).toBe(true);
@@ -477,7 +477,7 @@ test("Save as a new council keeps the old one and makes another group from the t
 	);
 	try {
 		await show();
-		await page.click(button("Council: Crew") ?? null);
+		await page.click(button("Crew ▾") ?? null);
 		await settle();
 		await page.click(tickOf("mason") ?? null);
 		await page.click(button("Save as a new council") ?? null);

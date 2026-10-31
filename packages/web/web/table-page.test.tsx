@@ -253,7 +253,7 @@ test("under Camelot a council in chat mode renders the compact strip, lit on its
 	});
 	await page.render(
 		<ConfigContext.Provider value={CONFIG}>
-			<CouncilView roomKey="app:group.crew" lead={null} />
+			<CouncilView roomKey="app:group.crew" />
 		</ConfigContext.Provider>,
 	);
 	await settle();
@@ -301,7 +301,7 @@ test("under modern a council in chat mode has no strip, and the mode switch show
 	});
 	await page.render(
 		<ConfigContext.Provider value={CONFIG}>
-			<CouncilView roomKey="app:group.crew" lead={null} />
+			<CouncilView roomKey="app:group.crew" />
 		</ConfigContext.Provider>,
 	);
 	await settle();
@@ -332,7 +332,7 @@ test("in the scene a council's strip is gone: the camera is the table", async ()
 	});
 	await page.render(
 		<ConfigContext.Provider value={CONFIG}>
-			<CouncilView roomKey="app:group.crew" lead={null} />
+			<CouncilView roomKey="app:group.crew" />
 		</ConfigContext.Provider>,
 	);
 	await settle();

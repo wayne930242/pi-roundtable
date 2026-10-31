@@ -177,23 +177,60 @@ const table = async () => {
 	await settle();
 };
 
-test("the group room and the round table show the same council view with the same controls", async () => {
+test("the group room and the round table show the same council header with the same controls", async () => {
 	await room();
 	expect(q(".council-head")).not.toBeNull();
 	const inRoom = controls();
-	expect(inRoom).toEqual(
-		expect.arrayContaining([
-			"Animation mode/Chat mode",
-			"Council: Crew ▾",
-			"Room menu",
-		]),
-	);
-	// The room keeps its own way back and its name before them.
+	expect(inRoom).toEqual(["Animation mode/Chat mode", "Room menu"]);
+	// The room keeps its own way back and a name that edits the group; it has no separate council chip.
+	expect(q(".council-head .room-back")).not.toBeNull();
 	expect(q(".council-head .room-name")?.textContent).toBe("Crew");
+	expect(q(".council-head .council-pick")).toBeNull();
+	expect(q(".council-head .room-status")?.textContent).toBe("Group");
+	expect(q(".council-chip")).toBeNull();
 	await table();
 	expect(q(".council-head")).not.toBeNull();
 	expect(controls()).toEqual(inRoom);
-	expect(q(".council-head h1")?.textContent).toBe("Round table");
+	// On the round table the name is the council picker, and it names the council once.
+	expect(q(".council-head h1")?.textContent).toBe("Crew ▾");
+	expect(q(".council-head .council-pick")?.getAttribute("aria-haspopup")).toBe(
+		"dialog",
+	);
+	expect(q(".council-head .room-back")).toBeNull();
+	expect(q(".council-head .room-status")?.textContent).toBe("Group");
+	expect(page.container.textContent).not.toContain("Council:");
+});
+
+test("the mode switch keeps icon and words in the markup, hides the words on narrow and touch screens only by style", async () => {
+	await table();
+	const labels = all<HTMLElement>(".table-mode label");
+	expect(labels.map((one) => one.getAttribute("title"))).toEqual([
+		"Animation mode",
+		"Chat mode",
+	]);
+	for (const one of labels) {
+		expect(one.querySelector("svg")).not.toBeNull();
+		expect(one.querySelector(".mode-label")?.textContent).toBe(
+			one.getAttribute("title"),
+		);
+	}
+	const phone = TABLE_PAGE_CSS.slice(
+		TABLE_PAGE_CSS.indexOf("@media (max-width: 719px), (pointer: coarse)"),
+	);
+	expect(phone).toContain(".table-mode .mode-label {");
+});
+
+test("a group room's menu edits the council, and the sheet it opens picks or edits one", async () => {
+	await room();
+	await page.click(q('.council-head button[aria-label="Room menu"]') ?? null);
+	await settle();
+	const item = all<HTMLButtonElement>("button.menu-link").find((one) =>
+		one.textContent?.includes("Edit this council"),
+	);
+	expect(item).toBeDefined();
+	await page.click(item ?? null);
+	await settle();
+	expect(q(".council-sheet")).not.toBeNull();
 });
 
 test("a mode chosen in one entry shows in the other", async () => {
@@ -259,16 +296,11 @@ test("at 390 px the council's tools take their own row, and a send closes the ke
 	await page.render(
 		<ConfigContext.Provider value={config}>
 			<section className="room">
-				<CouncilView roomKey={CREW} lead={<h1>Crew</h1>} />
+				<CouncilView roomKey={CREW} />
 			</section>
 		</ConfigContext.Provider>,
 	);
 	await settle();
-	const narrow = TABLE_PAGE_CSS.slice(
-		TABLE_PAGE_CSS.indexOf("@media (max-width: 719px)"),
-	);
-	expect(narrow).toContain(".council-head .table-tools {\n\t\torder: 3;");
-	expect(q(".council-head .table-tools .council-chip")).not.toBeNull();
 	expect(q(".council-head .table-tools .table-mode")).not.toBeNull();
 	let box = await send("from the scene");
 	expect(said.at(-1)).toEqual({ room: CREW, text: "from the scene" });
@@ -284,7 +316,7 @@ test("at 390 px the council's tools take their own row, and a send closes the ke
 	await page.render(
 		<ConfigContext.Provider value={config}>
 			<section className="room">
-				<CouncilView roomKey={CREW} lead={<h1>Crew</h1>} />
+				<CouncilView roomKey={CREW} />
 			</section>
 		</ConfigContext.Provider>,
 	);
@@ -314,7 +346,7 @@ async function strip(key: string, names: Record<string, string> = {}) {
 	await page.render(
 		<ConfigContext.Provider value={config}>
 			<ActionMenuHost />
-			<CouncilView roomKey={room.key} lead={null} />
+			<CouncilView roomKey={room.key} />
 		</ConfigContext.Provider>,
 	);
 	await settle();
