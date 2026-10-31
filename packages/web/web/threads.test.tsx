@@ -7,10 +7,12 @@ import { ConfigContext } from "./lib/config.ts";
 import { initialState, reduce } from "./lib/rooms.ts";
 import { RoomsPage } from "./pages/rooms.tsx";
 
-const GUIDE = "app:agent.guide";
-const THREAD = "app:thread.0b5e7c1a-0000-4000-8000-000000000001";
-const OLD = "app:thread.0b5e7c1a-0000-4000-8000-000000000002";
-const SECOND = "app:thread.0b5e7c1a-0000-4000-8000-000000000003";
+// Rooms of this file's own: the store is shared by the files of a run, and a room another file left
+// there (a thread of the same key, say) would show in this list.
+const GUIDE = "app:agent.threads-guide";
+const THREAD = "app:thread.0b5e7c1a-0000-4000-8000-0000000000a1";
+const OLD = "app:thread.0b5e7c1a-0000-4000-8000-0000000000a2";
+const SECOND = "app:thread.0b5e7c1a-0000-4000-8000-0000000000a3";
 
 const config: ConfigView = {
 	title: "Console",
