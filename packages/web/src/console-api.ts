@@ -11,7 +11,13 @@ import type {
 	SpeakerMemory,
 	Tier,
 } from "pi-roundtable";
-import { MemoryError, parseChannelKey, SYSTEM_PRINCIPAL } from "pi-roundtable";
+import {
+	agentRoomKey,
+	groupRoomKey,
+	MemoryError,
+	parseChannelKey,
+	SYSTEM_PRINCIPAL,
+} from "pi-roundtable";
 import { thinkingLabel } from "pi-roundtable/kit";
 import type {
 	ApiError,
@@ -85,6 +91,11 @@ export interface ConsolePorts {
 	sessionsDir: string;
 	/** Present when the overview pane is served, or the agent server is there to classify channels. */
 	team?: Pick<AgentTeam, "status" | "owns" | "guildId">;
+	/**
+	 * The web app's surface, when it hosts the agents' and groups' rooms: the overview then names
+	 * each one's room, which its start-over resets instead of the Discord channel's conversation.
+	 */
+	roomSurface?: string;
 	queue: Pick<QueuePort, "size">;
 	/** Undefined when Discord no longer knows the channel; throws when it cannot be asked. */
 	channelName?: (channelId: string) => Promise<ChannelName | undefined>;
@@ -373,7 +384,7 @@ export class ConsoleApi {
 		const { team } = this.#ports;
 		if (!team) throw new HttpError(404, "This pane is not served.");
 		const status = await team.status();
-		const { features } = this.#ports;
+		const { features, roomSurface } = this.#ports;
 		const stored = (await this.conversations()).conversations.filter(
 			(c) => c.kind === "owner" || c.kind === "outside",
 		);
@@ -395,6 +406,7 @@ export class ConsoleApi {
 				name: agent.name,
 				displayName: agent.displayName,
 				...(agent.channelId ? { channelId: agent.channelId } : {}),
+				...(roomSurface ? { room: agentRoomKey(roomSurface, agent.name) } : {}),
 				model: agent.model,
 				thinking: thinkingLabel(agent.thinking),
 				...(agent.workingIn ? { workingIn: agent.workingIn } : {}),
@@ -408,6 +420,7 @@ export class ConsoleApi {
 				displayName: group.displayName,
 				// A group of a team without Discord has no channel; the pane then links none.
 				...(group.channelId ? { channelId: group.channelId } : {}),
+				...(roomSurface ? { room: groupRoomKey(roomSurface, group.name) } : {}),
 				members: group.members,
 				host: group.host,
 				busy: group.busy,

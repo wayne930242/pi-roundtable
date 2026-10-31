@@ -14,6 +14,7 @@ import { ConnectionGate } from "./components/connection-gate.tsx";
 import { Icon, type IconName } from "./components/icons.tsx";
 import { Failure, Loading } from "./components/states.tsx";
 import { Toaster } from "./components/toaster.tsx";
+import { WaitingButton } from "./components/waiting-button.tsx";
 import { api, messageOf, setPushSubscribe } from "./lib/api.ts";
 import { useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
@@ -502,6 +503,7 @@ function Console({ config }: { config: ConfigView }) {
 					</nav>
 					<div className="rail-foot">
 						{chip}
+						<WaitingButton />
 						{bell}
 						{hasApp ? (
 							<button
@@ -524,6 +526,7 @@ function Console({ config }: { config: ConfigView }) {
 						</div>
 						<div className="topbar-end">
 							{chip}
+							<WaitingButton />
 							{bell}
 							<ThemeButton />
 						</div>

@@ -2,6 +2,7 @@ import type { CharacterSpec } from "pi-roundtable/characters";
 import { lazy, memo, Suspense, useContext, useEffect, useState } from "react";
 import {
 	HELPERS_ENDED,
+	isStartOver,
 	type RoomFile,
 	type RoomMessage,
 } from "../../src/api-types.ts";
@@ -21,6 +22,9 @@ import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 // An internal note's row and its styles, a knight's line that it archived its temp knights, and a
 // message between agents, are read when the first is shown.
 const NoteRow = lazy(() => import("./note-row.tsx"));
+
+// The line where a conversation started over, and its styles, are read when the first is shown.
+const StartOverLine = lazy(() => import("./start-over-line.tsx"));
 
 // Another owner's picture, and the styles it brings, are read when a room shows one.
 const OwnerPicture = lazy(() =>
@@ -147,6 +151,12 @@ export const MessageRow = memo(function MessageRow(props: {
 					enter={props.enter}
 					timeZone={props.timeZone}
 				/>
+			</Suspense>
+		);
+	if (isStartOver(message))
+		return (
+			<Suspense fallback={<li className="line" />}>
+				<StartOverLine message={message} enter={props.enter} />
 			</Suspense>
 		);
 	if (message.kind === "system") {

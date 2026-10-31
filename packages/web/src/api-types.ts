@@ -153,6 +153,8 @@ export interface AgentView {
 	name: string;
 	displayName: string;
 	channelId?: string;
+	/** Its room in the web app, when the app hosts rooms: the conversation a start-over from the web resets. */
+	room?: string;
 	model: string;
 	thinking: string;
 	/** Channel id of its running turn. */
@@ -168,6 +170,8 @@ export interface GroupView {
 	displayName: string;
 	/** The group's Discord channel; a team without Discord has none. */
 	channelId?: string;
+	/** Its room in the web app, when the app hosts rooms: the conversation a start-over from the web resets. */
+	room?: string;
 	members: string[];
 	host: string;
 	busy: number;
@@ -432,6 +436,16 @@ export interface RoomFile {
 	type: string;
 	size: number;
 }
+
+/**
+ * The line a conversation's start-over writes into its room. The room shows what came from its
+ * latest such line on; what is older belongs to the archived conversation, read on request.
+ */
+export const START_OVER_TEXT = "Conversation started over";
+
+/** Whether a message is the line a start-over wrote. */
+export const isStartOver = (message: Pick<RoomMessage, "kind" | "text">) =>
+	message.kind === "system" && message.text === START_OVER_TEXT;
 
 /**
  * One message of a room. `id` is the room log's own number, ascending; a live message (an

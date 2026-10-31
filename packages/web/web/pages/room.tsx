@@ -6,6 +6,7 @@ import { ModeBanner } from "../components/mode-banner.tsx";
 import { RoomChat } from "../components/room-chat.tsx";
 import { Empty, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
+import { WaitingButton } from "../components/waiting-button.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
@@ -252,6 +253,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						/>
 					</Suspense>
 				) : null}
+				<WaitingButton />
 				<button
 					ref={menuButton}
 					type="button"

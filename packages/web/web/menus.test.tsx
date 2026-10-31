@@ -20,6 +20,7 @@ import { PromptCard } from "./components/cards.tsx";
 import { Composer } from "./components/composer.tsx";
 import { MessageRow } from "./components/message-row.tsx";
 import { RoomConfirmHost } from "./components/room-confirms.tsx";
+import { SelectTextSheetHost } from "./components/select-text-sheet.tsx";
 import { RoomSwitcher, useSwitcher } from "./components/switcher.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
@@ -30,6 +31,7 @@ import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { clearDrafts, draftOf } from "./lib/drafts.ts";
 import { loadKit } from "./lib/kit.ts";
+import { closeSelectText } from "./lib/message-sheets.ts";
 import { setRouting } from "./lib/router.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
 import { RoomsPage } from "./pages/rooms.tsx";
@@ -494,7 +496,43 @@ test("a message of a read-only room offers no quote", async () => {
 	expect(labels()).not.toContain("Quote reply");
 });
 
-test("Select text selects the message's words, and Share hands them to the system share sheet", async () => {
+test("on a phone Select text opens the message's text alone in a sheet, where nothing else can be selected and Copy all copies it", async () => {
+	window.innerWidth = 390;
+	const copied: string[] = [];
+	Object.defineProperty(navigator, "clipboard", {
+		configurable: true,
+		value: { writeText: async (text: string) => void copied.push(text) },
+	});
+	await page.render(
+		<>
+			<Message />
+			<SelectTextSheetHost />
+		</>,
+	);
+	await rightClick(q("li.message"));
+	await choose("Select text");
+	await page.act(async () => void (await settle(300)));
+	const text = document.querySelector<HTMLElement>("pre.select-text");
+	const sheet = text?.closest("dialog");
+	expect(sheet?.open).toBe(true);
+	// Exactly what was written, as stored: the Markdown marks and the line break too.
+	expect(text?.textContent).toBe("hello **bold**\nsecond line");
+	expect(sheet?.querySelector("[data-hold]")).toBeNull();
+	expect(text?.closest("[data-hold]")).toBeNull();
+	expect(window.getSelection()?.toString() ?? "").toBe("");
+	await page.click(
+		[...(sheet?.querySelectorAll("button") ?? [])].find(
+			(one) => one.textContent === "Copy all",
+		) ?? null,
+	);
+	await page.act(async () => void (await settle()));
+	expect(copied).toEqual(["hello **bold**\nsecond line"]);
+	await page.act(() => closeSelectText());
+	await page.act(async () => void (await settle(300)));
+	Reflect.deleteProperty(navigator, "clipboard");
+});
+
+test("Share hands the message's words to the system share sheet", async () => {
 	const shared: unknown[] = [];
 	Object.defineProperty(navigator, "share", {
 		value: (data: unknown) => {
@@ -504,9 +542,6 @@ test("Select text selects the message's words, and Share hands them to the syste
 		configurable: true,
 	});
 	await page.render(<Message />);
-	await rightClick(q("li.message"));
-	await choose("Select text");
-	expect(window.getSelection()?.toString()).toContain("hello");
 	await rightClick(q("li.message"));
 	await choose("Share");
 	expect(shared.length).toBe(1);

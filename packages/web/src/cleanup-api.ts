@@ -22,10 +22,16 @@ export async function cleanupConversation(
 	const cleanup = features?.cleanup;
 	const key = raw as ChannelKey;
 	const parsed = parseKey(raw);
-	if (!cleanup || !parsed || parsed.kind === "group" || exclude?.(key))
-		throw new HttpError(404, "There is no such conversation.");
+	// An agent's or group's room in the web app is named by its room key, which no session directory has.
 	const owned =
 		Boolean(team?.owns(key)) || Boolean(features?.party?.contains(key));
+	if (
+		!cleanup ||
+		(!parsed && !owned) ||
+		parsed?.kind === "group" ||
+		exclude?.(key)
+	)
+		throw new HttpError(404, "There is no such conversation.");
 	const group =
 		(await team?.status())?.groups.some(
 			(g) => g.channelId !== undefined && `discord:${g.channelId}` === key,
@@ -33,6 +39,7 @@ export async function cleanupConversation(
 	const stored =
 		!owned &&
 		!group &&
+		parsed !== undefined &&
 		Boolean(conversationFiles(join(sessionsDir, parsed.dir)));
 	if (action === "delete") {
 		if (!stored)

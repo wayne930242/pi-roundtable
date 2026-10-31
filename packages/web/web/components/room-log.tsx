@@ -203,7 +203,12 @@ export function RoomLog(props: {
 						);
 					case "card":
 						return (
-							<li key={`c${row.item.id}`} className="slot" data-enter>
+							<li
+								key={`c${row.item.id}`}
+								className="slot"
+								data-enter
+								data-card={row.item.id}
+							>
 								<PromptCard card={row.item.card} timeZone={config.timeZone} />
 							</li>
 						);

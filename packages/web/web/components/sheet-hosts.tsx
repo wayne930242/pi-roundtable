@@ -1,8 +1,11 @@
 import { lazy, Suspense, useRef } from "react";
 import { useShortcutHelp } from "../lib/shortcut-help.ts";
 import { AgentSheetHost } from "./agent-sheet.tsx";
+import { ArchivedSheetHost } from "./archived-sheet.tsx";
 import { RoomConfirmHost } from "./room-confirms.tsx";
+import { SelectTextSheetHost } from "./select-text-sheet.tsx";
 import { TeamSheetHost } from "./team-sheets.tsx";
+import { WaitingSheetHost } from "./waiting-sheet.tsx";
 
 // The shortcut list's drawing is a chunk of its own that waits for the first `?`.
 const ShortcutHelp = lazy(() => import("./shortcut-help.tsx"));
@@ -27,6 +30,9 @@ export function SheetHosts() {
 			<RoomConfirmHost />
 			<AgentSheetHost />
 			<TeamSheetHost />
+			<ArchivedSheetHost />
+			<SelectTextSheetHost />
+			<WaitingSheetHost />
 			<ShortcutHelpHost />
 		</>
 	);

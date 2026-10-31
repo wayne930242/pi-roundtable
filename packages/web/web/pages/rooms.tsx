@@ -1,5 +1,5 @@
 import { lazy, memo, type ReactNode, Suspense, useMemo } from "react";
-import type { RoomView } from "../../src/api-types.ts";
+import { isStartOver, type RoomView } from "../../src/api-types.ts";
 import { Icon } from "../components/icons.tsx";
 import { RoomPicture } from "../components/room-picture.tsx";
 import { Empty } from "../components/states.tsx";
@@ -163,7 +163,11 @@ export function useRowData(keys: readonly string[]): RowData[] {
 					yolo: room?.mode.yolo ?? false,
 					longRunning: room?.mode.longRunning ?? false,
 					waiting: waitingCards(state, key),
-					preview: last ? previewOf(last.text, last.files.length) : "",
+					preview: !last
+						? ""
+						: isStartOver(last)
+							? t("Conversation started over")
+							: previewOf(last.text, last.files.length),
 					at: last?.at,
 				};
 			}),

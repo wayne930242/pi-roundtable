@@ -13,7 +13,7 @@ import { useSelector } from "../lib/app-store.ts";
 import { hostUi } from "../lib/frame-taps.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
-import { timeline } from "../lib/rooms.ts";
+import { timeline, waitingCards } from "../lib/rooms.ts";
 import { Icon } from "./icons.tsx";
 import { ProgressStrip } from "./progress-strip.tsx";
 import { loadOlderMessages, RoomLog, useRoomHistory } from "./room-log.tsx";
@@ -21,6 +21,9 @@ import { Empty, Failure, Loading } from "./states.tsx";
 
 // The read marks and the divider of new messages load beside the log; until they do the log shows as it is.
 const ReadLog = lazy(() => hostUi().then((ui) => ({ default: ui.ReadLog })));
+
+// The chip that brings back a waiting card out of view, and a jump's card, load while a card waits here.
+const WaitingChip = lazy(() => import("./waiting-chip.tsx"));
 
 /**
  * Keeps the end of the list in view while the person is at the end, and says when more arrived
@@ -91,6 +94,10 @@ export function RoomChat(props: {
 		cardOrder: state.cardOrder,
 	}));
 	const { loaded, error } = useRoomHistory(roomKey);
+	const waiting = useSelector(
+		(state) => waitingCards(state, roomKey) > 0,
+		roomKey,
+	);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
@@ -149,6 +156,11 @@ export function RoomChat(props: {
 		.find((m) => m.kind === "agent");
 	return (
 		<>
+			{waiting ? (
+				<Suspense fallback={null}>
+					<WaitingChip roomKey={roomKey} scroller={scroller} loaded={loaded} />
+				</Suspense>
+			) : null}
 			<div
 				className="room-scroll"
 				ref={scroller}

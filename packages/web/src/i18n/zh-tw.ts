@@ -238,6 +238,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 
 	// 訊息列
 	"Conversation started over": "對話已重新開始",
+	"View the archived conversation": "查看封存的對話",
+	"Archived conversation": "封存的對話",
+	"The archived conversation has no messages.": "封存的對話裡沒有訊息。",
 	Discard: "捨棄",
 	"Not sent yet": "尚未傳送",
 	"Not sent": "未傳送",
@@ -598,6 +601,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Copy as Markdown": "複製為 Markdown",
 	"Quote reply": "引用回覆",
 	"Select text": "選取文字",
+	"Copy all": "全部複製",
 	Share: "分享",
 	"Knight profile": "騎士資料",
 	"Copy details": "複製細節",
@@ -685,6 +689,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Yolo: "Yolo",
 	"{count} card waiting": "{count} 張卡片等待中",
 	"{count} cards waiting": "{count} 張卡片等待中",
+	"{count} card waiting for an answer": "{count} 張卡待回答",
+	"{count} cards waiting for an answer": "{count} 張卡待回答",
+	"Cards waiting": "待回答的卡片",
 	"{count} finished thread": "{count} 個已結束的討論串",
 	"{count} finished threads": "{count} 個已結束的討論串",
 	Clear: "清除",
@@ -867,6 +874,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Method not allowed.": "不允許使用這個方法。",
 	"There is no such API.": "沒有這個 API。",
 	"before and limit must be whole numbers.": "before 與 limit 必須是整數。",
+	"before, limit and archive must be whole numbers.":
+		"before、limit 與 archive 必須是整數。",
 	"Give yolo or longRunning.": "請提供 yolo 或 longRunning。",
 	"This room follows the modes of the conversation that made it; switch them there.":
 		"這個房間沿用建立它的對話的模式；請到那個對話切換。",

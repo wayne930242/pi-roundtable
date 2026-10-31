@@ -2,6 +2,7 @@ import type {
 	AgentDirectory,
 	AgentTeam,
 	AvatarStudio,
+	ChannelKey,
 	ConversationModes,
 	ConversationPort,
 	IdentityService,
@@ -37,6 +38,7 @@ import type {
 	WorkspaceRootsView,
 	WorkspaceSave,
 } from "../api-types.ts";
+import { isStartOver } from "../api-types.ts";
 import type { Authenticated } from "../auth/authenticator.ts";
 import { type ConsolePresentation, message } from "../features.ts";
 import type { Gate } from "../gate.ts";
@@ -79,7 +81,7 @@ export interface AppApiOptions {
 	presentation?: ConsolePresentation;
 	surface: AppSurface;
 	rooms: Rooms;
-	log: Pick<RoomLog, "page" | "lastOf" | "removeRoom">;
+	log: Pick<RoomLog, "page" | "lastOf" | "removeRoom" | "get" | "startOver">;
 	cards: Pick<CardLog, "during" | "removeRoom">;
 	uploads: Uploads;
 	/** Where stored files are read from. */
@@ -580,17 +582,23 @@ export class AppApi {
 			const params = new URL(request.url).searchParams;
 			const before = params.get("before");
 			const limit = params.get("limit");
+			const archive = params.get("archive");
 			const beforeId = before === null ? undefined : Number(before);
+			const archiveId = archive === null ? undefined : Number(archive);
 			const count = limit === null ? PAGE_LIMIT : Number(limit);
 			if (
 				(beforeId !== undefined && !Number.isInteger(beforeId)) ||
+				(archiveId !== undefined && !Number.isInteger(archiveId)) ||
 				!Number.isInteger(count) ||
 				count < 1
 			)
-				throw bad("before and limit must be whole numbers.");
+				throw bad("before, limit and archive must be whole numbers.");
+			if (archiveId !== undefined)
+				return json(await this.#archived(room.key, archiveId, beforeId, count));
 			const page = await log.page(room.key, beforeId, count);
 			// The cards stand among the messages by the time they opened; a page that has older
-			// messages leaves the cards before its first one to the older page.
+			// messages leaves the cards before its first one to the older page, and a conversation
+			// started over leaves the archived one's cards to it.
 			const first = page.messages[0];
 			const { reads, nameOf } = this.#options;
 			const self = admission.visitor.principal.id;
@@ -599,7 +607,9 @@ export class AppApi {
 				...page,
 				messages: withExpiredFiles(page.messages, this.#options.files),
 				cards: await cards.during(room.key, {
-					...(page.more && first ? { from: first.at } : {}),
+					...(first && (page.more || isStartOver(first))
+						? { from: first.at }
+						: {}),
 					...(beforeId === undefined ? {} : { before: beforeId }),
 				}),
 				...(reads && nameOf
@@ -635,6 +645,8 @@ export class AppApi {
 			if (room.readOnly) throw notFound();
 			await this.#owner(admission);
 			await conversations.startFresh(room.key);
+			// The other pages read the room list again: its unread count and last line changed.
+			this.#options.changed();
 			return json({ ok: true });
 		}
 		if (
@@ -655,6 +667,37 @@ export class AppApi {
 			return json({ muted });
 		}
 		throw new HttpError(404, "There is no such API.");
+	}
+
+	/**
+	 * A page of the conversation a start-over line of the room ended, read only: its messages and
+	 * the cards that opened within it. A line that is not one of the room's start-overs names none.
+	 */
+	async #archived(
+		room: ChannelKey,
+		until: number,
+		before: number | undefined,
+		count: number,
+	): Promise<MessagesView> {
+		const { log, cards } = this.#options;
+		const line = await log.get(room, until);
+		if (!line || !isStartOver(line)) throw notFound();
+		const page = await log.page(room, before, count, until);
+		const first = page.messages[0];
+		const previous = page.more ? undefined : await log.startOver(room, until);
+		const from = page.more
+			? first?.at
+			: previous === undefined
+				? undefined
+				: (await log.get(room, previous))?.at;
+		return {
+			...page,
+			messages: withExpiredFiles(page.messages, this.#options.files),
+			cards: await cards.during(room, {
+				...(from === undefined ? {} : { from }),
+				before: before ?? until,
+			}),
+		};
 	}
 
 	/**
