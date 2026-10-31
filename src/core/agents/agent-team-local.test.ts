@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
+import type { ChannelKey } from "../sessions.ts";
 import { describeDb, openTestStore, TEST_GUILD } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { PgAgentStore } from "./agent-store.ts";
@@ -226,7 +227,7 @@ describeDb("schedule_list across the rooms of a team with Discord", () => {
 		try {
 			expect(restarted.conversations.latest("infra")).toBe(room("infra"));
 			const infra = restarted.activeAgent("infra");
-			const target = (from: string) =>
+			const target = (from: ChannelKey) =>
 				messageTarget(
 					{
 						store: restarted,
