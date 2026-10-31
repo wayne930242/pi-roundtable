@@ -182,6 +182,9 @@ export class Podium {
 	private readonly plateMaterial: MeshBasicMaterial;
 	private readonly panelMaterial: MeshToonMaterial;
 	private shown: Badge | null = null;
+	/** The standee's picture, and the same figure with its mouth open while the seat has one to speak with. */
+	private closedMap: Texture | undefined;
+	private talkMap: Texture | undefined;
 	/** The nameplate's text as drawn, and its size in canvas px, for the readability check. */
 	plateText = { text: "", px: 0 };
 	/** 0 to 1 channels the loop eases. */
@@ -301,8 +304,9 @@ export class Podium {
 
 	/** Sets the board's picture and sizes it to the picture's proportions. */
 	setSticker(canvasEl: HTMLCanvasElement): void {
-		const old = this.boardMaterial.map;
+		const old = this.closedMap;
 		const map = this.kit.texture(canvasEl);
+		this.closedMap = map;
 		this.boardMaterial.map = map;
 		this.boardMaterial.needsUpdate = true;
 		const ratio = canvasEl.height / canvasEl.width;
@@ -314,6 +318,22 @@ export class Podium {
 			this.board.position.y + (BOARD_W * ratio) / 2 + 0.02;
 		this.board.visible = true;
 		old?.dispose();
+	}
+
+	/** Sets the open-mouthed frame of the board's picture, the same size as it; `undefined` takes it away. */
+	setTalk(canvasEl: HTMLCanvasElement | undefined): void {
+		const old = this.talkMap;
+		this.talkMap = canvasEl ? this.kit.texture(canvasEl) : undefined;
+		if (this.boardMaterial.map === old)
+			this.boardMaterial.map = this.closedMap ?? null;
+		old?.dispose();
+	}
+
+	/** Shows the board with its mouth open or closed; returns whether it has an open frame to show. */
+	mouth(open: boolean): boolean {
+		const map = open && this.talkMap ? this.talkMap : this.closedMap;
+		if (map && this.boardMaterial.map !== map) this.boardMaterial.map = map;
+		return this.talkMap !== undefined;
 	}
 
 	/**
@@ -361,7 +381,8 @@ export class Podium {
 		this.plateTexture.dispose();
 		this.plateMaterial.dispose();
 		this.panelMaterial.dispose();
-		this.boardMaterial.map?.dispose();
+		this.closedMap?.dispose();
+		this.talkMap?.dispose();
 		this.boardMaterial.dispose();
 		this.board.geometry.dispose();
 		this.glowMaterial.dispose();

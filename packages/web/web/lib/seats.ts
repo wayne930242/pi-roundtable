@@ -16,16 +16,21 @@ import type { Kit } from "./kit.ts";
 export const seatStateOf = (state: AvatarState): SeatState =>
 	state === "sleepy" ? "idle" : state;
 
-/** Who is speaking in a group room: its `typing` and `agent` as the room's state holds them. */
+/**
+ * A group room's round as the table sees it: whether a turn runs (`typing`) and whose (`agent`), and
+ * the member whose words the room's dialogue box reveals now (`voice`).
+ */
 export interface GroupRound {
 	typing: boolean;
 	agent?: string | undefined;
+	voice?: string | undefined;
 }
 
 /**
- * The state of every seat. `agents` holds each agent's presence by name; the member a typing group
- * round names as `agent` is lit as `speaking`, unless it is waiting on a card or has failed, which
- * the table must keep showing.
+ * The state of every seat. `agents` holds each agent's presence by name. The member whose turn runs
+ * thinks (or works, when its presence says so) until its words show; the member whose words the
+ * dialogue box reveals is lit as `speaking` until the last of them shows. A seat waiting on a card or
+ * failed keeps that, which the table must keep showing.
  */
 export function seatStates(
 	agents: Readonly<Record<string, AvatarState>>,
@@ -34,14 +39,20 @@ export function seatStates(
 	const states: Record<string, SeatState> = {};
 	for (const [name, state] of Object.entries(agents))
 		states[name] = seatStateOf(state);
+	const settled = (name: string | undefined): name is string =>
+		name !== undefined &&
+		name in states &&
+		states[name] !== "waiting" &&
+		states[name] !== "error";
 	for (const round of groups) {
-		const speaker = round.agent;
-		if (!round.typing || speaker === undefined || !(speaker in states))
-			continue;
-		const now = states[speaker];
-		if (now === "waiting" || now === "error") continue;
-		states[speaker] = "speaking";
+		const turn = round.agent;
+		if (round.typing && settled(turn)) {
+			const now = states[turn];
+			if (now !== "thinking" && now !== "working") states[turn] = "thinking";
+		}
 	}
+	for (const round of groups)
+		if (settled(round.voice)) states[round.voice] = "speaking";
 	return states;
 }
 
@@ -86,11 +97,13 @@ export function seatPicture(
 	state: SeatState,
 	uid: string,
 	skins?: readonly Hex[],
+	mouth?: "open" | "closed",
 ): string {
 	const figure = kit.composeSvg(spec, {
 		bare: true,
 		look,
 		expr: seatExpressionOf(state, kit),
+		...(mouth ? { mouth } : {}),
 		state: "idle",
 		still: true,
 		size: STANDEE_PX,
@@ -104,6 +117,26 @@ export function seatPicture(
 			`width="${STANDEE_PX}" height="${STANDEE_PX}"`,
 			`width="${STANDEE_PX}" height="${Math.round((STANDEE_PX * h) / w)}"`,
 		);
+}
+
+/**
+ * A seat's pictures for a state: the standee, and for a speaker the same figure with its mouth open
+ * (`talkSvg`), which the table alternates with the closed one while the words show.
+ */
+export function seatPictures(
+	kit: Kit,
+	spec: CharacterSpec,
+	look: CharacterLook,
+	state: SeatState,
+	uid: string,
+	skins?: readonly Hex[],
+): { avatarSvg: string; talkSvg?: string } {
+	if (state !== "speaking")
+		return { avatarSvg: seatPicture(kit, spec, look, state, uid, skins) };
+	return {
+		avatarSvg: seatPicture(kit, spec, look, state, uid, skins, "closed"),
+		talkSvg: seatPicture(kit, spec, look, state, uid, skins, "open"),
+	};
 }
 
 export interface Timers {

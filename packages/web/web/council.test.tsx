@@ -595,18 +595,20 @@ test("a running round lights who speaks, turns the camera there, marks the seats
 		tries += 1
 	)
 		await settle();
-	// the member the round names speaks, though no line of theirs has come yet
-	const states = Object.fromEntries(
-		all("g.seat").map((seat) => [
-			seat.getAttribute("data-seat"),
-			seat.getAttribute("data-state"),
-		]),
-	);
-	expect(states).toEqual({
+	// the member the round names thinks while no word of theirs has come: no light yet
+	const states = () =>
+		Object.fromEntries(
+			all("g.seat").map((seat) => [
+				seat.getAttribute("data-seat"),
+				seat.getAttribute("data-state"),
+			]),
+		);
+	expect(states()).toEqual({
 		guide: "idle",
-		scout: "speaking",
+		scout: "thinking",
 		mason: "idle",
 	});
+	expect(q(".t2d.dim")).toBeNull();
 	expect(
 		all("g.seat[data-focus]").map((seat) => seat.getAttribute("data-seat")),
 	).toEqual(["scout"]);
@@ -625,6 +627,95 @@ test("a running round lights who speaks, turns the camera there, marks the seats
 	).toBe("Stop the round");
 	await page.click(q<HTMLButtonElement>(".composer-stop"));
 	expect(sent).toContainEqual({ type: "stop", room: crewRoom });
+});
+
+test("a member speaks while its words show in the box, and only then: thinking, speaking, idle", async () => {
+	load([...everyone, group("crew", ["guide", "scout", "mason"])]);
+	await show();
+	const crewRoom = "app:group.crew";
+	const scout = () =>
+		q('g.seat[data-seat="scout"]')?.getAttribute("data-state");
+	const until = async (check: () => boolean) => {
+		for (let tries = 0; tries < 40 && !check(); tries += 1) await settle(50);
+	};
+	await page.act(() => {
+		store.dispatch({ type: "focused", room: crewRoom });
+		store.dispatch({
+			type: "activity",
+			room: crewRoom,
+			typing: true,
+			stoppable: true,
+		});
+		store.dispatch({
+			type: "round",
+			room: crewRoom,
+			round: {
+				id: 4,
+				state: "running",
+				current: "scout",
+				next: [],
+				spoken: [],
+				replies: 0,
+				limit: 8,
+			},
+		});
+	});
+	await until(() => scout() === "thinking");
+	expect(scout()).toBe("thinking");
+	expect(q(".t2d.dim")).toBeNull();
+	// its words stream into the box: the light comes on
+	await page.act(() => {
+		store.dispatch({
+			type: "progress",
+			room: crewRoom,
+			event: { type: "text", delta: "Three leads found." },
+		});
+	});
+	await until(() => scout() === "speaking");
+	expect(scout()).toBe("speaking");
+	expect(q(".t2d.dim")).not.toBeNull();
+	// the turn ends and the stored reply has shown whole: the light goes off
+	await page.act(() => {
+		store.dispatch({
+			type: "message",
+			room: crewRoom,
+			message: {
+				id: 9,
+				room: crewRoom,
+				kind: "agent",
+				agent: "scout",
+				author: "scout",
+				text: "Three leads found.",
+				files: [],
+				at: "2026-10-31T10:00:00.000Z",
+			},
+		});
+		store.dispatch({
+			type: "activity",
+			room: crewRoom,
+			typing: false,
+			stoppable: false,
+		});
+		store.dispatch({
+			type: "round",
+			room: crewRoom,
+			round: {
+				id: 4,
+				state: "ended",
+				ended: "done",
+				next: [],
+				spoken: ["scout"],
+				replies: 1,
+				limit: 8,
+			},
+		});
+	});
+	await until(() => scout() === "idle");
+	expect(scout()).toBe("idle");
+	expect(q(".t2d.dim")).toBeNull();
+	await page.act(() => {
+		store.dispatch({ type: "focused", room: undefined });
+	});
 });
 
 // ── the composer and the display mode of the table page ──────────────────────────────────────

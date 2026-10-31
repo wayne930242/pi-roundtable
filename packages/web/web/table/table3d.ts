@@ -52,6 +52,7 @@ import {
 } from "./seating";
 import { createSpeedLines, type SpeedLines } from "./speed";
 import { mixHex, stickerCanvas } from "./standee";
+import { mouthOpenAt } from "./talk";
 import { Toon } from "./toon";
 import type {
 	Scheme,
@@ -173,13 +174,31 @@ export function createTable3D(
 	const states = new Map<string, SeatState>();
 	const marks = new Map<string, string>();
 	const svgs = new Map<string, string>();
+	/** Each seat's open-mouthed picture, while it has one. */
+	const talks = new Map<string, string>();
 	let world: World | undefined;
 	let building = 0;
 	/** The standees as drawn, so a new ring shows them at once and does not wait for them to be drawn again. */
 	const stickers = new Map<
 		string,
-		{ svg: string; tone: string; canvas: HTMLCanvasElement }
+		{
+			svg: string;
+			talk: string | undefined;
+			tone: string;
+			canvas: HTMLCanvasElement;
+			talkCanvas: HTMLCanvasElement | undefined;
+		}
 	>();
+	/** Whether a seat's drawn standee is the one its pictures ask for now. */
+	const keptFor = (id: string) => {
+		const kept = stickers.get(id);
+		return kept &&
+			kept.svg === svgs.get(id) &&
+			kept.talk === talks.get(id) &&
+			kept.tone === toneOf()
+			? kept
+			: undefined;
+	};
 	const toneOf = () => `${theme}/${scheme}`;
 	let show: Show | undefined;
 
@@ -259,19 +278,31 @@ export function createTable3D(
 		const slot = w.slotOf.get(id);
 		const podium = slot === undefined ? undefined : w.podiums[slot];
 		if (podium?.init.kind !== "agent") return;
+		const talk = talks.get(id);
+		const colors = {
+			rim: w.hall.paper,
+			ink: w.hall.ink,
+			edge: mixHex(
+				seats.find((s) => s.id === id)?.color ?? w.hall.gold,
+				w.hall.ink,
+				0.35,
+			),
+		};
 		try {
-			const made = await stickerCanvas(svg, 320, {
-				rim: w.hall.paper,
-				ink: w.hall.ink,
-				edge: mixHex(
-					seats.find((s) => s.id === id)?.color ?? w.hall.gold,
-					w.hall.ink,
-					0.35,
-				),
-			});
+			const [made, open] = await Promise.all([
+				stickerCanvas(svg, 320, colors),
+				talk ? stickerCanvas(talk, 320, colors) : undefined,
+			]);
 			if (expected !== building || world !== w) return;
-			stickers.set(id, { svg, tone: toneOf(), canvas: made.canvas });
+			stickers.set(id, {
+				svg,
+				talk,
+				tone: toneOf(),
+				canvas: made.canvas,
+				talkCanvas: open?.canvas,
+			});
 			podium.setSticker(made.canvas);
+			podium.setTalk(open?.canvas);
 			loop.wake();
 		} catch {
 			/* a picture that does not decode leaves the podium empty, never the scene broken */
@@ -333,9 +364,11 @@ export function createTable3D(
 			podium.setDim(seat.dim === true);
 			applyState(podium, states.get(seat.id) ?? seat.state ?? "idle");
 			place(slot, podium);
-			const kept = stickers.get(seat.id);
-			if (kept && kept.svg === svgs.get(seat.id) && kept.tone === toneOf())
+			const kept = keptFor(seat.id);
+			if (kept) {
 				podium.setSticker(kept.canvas);
+				podium.setTalk(kept.talkCanvas);
+			}
 		});
 		world = { hall, toon, kit, built, group, slots, podiums, slotOf, order };
 		if (glide && show) {
@@ -370,9 +403,7 @@ export function createTable3D(
 		key.color.set(hall.key);
 		key.intensity = hall.keyI;
 		for (const seat of seats.slice(0, slots.seated)) {
-			const kept = stickers.get(seat.id);
-			if (kept && kept.svg === svgs.get(seat.id) && kept.tone === toneOf())
-				continue;
+			if (keptFor(seat.id)) continue;
 			void stickerOf(seat.id, generation);
 		}
 		if (focusId && !slotOf.has(focusId)) focusId = null;
@@ -601,6 +632,10 @@ export function createTable3D(
 					p.boardY + Math.sin(seconds * 3.1 + p.phase) * 0.035 * p.bob;
 				p.face(eye);
 				if (p.markFrame(state === "speaking", seconds, reduced)) moving = true;
+				// The mouth opens and closes while the seat speaks, and rests closed under reduced motion.
+				const talking = state === "speaking" && !reduced;
+				if (p.mouth(talking && mouthOpenAt(seconds, p.phase)) && talking)
+					moving = true;
 				if (
 					Math.abs(p.speak - speaking) > 0.01 ||
 					Math.abs(wasSpeak - p.speak) > 0.001 ||
@@ -926,6 +961,7 @@ export function createTable3D(
 	for (const s of seats) {
 		if (s.state) states.set(s.id, s.state);
 		if (s.avatarSvg) svgs.set(s.id, s.avatarSvg);
+		if (s.talkSvg) talks.set(s.id, s.talkSvg);
 	}
 	if (opts.focus && seats.some((s) => s.id === opts.focus))
 		focusId = opts.focus;
@@ -955,6 +991,10 @@ export function createTable3D(
 				if (s.state) states.set(s.id, s.state);
 				if (s.avatarSvg && s.avatarSvg !== svgs.get(s.id))
 					svgs.set(s.id, s.avatarSvg);
+				if (s.avatarSvg) {
+					if (s.talkSvg) talks.set(s.id, s.talkSvg);
+					else talks.delete(s.id);
+				}
 			}
 			// the seats that come and go play out; the old ring stands until they have
 			if (plan && plan.mode !== "cut") {
@@ -992,8 +1032,10 @@ export function createTable3D(
 			if (p) names.mark(p, mark);
 			loop.wake();
 		},
-		async setAvatar(id, svg) {
+		async setAvatar(id, svg, talk) {
 			svgs.set(id, svg);
+			if (talk) talks.set(id, talk);
+			else talks.delete(id);
 			await stickerOf(id, building);
 		},
 		setReducedMotion(next) {

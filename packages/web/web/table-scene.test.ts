@@ -44,10 +44,18 @@ import {
 	PLATE_FONT_STACK,
 	type PlateContext,
 } from "./table/plate.ts";
-import { badgeOf, STANDEE_TURN, standeeTurn } from "./table/podium3d.ts";
+import {
+	badgeOf,
+	Podium,
+	PodiumKit,
+	STANDEE_TURN,
+	standeeTurn,
+} from "./table/podium3d.ts";
 import { createSpeedLines } from "./table/speed.ts";
 import { mixHex, ringOffsets } from "./table/standee.ts";
 import { layoutOf } from "./table/table2d.ts";
+import { mouthOpenAt, TALK_HZ, talkFrames } from "./table/talk.ts";
+import { Toon } from "./table/toon.ts";
 
 beforeAll(() => GlobalRegistrator.register({ width: 1280, height: 800 }));
 afterAll(() => GlobalRegistrator.unregister());
@@ -841,5 +849,65 @@ describe("the 2D hall", () => {
 		expect(layoutOf(12, false)).toEqual({ rows: 2, perRow: 6 });
 		expect(layoutOf(12, true)).toEqual({ rows: 1, perRow: 12 });
 		expect(layoutOf(0, false)).toEqual({ rows: 1, perRow: 1 });
+	});
+});
+
+describe("the talking mouth", () => {
+	test("it opens and closes about seven times a second, a beat now and then held shut, out of step between speakers", () => {
+		const samples = (phase: number) =>
+			Array.from({ length: 140 }, (_, at) => mouthOpenAt(at / 70, phase));
+		const opens = (list: boolean[]) =>
+			list.filter((open, at) => open && !list[at - 1]).length;
+		const one = samples(0);
+		// two seconds: about fourteen openings, a few held shut
+		expect(opens(one)).toBeGreaterThanOrEqual(8);
+		expect(opens(one)).toBeLessThanOrEqual(2 * TALK_HZ);
+		expect(one.filter(Boolean).length).toBeGreaterThan(30);
+		expect(samples(1.3)).not.toEqual(one);
+		const { frames, seconds } = talkFrames(2);
+		expect(frames.every((frame) => frame === 0 || frame === 1)).toBe(true);
+		expect(frames).toContain(1);
+		expect(seconds).toBeCloseTo(frames.length / (TALK_HZ * 2), 9);
+	});
+
+	test("the 3D standee swaps its board between the closed and the open picture, and only while it has an open one", () => {
+		// happy-dom draws nothing: a 2D context that takes every call and answers with a number does for the podium's canvases.
+		const anything: unknown = new Proxy(() => undefined, {
+			get: (_, key) => (key === Symbol.toPrimitive ? () => 10 : anything),
+			apply: () => anything,
+			set: () => true,
+		});
+		const real = HTMLCanvasElement.prototype.getContext;
+		HTMLCanvasElement.prototype.getContext = (() =>
+			anything) as typeof HTMLCanvasElement.prototype.getContext;
+		try {
+			const kit = new PodiumKit(hallOf("camelot", "dark"));
+			const podium = new Podium(
+				{ id: "gawain", name: "Gawain", kind: "agent", accent: "#a5435f" },
+				kit,
+				new Toon(),
+			);
+			const picture = () => document.createElement("canvas");
+			podium.setSticker(picture());
+			const closed = podium.boardMaterial.map;
+			// no open frame yet: the mouth stays as drawn
+			expect(podium.mouth(true)).toBe(false);
+			expect(podium.boardMaterial.map).toBe(closed);
+			podium.setTalk(picture());
+			expect(podium.mouth(true)).toBe(true);
+			const open = podium.boardMaterial.map;
+			expect(open).not.toBe(closed);
+			expect(podium.mouth(false)).toBe(true);
+			expect(podium.boardMaterial.map).toBe(closed);
+			// it opens again, then the open frame goes: the board shows the closed one
+			podium.mouth(true);
+			podium.setTalk(undefined);
+			expect(podium.boardMaterial.map).toBe(closed);
+			expect(podium.mouth(true)).toBe(false);
+			podium.dispose();
+			kit.dispose();
+		} finally {
+			HTMLCanvasElement.prototype.getContext = real;
+		}
 	});
 });

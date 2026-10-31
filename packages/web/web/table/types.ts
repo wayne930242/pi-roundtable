@@ -40,6 +40,8 @@ export interface SeatInit {
 	color: string;
 	/** composed character SVG (from the art lab); placeholder bust is drawn until set */
 	avatarSvg?: string;
+	/** The same figure with its mouth open: while the seat speaks the table alternates it with `avatarSvg`, unless motion is reduced. */
+	talkSvg?: string;
 	state?: SeatState;
 	/** The seat is asleep or away: its standee is dimmed. */
 	dim?: boolean;
@@ -129,8 +131,8 @@ export interface TableHandle {
 	setState(id: string, state: SeatState): void;
 	/** A short sign before a seat's name that says where it stands in a round (a check for who has spoken, a number for who is next); `null` takes it away. */
 	setMark(id: string, mark: string | null): void;
-	/** The seam for the composed characters: replace one seat's picture. */
-	setAvatar(id: string, svg: string): Promise<void>;
+	/** The seam for the composed characters: replace one seat's picture, and its open-mouthed frame for speaking (none when absent). */
+	setAvatar(id: string, svg: string, talkSvg?: string): Promise<void>;
 	setReducedMotion(reduced: boolean): void;
 	resetCamera(): void;
 	/** Turns the camera to a seat (a close-up) or back to the whole ring (`null`); cuts under reduced motion or when `cut`. */

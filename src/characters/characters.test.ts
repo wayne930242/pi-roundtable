@@ -720,3 +720,28 @@ test("EAST_ASIAN_SKINS is six light, warm-pink to peach tones the face lines rea
 	// Distinct enough to pick from.
 	expect(new Set(EAST_ASIAN_SKINS).size).toBe(6);
 });
+
+test("a mouth option draws the two frames of a talking figure in every expression, and leaves the rest of the face as it is", () => {
+	const mouthOf = (svg: string) =>
+		svg.match(/<g class="mouth"[^>]*>(.*?)<\/g>/)?.[1] ?? "";
+	const without = (svg: string) => svg.replace(mouthOf(svg), "");
+	for (const expr of EXPRESSIONS) {
+		const own = composeSvg(KNIGHT, { expr, uid: "m1" });
+		const open = composeSvg(KNIGHT, { expr, uid: "m1", mouth: "open" });
+		const closed = composeSvg(KNIGHT, { expr, uid: "m1", mouth: "closed" });
+		expectSafe(open, "m1");
+		expectSafe(closed, "m1");
+		// an open mouth is filled with the ink, a closed one is a line
+		expect(mouthOf(open)).toMatch(/<(ellipse|path)[^>]*fill="#/);
+		expect(mouthOf(closed)).not.toContain("<ellipse");
+		expect(mouthOf(closed)).toContain('fill="none"');
+		expect(mouthOf(open)).not.toBe(mouthOf(closed));
+		// one of the two is the expression's own mouth, and only the mouth changes
+		expect([mouthOf(open), mouthOf(closed)]).toContain(mouthOf(own));
+		expect(without(open)).toBe(without(own));
+		expect(without(closed)).toBe(without(own));
+	}
+	expect(
+		fieldOf(() => composeSvg(KNIGHT, { mouth: "wide" as unknown as "open" })),
+	).toBe("mouth");
+});

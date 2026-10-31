@@ -22,6 +22,22 @@ type MouthShape =
 	| "tongue"
 	| "yawn"
 	| "tilt";
+/** The mouths that show an open mouth; the rest are a closed line. */
+const OPEN_MOUTHS: ReadonlySet<MouthShape> = new Set([
+	"grin",
+	"o",
+	"tongue",
+	"yawn",
+	"tilt",
+]);
+
+/** A talking figure's mouth for one frame: the expression's own when it already is open or closed, else an open "o" or a closed smile. */
+function talking(shape: MouthShape, mouth: "open" | "closed"): MouthShape {
+	const open = OPEN_MOUTHS.has(shape);
+	if (mouth === "open") return open ? shape : "o";
+	return open ? "smile" : shape;
+}
+
 type Extra = "blush" | "sweat" | "tear" | "sparkle" | "dots" | "burst";
 
 interface ExpressionRow {
@@ -263,9 +279,14 @@ const star = (x: number, y: number, r: number, color: string): string =>
 const drop = (x: number, y: number, s: number, color: string): string =>
 	`<path d="M${x} ${y - 3.6 * s}Q${x + 3 * s} ${y + 0.2 * s} ${x} ${y + 2.8 * s}Q${x - 3 * s} ${y + 0.2 * s} ${x} ${y - 3.6 * s}Z" fill="${color}"/>`;
 
-export function faceParts(colors: FaceColors, expression: Expression): Face {
+export function faceParts(
+	colors: FaceColors,
+	expression: Expression,
+	talk?: "open" | "closed",
+): Face {
 	const c = FACE;
 	const row = EXPRESSION_ROWS[expression];
+	const shape = talk === undefined ? row.mouth : talking(row.mouth, talk);
 	const [lx, ly] = row.look;
 	const eye = (cx: number, side: 0 | 1) => {
 		const big = row.big && !side;
@@ -279,7 +300,7 @@ export function faceParts(colors: FaceColors, expression: Expression): Face {
 	) =>
 		`<path d="M${-c.bl / 2} 0H${c.bl / 2}" transform="translate(${cx} ${f1(c.ey + c.bdy + dy)}) rotate(${side ? -tilt : tilt})" stroke="${colors.brow}" stroke-width="${c.bw}" stroke-linecap="round" fill="none"/>`;
 	const brows = `<g class="brows">${brow(c.ex[0], row.bl, 0)}${brow(c.ex[1], row.br, 1)}</g>`;
-	const mouth = `<g class="mouth" transform="translate(${c.mx} ${c.my}) scale(${c.ms})">${mouthShape(row.mouth, colors.ink)}</g>`;
+	const mouth = `<g class="mouth" transform="translate(${c.mx} ${c.my}) scale(${c.ms})">${mouthShape(shape, colors.ink)}</g>`;
 	const [fx, fy] = c.fx;
 	const blush = (cx: number) =>
 		`<ellipse cx="${cx}" cy="${c.ey + c.by}" rx="${c.br}" ry="${f1(c.br * 0.62)}" fill="#ff7a8e" opacity=".5"/>`;

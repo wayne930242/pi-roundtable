@@ -177,6 +177,21 @@ export function createReveal(): Reveal {
 }
 
 /**
+ * Who speaks in the box now: the agent whose words are being revealed, or still streaming in
+ * (`streamer`, the member the room streams for, names who is writing them). Nobody while the turn
+ * only thinks or runs its tools, and nobody once the words stand whole.
+ */
+export function voiceOf(
+	line: Pick<Line, "who" | "agent" | "live"> | undefined,
+	revealing: boolean,
+	streamer: string | undefined,
+): string | undefined {
+	if (line?.who !== "agent") return undefined;
+	if (line.live && streamer !== undefined) return streamer;
+	return revealing ? line.agent : undefined;
+}
+
+/**
  * What the folded dialogue box shows of a line: its first line of words, without the marks of
  * Markdown, cut to `max` characters.
  */

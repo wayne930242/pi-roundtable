@@ -11,6 +11,7 @@ import {
 	revealStep,
 	sliceChars,
 	speakerOf,
+	voiceOf,
 } from "./lib/dialogue.ts";
 import type { CardState, RoomState } from "./lib/rooms.ts";
 
@@ -242,4 +243,21 @@ describe("linePreview", () => {
 		);
 		expect(linePreview("")).toBe("");
 	});
+});
+
+test("the box's voice is the agent whose words are being revealed or streamed, and nobody while the turn only thinks", () => {
+	const stored = { who: "agent" as const, agent: "scout", live: false };
+	const interim = { who: "agent" as const, agent: "scout", live: true };
+	// typing out a stored reply, and done with it
+	expect(voiceOf(stored, true, undefined)).toBe("scout");
+	expect(voiceOf(stored, false, undefined)).toBeUndefined();
+	// words streaming in name whoever writes them, even when the reveal has caught up
+	expect(voiceOf(interim, false, "mason")).toBe("mason");
+	// an interim line that stands while the turn runs its tools is not speech
+	expect(voiceOf(interim, false, undefined)).toBeUndefined();
+	// the owner's words, or nothing said, light nobody
+	expect(
+		voiceOf({ who: "owner", agent: undefined, live: false }, true, "scout"),
+	).toBeUndefined();
+	expect(voiceOf(undefined, true, "scout")).toBeUndefined();
 });

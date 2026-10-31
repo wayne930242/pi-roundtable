@@ -209,10 +209,14 @@ export async function mountRoundTable(
 			inner!.setState(id, st);
 		},
 		setMark: (id, mark) => inner!.setMark(id, mark),
-		setAvatar(id, svg) {
+		setAvatar(id, svg, talkSvg) {
 			const s = seats.get(id);
-			if (s) s.avatarSvg = svg;
-			return inner!.setAvatar(id, svg);
+			if (s) {
+				s.avatarSvg = svg;
+				if (talkSvg === undefined) delete s.talkSvg;
+				else s.talkSvg = talkSvg;
+			}
+			return inner!.setAvatar(id, svg, talkSvg);
 		},
 		setReducedMotion: (r) => inner!.setReducedMotion(r),
 		resetCamera: () => inner!.resetCamera(),

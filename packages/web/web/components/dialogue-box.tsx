@@ -17,14 +17,17 @@ import {
 	type Line,
 	linePreview,
 	sliceChars,
+	voiceOf,
 } from "../lib/dialogue.ts";
 import { useFollowEnd } from "../lib/follow-end.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import type { RoomState } from "../lib/rooms.ts";
+import { speakerOfRound } from "../lib/round-view.ts";
 import { useConnection } from "../lib/socket.ts";
 import { installDialogueFoldStyle } from "../lib/table-page-style.ts";
 import { useDialogueFolded } from "../lib/table-view.ts";
+import { setVoice } from "../lib/voices.ts";
 import { PromptCard } from "./cards.tsx";
 import { PageCharacter } from "./character.tsx";
 import { Composer } from "./composer.tsx";
@@ -216,6 +219,17 @@ export function DialogueBox(props: DialogueBoxProps) {
 			? line.author
 			: (view?.displayName ?? roomKey);
 	const { shown, done, finish } = useReveal(line);
+	// The table lights the member whose words show, while they show: not while the turn only thinks.
+	const streaming = Boolean(room?.typing && room.progress.text !== "");
+	const voice = voiceOf(
+		line,
+		!done,
+		streaming ? (speakerOfRound(room?.round) ?? line?.agent) : undefined,
+	);
+	useEffect(() => {
+		setVoice(roomKey, voice);
+	}, [roomKey, voice]);
+	useEffect(() => () => setVoice(roomKey, undefined), [roomKey]);
 	// The box is bounded, so a long line scrolls: the newest words stay in view while it is typed out.
 	const body = useRef<HTMLDivElement>(null);
 	useFollowEnd(body, !done, shown);

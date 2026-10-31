@@ -197,3 +197,37 @@ test("without a menu handler the table adds no menu gestures: a right click is t
 	expect(event.defaultPrevented).toBe(false);
 	table.dispose();
 });
+
+test("a speaking seat's mouth opens and closes in frames over its picture, stops when it stops speaking, and rests closed under reduced motion", async () => {
+	const closed =
+		'<svg xmlns="http://www.w3.org/2000/svg"><g class="mouth">c</g></svg>';
+	const open =
+		'<svg xmlns="http://www.w3.org/2000/svg"><g class="mouth">o</g></svg>';
+	const { container, table } = await mount({ reducedMotion: false });
+	const talk = () =>
+		container.querySelector('[data-seat="lancelot"] image.talk');
+	await table.setAvatar("lancelot", closed, open);
+	// thinking: one picture, no mouth moving
+	table.setState("lancelot", "thinking");
+	expect(talk()).toBeNull();
+	table.setState("lancelot", "speaking");
+	const frames = talk()?.querySelector("animate");
+	expect(frames?.getAttribute("calcMode")).toBe("discrete");
+	expect(frames?.getAttribute("repeatCount")).toBe("indefinite");
+	const values = frames?.getAttribute("values")?.split(";") ?? [];
+	expect(values).toContain("0");
+	expect(values).toContain("1");
+	expect(decodeURIComponent(talk()?.getAttribute("href") ?? "")).toContain(
+		">o<",
+	);
+	// the words have all shown
+	table.setState("lancelot", "idle");
+	expect(talk()).toBeNull();
+	table.setState("lancelot", "speaking");
+	table.setReducedMotion(true);
+	expect(talk()).toBeNull();
+	expect(
+		container.querySelectorAll('[data-seat="lancelot"] image'),
+	).toHaveLength(1);
+	table.dispose();
+});

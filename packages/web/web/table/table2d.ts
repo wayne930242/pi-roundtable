@@ -2,6 +2,7 @@ import { type Hall, hallOf, STATE_COLOR } from "./hall";
 import { fitLabel } from "./label";
 import { PLATE_FONT_STACK } from "./plate";
 import { PUFF_MS, planSeating, RISE_MS } from "./seating";
+import { talkFrames } from "./talk";
 import type {
 	Scheme,
 	SeatInit,
@@ -17,8 +18,9 @@ import { ENGLISH_TABLE_LABELS, pointOf } from "./types";
  * The 2D council hall: the same ring of podiums with standees behind them, drawn as SVG in the hall's
  * palette, for a browser without WebGL, a lost context, and the compact strip. It has the scene's
  * own contract (seats, states, focus, a click on a seat), so the page's dialogue box works over it
- * unchanged. State motion is CSS transform and opacity only (web/styles/table.css), and reduced
- * motion drops it.
+ * unchanged. State motion is CSS transform and opacity only (web/styles/table.css), a speaker's
+ * mouth is its open-mouthed picture shown in discrete frames over the closed one, and reduced motion
+ * drops both.
  */
 
 const NS = "http://www.w3.org/2000/svg";
@@ -68,6 +70,8 @@ export function createTable2D(
 	let scheme: Scheme = opts.scheme;
 	let seats: SeatInit[] = [];
 	const svgs = new Map<string, string>();
+	/** Each seat's open-mouthed picture, while it has one. */
+	const talks = new Map<string, string>();
 	const states = new Map<string, SeatState>();
 	const marks = new Map<string, string>();
 	let focusId: string | null = opts.focus ?? null;
@@ -252,19 +256,43 @@ export function createTable2D(
 			const lift = el("g", { class: "lift" }, g);
 			const picture = svgs.get(s.id);
 			if (picture) {
+				const place = {
+					x: -figure / 2,
+					y: -ph - figure * 0.78,
+					width: figure,
+					height: figure * 0.88,
+					filter: `url(#${uid}-rim)`,
+				};
 				el(
 					"image",
 					{
 						href: dataUri(picture),
-						x: -figure / 2,
-						y: -ph - figure * 0.78,
-						width: figure,
-						height: figure * 0.88,
-						filter: `url(#${uid}-rim)`,
+						...place,
 						...(s.dim ? { opacity: 0.55 } : {}),
 					},
 					lift,
 				);
+				// A speaker's mouth: the open-mouthed picture over the closed one, shown and hidden at the talking beat.
+				const talk = talks.get(s.id);
+				if (st === "speaking" && talk && !reduced) {
+					const open = el(
+						"image",
+						{ class: "talk", href: dataUri(talk), ...place, opacity: 0 },
+						lift,
+					);
+					const { frames, seconds } = talkFrames(i);
+					el(
+						"animate",
+						{
+							attributeName: "opacity",
+							values: frames.join(";"),
+							dur: `${seconds.toFixed(3)}s`,
+							calcMode: "discrete",
+							repeatCount: "indefinite",
+						},
+						open,
+					);
+				}
 			} else {
 				el(
 					"circle",
@@ -579,6 +607,8 @@ export function createTable2D(
 			for (const s of list) {
 				states.set(s.id, s.state ?? "idle");
 				if (s.avatarSvg) svgs.set(s.id, s.avatarSvg);
+				if (s.talkSvg) talks.set(s.id, s.talkSvg);
+				else talks.delete(s.id);
 			}
 			draw();
 			// the first seats are not an arrival; a change of who sits plays a short show in CSS
@@ -603,8 +633,10 @@ export function createTable2D(
 			else marks.set(id, mark);
 			draw();
 		},
-		setAvatar(id, s) {
+		setAvatar(id, s, talk) {
 			svgs.set(id, s);
+			if (talk) talks.set(id, talk);
+			else talks.delete(id);
 			draw();
 			return Promise.resolve();
 		},
