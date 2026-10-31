@@ -1,11 +1,12 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
 import { partial } from "pi-roundtable/testing";
 import type { ConfigView, RoomView } from "../src/api-types.ts";
-import { GroupTable } from "./components/group-table.tsx";
+import { CouncilView } from "./components/council-view.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
+import { resetCouncilModes, setCouncilMode } from "./lib/council-mode.ts";
 import { loadKit } from "./lib/kit.ts";
 import { setLook } from "./lib/look.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
@@ -238,18 +239,22 @@ test("upright, even with eight seats, no seat list stands under the table", asyn
 	expect(query(".rt-table-list")).toBeNull();
 });
 
-test("under Camelot a group room renders the compact strip, lit on its speaker", async () => {
+test("under Camelot a council in chat mode renders the compact strip, lit on its speaker", async () => {
 	setLook("camelot");
 	load([
 		...agents(3),
 		group(["scout", "mason"], { typing: true, agent: "mason" }),
 	]);
+	setCouncilMode("app:group.crew", "chat");
+	messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
 	await page.render(
-		<GroupTable
-			roomKey="app:group.crew"
-			scene={false}
-			onScene={() => undefined}
-		/>,
+		<ConfigContext.Provider value={CONFIG}>
+			<CouncilView roomKey="app:group.crew" lead={null} />
+		</ConfigContext.Provider>,
 	);
 	await settle();
 	expect(query('[data-variant="compact"]')).not.toBeNull();
@@ -285,45 +290,50 @@ test("under Camelot a group room renders the compact strip, lit on its speaker",
 	});
 });
 
-test("under modern the strip is collapsed, and the Table button switches the room to the scene and back", async () => {
+test("under modern a council in chat mode has no strip, and the mode switch shows the scene and back", async () => {
 	setLook("modern");
 	load([...agents(3), group(["scout", "mason"])]);
-	const asked: boolean[] = [];
+	setCouncilMode("app:group.crew", "chat");
+	messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
 	await page.render(
-		<GroupTable
-			roomKey="app:group.crew"
-			scene={false}
-			onScene={(on) => void asked.push(on)}
-		/>,
+		<ConfigContext.Provider value={CONFIG}>
+			<CouncilView roomKey="app:group.crew" lead={null} />
+		</ConfigContext.Provider>,
 	);
 	await settle();
 	expect(query('[data-variant="compact"]')).toBeNull();
-	const toggle = all<HTMLButtonElement>("button").find((button) =>
-		button.textContent?.includes("Table"),
-	);
-	expect(toggle?.getAttribute("aria-pressed")).toBe("false");
-	await page.click(toggle ?? null);
-	expect(asked).toEqual([true]);
-	await page.render(
-		<GroupTable
-			roomKey="app:group.crew"
-			scene
-			onScene={(on) => void asked.push(on)}
-		/>,
-	);
-	const pressed = all<HTMLButtonElement>("button").find((button) =>
-		button.textContent?.includes("Table"),
-	);
-	expect(pressed?.getAttribute("aria-pressed")).toBe("true");
-	await page.click(pressed ?? null);
-	expect(asked).toEqual([true, false]);
+	expect(query(".table-chat")).not.toBeNull();
+	const radio = (mode: string) =>
+		all<HTMLInputElement>('.table-mode input[type="radio"]').find(
+			(one) => one.value === mode,
+		) ?? null;
+	await page.click(radio("scene"));
+	await settle();
+	expect(query(".table-chat")).toBeNull();
+	expect(query(".room-scene")).not.toBeNull();
+	await page.click(radio("chat"));
+	await settle();
+	expect(query(".table-chat")).not.toBeNull();
+	resetCouncilModes();
 });
 
-test("in the scene a group's strip is gone: the camera is the table", async () => {
+test("in the scene a council's strip is gone: the camera is the table", async () => {
 	setLook("camelot");
 	load([...agents(3), group(["scout", "mason"])]);
+	setCouncilMode("app:group.crew", "scene");
+	messages = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
 	await page.render(
-		<GroupTable roomKey="app:group.crew" scene onScene={() => undefined} />,
+		<ConfigContext.Provider value={CONFIG}>
+			<CouncilView roomKey="app:group.crew" lead={null} />
+		</ConfigContext.Provider>,
 	);
 	await settle();
 	expect(query('[data-variant="compact"]')).toBeNull();

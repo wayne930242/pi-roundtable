@@ -1,6 +1,6 @@
-// The styles of the scene's folding dialogue box and of the table page's display mode. They load with
-// the box and the page, as constructed stylesheets, so the page's own stylesheet (which every visit
-// downloads before it draws) stays small.
+// The styles of the scene's folding dialogue box and of a council's header and display mode. They
+// load with the box and the council view, as constructed stylesheets, so the page's own stylesheet
+// (which every visit downloads before it draws) stays small.
 
 import { installStyle } from "./lazy-style.ts";
 
@@ -95,7 +95,22 @@ export const TABLE_PAGE_CSS = `
 	font-size: var(--text-sm);
 	white-space: nowrap;
 }
-/* The council's messages as a chat fill the page under its header, like a room's own list. */
+/* A council's header: on a phone its tools take a row of their own under the title. */
+@media (max-width: 719px) {
+	.council-head {
+		flex-wrap: wrap;
+	}
+	.council-head .table-tools {
+		order: 3;
+		flex-basis: 100%;
+		min-width: 0;
+	}
+	.council-head .council-chip {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+}
+/* The council's messages as a chat fill the view under its header, like a room's own list. */
 .table-chat {
 	position: relative;
 	flex: 1;

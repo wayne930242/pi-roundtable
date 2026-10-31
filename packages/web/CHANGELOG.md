@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A group's council has one view, `CouncilView`, that both the group room and the round table page show: the council chip and sheet, the Animation mode / Chat mode switch, Reset view in the scene, the waiting cards, the room menu, the mode and offline banners, and the scene or the chat with the room's composer (with its @AI/note switch where the room takes notes). The table page gains the waiting cards and the room menu; the room gains the council chip, seat menus in the scene, and a phone keyboard that closes after a send.
+- The mode is kept per council room (`roundtable-console:council-mode:<room>`) instead of a group room's "Table" toggle and the table page's per-device mode. The first read takes the room's old toggle (`rt-table-mode:<room>`, then removed), else the old device mode (`roundtable-console:table-mode`), else the scene.
+
+### Removed
+
+- The group room's "Table" toggle button and the table page's own header, mode switch and chat wrapper.
+
 ## [0.28.0] - 2026-10-31
 
 ### Added

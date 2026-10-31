@@ -22,6 +22,12 @@ import { useAgents } from "./round-table.tsx";
 import { Sheet } from "./sheet.tsx";
 import { Failure } from "./states.tsx";
 
+/** Shows a council picked or made in the sheet: its group room's key and its name. */
+export type CouncilGo = (council: { key: string; name: string }) => void;
+
+const toTable: CouncilGo = (council) =>
+	navigate("table", council.name, { replace: true });
+
 /** One saved council: its members' faces and its name; pressing it puts it on the table. */
 function CouncilRow(props: {
 	view: RoomView;
@@ -59,6 +65,7 @@ function CouncilBody(props: {
 	open: boolean;
 	council: RoomView | undefined;
 	onClose(): void;
+	go: CouncilGo;
 }) {
 	const { council } = props;
 	const councils = useCouncils();
@@ -163,7 +170,7 @@ function CouncilBody(props: {
 		});
 		if (!done || !made) return;
 		chooseCouncil(made.room);
-		navigate("table", made.name, { replace: true });
+		props.go({ key: made.room, name: made.name });
 		toast(t("Made {name}.", { name: made.displayName }));
 		props.onClose();
 	};
@@ -181,7 +188,7 @@ function CouncilBody(props: {
 								current={view.key === council?.key}
 								onPick={() => {
 									chooseCouncil(view.key);
-									navigate("table", view.name, { replace: true });
+									props.go(view);
 									props.onClose();
 								}}
 							/>
@@ -296,6 +303,8 @@ export function CouncilSheet(props: {
 	open: boolean;
 	onClose(): void;
 	council: RoomView | undefined;
+	/** Where a council picked or made goes; the round table with it, unless the caller says otherwise. */
+	go?: CouncilGo;
 }) {
 	return (
 		<Sheet
@@ -308,6 +317,7 @@ export function CouncilSheet(props: {
 				open={props.open}
 				council={props.council}
 				onClose={props.onClose}
+				go={props.go ?? toTable}
 			/>
 		</Sheet>
 	);

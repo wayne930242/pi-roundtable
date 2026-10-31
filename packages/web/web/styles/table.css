@@ -379,20 +379,9 @@
 	flex: 1;
 	min-width: 0;
 }
-.room-table-slot {
-	flex: none;
-}
 .group-strip {
 	border-bottom: 1px solid var(--border);
 	background: var(--surface);
-}
-.group-table-button {
-	width: auto;
-	gap: var(--space-1);
-	padding-inline: var(--space-2);
-}
-.group-table-label {
-	font-size: var(--text-xs);
 }
 /* The council scene: names over the podiums, the speed lines, and the dialogue box that slides up over it. */
 .rt-names {

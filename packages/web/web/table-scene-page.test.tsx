@@ -24,11 +24,6 @@ import { clearDrafts, draftOf } from "./lib/drafts.ts";
 import { loadKit } from "./lib/kit.ts";
 import { setRouting } from "./lib/router.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
-import {
-	resetTableModes,
-	setTableMode,
-	tableModeOf,
-} from "./lib/table-mode.ts";
 import { DIALOGUE_FOLD_CSS } from "./lib/table-page-style.ts";
 import {
 	DIALOGUE_FOLDED_KEY,
@@ -568,18 +563,4 @@ test("a speaker change while the owner is typing does not take the focus from th
 	expect(lit()).toEqual(["\u6885\u68ee"]);
 	expect(document.activeElement).toBe(query(".scene-box textarea"));
 	expect(query<HTMLTextAreaElement>(".scene-box textarea")).toBe(box);
-});
-
-test("a room's choice of the scene is remembered for that room", () => {
-	resetTableModes();
-	expect(tableModeOf(CREW)).toBe(false);
-	setTableMode(CREW, true);
-	expect(tableModeOf(CREW)).toBe(true);
-	expect(tableModeOf("app:group.other")).toBe(false);
-	// a page that starts again reads it back from the browser's storage
-	resetTableModes();
-	expect(tableModeOf(CREW)).toBe(true);
-	setTableMode(CREW, false);
-	resetTableModes();
-	expect(tableModeOf(CREW)).toBe(false);
 });

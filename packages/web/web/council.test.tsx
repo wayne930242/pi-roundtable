@@ -30,12 +30,14 @@ import {
 	startingTicks,
 	toggled,
 } from "./lib/council.ts";
+import { COUNCIL_MODE_KEY, resetCouncilModes } from "./lib/council-mode.ts";
 import { loadKit } from "./lib/kit.ts";
+import { setLook } from "./lib/look.ts";
 import { seatMenuOf } from "./lib/menus.ts";
 import { clearRoomConfirm } from "./lib/room-confirm.ts";
 import { setRouting } from "./lib/router.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
-import { resetTableView, TABLE_MODE_KEY } from "./lib/table-view.ts";
+import { resetTableView } from "./lib/table-view.ts";
 import { teamApi } from "./lib/team-api.ts";
 import { TablePage } from "./pages/table.tsx";
 
@@ -207,7 +209,10 @@ beforeEach(() => {
 	phone = false;
 	resetCouncilChoice();
 	window.localStorage.clear();
+	// The look another file left would draw the Camelot strip over the chat.
+	setLook("modern");
 	resetTableView();
+	resetCouncilModes();
 	window.location.hash = "#/table";
 	setConnection(
 		partial<AppConnection>({
@@ -243,6 +248,9 @@ afterEach(async () => {
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	window.location.hash = "";
+	window.localStorage.clear();
+	resetCouncilModes();
+	setLook(undefined);
 });
 
 const load = (list: RoomView[]) =>
@@ -773,7 +781,7 @@ test("the same send in chat mode closes a phone's keyboard too", async () => {
 	expect(document.activeElement).not.toBe(box);
 });
 
-test("the table page switches between the scene and a chat of the council, keeps the choice on the device, and the chat shows the messages and the cards", async () => {
+test("the table page switches between the scene and a chat of the council, keeps the choice for the council, and the chat shows the messages and the cards", async () => {
 	load([...everyone, group("crew", ["guide", "scout"])]);
 	messages.mockResolvedValue({
 		messages: [
@@ -826,7 +834,7 @@ test("the table page switches between the scene and a chat of the council, keeps
 	expect(chat?.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe(
 		"half a thought",
 	);
-	expect(localStorage.getItem(TABLE_MODE_KEY)).toBe("chat");
+	expect(localStorage.getItem(COUNCIL_MODE_KEY("app:group.crew"))).toBe("chat");
 	// A card that waits shows in the chat as it does in a room.
 	await page.act(() => {
 		store.dispatch({
@@ -844,7 +852,7 @@ test("the table page switches between the scene and a chat of the council, keeps
 	await settle(30);
 	expect(q(".table-chat")?.textContent).toContain("Ship the release?");
 	// A page that comes back to the table finds the chat.
-	resetTableView();
+	resetCouncilModes();
 	await page.render(null);
 	await show();
 	expect(q(".table-chat")).not.toBeNull();
@@ -854,7 +862,9 @@ test("the table page switches between the scene and a chat of the council, keeps
 	await settle();
 	expect(q(".table-chat")).toBeNull();
 	expect(q(".scene-box")?.textContent).toContain("Ship the release?");
-	expect(localStorage.getItem(TABLE_MODE_KEY)).toBe("scene");
+	expect(localStorage.getItem(COUNCIL_MODE_KEY("app:group.crew"))).toBe(
+		"scene",
+	);
 });
 
 test("a table with no council has no mode switch", async () => {

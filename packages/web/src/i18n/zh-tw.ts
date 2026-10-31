@@ -234,7 +234,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 
 	// 群組圓桌
 	Close: "關閉",
-	Table: "圓桌",
 
 	// 訊息列
 	"Conversation started over": "對話已重新開始",
