@@ -176,6 +176,27 @@ export function createReveal(): Reveal {
 	};
 }
 
+/**
+ * What the folded dialogue box shows of a line: its first line of words, without the marks of
+ * Markdown, cut to `max` characters.
+ */
+export function linePreview(text: string, max = 80): string {
+	const line =
+		text
+			.split("\n")
+			.map((one) =>
+				one
+					.replace(/^\s*(?:#{1,6}\s|>\s?|[-*+]\s|\d+\.\s)+/, "")
+					.replace(/[*_`~]/g, "")
+					.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+					.replace(/\s+/g, " ")
+					.trim(),
+			)
+			.find((one) => one !== "") ?? "";
+	const chars = Array.from(line);
+	return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : line;
+}
+
 /** The first `count` characters of a text, never half of a surrogate pair. */
 export const sliceChars = (text: string, count: number): string =>
 	Array.from(text).slice(0, count).join("");

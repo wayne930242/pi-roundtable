@@ -1,10 +1,11 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { RoomMessage } from "../src/api-types.ts";
 import {
 	boxCards,
 	createReveal,
 	currentLine,
 	followFocus,
+	linePreview,
 	REVEAL_CPS,
 	resolveFocus,
 	revealStep,
@@ -228,4 +229,17 @@ test("a seat the person turned to holds only while the line they looked at stand
 	expect(followFocus("otto", "m6", { lineId: "m5", member: "lena" })).toBe(
 		"otto",
 	);
+});
+
+describe("linePreview", () => {
+	test("the folded box shows the first line of words, without Markdown's marks, cut short", () => {
+		expect(
+			linePreview("\n## Found **three** [leads](https://x.test)\nmore"),
+		).toBe("Found three leads");
+		expect(linePreview("> - `quoted` item")).toBe("quoted item");
+		expect(linePreview("牆已經砌好了。".repeat(20), 10)).toBe(
+			"牆已經砌好了。牆已…",
+		);
+		expect(linePreview("")).toBe("");
+	});
 });

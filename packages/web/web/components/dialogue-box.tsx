@@ -15,6 +15,7 @@ import {
 	createReveal,
 	currentLine,
 	type Line,
+	linePreview,
 	sliceChars,
 } from "../lib/dialogue.ts";
 import { useFollowEnd } from "../lib/follow-end.ts";
@@ -22,12 +23,14 @@ import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import type { RoomState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
+import { useDialogueFolded } from "../lib/table-view.ts";
 import { PromptCard } from "./cards.tsx";
 import { PageCharacter } from "./character.tsx";
 import { Composer } from "./composer.tsx";
 import { Icon } from "./icons.tsx";
 import { MessageMarkdown } from "./message-markdown.tsx";
 import { Files } from "./message-row.tsx";
+import { roundChip } from "./order-strip.tsx";
 import { ProgressStrip } from "./progress-strip.tsx";
 import { loadOlderMessages, RoomLog, useRoomHistory } from "./room-log.tsx";
 import { Sheet } from "./sheet.tsx";
@@ -212,7 +215,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 	const body = useRef<HTMLDivElement>(null);
 	useFollowEnd(body, !done, shown);
 	const [log, setLog] = useState(false);
-	const [collapsed, setCollapsed] = useState(false);
+	const [folded, setFolded] = useDialogueFolded();
 	const style: CSSProperties | undefined =
 		line?.who === "owner" && !owned
 			? { ["--agent-accent" as string]: "var(--accent)" }
@@ -220,121 +223,147 @@ export function DialogueBox(props: DialogueBoxProps) {
 	const typing = Boolean(room?.typing);
 	const showProgress = typing && (!line || line.who === "owner");
 	const shownText = line ? sliceChars(line.text, shown) : "";
+	const chip =
+		owned || line?.who === "agent" ? (
+			<span className="scene-chip">
+				<PageCharacter
+					spec={agent ? characters[agent] : undefined}
+					name={agent ?? speaker}
+					size={34}
+					live={false}
+				/>
+			</span>
+		) : null;
+	const asking = cards.some(({ card }) => card.outcome === undefined);
+	const toggle = (
+		<button
+			type="button"
+			className="icon-button scene-collapse"
+			aria-expanded={!folded}
+			onClick={(event) => {
+				// The folded bar opens on a tap anywhere; this button is its keyboard path, and it must not open and fold at once.
+				event.stopPropagation();
+				setFolded(!folded);
+			}}
+		>
+			{/* The chevron points where the box goes: down to fold it away, up to bring it back. */}
+			<Icon name="chevron" style={{ rotate: folded ? "-90deg" : "90deg" }} />
+			<span>{folded ? t("Expand dialogue") : t("Collapse dialogue")}</span>
+		</button>
+	);
 	return (
 		<section
 			className="scene-box"
 			data-open={props.open || undefined}
-			data-collapsed={collapsed || undefined}
+			data-collapsed={folded || undefined}
 			data-who={line?.who}
 			style={style}
 			aria-label={t("Log")}
 		>
-			<header className="scene-tab">
-				{owned || line?.who === "agent" ? (
-					<span className="scene-chip">
-						<PageCharacter
-							spec={agent ? characters[agent] : undefined}
-							name={agent ?? speaker}
-							size={34}
-							live={false}
-						/>
+			{folded ? (
+				// biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: a tap anywhere on the bar opens the box; its labelled button is the keyboard path
+				<div className="scene-bar" onClick={() => setFolded(false)}>
+					{chip}
+					<strong className="scene-bar-name">{speaker}</strong>
+					<span className="scene-bar-preview">
+						{line
+							? linePreview(line.text)
+							: room?.round
+								? roundChip(room.round)
+								: ""}
 					</span>
-				) : null}
-				<strong className="scene-name">{speaker}</strong>
-				<span className="scene-tools">
-					{props.onBack ? (
-						<button
-							type="button"
-							className="icon-button"
-							aria-label={t("Back to the whole table")}
-							onClick={props.onBack}
-						>
-							<Icon name="back" />
-						</button>
+					{asking ? (
+						<span className="scene-bar-asking">
+							{t("Waiting for your answer")}
+						</span>
 					) : null}
-					{props.onMenu ? (
-						<button
-							type="button"
-							className="icon-button scene-more"
-							aria-label={t("More")}
-							aria-haspopup="menu"
-							onClick={(event) => props.onMenu?.(event.currentTarget)}
-						>
-							<Icon name="more" />
-						</button>
-					) : null}
-					<button
-						type="button"
-						className="icon-button scene-log-button"
-						aria-label={t("Log")}
-						aria-haspopup="dialog"
-						onClick={() => setLog(true)}
-					>
-						<Icon name="conversations" />
-						<span>{t("Log")}</span>
-					</button>
-					<button
-						type="button"
-						className="icon-button scene-collapse"
-						aria-label={
-							collapsed ? t("Show the message box") : t("Hide the message box")
-						}
-						title={
-							collapsed ? t("Show the message box") : t("Hide the message box")
-						}
-						aria-expanded={!collapsed}
-						onClick={() => setCollapsed((now) => !now)}
-					>
-						{/* The chevron points where the box goes: down to tuck it away, up to bring it back. */}
-						<Icon
-							name="chevron"
-							style={{ rotate: collapsed ? "-90deg" : "90deg" }}
-						/>
-					</button>
-				</span>
-			</header>
-			{props.strip}
-			<div className="scene-body" ref={body}>
-				<div
-					className="scene-line"
-					data-live={line?.live || undefined}
-					aria-live="polite"
-					{...(done
-						? {}
-						: {
-								role: "button",
-								tabIndex: 0,
-								title: t("Tap to show the whole message"),
-								onClick: finish,
-								onKeyDown: (event: React.KeyboardEvent) => {
-									if (event.key === "Enter" || event.key === " ") {
-										event.preventDefault();
-										finish();
-									}
-								},
-							})}
-				>
-					{line ? (
-						<>
-							{owned && line.who === "owner" ? (
-								<span className="scene-from">{line.author}</span>
-							) : null}
-							<MessageMarkdown source={shownText} />
-							{done ? <Files files={line.files} /> : null}
-						</>
-					) : null}
+					{toggle}
 				</div>
-				{showProgress && room ? (
-					<ProgressStrip name={speaker} progress={room.progress} />
-				) : null}
-				{cards.map(({ id, card }) => (
-					<div key={id} className="scene-card">
-						<PromptCard card={card} timeZone={config.timeZone} />
+			) : (
+				<header className="scene-tab">
+					{chip}
+					<strong className="scene-name">{speaker}</strong>
+					<span className="scene-tools">
+						{props.onBack ? (
+							<button
+								type="button"
+								className="icon-button"
+								aria-label={t("Back to the whole table")}
+								onClick={props.onBack}
+							>
+								<Icon name="back" />
+							</button>
+						) : null}
+						{props.onMenu ? (
+							<button
+								type="button"
+								className="icon-button scene-more"
+								aria-label={t("More")}
+								aria-haspopup="menu"
+								onClick={(event) => props.onMenu?.(event.currentTarget)}
+							>
+								<Icon name="more" />
+							</button>
+						) : null}
+						<button
+							type="button"
+							className="icon-button scene-log-button"
+							aria-label={t("Log")}
+							aria-haspopup="dialog"
+							onClick={() => setLog(true)}
+						>
+							<Icon name="conversations" />
+							<span>{t("Log")}</span>
+						</button>
+						{toggle}
+					</span>
+				</header>
+			)}
+			{folded ? null : props.strip}
+			{folded ? null : (
+				<div className="scene-body" ref={body}>
+					<div
+						className="scene-line"
+						data-live={line?.live || undefined}
+						aria-live="polite"
+						{...(done
+							? {}
+							: {
+									role: "button",
+									tabIndex: 0,
+									title: t("Tap to show the whole message"),
+									onClick: finish,
+									onKeyDown: (event: React.KeyboardEvent) => {
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault();
+											finish();
+										}
+									},
+								})}
+					>
+						{line ? (
+							<>
+								{owned && line.who === "owner" ? (
+									<span className="scene-from">{line.author}</span>
+								) : null}
+								<MessageMarkdown source={shownText} />
+								{done ? <Files files={line.files} /> : null}
+							</>
+						) : null}
 					</div>
-				))}
-			</div>
+					{showProgress && room ? (
+						<ProgressStrip name={speaker} progress={room.progress} />
+					) : null}
+					{cards.map(({ id, card }) => (
+						<div key={id} className="scene-card">
+							<PromptCard card={card} timeZone={config.timeZone} />
+						</div>
+					))}
+				</div>
+			)}
 			{view?.readOnly ? null : (
-				<div className="scene-composer">
+				// Folded, the box keeps its composer and what is typed in it, out of sight.
+				<div className="scene-composer" hidden={folded}>
 					<Composer
 						key={roomKey}
 						draftKey={roomKey}

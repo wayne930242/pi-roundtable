@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { followFocus, speakerOf } from "../lib/dialogue.ts";
 import { speakerOfRound } from "../lib/round-view.ts";
+import { useDialogueFolded } from "../lib/table-view.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
 import { DialogueBox, useRoomLine } from "./dialogue-box.tsx";
 import { OrderStrip } from "./order-strip.tsx";
@@ -48,8 +49,14 @@ export function GroupStage(props: {
 	onSeatMenu?(request: SeatMenuRequest): void;
 }) {
 	const { roomKey, members } = props;
+	// A folded box is a bar: the scene takes the height it gave back.
+	const [folded] = useDialogueFolded();
 	return (
-		<div className="table-frame room-scene" data-focused="">
+		<div
+			className="table-frame room-scene"
+			data-focused=""
+			data-folded={folded || undefined}
+		>
 			<RoundTable
 				members={members}
 				groupRoom={roomKey}

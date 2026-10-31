@@ -1,3 +1,4 @@
+import type { RoundView } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useCharacters } from "../lib/characters.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -21,6 +22,10 @@ function chipOf(round: {
 		});
 	return t("Reply {n} of {limit}", { n: round.n, limit: round.limit });
 }
+
+/** The words of a round's chip, as the strip and the folded dialogue box show them. */
+export const roundChip = (round: RoundView): string =>
+	chipOf({ ...round, n: replyNumber(round) });
 
 /**
  * The turn-taking of a group room's round, a strip on top of its dialogue box: the faces in the
@@ -80,7 +85,7 @@ export function OrderStrip(props: { roomKey: string }) {
 				))}
 			</ol>
 			<span className="order-chip" aria-live="polite">
-				{chipOf({ ...round, n: replyNumber(round) })}
+				{roundChip(round)}
 			</span>
 			{round.state === "running" && (round.queued ?? 0) > 0 ? (
 				<span className="order-queued">

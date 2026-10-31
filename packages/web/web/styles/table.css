@@ -559,8 +559,59 @@
 	flex: none;
 	border-top: 1px solid var(--border);
 }
-.scene-box[data-collapsed] .scene-body,
-.scene-box[data-collapsed] .scene-composer {
+/* The box's fold button says what it does, in words beside its chevron. */
+.scene-collapse {
+	width: auto;
+	flex: none;
+	gap: var(--space-1);
+	padding-inline: var(--space-2);
+	font-size: var(--text-xs);
+}
+.scene-collapse span {
+	white-space: nowrap;
+}
+/* Folded, the box is one bar: who speaks, the start of their newest line, and the button that opens it. */
+.scene-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: var(--touch);
+	padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+	cursor: pointer;
+}
+.scene-bar .scene-chip {
+	width: 2rem;
+	height: 2rem;
+	margin: 0;
+	border-width: 2px;
+	flex: none;
+}
+.scene-bar-name {
+	flex: 0 1 auto;
+	min-width: 3ch;
+	max-width: 35%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.scene-bar-preview {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--muted);
+	font-size: var(--text-sm);
+}
+.scene-bar-asking {
+	flex: none;
+	padding: 0 var(--space-2);
+	border-radius: var(--radius-full);
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+.scene-composer[hidden] {
 	display: none;
 }
 .scene-log {
@@ -578,8 +629,11 @@
 		width: 2.5rem;
 		min-width: 2.5rem;
 	}
-	.scene-tools .scene-log-button {
+	.scene-tools .scene-log-button,
+	.scene-tools .scene-collapse,
+	.scene-bar .scene-collapse {
 		width: auto;
+		min-width: 0;
 		padding-inline: var(--space-1);
 	}
 }
@@ -589,6 +643,10 @@
 	.table-frame[data-focused] {
 		display: grid;
 		grid-template-rows: 55% minmax(0, 1fr);
+	}
+	/* Folded, the box is only its bar and the scene takes the rest. */
+	.table-frame[data-focused][data-folded] {
+		grid-template-rows: minmax(0, 1fr) auto;
 	}
 	.table-frame[data-focused] .table-host {
 		min-height: 0;
