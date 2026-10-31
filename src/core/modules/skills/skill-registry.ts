@@ -28,7 +28,7 @@ import {
 	type SkillVersion,
 	skillFileContent,
 } from "./skill-rules.ts";
-import type { SkillEntry } from "./skill-store.ts";
+import type { SkillEntry, SkillGroup } from "./skill-store.ts";
 
 export {
 	BUILTIN_SKILLS,
@@ -341,6 +341,12 @@ export class StoredSkillRegistry implements SkillRegistry {
 			force: true,
 		});
 		return this.#removed(name, detached);
+	}
+
+	groups(): SkillGroup[] {
+		return this.#options.store
+			.groups()
+			.map((group) => ({ ...group, skills: [...group.skills] }));
 	}
 
 	async setGroup(

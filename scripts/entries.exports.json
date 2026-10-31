@@ -297,6 +297,7 @@
 			"SessionToolSnapshot",
 			"SkillCatalogEntry",
 			"SkillDocument",
+			"SkillGroup",
 			"SkillRegistry",
 			"SkillSet",
 			"SkillSource",

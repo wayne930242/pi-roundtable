@@ -418,6 +418,36 @@ describeDb("PostgreSQL", () => {
 				"no skill group",
 			);
 		});
+
+		test("groups lists each group with its skills, and a deleted group leaves its skills carried", async () => {
+			await registry.link("acme/skills", "skills");
+			expect(
+				await registry.setGroup("coding", " Coding workflow. ", [
+					"plan-work",
+					"write-tests",
+				]),
+			).toBe("Created skill group coding: plan-work, write-tests.");
+			await registry.attach("infra", ["plan-work"], []);
+			expect(registry.groups()).toEqual([
+				{
+					name: "coding",
+					description: "Coding workflow.",
+					skills: ["plan-work", "write-tests"],
+				},
+			]);
+			registry.groups()[0]?.skills.push("mutated");
+			expect(registry.groups()[0]?.skills).toEqual(["plan-work", "write-tests"]);
+			await refuses(
+				() => registry.setGroup("coding", " ", []),
+				"needs a description",
+			);
+			expect(await registry.deleteGroup("coding")).toBe(
+				"Deleted skill group coding; its skills are untouched.",
+			);
+			expect(registry.groups()).toEqual([]);
+			expect(store.carriedBy("infra")).toEqual(["plan-work"]);
+			await refuses(() => registry.deleteGroup("coding"), "no skill group");
+		});
 	});
 
 	describe("package skills", () => {

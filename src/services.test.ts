@@ -92,6 +92,9 @@ const skills: SkillRegistry = {
 	},
 	documentHistory: async () => [],
 	delete: async () => "deleted",
+	groups: () => [],
+	setGroup: async () => "set",
+	deleteGroup: async () => "deleted",
 	attach: async () => [],
 };
 

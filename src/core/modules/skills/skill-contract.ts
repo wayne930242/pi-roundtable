@@ -4,6 +4,7 @@ import type {
 	SkillSet,
 	SkillVersion,
 } from "./skill-rules.ts";
+import type { SkillGroup } from "./skill-store.ts";
 
 /** The skills agents carry: built in, linked from repositories, or written by an agent. */
 export interface SkillRegistry {
@@ -45,6 +46,16 @@ export interface SkillRegistry {
 	delete(name: string): Promise<string>;
 	/** The saved versions of an agent-written skill, newest first; none for any other skill. */
 	documentHistory(name: string): Promise<SkillVersion[]>;
+	/** Every skill group, by name: a named list of skills to filter by or apply to an agent once; an agent carries skills, not groups. */
+	groups(): SkillGroup[];
+	/** Creates or replaces a group; returns what it did. Throws AgentError for a refused name, an empty description or an unknown skill. */
+	setGroup(
+		name: string,
+		description: string,
+		skills: readonly string[],
+	): Promise<string>;
+	/** Deletes a group and leaves its skills and their carriers as they are; returns what it did. Throws AgentError for an unknown group. */
+	deleteGroup(name: string): Promise<string>;
 	/** Adds and removes an agent's registered skills together, or changes nothing; returns what it carries after. */
 	attach(
 		agent: string,

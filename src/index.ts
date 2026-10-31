@@ -333,6 +333,7 @@ export type {
 	SkillVersion,
 } from "./core/modules/skills/skill-rules.ts";
 export { SkillConflictError } from "./core/modules/skills/skill-rules.ts";
+export type { SkillGroup } from "./core/modules/skills/skill-store.ts";
 export type {
 	ActionEvent,
 	AgentTools,

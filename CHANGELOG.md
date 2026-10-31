@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `SkillRegistry.groups()`, `setGroup(name, description, skills)` and `deleteGroup(name)` are part of the skill registry interface (`SkillGroup`: `name`, `description`, `skills`), so a host surface can manage skill groups. A group stays a filter and a list to apply once: an agent carries skills, not groups. `SkillRegistry` has three new required methods, so a hand-built stand-in must set them.
+
 ## [0.28.0] - 2026-10-31
 
 ### Added

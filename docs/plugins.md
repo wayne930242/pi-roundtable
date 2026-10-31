@@ -258,7 +258,7 @@ The built-in plugins provide these, from the main entry:
 | `RUNTIME` | `AgentRuntime` | `runtime` | The runtime every conversation turn runs on, the agent server's and `context.turns`': the `runtime` slot's when a plugin fills it, Pi's otherwise |
 | `AGENTS` | `AgentServer` | `agent-server` | The `team` (`AgentTeam`), the read-only `directory` (`AgentDirectory`), the `runtime` every agent turn runs on (the same one `RUNTIME` provides), `approvals` (whether the owner's reply approves held actions), `avatars` (`AvatarStudio`), `workspace` (`AgentWorkspace`: the agents' `workDir` and, when set, `scratchDir`), and `routes` (`RoutingTable`: where work no person started lands; see [Routing](#routing-where-work-no-person-started-lands)) |
 | `PROMPTS` | `PromptDocuments` | `prompts` | The prompt texts the owner edits in the app, each with a file version, an override and a history: `register`, `text`, `list`, `get`, `set`, `revert`, `history`. Always on; read it with `get`. See [`PROMPTS`: prompt texts the owner edits](#prompts-prompt-texts-the-owner-edits) |
-| `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach`, and the owner's whole-SKILL.md edits `document`, `saveDocument`, `createDocument`, `documentHistory` |
+| `SKILLS` | `SkillRegistry` | `skills` (an addon) | What agents carry: `carried`, `carriedNames`, `describeCarried`, `catalog`, `list`, `linkedFrom`, `checkRegistered`, `link`, `attach`, and the owner's whole-SKILL.md edits `document`, `saveDocument`, `createDocument`, `documentHistory`, and the groups `groups`, `setGroup`, `deleteGroup` |
 | `SCHEDULES` | `ScheduleStore` | `schedule-store` | The stored schedules: `create`, `createWithin`, `get`, `forChannel`, `all`, `update`, `remove`, `due`, `claim`, `recordStatus` |
 | `PRECHECKS` | `PrecheckRegistry` | `prechecks` | The host's named [prechecks](#prechecks-wake-a-schedule-only-when-it-has-work): `register`, `get`, `list`; and the runner of agents' precheck scripts: `useScriptRunner`, `scriptRunner` |
 | `MEMORY` | `MemoryStore` | `memory` (an addon) | `forSpeaker(principalId)` gives that principal's `SpeakerMemory`: `list`, `forPrompt`, `add`, `search`, `update`, `removeById`, `remove`; `MEMORY_KINDS` is `core`, `note`, `event` |
@@ -4594,6 +4594,7 @@ Import from the entries listed below; source area files are internal.
 | `PromptConflictError` | `pi-roundtable` | value |
 | `SkillConflictError` | `pi-roundtable` | value |
 | `SkillDocument` | `pi-roundtable` | type |
+| `SkillGroup` | `pi-roundtable` | type |
 | `SKILLS` | `pi-roundtable` | value |
 | `SINGLE_QUESTION` | `pi-roundtable` | value |
 | `Schedule` | `pi-roundtable` | type |
