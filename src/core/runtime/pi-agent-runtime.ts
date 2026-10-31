@@ -53,7 +53,7 @@ import { promptFailed, turnLimits } from "./turn-limits.ts";
 import { progressReporter } from "./turn-progress.ts";
 import { turnTools } from "./turn-tools.ts";
 import { wrapUpTurn } from "./turn-wrapup.ts";
-import { workerReport } from "./worker-task.ts";
+import { promptTask, workerReport } from "./worker-task.ts";
 
 export {
 	type CoreExtensions,
@@ -434,10 +434,7 @@ export class PiAgentRuntime implements AgentRuntime {
 					(name) => registered.has(name) && this.#tiers.allows(tier, name),
 				);
 			session.setActiveToolsByName([...worker.tools]);
-			// The model wrote the task text, so it is never a command or a skill to expand.
-			const prompted = withoutReplyFiles(() =>
-				session.prompt(task.text, { expandPromptTemplates: false }),
-			);
+			const prompted = withoutReplyFiles(() => promptTask(session, task.text));
 			prompted.catch(() => undefined);
 			await Promise.race([prompted, guard.gaveUp]);
 			return workerReport(

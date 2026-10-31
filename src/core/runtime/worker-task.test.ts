@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { AgentRunError } from "../domain/errors.ts";
 import { lastAssistant, textOf } from "../shared/session-messages.ts";
-import { MAX_REPORT_CHARS, workerReport } from "./worker-task.ts";
+import { MAX_REPORT_CHARS, promptTask, workerReport } from "./worker-task.ts";
 
 const user = { role: "user", content: "task" };
 const answer = (text: string, extra: Record<string, unknown> = {}) => ({
@@ -78,5 +79,20 @@ describe("workerReport", () => {
 		expect(() => workerReport([answer("   ")], "stopped")).toThrow(
 			new AgentRunError("the worker's answer is empty"),
 		);
+	});
+});
+
+describe("promptTask", () => {
+	test("sends the text without expanding commands, skills or templates", async () => {
+		const calls: [string, unknown][] = [];
+		const session = {
+			prompt: async (text: string, options: unknown) => {
+				calls.push([text, options]);
+			},
+		} as unknown as AgentSession;
+		await promptTask(session, "/some-command now");
+		expect(calls).toEqual([
+			["/some-command now", { expandPromptTemplates: false }],
+		]);
 	});
 });

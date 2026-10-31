@@ -25,6 +25,14 @@ export function workerReport(
 		: report;
 }
 
+/**
+ * Sends a worker its task as plain text. A task is written by a model or a plugin, so it never
+ * runs an extension command or expands a skill, whatever it starts with.
+ */
+export function promptTask(session: AgentSession, text: string): Promise<void> {
+	return session.prompt(text, { expandPromptTemplates: false });
+}
+
 /** The host's model for `<provider>/<id>`; throws ConfigError when it has none. */
 export function hostModel(runtime: ModelRuntime, model: string) {
 	const ref = parseModelRef(model);
@@ -56,7 +64,7 @@ export async function runWorkerTask(
 	try {
 		// Extension providers such as claude-bridge exist only once the session loaded them.
 		await session.setModel(hostModel(modelRuntime, model));
-		await session.prompt(task);
+		await promptTask(session, task);
 		return workerReport(session.messages, aborted);
 	} finally {
 		signal.removeEventListener("abort", onAbort);
