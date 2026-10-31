@@ -572,7 +572,7 @@ test("the last two members cannot be taken out: the council is offered for archi
 	}
 });
 
-test("a running round lights who speaks, turns the camera there, marks the seats and fills the strip above the box", async () => {
+test("a running round marks the seats and fills the strip above the box, and a member who only thinks gets neither the light nor the camera", async () => {
 	load([...everyone, group("crew", ["guide", "scout", "mason"])]);
 	await show();
 	const crewRoom = "app:group.crew";
@@ -599,11 +599,12 @@ test("a running round lights who speaks, turns the camera there, marks the seats
 	});
 	for (
 		let tries = 0;
-		tries < 30 && all("g.seat[data-focus]").length === 0;
+		tries < 30 &&
+		q('g.seat[data-seat="scout"]')?.getAttribute("data-state") !== "thinking";
 		tries += 1
 	)
 		await settle();
-	// the member the round names thinks while no word of theirs has come: no light yet
+	// the member the round names thinks while no word of theirs has come: no light, no camera yet
 	const states = () =>
 		Object.fromEntries(
 			all("g.seat").map((seat) => [
@@ -617,9 +618,7 @@ test("a running round lights who speaks, turns the camera there, marks the seats
 		mason: "idle",
 	});
 	expect(q(".t2d.dim")).toBeNull();
-	expect(
-		all("g.seat[data-focus]").map((seat) => seat.getAttribute("data-seat")),
-	).toEqual(["scout"]);
+	expect(all("g.seat[data-focus]")).toEqual([]);
 	// the seats wear the same signs as the strip
 	const plate = (name: string) =>
 		all<SVGTextElement>(`g.seat[data-seat="${name}"] text`).at(0)?.textContent;

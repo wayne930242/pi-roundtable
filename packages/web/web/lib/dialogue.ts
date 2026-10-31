@@ -170,19 +170,17 @@ export function createStage(): Stage {
 }
 
 /**
- * Who the group scene's camera rests on: the member whose words the box is still typing out holds
- * it (`held`), even while the next member already thinks; once the words stand whole, the member the
- * round says speaks now, else whoever said the newest line.
+ * Who the group scene's camera rests on, by the same rule as the spotlight: a member gets it only
+ * when their words show. The member whose words the box is typing out holds it (`held`); once the
+ * words stand whole, it stays on whoever said them, the newest line's speaker, until the next
+ * member's words start. A member who only thinks never takes the camera.
  */
 export function sceneSpeaker(
 	held: string | undefined,
-	roundSpeaker: string | undefined,
 	line: Pick<Line, "who" | "agent"> | undefined,
 	members: readonly string[],
 ): string | null {
 	if (held !== undefined && members.includes(held)) return held;
-	if (roundSpeaker !== undefined && members.includes(roundSpeaker))
-		return roundSpeaker;
 	return speakerOf(line, members);
 }
 

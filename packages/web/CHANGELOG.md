@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The round table's camera turns to a member by the same rule as the spotlight: only when their words show. A member who only thinks or works no longer takes it when the previous speaker's words finish; the camera stays on whoever spoke last until the next member's words start.
+
 ## [0.29.1] - 2026-10-31
 
 ### Added

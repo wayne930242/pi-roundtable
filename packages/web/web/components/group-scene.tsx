@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { useSelector } from "../lib/app-store.ts";
 import { followFocus, sceneSpeaker } from "../lib/dialogue.ts";
-import { speakerOfRound } from "../lib/round-view.ts";
 import { useDialogueFolded } from "../lib/table-view.ts";
 import { useVoices } from "../lib/voices.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
@@ -10,23 +8,20 @@ import { OrderStrip } from "./order-strip.tsx";
 import { RoundTable } from "./round-table.tsx";
 
 /**
- * Where the camera of a group scene is: on the member whose words the dialogue box is still typing
- * out, then on the member the round says speaks now, else on whoever
- * said the newest line, or on the member a person turned it to by hand, until the next line or the
- * next speaker comes. `look` turns it (null: the whole ring).
+ * Where the camera of a group scene is: on the member whose words the dialogue box is typing out,
+ * and after they stand whole, still on whoever said them, until the next member's words start; a
+ * member who only thinks does not turn it, as it does not light their seat. A person may turn it by
+ * hand until the next line or speaker comes. `look` turns it (null: the whole ring).
  */
 export function useGroupFocus(roomKey: string, members: readonly string[]) {
 	const { line } = useRoomLine(roomKey);
-	const speaking = useSelector((state) =>
-		speakerOfRound(state.rooms[roomKey]?.round),
-	);
 	const held = useVoices()[roomKey];
 	const [manual, setManual] = useState<{
 		lineId: string | undefined;
 		member: string | null;
 	}>();
 	// A hand-turned camera stays for the beat it was turned in: the newest line and the one who speaks.
-	const speaker = sceneSpeaker(held, speaking, line, members);
+	const speaker = sceneSpeaker(held, line, members);
 	const beat = `${line?.id ?? ""}|${speaker ?? ""}`;
 	const focus = followFocus(speaker, beat, manual);
 	const look = (member: string | null) => setManual({ lineId: beat, member });

@@ -284,7 +284,7 @@ describe("the stage: one speaker's words typed out whole before the next takes t
 		return steps;
 	};
 
-	test("a knight who starts thinking while another's words type waits on its seat; the camera follows once they stand", () => {
+	test("a knight who starts thinking while another's words type waits on its seat; the camera turns to it only when its own words show", () => {
 		const stage = createStage();
 		stage.feed([], undefined);
 		const otto = [knight(1, "otto", "x".repeat(200))];
@@ -298,13 +298,23 @@ describe("the stage: one speaker's words typed out whole before the next takes t
 		// while otto's words type, otto is the voice and holds the camera over lena, who thinks
 		const voice = voiceOf(stage.line, !reveal.done, undefined);
 		expect(voice).toBe("otto");
-		expect(sceneSpeaker(voice, "lena", stage.line, members)).toBe("otto");
+		expect(sceneSpeaker(voice, stage.line, members)).toBe("otto");
 		reveal.finish();
-		// typed out, nothing waits: the camera turns to lena, thinking
+		// typed out while lena still only thinks: the camera stays on otto, as her seat stays unlit
 		expect(stage.advance()).toBe(false);
 		const after = voiceOf(stage.line, !reveal.done, undefined);
 		expect(after).toBeUndefined();
-		expect(sceneSpeaker(after, "lena", stage.line, members)).toBe("lena");
+		expect(sceneSpeaker(after, stage.line, members)).toBe("otto");
+		// lena's words start: now the camera turns to her
+		const lena = [...otto, knight(2, "lena", "hello")];
+		stage.feed(lena, storedLineOf(lena));
+		expect(stage.advance()).toBe(true);
+		const next = createReveal();
+		next.feed(stage.line?.id ?? "", stage.line?.text ?? "");
+		next.step(16, false);
+		const speaking = voiceOf(stage.line, !next.done, undefined);
+		expect(speaking).toBe("lena");
+		expect(sceneSpeaker(speaking, stage.line, members)).toBe("lena");
 	});
 
 	test("lines said while one types wait and come in the order they were said, a stream settling in place", () => {
