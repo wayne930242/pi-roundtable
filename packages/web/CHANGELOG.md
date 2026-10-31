@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-10-31
+
+### Fixed
+
+- A link click reaches every `useRoute`, not only the first that listened. The Files page, kept mounted across folders since 0.26.2, no longer ignores taps on its folders when reached from another page (the phone's tab bar).
+
 ## [0.27.1] - 2026-10-31
 
 ### Fixed

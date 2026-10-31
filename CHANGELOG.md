@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.2] - 2026-10-31
+
+### Fixed
+
+- `ask_user` posts no card while the host stops: open cards live in the surface's memory and do not survive the restart, so the tool now tells the turn to ask in its reply instead. A card still waiting when the drain begins is reported lost rather than "stays open".
+
 ## [0.27.1] - 2026-10-31
 
 ### Fixed
