@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-31
+
 ### Fixed
 
 - A reply card Discord refuses (a channel that denies Attach Files) no longer loses the reply: the Discord surface logs a warning and sends the text alone. A card that posts still goes first, as its own message.

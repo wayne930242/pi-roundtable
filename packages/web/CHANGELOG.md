@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-10-31
+
 ### Fixed
 
 - A lazy style (`installStyle`) is installed once per document instead of once per page load, so a new document gets it again. A test suite that rendered a drop-down in an earlier document no longer leaves a later one without the style.
