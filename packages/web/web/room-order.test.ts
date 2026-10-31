@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { RoomView } from "../src/api-types.ts";
+import { sectionFold } from "./lib/folds.ts";
 import { neighbour, type OrderOptions, roomStops } from "./lib/room-order.ts";
 import type { SectionsInput } from "./lib/sections.ts";
 
@@ -88,7 +89,7 @@ test("the pinned rooms come next, then the folders in their order, then the rest
 	expect(keys(stops)).toEqual([HOME, C, G, A, B]);
 });
 
-test("a folded folder's rooms are not shown, unless the open room is in it", () => {
+test("a folded folder shows only the open room and the rooms that stay", () => {
 	const state = input([view(HOME, { home: true }), view(A), view(B), view(C)], {
 		folders: [{ id: F1, name: "One", rooms: [A, B] }],
 	});
@@ -96,10 +97,12 @@ test("a folded folder's rooms are not shown, unless the open room is in it", () 
 	expect(shown(roomStops(state, options({ collapsed })))).toEqual([HOME, C]);
 	expect(shown(roomStops(state, options({ collapsed, current: B })))).toEqual([
 		HOME,
-		A,
 		B,
 		C,
 	]);
+	expect(
+		shown(roomStops(state, options({ collapsed, stays: (key) => key === A }))),
+	).toEqual([HOME, A, C]);
 	// Folded or not, every room is in the run.
 	expect(keys(roomStops(state, options({ collapsed })))).toEqual([
 		HOME,
@@ -107,6 +110,37 @@ test("a folded folder's rooms are not shown, unless the open room is in it", () 
 		B,
 		C,
 	]);
+});
+
+test("a folded section hides its rooms as a folder does: pinned, ungrouped, and knights and groups apart", () => {
+	const state = input(
+		[view(HOME, { home: true }), view(A), view(B), view(C), view(G)],
+		{ pins: [A, B] },
+	);
+	expect(
+		shown(
+			roomStops(
+				state,
+				options({ collapsed: new Set([sectionFold("pinned")]) }),
+			),
+		),
+	).toEqual([HOME, C, G]);
+	expect(
+		shown(
+			roomStops(
+				state,
+				options({ collapsed: new Set([sectionFold("agents")]), current: C }),
+			),
+		),
+	).toEqual([HOME, A, B, C, G]);
+	expect(
+		shown(
+			roomStops(
+				state,
+				options({ collapsed: new Set([sectionFold("agents")]) }),
+			),
+		),
+	).toEqual([HOME, A, B, G]);
 });
 
 test("finished threads show only while their fold is open or one of them is the open room; open threads always do", () => {

@@ -1,8 +1,9 @@
 import { type ReactNode, useEffect } from "react";
 import { useSelector } from "../lib/app-store.ts";
-import { pruneCollapsed } from "../lib/folds.ts";
+import { pruneCollapsed, useCollapsed } from "../lib/folds.ts";
 import { waitingCards } from "../lib/rooms.ts";
 import { type FolderSection, muteState } from "../lib/sections.ts";
+import { useStaying } from "../lib/staying.ts";
 import { Typing, WaitingBadge } from "../pages/rooms.tsx";
 import { FolderBlock } from "./folder-header.tsx";
 import { RoomPicture } from "./room-picture.tsx";
@@ -32,7 +33,7 @@ function FolderStack(props: { rooms: string[] }) {
 	);
 }
 
-/** What waits or works in a folded folder's rooms, so the fold hides nothing that needs the owner. */
+/** What waits or works in the rooms a fold hides, so the fold hides nothing that needs the owner. */
 function FolderSummary(props: { rooms: string[] }) {
 	const summary = useSelector(
 		(state) => ({
@@ -89,19 +90,26 @@ function FolderRoomsBlock(props: {
 }) {
 	const { folder } = props;
 	const muted = useFolderMute(folder.rooms);
+	const folded = useCollapsed().has(folder.id);
+	// A folded folder keeps the open room and the rooms that need the owner under its heading; the
+	// stack and the summary speak for the others.
+	const staying = useStaying(folder.rooms, props.active);
+	const shown = folded ? staying : folder.rooms;
+	const hidden = folded
+		? folder.rooms.filter((key) => !staying.includes(key))
+		: [];
 	return (
 		<FolderBlock
 			id={folder.id}
 			name={folder.name}
 			count={folder.rooms.length}
-			holdsActive={
-				props.active !== undefined && folder.rooms.includes(props.active)
-			}
+			folded={folded}
+			shown={shown.length}
 			muted={muted}
-			summary={<FolderSummary rooms={folder.rooms} />}
-			stack={<FolderStack rooms={folder.rooms} />}
+			summary={<FolderSummary rooms={hidden} />}
+			stack={hidden.length > 0 ? <FolderStack rooms={hidden} /> : null}
 		>
-			{props.rooms(folder.rooms)}
+			{props.rooms(shown)}
 		</FolderBlock>
 	);
 }

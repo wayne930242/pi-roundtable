@@ -117,6 +117,54 @@ export const ARRANGED_CSS = `
 	font-weight: var(--weight-medium);
 }
 
+/*
+ * A section's or the drawer's heading, as a fold button: it wears the heading's own size, colour and
+ * case. Like the folder's, each state is named, since the base "button:hover:not(:disabled)" would
+ * otherwise paint an accent fill behind it.
+ */
+.fold-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	max-width: 100%;
+	min-height: var(--touch);
+	padding: 0 var(--space-2);
+	border: 0;
+	border-radius: var(--radius);
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	letter-spacing: inherit;
+	text-align: left;
+	text-transform: inherit;
+}
+
+.fold-toggle:hover:not(:disabled),
+.fold-toggle:active:not(:disabled),
+.fold-toggle:focus-visible {
+	border: 0;
+	background: color-mix(in srgb, var(--text) 8%, transparent);
+	color: var(--text);
+}
+
+.fold-toggle:active:not(:disabled) {
+	transform: none;
+}
+
+/* In the drawer the button sits where the heading's text would, so the chevron hangs in its margin. */
+.switcher-heading .fold-toggle {
+	min-height: 2.25rem;
+	margin-left: calc(-1 * var(--space-2));
+}
+
+.fold-toggle .meta {
+	color: inherit;
+	font-weight: normal;
+	letter-spacing: normal;
+	text-transform: none;
+	white-space: nowrap;
+}
+
 .folder-chevron {
 	flex: none;
 	transition: transform var(--dur-fast) var(--ease-out);

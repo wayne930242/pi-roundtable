@@ -1,9 +1,14 @@
-// The folds kept for this device: which folders are folded in the room list. A device starts with every folder open.
-// Loads with the folder block, the first time a folder is drawn.
+// The folds kept for this device: which groups are folded in the room list and the room drawer, the
+// owners' folders and the headed sections (pinned, ungrouped, knights, groups). A device starts with every group open.
+// Loads with the first group that can fold.
 
 import { signal } from "./signal.ts";
 
 export const COLLAPSED_KEY = "roundtable-console:folders-collapsed";
+
+/** A headed section's id among the folds; a folder's own id never starts with it. */
+export const sectionFold = (name: "pinned" | "rest" | "agents" | "groups") =>
+	`section:${name}`;
 
 function loadCollapsed(): ReadonlySet<string> {
 	try {
@@ -57,12 +62,13 @@ export function expandFolder(id: string): void {
 	keep(next);
 }
 
-/** Forgets the folded folders that no longer exist, once the list is known. */
+/** Forgets the folded folders that no longer exist, once the list is known; the sections always exist. */
 export function pruneCollapsed(existing: readonly string[]): void {
 	const live = new Set(existing);
+	const exists = (id: string) => live.has(id) || id.startsWith("section:");
 	const now = held();
-	if ([...now].every((id) => live.has(id))) return;
-	keep(new Set([...now].filter((id) => live.has(id))));
+	if ([...now].every(exists)) return;
+	keep(new Set([...now].filter(exists)));
 }
 
 /** Re-reads the folds from storage; for a test that changes it. */

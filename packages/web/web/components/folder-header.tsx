@@ -1,7 +1,7 @@
 import "../lib/layout-icons.ts";
 import { type ReactNode, useId } from "react";
 import { openMenu } from "../lib/action-menu.ts";
-import { expandFolder, toggleCollapsed, useCollapsed } from "../lib/folds.ts";
+import { expandFolder, toggleCollapsed } from "../lib/folds.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import type { Lifting } from "../lib/row-press.ts";
 import { useRowPress } from "../lib/row-press.ts";
@@ -30,26 +30,27 @@ const folderLifting = (id: string): Lifting => ({
 
 /**
  * A folder of the room list: a light section header with the name, how many rooms, a fold button and
- * a menu, and under it the rooms. A folded folder shows a stack of the pictures of its rooms (`stack`)
- * and what in it needs the owner (`summary`), so a card waiting there does not hide behind the fold. The folder that holds the open room shows open,
- * without changing the fold kept for this device. Long-pressing or dragging the header moves the folder.
+ * a menu, and under it the rooms. A folded folder draws only the `shown` rooms it is given (the open
+ * room, those with a card waiting or messages unread) and, for the rooms it hides, a stack of their
+ * pictures (`stack`) and what works in them (`summary`). Long-pressing or dragging the header moves the folder.
  */
 export function FolderBlock(props: {
 	id: string;
 	name: string;
 	count: number;
-	/** The room open beside the list or in the drawer: its folder shows open. */
-	holdsActive: boolean;
+	/** The folder is folded on this device. */
+	folded: boolean;
+	/** How many rooms `children` draws: all of them while open, those that stay while folded. */
+	shown: number;
 	muted: MuteState;
-	/** What waits or works inside, shown while folded. */
+	/** What works in the hidden rooms, shown while folded. */
 	summary: ReactNode;
-	/** The pictures of the rooms inside, stacked, shown while folded. */
+	/** The pictures of the hidden rooms, stacked, shown while folded. */
 	stack: ReactNode;
 	children: ReactNode;
 }) {
 	const { id, name } = props;
-	const folded = useCollapsed().has(id);
-	const open = props.holdsActive || !folded;
+	const open = !props.folded;
 	const bodyId = useId();
 	const press = useRowPress(() => folderMenuOf(id), folderLifting(id));
 	const openMenuFrom = (button: HTMLElement) => {
@@ -127,15 +128,17 @@ export function FolderBlock(props: {
 					<Icon name="more" size={18} />
 				</button>
 			</header>
-			<div id={bodyId} className="folder-body" hidden={!open}>
-				{open ? (
-					props.count === 0 ? (
-						<p className="meta folder-empty">
-							{t("No rooms in this folder yet.")}
-						</p>
-					) : (
-						props.children
-					)
+			<div
+				id={bodyId}
+				className="folder-body"
+				hidden={!open && props.shown === 0}
+			>
+				{open && props.count === 0 ? (
+					<p className="meta folder-empty">
+						{t("No rooms in this folder yet.")}
+					</p>
+				) : props.shown > 0 ? (
+					props.children
 				) : null}
 			</div>
 		</section>

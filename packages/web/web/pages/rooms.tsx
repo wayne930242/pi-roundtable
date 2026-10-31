@@ -8,6 +8,7 @@ import { useSelector } from "../lib/app-store.ts";
 import { useArranging } from "../lib/arrange.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { useConfig } from "../lib/config.ts";
+import { sectionFold } from "../lib/folds.ts";
 import { ago } from "../lib/format.ts";
 import { hostUi } from "../lib/frame-taps.ts";
 import { nestedHelper } from "../lib/helper-nesting.ts";
@@ -197,21 +198,26 @@ export function ThreadList(props: ThreadListProps) {
 	);
 }
 
+// A heading that folds its section loads with the fold code; until then the section draws as it was.
+const SectionFold = lazy(() => import("../components/section-fold.tsx"));
+
 function Section(props: {
 	title: string;
 	rooms: string[];
 	threads: Record<string, ThreadKeys>;
 	active: string | undefined;
+	/** The section's fold among the device's folds; none for a section that never folds. */
+	fold?: string;
 }) {
 	const { now } = useLive();
 	const { timeZone } = useConfig();
 	const shown = useRowData(props.rooms);
 	if (shown.length === 0) return null;
-	return (
-		<section className="stack">
-			<h2 className="section-title">{props.title}</h2>
-			<ul className="room-list">
-				{shown.map(({ key, ...row }) => {
+	const list = (keys: readonly string[]) => (
+		<ul className="room-list">
+			{shown
+				.filter((row) => keys.includes(row.key))
+				.map(({ key, ...row }) => {
 					const threads = props.threads[key];
 					return (
 						<RoomRow
@@ -235,8 +241,26 @@ function Section(props: {
 						/>
 					);
 				})}
-			</ul>
+		</ul>
+	);
+	const plain = (
+		<section className="stack">
+			<h2 className="section-title">{props.title}</h2>
+			{list(props.rooms)}
 		</section>
+	);
+	if (!props.fold) return plain;
+	return (
+		<Suspense fallback={plain}>
+			<SectionFold
+				id={props.fold}
+				title={props.title}
+				rooms={props.rooms}
+				active={props.active}
+			>
+				{list}
+			</SectionFold>
+		</Suspense>
 	);
 }
 
@@ -398,12 +422,14 @@ function PlainRoomsPage(props: RoomsPageProps) {
 				rooms={groups.agents}
 				threads={threads}
 				active={props.active}
+				fold={sectionFold("agents")}
 			/>
 			<Section
 				title={t("Groups")}
 				rooms={groups.groups}
 				threads={threads}
 				active={props.active}
+				fold={sectionFold("groups")}
 			/>
 			{orphans.open.length + orphans.closed.length > 0 ? (
 				<section className="stack">

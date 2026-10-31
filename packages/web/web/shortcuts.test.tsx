@@ -230,7 +230,7 @@ test("the unread jump follows the list's order: folders before the rest, and a f
 	expect(open()).toBe(B);
 });
 
-test("Alt+↓ follows the folders in the list and skips a folded folder, unless the open room is in it", () => {
+test("Alt+↓ follows the folders in the list and skips a folded folder, except for the open room", () => {
 	load({}, [{ id: F1, name: "One", rooms: [G, C] }]);
 	at(HOME);
 	press(document.body, alt("ArrowDown"));
@@ -245,10 +245,13 @@ test("Alt+↓ follows the folders in the list and skips a folded folder, unless 
 	expect(open()).toBe(A);
 	press(document.body, alt("ArrowUp"));
 	expect(open()).toBe(HOME);
-	// The folder holding the open room shows open, whatever was kept.
+	// A folded folder still shows the open room, but only that one: the room after it is hidden.
 	at(G);
 	press(document.body, alt("ArrowDown"));
-	expect(open()).toBe(C);
+	expect(open()).toBe(A);
+	at(C);
+	press(document.body, alt("ArrowUp"));
+	expect(open()).toBe(HOME);
 });
 
 test("a room open that the list does not hold stays where it is", () => {

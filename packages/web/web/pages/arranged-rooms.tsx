@@ -1,5 +1,6 @@
 import { lazy, memo, type ReactNode, Suspense, useMemo, useRef } from "react";
 import { Icon } from "../components/icons.tsx";
+import SectionFold from "../components/section-fold.tsx";
 import { Empty } from "../components/states.tsx";
 import { openMenu } from "../lib/action-menu.ts";
 import { useSelector } from "../lib/app-store.ts";
@@ -7,6 +8,7 @@ import { setArranging, useArranging } from "../lib/arrange.ts";
 import { installArrangedStyle } from "../lib/arranged-style.ts";
 import { useConfig } from "../lib/config.ts";
 import { askFolderDialog } from "../lib/folder-dialogs.ts";
+import { sectionFold } from "../lib/folds.ts";
 import { roomLifting } from "../lib/layout.ts";
 import { useLifting } from "../lib/lifting.ts";
 import { useLive } from "../lib/live.ts";
@@ -139,28 +141,44 @@ function Section(props: {
 	arranging: boolean;
 	/** A place a lifted room can be dropped: the pinned list or the rest. */
 	zone?: { kind: "pinned" | "rest"; id: string };
+	/** The section's fold among the device's folds; none for a section that never folds. */
+	fold?: string;
 }) {
 	const shown = useRowData(props.rooms);
 	// The pinned list is a place to drop even before it holds a room: it shows while a row is lifted.
 	const empty = shown.length === 0;
 	if (empty && props.zone?.kind !== "pinned") return null;
+	const zone: Record<string, string> = props.zone
+		? { "data-drop-zone": props.zone.kind, "data-zone-id": props.zone.id }
+		: {};
+	const list = (keys: string[]) => (
+		<RoomList
+			rooms={keys}
+			threads={props.threads}
+			active={props.active}
+			arranging={props.arranging}
+		/>
+	);
+	if (props.fold && !empty)
+		return (
+			<SectionFold
+				id={props.fold}
+				title={props.title}
+				rooms={props.rooms}
+				active={props.active}
+				attrs={zone}
+			>
+				{list}
+			</SectionFold>
+		);
 	return (
 		<section
 			className="stack"
 			{...(empty ? { "data-empty": "" } : {})}
-			{...(props.zone
-				? { "data-drop-zone": props.zone.kind, "data-zone-id": props.zone.id }
-				: {})}
+			{...zone}
 		>
 			<h2 className="section-title">{props.title}</h2>
-			{empty ? null : (
-				<RoomList
-					rooms={props.rooms}
-					threads={props.threads}
-					active={props.active}
-					arranging={props.arranging}
-				/>
-			)}
+			{empty ? null : list(props.rooms)}
 		</section>
 	);
 }
@@ -276,6 +294,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 				title={t("Pinned")}
 				rooms={pinned}
 				zone={{ kind: "pinned", id: "pinned" }}
+				fold={sectionFold("pinned")}
 				{...common}
 			/>
 			{folders.length > 0 ? (
@@ -302,6 +321,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 					title={t("Ungrouped")}
 					rooms={rest}
 					zone={{ kind: "rest", id: "rest" }}
+					fold={sectionFold("rest")}
 					{...common}
 				/>
 			) : (
@@ -310,12 +330,14 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 						title={t("Knights")}
 						rooms={restAgents}
 						zone={{ kind: "rest", id: "rest-agents" }}
+						fold={sectionFold("agents")}
 						{...common}
 					/>
 					<Section
 						title={t("Groups")}
 						rooms={restGroups}
 						zone={{ kind: "rest", id: "rest-groups" }}
+						fold={sectionFold("groups")}
 						{...common}
 					/>
 				</>

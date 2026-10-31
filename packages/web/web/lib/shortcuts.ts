@@ -16,7 +16,7 @@ import { composingKey } from "./ime.ts";
 import { canChangeQueued } from "./queued-actions.ts";
 import { askQueuedEdit } from "./queued-edit.ts";
 import { neighbour, roomStops, type Stop } from "./room-order.ts";
-import { activityAt } from "./rooms.ts";
+import { activityAt, waitingCards } from "./rooms.ts";
 import { currentRoute, hrefFor, navigate } from "./router.ts";
 import {
 	closeShortcutHelp,
@@ -168,6 +168,7 @@ function stepRoom(direction: 1 | -1, unread: boolean): void {
 	const stops = roomStops(state, {
 		at: (key) => activityAt(state, key),
 		collapsed: collapsedNow(),
+		stays: (key) => waitingCards(state, key) > 0 || unreadOf(key) > 0,
 		expanded: openFolds(),
 		current,
 	});
