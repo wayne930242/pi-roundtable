@@ -13,9 +13,11 @@ import { useConfig } from "../lib/config.ts";
 import {
 	boxCards,
 	createReveal,
+	createStage,
 	currentLine,
 	type Line,
 	linePreview,
+	type Stage,
 	sliceChars,
 	voiceOf,
 } from "../lib/dialogue.ts";
@@ -91,6 +93,7 @@ export function useRoomLine(roomKey: string): {
 	room: RoomState | undefined;
 	view: RoomView | undefined;
 	line: Line | undefined;
+	displayOf(agent: string | undefined): string;
 } {
 	const room = useSelector((state) => state.rooms[roomKey]);
 	const ownerName = useSelector((state) => state.principal?.name) ?? t("You");
@@ -114,7 +117,7 @@ export function useRoomLine(roomKey: string): {
 		displayOf,
 		view?.kind === "agent" ? view.name : undefined,
 	);
-	return { room, view, line };
+	return { room, view, line, displayOf };
 }
 
 /** The sheet that holds the room's whole message list, over the scene. */
@@ -203,7 +206,15 @@ export function DialogueBox(props: DialogueBoxProps) {
 		boxCards(state, roomKey, state.rooms[roomKey]?.messages.at(-1)?.id),
 	);
 	const characters = useCharacters();
-	const { room, view, line } = useRoomLine(roomKey);
+	const { room, view, line: newest, displayOf } = useRoomLine(roomKey);
+	// The box types one speaker's words out whole before the next speaker takes it; later lines wait in order.
+	const staged = useRef<{ room: string; stage: Stage }>(undefined);
+	if (staged.current?.room !== roomKey)
+		staged.current = { room: roomKey, stage: createStage() };
+	const { stage } = staged.current;
+	stage.feed(room?.messages ?? [], newest);
+	const line = stage.line;
+	const waiting = stage.waiting;
 	// An agent's own room is that agent's podium: the plate names them even while the newest line is the owner's, which would otherwise put the owner's name under the agent's standee.
 	const owned = view?.kind === "agent" ? view : undefined;
 	const agent = owned
@@ -219,12 +230,21 @@ export function DialogueBox(props: DialogueBoxProps) {
 			? line.author
 			: (view?.displayName ?? roomKey);
 	const { shown, done, finish } = useReveal(line);
+	const [, moved] = useReducer((count: number) => count + 1, 0);
+	// Typed out (or tapped whole), the line gives the box to the next one waiting.
+	useEffect(() => {
+		if (done && waiting > 0 && stage.advance()) moved();
+	}, [done, waiting, stage]);
 	// The table lights the member whose words show, while they show: not while the turn only thinks.
-	const streaming = Boolean(room?.typing && room.progress.text !== "");
+	// The voice is also who the group scene's camera holds on, so a member who starts thinking waits on its seat.
+	const roundSpeaker = speakerOfRound(room?.round);
+	const streaming = Boolean(
+		room?.typing && room.progress.text !== "" && waiting === 0,
+	);
 	const voice = voiceOf(
 		line,
 		!done,
-		streaming ? (speakerOfRound(room?.round) ?? line?.agent) : undefined,
+		streaming ? (roundSpeaker ?? line?.agent) : undefined,
 	);
 	useEffect(() => {
 		setVoice(roomKey, voice);
@@ -240,7 +260,14 @@ export function DialogueBox(props: DialogueBoxProps) {
 			? { ["--agent-accent" as string]: "var(--accent)" }
 			: accent;
 	const typing = Boolean(room?.typing);
-	const showProgress = typing && (!line || line.who === "owner");
+	// Once a member's words stand whole and the next member only thinks, the box says so under them.
+	const nextThinks =
+		done &&
+		waiting === 0 &&
+		line?.who === "agent" &&
+		roundSpeaker !== undefined &&
+		roundSpeaker !== line.agent;
+	const showProgress = typing && (!line || line.who === "owner" || nextThinks);
 	const shownText = line ? sliceChars(line.text, shown) : "";
 	const chip =
 		owned || line?.who === "agent" ? (
@@ -371,7 +398,10 @@ export function DialogueBox(props: DialogueBoxProps) {
 						) : null}
 					</div>
 					{showProgress && room ? (
-						<ProgressStrip name={speaker} progress={room.progress} />
+						<ProgressStrip
+							name={nextThinks ? displayOf(roundSpeaker) : speaker}
+							progress={room.progress}
+						/>
 					) : null}
 					{cards.map(({ id, card }) => (
 						<div key={id} className="scene-card">

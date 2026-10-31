@@ -254,6 +254,8 @@ test("a streaming reply types out, and a tap on it shows the whole text", async 
 	try {
 		await render(SCOUT);
 		await arrive();
+		// the room's last words still type out; the stream waits for them, so a tap shows them whole first
+		await page.click(query<HTMLElement>(".scene-line"));
 		const words =
 			`Streaming along nicely ${"with a fairly long sentence ".repeat(30)}`.trim();
 		await page.act(() => {

@@ -3,14 +3,17 @@ import type { RoomMessage } from "../src/api-types.ts";
 import {
 	boxCards,
 	createReveal,
+	createStage,
 	currentLine,
 	followFocus,
 	linePreview,
 	REVEAL_CPS,
 	resolveFocus,
 	revealStep,
+	sceneSpeaker,
 	sliceChars,
 	speakerOf,
+	storedLine,
 	voiceOf,
 } from "./lib/dialogue.ts";
 import type { CardState, RoomState } from "./lib/rooms.ts";
@@ -261,3 +264,123 @@ test("the box's voice is the agent whose words are being revealed or streamed, a
 	).toBeUndefined();
 	expect(voiceOf(undefined, true, "scout")).toBeUndefined();
 });
+
+describe("the stage: one speaker's words typed out whole before the next takes the box", () => {
+	const members = ["lena", "otto", "mira"];
+	const knight = (id: number, agent: string, text = `line ${id}`) =>
+		say(id, { room: "app:group.c", agent, author: agent, text });
+	const shown = (stage: ReturnType<typeof createStage>) => stage.line?.id;
+	/** Types the line on show out at the box's pace, then gives the box on as the box does. */
+	const typeOut = (stage: ReturnType<typeof createStage>, instant = false) => {
+		const reveal = createReveal();
+		const line = stage.line;
+		reveal.feed(line?.id ?? "", line?.text ?? "");
+		let steps = 0;
+		while (!reveal.done) {
+			reveal.step(16, instant);
+			steps += 1;
+		}
+		stage.advance();
+		return steps;
+	};
+
+	test("a knight who starts thinking while another's words type waits on its seat; the camera follows once they stand", () => {
+		const stage = createStage();
+		stage.feed([], undefined);
+		const otto = [knight(1, "otto", "x".repeat(200))];
+		stage.feed(otto, storedLineOf(otto));
+		// lena's turn starts: no words yet, the round says she speaks
+		stage.feed(otto, storedLineOf(otto));
+		const reveal = createReveal();
+		reveal.feed(stage.line?.id ?? "", stage.line?.text ?? "");
+		reveal.step(100, false);
+		expect(shown(stage)).toBe("m1");
+		// while otto's words type, otto is the voice and holds the camera over lena, who thinks
+		const voice = voiceOf(stage.line, !reveal.done, undefined);
+		expect(voice).toBe("otto");
+		expect(sceneSpeaker(voice, "lena", stage.line, members)).toBe("otto");
+		reveal.finish();
+		// typed out, nothing waits: the camera turns to lena, thinking
+		expect(stage.advance()).toBe(false);
+		const after = voiceOf(stage.line, !reveal.done, undefined);
+		expect(after).toBeUndefined();
+		expect(sceneSpeaker(after, "lena", stage.line, members)).toBe("lena");
+	});
+
+	test("lines said while one types wait and come in the order they were said, a stream settling in place", () => {
+		const stage = createStage();
+		const log = [knight(1, "otto")];
+		stage.feed(log, storedLineOf(log));
+		// lena streams, then her reply is stored, then mira replies, all while otto still types
+		const stream = {
+			...storedLineOf([knight(1, "lena", "Half")]),
+			id: "s1",
+			live: true,
+		};
+		stage.feed(log, stream);
+		log.push(knight(2, "lena", "Half and whole"));
+		log.push(knight(3, "mira"));
+		stage.feed(log, storedLineOf(log));
+		stage.feed(log, storedLineOf(log));
+		expect(shown(stage)).toBe("m1");
+		expect(stage.waiting).toBe(2);
+		typeOut(stage);
+		expect(stage.line).toMatchObject({ id: "m2", text: "Half and whole" });
+		typeOut(stage);
+		expect(shown(stage)).toBe("m3");
+		expect(stage.advance()).toBe(false);
+	});
+
+	test("a tap shows the whole line and gives the box to the next at once", () => {
+		const stage = createStage();
+		const log = [knight(1, "otto", "y".repeat(500))];
+		stage.feed(log, storedLineOf(log));
+		log.push(knight(2, "lena"));
+		stage.feed(log, storedLineOf(log));
+		const reveal = createReveal();
+		reveal.feed(stage.line?.id ?? "", stage.line?.text ?? "");
+		reveal.step(16, false);
+		expect(reveal.done).toBe(false);
+		reveal.finish();
+		expect(reveal.done).toBe(true);
+		expect(stage.advance()).toBe(true);
+		expect(shown(stage)).toBe("m2");
+	});
+
+	test("with reduced motion each line shows whole at once and the next follows straight away", () => {
+		const stage = createStage();
+		const log = [knight(1, "otto", "z".repeat(500))];
+		stage.feed(log, storedLineOf(log));
+		log.push(knight(2, "lena", "z".repeat(500)));
+		stage.feed(log, storedLineOf(log));
+		expect(typeOut(stage, true)).toBe(1);
+		expect(shown(stage)).toBe("m2");
+		expect(voiceOf(stage.line, false, undefined)).toBeUndefined();
+	});
+
+	test("the history a page loads does not replay, and the owner's send settles into its stored message", () => {
+		const stage = createStage();
+		stage.feed([], undefined);
+		const log = [knight(1, "otto"), knight(2, "lena"), knight(3, "mira")];
+		stage.feed(log, storedLineOf(log));
+		expect(shown(stage)).toBe("m3");
+		expect(stage.waiting).toBe(0);
+		const send = {
+			...storedLineOf([say(4, { kind: "owner", text: "go on" })]),
+			id: "p9",
+			pending: true,
+		};
+		stage.feed(log, send);
+		log.push(say(4, { kind: "owner", author: "You", text: "go on" }));
+		stage.feed(log, storedLineOf(log));
+		expect(stage.waiting).toBe(1);
+		stage.advance();
+		expect(shown(stage)).toBe("m4");
+	});
+});
+
+const storedLineOf = (log: RoomMessage[]) => {
+	const last = log.at(-1);
+	if (!last) throw new Error("empty log");
+	return storedLine(last);
+};

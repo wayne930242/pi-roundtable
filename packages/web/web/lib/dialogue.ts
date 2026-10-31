@@ -1,4 +1,4 @@
-import type { RoomFile } from "../../src/api-types.ts";
+import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
 import type { CardState, RoomState } from "./rooms.ts";
 
 // What the scene's dialogue box shows of a room, and how its words appear. All of it is pure or takes
@@ -78,18 +78,105 @@ export function currentLine(
 	for (let at = room.messages.length - 1; at >= 0; at -= 1) {
 		const message = room.messages[at];
 		if (!message || message.kind === "system") continue;
-		return {
-			id: `m${message.id}`,
-			who: message.kind === "owner" ? "owner" : "agent",
-			agent: message.agent,
-			author: message.author,
-			text: message.text,
-			files: message.files,
-			live: false,
-			pending: false,
-		};
+		return storedLine(message);
 	}
 	return undefined;
+}
+
+/** A stored owner or agent message as a line. */
+export function storedLine(message: RoomMessage): Line {
+	return {
+		id: `m${message.id}`,
+		who: message.kind === "owner" ? "owner" : "agent",
+		agent: message.agent,
+		author: message.author,
+		text: message.text,
+		files: message.files,
+		live: false,
+		pending: false,
+	};
+}
+
+/**
+ * The lines the box shows in turn, so a speaker's words are typed out whole before the next speaker
+ * takes the box: the first is on show, the rest wait in the order they were said. `feed` takes the
+ * room's stored messages and its newest line each time either changes; a line that grows or settles
+ * (a stream that becomes its stored reply) updates the one it continues instead of queueing again.
+ * `advance` moves on once the line on show is typed out. The first feed, and the one that brings the
+ * history in, start from the newest line, so the history a page loads does not replay.
+ */
+export interface Stage {
+	/** The line on show. */
+	readonly line: Line | undefined;
+	/** How many lines wait behind it. */
+	readonly waiting: number;
+	feed(messages: readonly RoomMessage[], newest: Line | undefined): void;
+	/** Shows the next waiting line, if any; true when it did. */
+	advance(): boolean;
+}
+
+/** Whether `next` is the same words as `line`, grown or settled: a stream become its stored reply. */
+const continues = (line: Line, next: Line): boolean =>
+	line.id === next.id ||
+	(line.who === next.who &&
+		line.agent === next.agent &&
+		line.text !== "" &&
+		next.text !== "" &&
+		(next.text.startsWith(line.text) || line.text.startsWith(next.text)));
+
+export function createStage(): Stage {
+	let lines: Line[] = [];
+	let cursor: number | undefined;
+	const take = (next: Line) => {
+		const last = lines.length - 1;
+		const tail = lines[last];
+		if (tail && continues(tail, next)) lines[last] = next;
+		else lines.push(next);
+	};
+	return {
+		get line() {
+			return lines[0];
+		},
+		get waiting() {
+			return Math.max(0, lines.length - 1);
+		},
+		feed(messages, newest) {
+			const top = messages.at(-1)?.id ?? 0;
+			// nothing seen yet, or the history only now loaded: start from the newest line
+			if (!cursor) {
+				cursor = top;
+				lines = newest ? [newest] : [];
+				return;
+			}
+			for (const message of messages)
+				if (message.id > cursor && message.kind !== "system")
+					take(storedLine(message));
+			cursor = Math.max(cursor, top);
+			if (newest && !newest.id.startsWith("m")) take(newest);
+		},
+		advance() {
+			if (lines.length < 2) return false;
+			lines = lines.slice(1);
+			return true;
+		},
+	};
+}
+
+/**
+ * Who the group scene's camera rests on: the member whose words the box is still typing out holds
+ * it (`held`), even while the next member already thinks; once the words stand whole, the member the
+ * round says speaks now, else whoever said the newest line.
+ */
+export function sceneSpeaker(
+	held: string | undefined,
+	roundSpeaker: string | undefined,
+	line: Pick<Line, "who" | "agent"> | undefined,
+	members: readonly string[],
+): string | null {
+	if (held !== undefined && members.includes(held)) return held;
+	if (roundSpeaker !== undefined && members.includes(roundSpeaker))
+		return roundSpeaker;
+	return speakerOf(line, members);
 }
 
 /** The open cards and the newest closed ones of a room, in the order they opened. */

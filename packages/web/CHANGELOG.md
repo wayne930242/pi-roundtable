@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - A group's council has one view, `CouncilView`, that both the group room and the round table page show: the council chip and sheet, the Animation mode / Chat mode switch, Reset view in the scene, the waiting cards, the room menu, the mode and offline banners, and the scene or the chat with the room's composer (with its @AI/note switch where the room takes notes). The table page gains the waiting cards and the room menu; the room gains the council chip, seat menus in the scene, and a phone keyboard that closes after a send.
+- The round table's dialogue box types a knight's words out whole before the scene moves on. A knight who starts thinking meanwhile shows its thinking on its seat while the camera and the box stay on the speaker; once the words stand, the box takes the next knight's words, or the camera turns to the knight still thinking and the box shows its progress under the last words. Lines said while one types wait and come in order, a tap still shows the whole line and moves on, and with reduced motion each line shows whole and the next follows at once. Both the 3D and the 2D table; the chat mode is unchanged.
 - The mode is kept per council room (`roundtable-console:council-mode:<room>`) instead of a group room's "Table" toggle and the table page's per-device mode. The first read takes the room's old toggle (`rt-table-mode:<room>`, then removed), else the old device mode (`roundtable-console:table-mode`), else the scene.
 
 ### Removed
