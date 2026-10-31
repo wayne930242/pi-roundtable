@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - A swipe in a round table close-up steps the way the finger moves: a swipe to the left brings in the podium on the right. It went the other way.
+- A room's chat stops following its newest end the moment the person scrolls up, by wheel, finger, key or scrollbar. Scrolling up just a little from the end used to count as still at the end, so rows settling or a reply streaming in pulled the view back down, and it shook.
 
 ## [0.28.0] - 2026-10-31
 

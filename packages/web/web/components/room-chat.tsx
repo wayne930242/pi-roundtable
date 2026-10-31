@@ -12,8 +12,8 @@ import {
 import { useSelector } from "../lib/app-store.ts";
 import { hostUi } from "../lib/frame-taps.ts";
 import { translate as t } from "../lib/messages.ts";
-import { reducedMotion } from "../lib/motion.ts";
 import { timeline, waitingCards } from "../lib/rooms.ts";
+import { useStickToEnd } from "../lib/stick-to-end.ts";
 import { Icon } from "./icons.tsx";
 import { ProgressStrip } from "./progress-strip.tsx";
 import { loadOlderMessages, RoomLog, useRoomHistory } from "./room-log.tsx";
@@ -24,53 +24,6 @@ const ReadLog = lazy(() => hostUi().then((ui) => ({ default: ui.ReadLog })));
 
 // The chip that brings back a waiting card out of view, and a jump's card, load while a card waits here.
 const WaitingChip = lazy(() => import("./waiting-chip.tsx"));
-
-/**
- * Keeps the end of the list in view while the person is at the end, and says when more arrived
- * while they were not. A scroll event caused by the content growing is not the person moving, so
- * only scrolls that leave the height as it was count as theirs.
- */
-export function useStickToEnd(
-	scroller: React.RefObject<HTMLDivElement | null>,
-) {
-	const stuck = useRef(true);
-	const height = useRef(0);
-	const [away, setAway] = useState(false);
-	const onScroll = useCallback(() => {
-		const element = scroller.current;
-		if (!element) return;
-		if (element.scrollHeight !== height.current) {
-			height.current = element.scrollHeight;
-			return;
-		}
-		stuck.current =
-			element.scrollHeight - element.scrollTop - element.clientHeight < 96;
-		setAway(!stuck.current);
-	}, [scroller]);
-	/** The content changed size: follow it to the end, or note that there is more below. */
-	const onGrow = useCallback(() => {
-		const element = scroller.current;
-		if (!element) return;
-		height.current = element.scrollHeight;
-		if (stuck.current) element.scrollTo({ top: element.scrollHeight });
-		else setAway(true);
-	}, [scroller]);
-	const toEnd = useCallback(
-		(smooth: boolean) => {
-			const element = scroller.current;
-			if (!element) return;
-			stuck.current = true;
-			height.current = element.scrollHeight;
-			element.scrollTo({
-				top: element.scrollHeight,
-				behavior: smooth && !reducedMotion() ? "smooth" : "auto",
-			});
-			setAway(false);
-		},
-		[scroller],
-	);
-	return { away, onScroll, onGrow, toEnd };
-}
 
 /**
  * A room's conversation as a chat: its messages and cards in a list that opens at the end and keeps
