@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A reply card Discord refuses (a channel that denies Attach Files) no longer loses the reply: the Discord surface logs a warning and sends the text alone. A card that posts still goes first, as its own message.
+- The shell-policy fuzz runner caps each line at 30 CPU seconds per process (`ulimit -t`), so a busy loop a line leaves behind ends even when the test runner is killed before it can kill the line's process group.
+
 ## [0.27.0] - 2026-10-31
 
 ### Added
