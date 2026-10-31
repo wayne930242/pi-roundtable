@@ -3,6 +3,7 @@ import { useShortcutHelp } from "../lib/shortcut-help.ts";
 import { AgentSheetHost } from "./agent-sheet.tsx";
 import { ArchivedSheetHost } from "./archived-sheet.tsx";
 import { RoomConfirmHost } from "./room-confirms.tsx";
+import { SelectTextSheetHost } from "./select-text-sheet.tsx";
 import { TeamSheetHost } from "./team-sheets.tsx";
 
 // The shortcut list's drawing is a chunk of its own that waits for the first `?`.
@@ -29,6 +30,7 @@ export function SheetHosts() {
 			<AgentSheetHost />
 			<TeamSheetHost />
 			<ArchivedSheetHost />
+			<SelectTextSheetHost />
 			<ShortcutHelpHost />
 		</>
 	);

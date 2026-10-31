@@ -16,6 +16,7 @@ import { store } from "./app-store.ts";
 import { helperItems } from "./bulk-items.ts";
 import { COUNCIL_MIN } from "./council.ts";
 import { quoteInto } from "./drafts.ts";
+import { openSelectText } from "./message-sheets.ts";
 import { translate as t } from "./messages.ts";
 import { changeMode } from "./modes.ts";
 import { setRoomMuted } from "./mute.ts";
@@ -283,16 +284,6 @@ function shownText(source: HTMLElement, fallback: string): string {
 	return (prose.innerText || prose.textContent || fallback).trim();
 }
 
-function selectAll(element: Element | null): void {
-	if (!element) return;
-	const selection = window.getSelection();
-	if (!selection) return;
-	const range = document.createRange();
-	range.selectNodeContents(element);
-	selection.removeAllRanges();
-	selection.addRange(range);
-}
-
 /** What a person has selected inside the message, when they have. */
 function selectedIn(source: HTMLElement): string {
 	const selection = window.getSelection();
@@ -336,7 +327,9 @@ export function messageMenu(
 		id: "select",
 		label: t("Select text"),
 		icon: "list",
-		run: () => selectAll(source.querySelector(".bubble")),
+		// A sheet of its own: on a phone the hold on the row is the menu's, and a selection there
+		// spills into the page around it.
+		run: () => openSelectText(message.author, message.text),
 	});
 	if (canShare())
 		items.push({

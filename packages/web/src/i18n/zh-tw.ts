@@ -600,6 +600,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Copy as Markdown": "複製為 Markdown",
 	"Quote reply": "引用回覆",
 	"Select text": "選取文字",
+	"Copy all": "全部複製",
 	Share: "分享",
 	"Knight profile": "騎士資料",
 	"Copy details": "複製細節",

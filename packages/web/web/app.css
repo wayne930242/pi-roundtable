@@ -2245,6 +2245,12 @@ dialog.sheet dialog.sheet .creator-field > h3 {
 	user-select: none;
 }
 
+/* In a room only what was said is selectable: a drag over the messages picks up no lines or buttons. */
+.room-content {
+	-webkit-user-select: none;
+	user-select: none;
+}
+
 /* A message is a row too, but its words stay selectable. */
 [data-hold="text"] .bubble {
 	-webkit-user-select: text;
