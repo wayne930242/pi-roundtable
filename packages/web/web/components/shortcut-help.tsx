@@ -54,6 +54,10 @@ function rows(): { keys: string[]; label: string }[] {
 				"Edit your latest message that is still waiting, from an empty message box",
 			),
 		},
+		{
+			keys: ["/clear"],
+			label: t("In a message box, start the open room over (also /new)"),
+		},
 		{ keys: ["?"], label: t("Show these shortcuts") },
 	];
 }

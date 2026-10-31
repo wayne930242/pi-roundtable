@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `/clear` in the message box of an agent's or group's room starts the room over, as the room menu's Start over does: nothing is posted, the same question comes up first ("Start over <name>?"), and the screen clears to the one start-over line, with the old messages open read-only from it as the archived conversation. `/new` does the same. The text must be the command whole (spaces around it and the case do not matter); `/clear now` or a `/clear` with files waiting is a message like any other. A host's room keeps its own conversation, so `/clear` there answers with a notice instead of being sent.
+- Typing `/` at the start of the message box opens a small menu of commands above it, with a line on each (`/clear` is the first): ↑ and ↓ move, Enter runs the choice, Tab writes its name into the box, Esc closes it until the text changes, and a tap picks on a phone without closing its keyboard. Nothing acts while an input method composes. The menu and its styles are a lazy chunk. `Composer` takes a `commands` list (`SlashCommand`: name, aliases, one-line description, `run`), so a command to come is one more entry in `lib/room-commands.ts`.
+- The `?` shortcut list names `/clear`.
+
 ## [0.29.2] - 2026-10-31
 
 ### Added

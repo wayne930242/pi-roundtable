@@ -26,6 +26,7 @@ import { installHostStyle } from "../lib/host-style.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
+import { hostRoomCommands } from "../lib/room-commands.ts";
 import { ROOM_PAGE } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -403,6 +404,7 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 						draftKey={roomKey}
 						name={title}
 						placeholder={placeholder}
+						commands={hostRoomCommands}
 						onAddressed={setAddressed}
 						{...(toggled
 							? {

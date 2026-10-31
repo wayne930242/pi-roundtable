@@ -17,6 +17,7 @@ import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { seatMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
+import { useRoomCommands } from "../lib/room-commands.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { useConnection } from "../lib/socket.ts";
 import { installTablePageStyle } from "../lib/table-page-style.ts";
@@ -186,6 +187,7 @@ export function CouncilView(props: {
 	}, [connection, roomKey]);
 
 	const name = view?.displayName ?? roomKey;
+	const commands = useRoomCommands(roomKey, name);
 	const mine = room?.mode;
 	const seated = roster.length > 0 || props.empty === undefined;
 	const scene = seated && mode === "scene";
@@ -299,6 +301,7 @@ export function CouncilView(props: {
 									key={roomKey}
 									draftKey={roomKey}
 									name={name}
+									commands={commands}
 									onAddressed={setAddressed}
 									{...(toggled
 										? {

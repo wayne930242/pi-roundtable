@@ -24,6 +24,7 @@ import {
 import { useFollowEnd } from "../lib/follow-end.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
+import { useRoomCommands } from "../lib/room-commands.ts";
 import type { RoomState } from "../lib/rooms.ts";
 import { speakerOfRound } from "../lib/round-view.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -207,6 +208,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 	);
 	const characters = useCharacters();
 	const { room, view, line: newest, displayOf } = useRoomLine(roomKey);
+	const commands = useRoomCommands(roomKey, view?.displayName ?? roomKey);
 	// The box types one speaker's words out whole before the next speaker takes it; later lines wait in order.
 	const staged = useRef<{ room: string; stage: Stage }>(undefined);
 	if (staged.current?.room !== roomKey)
@@ -417,6 +419,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 						key={roomKey}
 						draftKey={roomKey}
 						name={view?.displayName ?? roomKey}
+						commands={commands}
 						limits={limits}
 						stoppable={Boolean(room?.stoppable)}
 						blurAfterSend={props.blurAfterSend === true}
