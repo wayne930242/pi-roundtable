@@ -10,6 +10,7 @@
 //                                 two written ones made at start) so the skill editor works; default: the fake catalog below
 //
 // The page is built into dist/ at start when dist/ has none.
+//   FIXTURE_COMMANDS              `1` declares an extension command ("stats") as safe for chat, so a knight's room lists it after /clear and its skills
 //   FIXTURE_HOST                  `1` registers a host room kind ("inbox": an empty room and one with a message,
 //                                 both open to notes and turns) and a host page, for trying the host rooms
 //   FIXTURE_OWNERS                `2` makes two owners, Ada and Bob, who sign in by the `fixture_owner` cookie (`ada`, the default, or `bob`),
@@ -167,6 +168,14 @@ const registrySkills = (registry: SkillRegistry) => ({
 const origin = `http://127.0.0.1:${port}`;
 const asMember = process.env.FIXTURE_TIER === "member";
 const MEMBER_IDENTITY = "discord:300000000000000013";
+
+/** A plugin that declares an extension command as safe for chat, to see it in a room's command menu. */
+const commandFixture = definePlugin({
+	name: "fixture-commands",
+	setup: () => ({
+		chatCommands: [{ name: "stats", description: "Show this week's usage" }],
+	}),
+});
 
 /** A host room kind and a page, as a plugin that sits on the web app would register them. */
 const hostFixture = definePlugin({
@@ -764,6 +773,7 @@ host = await testHost({
 				: {}),
 		}),
 		...(process.env.FIXTURE_HOST === "1" ? [hostFixture] : []),
+		...(process.env.FIXTURE_COMMANDS === "1" ? [commandFixture] : []),
 	],
 });
 

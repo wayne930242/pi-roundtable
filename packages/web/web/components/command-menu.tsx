@@ -37,9 +37,10 @@ const COMMAND_MENU_CSS = `
 
 .command-item {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 0 var(--space-3);
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	gap: 0;
 	min-height: var(--touch);
 	padding: var(--space-2) var(--space-3);
 	border: 1px solid transparent;
