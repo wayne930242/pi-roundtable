@@ -238,6 +238,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 
 	// 訊息列
 	"Conversation started over": "對話已重新開始",
+	"View the archived conversation": "查看封存的對話",
+	"Archived conversation": "封存的對話",
+	"The archived conversation has no messages.": "封存的對話裡沒有訊息。",
 	Discard: "捨棄",
 	"Not sent yet": "尚未傳送",
 	"Not sent": "未傳送",
@@ -862,6 +865,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Method not allowed.": "不允許使用這個方法。",
 	"There is no such API.": "沒有這個 API。",
 	"before and limit must be whole numbers.": "before 與 limit 必須是整數。",
+	"before, limit and archive must be whole numbers.":
+		"before、limit 與 archive 必須是整數。",
 	"Give yolo or longRunning.": "請提供 yolo 或 longRunning。",
 	"muted must be true or false.": "muted 必須是 true 或 false。",
 	// 分組與置頂

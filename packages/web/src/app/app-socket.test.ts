@@ -1328,6 +1328,85 @@ describeDb("the owner app over a real host", () => {
 		tab.close();
 	});
 
+	test("after a start over the room's history starts at it, and the archived conversation keeps what came before", async () => {
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		// The database is shared by runs, so this run's words are its own.
+		const run = crypto.randomUUID().slice(0, 8);
+		const before = `before-restart-${run}`;
+		const after = `after-restart-${run}`;
+		const get = async (query = "") =>
+			(await (
+				await rest(app, `rooms/${encodeURIComponent(GUIDE)}/messages?${query}`)
+			).json()) as MessagesView;
+		const unreadOf = async () =>
+			((await (await rest(app, "rooms")).json()) as RoomsView).rooms.find(
+				(room) => room.key === GUIDE,
+			);
+		await unreadOf();
+		tab.send({ type: "send", id: "so1", room: GUIDE, text: before });
+		await tab.take(agentReply("guide"));
+		expect((await unreadOf())?.unread ?? 0).toBeGreaterThan(0);
+		expect(
+			(
+				await rest(app, `rooms/${encodeURIComponent(GUIDE)}/start-over`, {
+					method: "POST",
+				})
+			).status,
+		).toBe(200);
+		const divider = await tab.take(
+			(frame) =>
+				frame.type === "message" &&
+				frame.room === GUIDE &&
+				frame.message.kind === "system",
+		);
+		if (divider.type !== "message") throw new Error("no divider");
+		const line = divider.message.id;
+		// A reload shows only the start line; nothing above it is offered or reachable.
+		const fresh = await get("limit=50");
+		expect(fresh.messages.map((m) => m.id)).toEqual([line]);
+		expect(fresh.more).toBe(false);
+		const above = await get(`before=${line}&limit=50`);
+		expect(above.messages).toEqual([]);
+		expect(above.more).toBe(false);
+		// Nothing of the archived conversation counts as unread, nor stands in the list as unread.
+		const listed = await unreadOf();
+		expect(listed?.unread ?? 0).toBe(0);
+		expect(listed?.last?.id).toBe(line);
+		// What follows the start line is the new conversation.
+		tab.send({ type: "send", id: "so2", room: GUIDE, text: after });
+		await tab.take(agentReply("guide"));
+		const next = await get("limit=50");
+		expect(next.messages[0]?.id).toBe(line);
+		expect(next.messages.map((m) => m.text)).toContain(after);
+		expect(next.messages.map((m) => m.text)).not.toContain(before);
+		// The archived conversation holds what came before, back to the start line before it.
+		const archived = await get(`archive=${line}&limit=50`);
+		const texts = archived.messages.map((m) => m.text);
+		expect(texts).toContain(before);
+		expect(texts).not.toContain(after);
+		expect(archived.messages.every((m) => m.id < line)).toBe(true);
+		expect(
+			archived.messages.some((m) => m.text === "Conversation started over"),
+		).toBe(false);
+		// Only a start line of the room names an archived conversation.
+		const reply = next.messages.at(-1)?.id;
+		for (const query of [`archive=${reply}`, "archive=1"])
+			expect(
+				(
+					await rest(
+						app,
+						`rooms/${encodeURIComponent(GUIDE)}/messages?${query}`,
+					)
+				).status,
+			).toBe(404);
+		expect(
+			(await rest(app, `rooms/${encodeURIComponent(GUIDE)}/messages?archive=x`))
+				.status,
+		).toBe(400);
+		tab.close();
+	});
+
 	test("the page learns who it is, where the app is, and how to reach an agent's picture", async () => {
 		const session = (await (await rest(app, "session")).json()) as {
 			principal: { id: string; name: string };

@@ -15,6 +15,7 @@ import type {
 	ServerFrame,
 	UploadView,
 } from "../../src/api-types.ts";
+import { isStartOver } from "../../src/api-types.ts";
 
 // The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
 // what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
@@ -424,6 +425,33 @@ function onMessage(
 	return state.focus === roomKey ? updated : resolvedPruned(updated);
 }
 
+/**
+ * The state with the room shown from its latest start-over line on: what came before belongs to the
+ * archived conversation, so its messages and its ended cards go, and no older page is offered.
+ */
+function fromStart(state: RoomsState, key: string): RoomsState {
+	const room = state.rooms[key];
+	if (!room) return state;
+	const at = room.messages.findLastIndex(isStartOver);
+	const line = room.messages[at];
+	if (!line || (at === 0 && !room.more)) return state;
+	const old = (id: string) => {
+		const card = state.cards[id];
+		return card?.room === key && !!card.outcome && card.after < line.id;
+	};
+	return {
+		...state,
+		rooms: {
+			...state.rooms,
+			[key]: { ...room, messages: room.messages.slice(at), more: false },
+		},
+		cardOrder: state.cardOrder.filter((id) => !old(id)),
+		cards: Object.fromEntries(
+			Object.entries(state.cards).filter(([id]) => !old(id)),
+		),
+	};
+}
+
 function onHistory(
 	state: RoomsState,
 	frame: Extract<LocalAction, { type: "history_loaded" }>,
@@ -555,8 +583,11 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			};
 		}
 		case "message":
-		case "host_message":
-			return onMessage(state, action.room, action.message);
+		case "host_message": {
+			const next = onMessage(state, action.room, action.message);
+			// A start-over clears the room on every page that shows it.
+			return isStartOver(action.message) ? fromStart(next, action.room) : next;
+		}
 		case "host_removed":
 			return withRoom(state, action.room, (room) => ({
 				...room,
@@ -681,7 +712,7 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "history_loaded":
 			return resolvedPruned(
 				withClosedCards(
-					onHistory(state, action),
+					fromStart(onHistory(state, action), action.room),
 					action.room,
 					action.cards ?? [],
 				),

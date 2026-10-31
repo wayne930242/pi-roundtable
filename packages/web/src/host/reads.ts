@@ -1,5 +1,6 @@
 import type { SQL } from "bun";
 import type { Migration } from "pi-roundtable";
+import { START_OVER_TEXT } from "../api-types.ts";
 
 /** Where one person has read a room up to. */
 export interface ReadMark {
@@ -29,7 +30,8 @@ interface MarkRow {
  * The read cursors, one per person and room, kept in `web_room_reads`. A cursor only moves
  * forward: reading an older message again, or a second device that is behind, changes nothing.
  * A message counts as unread for a person when it is newer than their cursor and is not a line the
- * server wrote (a divider, a yolo approval), which is nobody's to read.
+ * server wrote (a divider, a yolo approval), which is nobody's to read, nor older than the room's
+ * latest start-over.
  */
 export class RoomReads {
 	readonly #sql: SQL;
@@ -187,13 +189,20 @@ export class RoomReads {
 					INSERT INTO web_room_reads ${this.#sql(empty)}
 					ON CONFLICT (room, principal_id) DO NOTHING`;
 		}
+		// What a start-over archived is out of the room's view, so none of it is left to read.
 		const rows: { room: string; unread: string | number | bigint }[] =
 			await this.#sql`
+			WITH starts AS (
+				SELECT room, max(id) AS id FROM web_room_messages
+				WHERE room IN ${this.#sql(rooms)} AND kind = 'system' AND text = ${START_OVER_TEXT}
+				GROUP BY room)
 			SELECT m.room, count(*) AS unread
 			FROM web_room_messages m
 			LEFT JOIN web_room_reads r ON r.room = m.room AND r.principal_id = ${principalId}
+			LEFT JOIN starts s ON s.room = m.room
 			WHERE m.room IN ${this.#sql(rooms)} AND m.kind <> 'system'
 				AND m.id > COALESCE(r.last_read_id, 0)
+				AND m.id > COALESCE(s.id, 0)
 			GROUP BY m.room`;
 		for (const row of rows) counts.set(row.room, Number(row.unread));
 		return counts;

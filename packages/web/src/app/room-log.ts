@@ -1,10 +1,11 @@
 import type { SQL } from "bun";
 import type { Migration } from "pi-roundtable";
-import type {
-	HostAuthorKind,
-	PictureRef,
-	RoomFile,
-	RoomMessage,
+import {
+	type HostAuthorKind,
+	type PictureRef,
+	type RoomFile,
+	type RoomMessage,
+	START_OVER_TEXT,
 } from "../api-types.ts";
 import { storedJson } from "../host/stored-json.ts";
 
@@ -128,6 +129,14 @@ export class RoomLog {
 		},
 	};
 
+	/** Finds a room's start-over lines without reading the whole room. */
+	static readonly startOverMigration: Migration = {
+		name: "web-room-messages-start-over",
+		up: async (sql) => {
+			await sql`CREATE INDEX IF NOT EXISTS web_room_messages_start_over ON web_room_messages (room, id) WHERE kind = 'system' AND text = 'Conversation started over'`;
+		},
+	};
+
 	async append(message: NewRoomMessage): Promise<RoomMessage> {
 		const [row] = await this.#insert(message, false);
 		if (!row) throw new Error("the room log stored nothing");
@@ -241,25 +250,48 @@ export class RoomLog {
 		return found;
 	}
 
-	/** The newest `limit` messages older than `before` (all of them when absent), oldest first. */
+	/**
+	 * The newest `limit` messages older than `before` (all of them when absent), oldest first, of
+	 * the room's conversation: from its latest start-over line, which the page includes, on. With
+	 * `until`, the id of one of its start-over lines, those of the conversation that line ended
+	 * instead: older than the line, back to the start-over line before it.
+	 */
 	async page(
 		room: string,
 		before: number | undefined,
 		limit: number,
+		until?: number,
 	): Promise<{ messages: RoomMessage[]; more: boolean }> {
 		const count = Math.min(Math.max(Math.trunc(limit), 1), PAGE_LIMIT);
-		const rows: Row[] =
-			before === undefined
-				? await this.#sql`
-					SELECT * FROM web_room_messages WHERE room = ${room}
-					ORDER BY id DESC LIMIT ${count + 1}`
-				: await this.#sql`
-					SELECT * FROM web_room_messages WHERE room = ${room} AND id < ${before}
-					ORDER BY id DESC LIMIT ${count + 1}`;
+		const start = await this.startOver(room, until);
+		// The live conversation includes its own start line; an archived one ends before the next.
+		const above = until === undefined ? (start ?? 1) - 1 : (start ?? 0);
+		const below =
+			until === undefined
+				? before
+				: before === undefined
+					? until
+					: Math.min(before, until);
+		const rows: Row[] = await this.#sql`
+			SELECT * FROM web_room_messages
+			WHERE room = ${room} AND id > ${above}
+				AND (${below ?? null}::bigint IS NULL OR id < ${below ?? null}::bigint)
+			ORDER BY id DESC LIMIT ${count + 1}`;
 		return {
 			messages: rows.slice(0, count).map(messageOf).reverse(),
 			more: rows.length > count,
 		};
+	}
+
+	/** The id of the room's latest start-over line, or of the latest one older than `before`. */
+	async startOver(room: string, before?: number): Promise<number | undefined> {
+		const [row]: { id: string | number | bigint | null }[] = await this.#sql`
+			SELECT max(id) AS id FROM web_room_messages
+			WHERE room = ${room} AND kind = 'system' AND text = ${START_OVER_TEXT}
+				AND (${before ?? null}::bigint IS NULL OR id < ${before ?? null}::bigint)`;
+		return row?.id === null || row?.id === undefined
+			? undefined
+			: Number(row.id);
 	}
 
 	/** Deletes every message of a room that is gone for good; returns how many. */

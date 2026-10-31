@@ -436,6 +436,16 @@ export interface RoomFile {
 }
 
 /**
+ * The line a conversation's start-over writes into its room. The room shows what came from its
+ * latest such line on; what is older belongs to the archived conversation, read on request.
+ */
+export const START_OVER_TEXT = "Conversation started over";
+
+/** Whether a message is the line a start-over wrote. */
+export const isStartOver = (message: Pick<RoomMessage, "kind" | "text">) =>
+	message.kind === "system" && message.text === START_OVER_TEXT;
+
+/**
  * One message of a room. `id` is the room log's own number, ascending; a live message (an
  * agent's interim text, shown until its final reply arrives) has `id` 0 and a `live` token,
  * and a later frame with the same token replaces it. It is never stored: the client drops a

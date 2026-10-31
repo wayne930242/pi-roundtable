@@ -14,7 +14,12 @@ import {
 	roomOf,
 	type TurnProgress,
 } from "pi-roundtable";
-import type { RoomFile, RoomMessage, RoundView } from "../api-types.ts";
+import {
+	type RoomFile,
+	type RoomMessage,
+	type RoundView,
+	START_OVER_TEXT,
+} from "../api-types.ts";
 import type { OwnerDesk } from "./desk.ts";
 import { type FileBinding, type FileDir, typeByName } from "./files.ts";
 import type { NewRoomMessage, RoomLog } from "./room-log.ts";
@@ -357,7 +362,7 @@ export class AppSurface implements ChatSurface {
 			room: channel,
 			kind: "system",
 			author: ASSISTANT,
-			text: "Conversation started over",
+			text: START_OVER_TEXT,
 		});
 	}
 

@@ -6,6 +6,8 @@ import type {
 	RoomView,
 	ServerFrame,
 } from "../src/api-types.ts";
+import { START_OVER_TEXT } from "../src/api-types.ts";
+import { boxCards, currentLine } from "./lib/dialogue.ts";
 import {
 	type Action,
 	banner,
@@ -1013,5 +1015,92 @@ describe("a group's round", () => {
 			opened,
 		);
 		expect(done.rooms[CREW]?.round).toEqual(ended);
+	});
+});
+
+describe("start over", () => {
+	const line = (id: number, room = SCOUT) =>
+		message(id, room, {
+			kind: "system",
+			text: START_OVER_TEXT,
+			author: "Assistant",
+		});
+
+	test("the start-over line clears the room on every page: older messages and ended cards go, open ones stay", () => {
+		let state = run([
+			READY,
+			{
+				type: "history_loaded",
+				room: SCOUT,
+				messages: [message(1, SCOUT), message(2, SCOUT)],
+				more: true,
+				older: false,
+			},
+			{ type: "prompt", room: SCOUT, prompt: approval("old") },
+			{ type: "prompt_closed", prompt: "old", outcome: "approved" },
+			{ type: "prompt", room: SCOUT, prompt: approval("open") },
+			{ type: "message", room: GUIDE, message: message(3, GUIDE) },
+		]);
+		state = reduce(state, { type: "message", room: SCOUT, message: line(4) });
+		const room = state.rooms[SCOUT];
+		expect(room?.messages.map((m) => m.id)).toEqual([4]);
+		expect(room?.more).toBe(false);
+		expect(state.cards.old).toBeUndefined();
+		expect(state.cards.open).toBeDefined();
+		// Another room keeps what it holds.
+		expect(state.rooms[GUIDE]?.messages.map((m) => m.id)).toEqual([3]);
+		// What is said next follows the line.
+		state = reduce(state, {
+			type: "message",
+			room: SCOUT,
+			message: message(5, SCOUT),
+		});
+		expect(state.rooms[SCOUT]?.messages.map((m) => m.id)).toEqual([4, 5]);
+	});
+
+	test("a reload's page that starts at the line drops what the page held from before it", () => {
+		let state = run([
+			READY,
+			{
+				type: "history_loaded",
+				room: SCOUT,
+				messages: [message(1, SCOUT), message(2, SCOUT)],
+				more: true,
+				older: false,
+			},
+		]);
+		state = reduce(state, {
+			type: "history_loaded",
+			room: SCOUT,
+			messages: [line(4), message(5, SCOUT)],
+			more: false,
+			older: false,
+		});
+		expect(state.rooms[SCOUT]?.messages.map((m) => m.id)).toEqual([4, 5]);
+		expect(state.rooms[SCOUT]?.more).toBe(false);
+	});
+
+	test("the council's dialogue box empties with the room", () => {
+		let state = run([
+			READY,
+			{
+				type: "history_loaded",
+				room: SCOUT,
+				messages: [message(1, SCOUT)],
+				more: false,
+				older: false,
+			},
+			{ type: "prompt", room: SCOUT, prompt: approval("old") },
+			{ type: "prompt_closed", prompt: "old", outcome: "approved" },
+		]);
+		expect(
+			currentLine(state.rooms[SCOUT], "Ada", (a) => a ?? ""),
+		).toBeDefined();
+		state = reduce(state, { type: "message", room: SCOUT, message: line(2) });
+		expect(
+			currentLine(state.rooms[SCOUT], "Ada", (a) => a ?? ""),
+		).toBeUndefined();
+		expect(boxCards(state, SCOUT, 2)).toEqual([]);
+		expect(lastMessage(state, SCOUT)?.id).toBe(2);
 	});
 });
