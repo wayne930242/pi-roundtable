@@ -30,6 +30,7 @@ export function webPushChannel(
 		(await identity.tierOf(principalId)) === "owner";
 	return {
 		name: `web:${options.surface}`,
+		surface: options.surface,
 		label: "a notice in the web app",
 		knows: async (principalId) =>
 			(await isOwner(principalId)) && home() !== undefined,

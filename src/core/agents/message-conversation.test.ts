@@ -116,7 +116,7 @@ const ran = (turns: TurnRequest[]) =>
 	turns.map((t) => [t.agent?.name, t.channel]);
 
 describe("message_agent picks the target's conversation", () => {
-	test("a reminder to an agent lands in the web conversation it was working in, and the answer returns to the sender's Discord channel", async () => {
+	test("a reminder from Discord lands in the target's Discord channel, though it was working in the web app", async () => {
 		let sent: string | undefined;
 		const { team, turns, posts, replies, speak, settle } = setup((request) => {
 			if (request.agent?.name === "coder" && request.text === "remind infra")
@@ -129,32 +129,23 @@ describe("message_agent picks the target's conversation", () => {
 		});
 		// infra was started in the web app, where the owner and it are still talking.
 		await speak(web("infra"), "check the logs");
+		const roomReplies = replies.length;
 		await speak(discord("coder"), "remind infra");
 		await settle();
 		expect(ran(turns)).toEqual([
 			["infra", web("infra")],
 			["coder", discord("coder")],
-			["infra", web("infra")],
+			["infra", discord("infra")],
 			["coder", discord("coder")],
 		]);
-		expect(turns[2]?.agent?.session).toBe(web("infra"));
-		expect(turns[3]?.agent?.session).toBe(discord("coder"));
-		expect(sent).toContain(`app conversation (${web("infra")})`);
-		// The request is shown in infra's web conversation, the answer in coder's channel.
-		expect(replies.map((r) => r.channel)).toContain(web("infra"));
-		expect(
-			replies.some(
-				(r) =>
-					r.channel === web("infra") &&
-					r.text ===
-						messages().messageDelivered("Infrastructure", "the deploy is done"),
-			),
-		).toBe(true);
+		expect(sent).toContain(`discord conversation (${discord("infra")})`);
+		// Nothing of the exchange reaches the web app; it stays in Discord.
+		expect(replies.length).toBe(roomReplies);
+		expect(posts.map((p) => p.channelId)).toContain("2000");
 		expect(posts.map((p) => p.channelId)).toContain("4000");
-		expect(posts.every((p) => p.channelId !== "2000")).toBe(true);
 	});
 
-	test("a message from a room never follows the target's latest conversation out to Discord; an explicit conversation still may", async () => {
+	test("a message from a room stays among the rooms, whichever conversation the target used last; an explicit conversation still may leave", async () => {
 		const { team, turns, posts, speak, settle } = setup((request) => {
 			if (request.agent?.name === "coder" && request.text === "ask infra")
 				team.message(scopeIn("coder", web("coder")), "infra", "disk?");
@@ -184,18 +175,6 @@ describe("message_agent picks the target's conversation", () => {
 		await settle();
 		expect(ran(turns)[4]).toEqual(["coder", web("coder")]);
 		expect(ran(turns)[5]).toEqual(["infra", discord("infra")]);
-	});
-
-	test("a message from Discord follows the target's latest conversation into a room", async () => {
-		const { team, turns, speak, settle } = setup((request) => {
-			if (request.agent?.name === "coder" && request.text === "ask infra")
-				team.message(scopeIn("coder", discord("coder")), "infra", "disk?");
-			return { ok: true, text: "ok" };
-		});
-		await speak(web("infra"), "hello");
-		await speak(discord("coder"), "ask infra");
-		await settle();
-		expect(ran(turns)[2]).toEqual(["infra", web("infra")]);
 	});
 
 	test("with no history the sender's own surface decides: a room's message stays among rooms, a Discord one goes to Discord", async () => {

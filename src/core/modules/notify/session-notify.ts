@@ -1,7 +1,9 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { ChannelKey } from "../../domain/conversation.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
 import type { OwnerIdentity } from "../../identity.ts";
 import type { Logger } from "../../log.ts";
+import { providerSurface, surfaceOf } from "../../presence/delivery-router.ts";
 import type {
 	DirectChannelProvider,
 	DirectChannels,
@@ -26,10 +28,21 @@ function labels(providers: readonly DirectChannelProvider[]): string {
 	return providers.map((provider) => provider.label).join(" or ");
 }
 
+/** The providers on the conversation's own surface, or every one when none is on it. */
+function ownSurface(
+	providers: readonly DirectChannelProvider[],
+	home: ChannelKey,
+): readonly DirectChannelProvider[] {
+	const surface = surfaceOf(home);
+	const own = providers.filter((p) => providerSurface(p) === surface);
+	return own.length > 0 ? own : providers;
+}
+
 /**
  * The notify tool of each session: none on a host without direct channels, and none in a private
  * conversation whose person no direct channel reaches. A notice goes to the conversation's
- * person in a private one, and to the turn's speaker in a shared one.
+ * person in a private one, and to the turn's speaker in a shared one, on the conversation's own
+ * surface: the delivery router tries another only when that one cannot reach them.
  */
 export function sessionNotify(
 	deps: SessionNotifyDeps,
@@ -70,15 +83,16 @@ export function sessionNotify(
 		const providers = directChannels.providers();
 		if (providers.length === 0) return null;
 		const { conversation } = session;
+		const origin = session.homeChannel;
 		const own =
 			conversation.visibility === "private"
 				? conversation.principalId
 				: undefined;
 		return async (pi) => {
-			let reaching = providers;
+			let reaching = ownSurface(providers, origin);
 			if (own !== undefined) {
 				try {
-					const known = await directChannels.known(own);
+					const known = await directChannels.known(origin, own);
 					if (!known) return;
 					reaching = [known];
 				} catch (error) {
@@ -98,7 +112,10 @@ export function sessionNotify(
 					: session.addressee;
 			await notifyExtension(
 				{
-					notifier: directChannels,
+					notifier: {
+						notify: (principalId, text) =>
+							directChannels.notify(origin, principalId, text),
+					},
 					recipient: async () => recipientOf(session, own),
 					channels: labels(reaching),
 				},

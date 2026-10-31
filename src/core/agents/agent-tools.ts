@@ -123,7 +123,7 @@ export interface AgentOps {
 	avatar(name: string, look: CharacterInput): Promise<string>;
 	/** Queues the message and returns at once. */
 	/**
-	 * Hands a request to another agent, in the conversation it used most recently, or in the
+	 * Hands a request to another agent, in its conversation on the sender's surface, or in the
 	 * `conversation` named: "discord", "web" (or a room surface's name), or one of its conversation keys.
 	 */
 	message(
@@ -425,14 +425,14 @@ function toolDefs(
 			name: MESSAGE_AGENT_TOOL,
 			label: "Message agent",
 			description:
-				'Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in the one it used most recently, so work it started in the web app is answered there. Give conversation to choose another: "discord", "web", or one of the conversation keys agent_get lists for it. The request shows in its conversation, and the request and the answer show as small cards in yours.',
+				'Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in its conversation on the surface you are writing from (its room from a web room, its Discord channel from Discord), so nothing crosses surfaces unless you name it. Give conversation to choose another: "discord", "web", or one of the conversation keys agent_get lists for it. The request shows in its conversation, and the request and the answer show as small cards in yours.',
 			parameters: Type.Object({
 				to: NAME,
 				text: Type.String({ minLength: 1, maxLength: 4000 }),
 				conversation: Type.Optional(
 					Type.String({
 						description:
-							'Which of the agent\'s conversations to deliver into: "discord", "web" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach the one it used most recently.',
+							'Which of the agent\'s conversations to deliver into: "discord", "web" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach its conversation on the surface you are writing from.',
 					}),
 				),
 			}),

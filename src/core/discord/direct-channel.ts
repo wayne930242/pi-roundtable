@@ -36,6 +36,7 @@ export function discordDirectChannel(
 	};
 	return {
 		name: "discord",
+		surface: "discord",
 		label: "a direct message on Discord",
 		knows: async (principalId) => (await userOf(principalId)) !== undefined,
 		reaches: async (principalId) => {

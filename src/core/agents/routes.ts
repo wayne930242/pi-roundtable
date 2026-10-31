@@ -37,7 +37,7 @@ export interface RoutingTable {
 	 * has none when the agent has no place at all.
 	 */
 	of(agent: string, kind: "integration", origin: ChannelKey): ChannelKey;
-	of(agent: string, kind: "agentMessage", origin?: ChannelKey): ChannelKey;
+	of(agent: string, kind: "agentMessage", origin: ChannelKey): ChannelKey;
 	of(
 		agent: string,
 		kind: RouteKind,
@@ -154,7 +154,7 @@ export class Routes implements RoutingTable {
 	 * when an `agentMessage` finds no place; undefined when an `opening` finds none.
 	 */
 	of(name: string, kind: "integration", origin: ChannelKey): ChannelKey;
-	of(name: string, kind: "agentMessage", origin?: ChannelKey): ChannelKey;
+	of(name: string, kind: "agentMessage", origin: ChannelKey): ChannelKey;
 	of(
 		name: string,
 		kind: RouteKind,
@@ -201,39 +201,57 @@ export class Routes implements RoutingTable {
 	}
 
 	/**
-	 * The conversation a message to the agent lands in when the sender names none: with `latest`
-	 * the one it last ran a turn in, except that a message from a room never follows it out to
-	 * Discord, since the room's text may be for the owners alone; with none yet, the sender's own
-	 * surface when it hosts rooms, so a message between rooms stays among them; otherwise its
-	 * primary place.
+	 * The conversation a message to the agent lands in when the sender names none. By default
+	 * (`"origin-surface"`) its place on the sender's own surface: its Discord channel for a message
+	 * from Discord, its room for one from a room. `"latest"` is the conversation it last ran a turn
+	 * in, but only on the sender's surface. A message never crosses surfaces by recency: when the
+	 * agent has no place on the sender's surface, or no sender is known, it lands in the agent's
+	 * primary place, and a crossing is logged with both surfaces.
 	 */
 	#agentMessage(name: string, from: ChannelKey | undefined): ChannelKey {
-		const { store, roomSurfaces, latest } = this.#options;
-		const to = this.rules(name).agentMessage ?? "latest";
-		if (to !== "latest") {
+		const { latest } = this.#options;
+		const to = this.rules(name).agentMessage ?? "origin-surface";
+		if (to !== "latest" && to !== "origin-surface") {
 			const key =
 				to === "primary" ? this.primary(name) : this.placeOn(name, to);
 			if (key) return key;
 			this.#warn(
 				`message:${name}`,
 				{ agent: name, to },
-				"the agent has no place for messages to it; the conversation it last ran a turn in is used",
+				"the agent has no place for messages to it; its place on the sender's surface is used",
 			);
 		}
-		const via = from === undefined ? undefined : roomSurfaceOf(from);
-		const last = latest?.(name);
-		const keys = keysOf(store, name, roomSurfaces());
-		const outward =
-			via !== undefined &&
-			last !== undefined &&
-			roomSurfaceOf(last) === undefined;
-		if (last !== undefined && keys.includes(last) && !outward) return last;
-		if (via === undefined) {
-			const primary = this.primary(name);
-			if (!primary) throw new AgentError(`${name} has no channel yet.`);
-			return primary;
+		const surface =
+			from === undefined ? undefined : parseChannelKey(from).surface;
+		if (to === "latest" && surface !== undefined) {
+			const last = latest?.(name);
+			const keys = keysOf(
+				this.#options.store,
+				name,
+				this.#options.roomSurfaces(),
+			);
+			if (
+				last !== undefined &&
+				keys.includes(last) &&
+				parseChannelKey(last).surface === surface
+			)
+				return last;
 		}
-		return agentRoomKey(via, name);
+		const own = surface === undefined ? undefined : this.placeOn(name, surface);
+		if (own) return own;
+		const primary = this.primary(name);
+		if (!primary) throw new AgentError(`${name} has no channel yet.`);
+		if (surface !== undefined)
+			this.#warn(
+				`message-cross:${name}:${surface}`,
+				{
+					agent: name,
+					from: surface,
+					to: parseChannelKey(primary).surface,
+				},
+				"the agent has no place on the sender's surface; the message lands in its primary place",
+			);
+		return primary;
 	}
 
 	/**

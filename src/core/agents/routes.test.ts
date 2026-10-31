@@ -134,25 +134,42 @@ describe("without routing, every routed decision is what 0.26.2 decided", () => 
 			);
 			// R5: no place is named.
 			expect(table.place("ops")).toBeUndefined();
-			expect(warned).toEqual([]);
+			// A message from a surface the agent has no place on crosses to its primary place, and says so.
+			expect(warned).toEqual(
+				host === "web only"
+					? [
+							"the agent has no place on the sender's surface; the message lands in its primary place",
+						]
+					: [],
+			);
 		});
 	}
 
-	test("a message follows the agent's latest conversation, but never from a room out to Discord", () => {
+	test("a message stays on the sender's surface, whichever conversation the agent used last", () => {
 		const web = routes("discord + web", undefined, {
 			infra: "app:agent.infra",
 		}).table;
 		expect(web.of("infra", "agentMessage", "discord:4000")).toBe(
-			"app:agent.infra",
+			"discord:2000",
 		);
 		const out = routes("discord + web", undefined, {
 			infra: "discord:2000",
 		}).table;
-		expect(out.of("infra", "agentMessage", "discord:4000")).toBe(
-			"discord:2000",
-		);
 		expect(out.of("infra", "agentMessage", "app:agent.coder")).toBe(
 			"app:agent.infra",
+		);
+	});
+
+	test("`latest` follows the agent's last conversation only on the sender's surface", () => {
+		const latest = routing({ agents: { infra: { agentMessage: "latest" } } });
+		const { table } = routes("discord + web", latest, {
+			infra: "app:agent.infra",
+		});
+		expect(table.of("infra", "agentMessage", "app:agent.coder")).toBe(
+			"app:agent.infra",
+		);
+		expect(table.of("infra", "agentMessage", "discord:4000")).toBe(
+			"discord:2000",
 		);
 	});
 
@@ -252,15 +269,14 @@ describe("with routing", () => {
 		expect(warned).toHaveLength(1);
 	});
 
-	test("R6: `latest` stays the default even with an explicit primary place, and falls to the primary when there is none", () => {
+	test("R6: the sender's surface stays the default even with an explicit primary place", () => {
 		const known = routes("discord + web", infraOnWeb, {
-			infra: "discord:2000",
+			infra: "app:agent.infra",
 		}).table;
 		expect(known.of("infra", "agentMessage", "discord:4000")).toBe(
 			"discord:2000",
 		);
-		const fresh = routes("discord + web", infraOnWeb).table;
-		expect(fresh.of("infra", "agentMessage", "discord:4000")).toBe(
+		expect(known.of("infra", "agentMessage", "app:agent.coder")).toBe(
 			"app:agent.infra",
 		);
 	});

@@ -31,11 +31,12 @@ export interface AgentRoutes {
 	 */
 	integration?: "origin" | "primary" | (string & {});
 	/**
-	 * The conversation a `message_agent` call reaches when it names none. `"latest"` (default) is
-	 * the one the agent last ran a turn in, never carrying a message from a room out to Discord;
+	 * The conversation a `message_agent` call reaches when it names none. `"origin-surface"`
+	 * (default) is the agent's place on the sender's surface, else its primary place; `"latest"` the
+	 * one the agent last ran a turn in on the sender's surface, else as `"origin-surface"`;
 	 * `"primary"` the agent's primary place; a surface name the agent's place there.
 	 */
-	agentMessage?: "latest" | "primary" | (string & {});
+	agentMessage?: "origin-surface" | "latest" | "primary" | (string & {});
 	/**
 	 * Where an agent's opening task (`agent_create task`) runs. `"origin-surface"` (default) is the
 	 * agent's place on the surface the creation came from, else its primary place; `"primary"`
@@ -86,7 +87,7 @@ const DECLARED_PLACES: readonly string[] = ["ops"];
 export const ROUTE_WORDS = {
 	primary: ["auto"],
 	integration: ["origin", "primary"],
-	agentMessage: ["latest", "primary"],
+	agentMessage: ["origin-surface", "latest", "primary"],
 	opening: ["origin-surface", "primary"],
 } as const;
 

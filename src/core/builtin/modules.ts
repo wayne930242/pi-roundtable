@@ -31,6 +31,7 @@ import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { schedulesExtension } from "../modules/schedules/schedules.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
+import { runChannelFor } from "../presence/delivery-router.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import {
 	AGENTS,
@@ -130,23 +131,22 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				services.get(AGENTS).team.roomsOf(agent);
 			// A conversation no chat surface carries keeps its runs in the creator's direct messages, where
 			// a claim must take them; anyone's elsewhere would run in a conversation that is not theirs.
-			const channelFor = async (
+			// The delivery router picks those messages with the conversation as the origin.
+			const channelFor = (
 				channel: ChannelKey,
 				principalId: string,
 				refused: (message: string) => Error,
-			) => {
-				if (surfaces.of(channel)) return channel;
-				const reached = await directChannels.reach(principalId);
-				if (!reached)
-					throw refused(
-						"this conversation has no chat surface to post a run in, and you have no direct channel on this host to post it in instead",
-					);
-				if (!conversations.takesBackground(reached.channel))
-					throw refused(
-						`this conversation has no chat surface to post a run in, and nothing here takes background turns in your ${reached.provider.name} direct messages, where it would go instead`,
-					);
-				return reached.channel;
-			};
+			) =>
+				runChannelFor(
+					{
+						surfaces,
+						directChannels,
+						takesBackground: (key) => conversations.takesBackground(key),
+					},
+					channel,
+					principalId,
+					refused,
+				);
 			const scheduleChannelFor = (channel: ChannelKey, principalId: string) =>
 				channelFor(channel, principalId, (m) => new ScheduleError(m));
 			const delegateChannelFor = (channel: ChannelKey, principalId: string) =>
@@ -198,7 +198,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 					// Only whether a direct channel knows them, without the network; the conversation there,
 					// and whether a claim takes its turns, are checked when a tool runs.
 					try {
-						if (!(await directChannels.known(own))) return;
+						if (!(await directChannels.known(home, own))) return;
 					} catch (error) {
 						logger.warn(
 							{ channel: home, err: error },

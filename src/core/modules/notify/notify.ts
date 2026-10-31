@@ -19,7 +19,8 @@ export interface SessionNotify {
 
 /**
  * Registers notify for one session: it sends a notice to the person the conversation serves,
- * through the first direct channel that reaches them, and refuses when none does. Its 0.8 name,
+ * through the direct channel on the conversation's own surface (another only when that one cannot
+ * reach them), and refuses when none does. Its 0.8 name,
  * `notify_owner`, still names it in a selection and in `toolTiers` until 1.0 (`RENAMED_TOOLS`).
  */
 export function notifyExtension(
@@ -37,7 +38,7 @@ export function notifyExtension(
 		return {
 			name: "notify",
 			label: "Notify",
-			description: `Send ${o.name} ${notify.channels}. Use only when ${o.he} asks to be notified or reminded by DM; your normal reply already reaches ${o.him}.`,
+			description: `Send ${o.name} ${notify.channels}. It goes out on this conversation's own surface. Use only when ${o.he} asks to be notified or reminded; your normal reply already reaches ${o.him}.`,
 			parameters: Type.Object({
 				text: Type.String({ description: "The message to send." }),
 			}),

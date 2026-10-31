@@ -49,18 +49,20 @@ const onWeb: ResolvedRouting = {
 };
 
 describe("message_agent's default conversation goes through the routing table (R6)", () => {
-	test("without routing it is the latest conversation, as in 0.26.2", () => {
-		expect(target(undefined, "discord:2000", "discord:4000")).toBe(
+	test("without routing it is the target's place on the sender's surface, whatever it used last", () => {
+		expect(target(undefined, "app:agent.infra", "discord:4000")).toBe(
 			"discord:2000",
 		);
-		expect(target(undefined, undefined, "app:agent.coder")).toBe(
+		expect(target(undefined, "discord:2000", "app:agent.coder")).toBe(
 			"app:agent.infra",
 		);
 	});
 
-	test("an explicit primary place keeps `latest` as the default and is the fallback", () => {
-		expect(target(onWeb, "discord:2000", "discord:4000")).toBe("discord:2000");
-		expect(target(onWeb, undefined, "discord:4000")).toBe("app:agent.infra");
+	test("an explicit primary place leaves the sender's surface the default", () => {
+		expect(target(onWeb, "app:agent.infra", "discord:4000")).toBe(
+			"discord:2000",
+		);
+		expect(target(onWeb, undefined, "discord:4000")).toBe("discord:2000");
 	});
 
 	test("a rule that pins messages to the primary place ignores where the agent last ran", () => {

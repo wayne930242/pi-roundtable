@@ -366,6 +366,7 @@ describeDb("webchat core principals with a self-built JWKS", () => {
 			await a.close();
 			expect(
 				await h.ctx.directChannels.notify(
+					`web:${conversationA}`,
 					a.speaker.principalId,
 					"later notice",
 				),

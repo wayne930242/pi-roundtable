@@ -2081,7 +2081,7 @@
 			},
 			{
 				"name": "message_agent",
-				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in the one it used most recently, so work it started in the web app is answered there. Give conversation to choose another: \"discord\", \"web\", or one of the conversation keys agent_get lists for it. The request shows in its conversation, and the request and the answer show as small cards in yours.",
+				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in its conversation on the surface you are writing from (its room from a web room, its Discord channel from Discord), so nothing crosses surfaces unless you name it. Give conversation to choose another: \"discord\", \"web\", or one of the conversation keys agent_get lists for it. The request shows in its conversation, and the request and the answer show as small cards in yours.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -2100,14 +2100,14 @@
 						},
 						"conversation": {
 							"type": "string",
-							"description": "Which of the agent's conversations to deliver into: \"discord\", \"web\" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach the one it used most recently."
+							"description": "Which of the agent's conversations to deliver into: \"discord\", \"web\" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach its conversation on the surface you are writing from."
 						}
 					}
 				}
 			},
 			{
 				"name": "notify",
-				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
+				"description": "Send Ada a direct message on Discord. It goes out on this conversation's own surface. Use only when she asks to be notified or reminded; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -4499,7 +4499,7 @@
 			},
 			{
 				"name": "notify",
-				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
+				"description": "Send Ada a direct message on Discord. It goes out on this conversation's own surface. Use only when she asks to be notified or reminded; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -6242,7 +6242,7 @@
 			},
 			{
 				"name": "notify",
-				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
+				"description": "Send Ada a direct message on Discord. It goes out on this conversation's own surface. Use only when she asks to be notified or reminded; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8754,7 +8754,7 @@
 			},
 			{
 				"name": "message_agent",
-				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in the one it used most recently, so work it started in the web app is answered there. Give conversation to choose another: \"discord\", \"web\", or one of the conversation keys agent_get lists for it. The request shows in its conversation, and the request and the answer show as small cards in yours.",
+				"description": "Send a self-contained request to another agent. It returns at once; the agent works in its own conversation and its answer comes back to you as a new turn, in the conversation you are writing from. An agent has one conversation on each surface (Discord, the web app); by default the request lands in its conversation on the surface you are writing from (its room from a web room, its Discord channel from Discord), so nothing crosses surfaces unless you name it. Give conversation to choose another: \"discord\", \"web\", or one of the conversation keys agent_get lists for it. The request shows in its conversation, and the request and the answer show as small cards in yours.",
 				"parameters": {
 					"type": "object",
 					"required": [
@@ -8773,14 +8773,14 @@
 						},
 						"conversation": {
 							"type": "string",
-							"description": "Which of the agent's conversations to deliver into: \"discord\", \"web\" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach the one it used most recently."
+							"description": "Which of the agent's conversations to deliver into: \"discord\", \"web\" (or the name of another surface that hosts rooms), or a key from agent_get. Leave it out to reach its conversation on the surface you are writing from."
 						}
 					}
 				}
 			},
 			{
 				"name": "notify",
-				"description": "Send Ada a direct message on Discord. Use only when she asks to be notified or reminded by DM; your normal reply already reaches her.",
+				"description": "Send Ada a direct message on Discord. It goes out on this conversation's own surface. Use only when she asks to be notified or reminded; your normal reply already reaches her.",
 				"parameters": {
 					"type": "object",
 					"required": [

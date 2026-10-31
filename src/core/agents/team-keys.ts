@@ -88,6 +88,20 @@ export const roomSurfaceOf = (room: ChannelKey): string | undefined => {
 };
 
 /**
+ * The channel a group seat runs in outside a running turn: the group's room on the surface of the
+ * seat's home for a room seat, so it never falls out to the group's Discord channel; otherwise the
+ * group's Discord channel, or the seat's home.
+ */
+export function groupSeatChannel(
+	group: Pick<AgentGroup, "name" | "channelId">,
+	scope: Pick<AgentTurnScope, "home">,
+): ChannelKey {
+	const surface = roomSurfaceOf(scope.home);
+	if (surface !== undefined) return groupRoomKey(surface, group.name);
+	return group.channelId ? discordKey(group.channelId) : scope.home;
+}
+
+/**
  * An agent's conversation inside a group, apart from its own. In a Discord group channel, or
  * without a room, it is keyed by the channel; in a room of another surface, by the surface and the
  * group's name, so the room's seats are conversations of their own.

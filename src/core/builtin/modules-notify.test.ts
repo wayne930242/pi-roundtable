@@ -36,7 +36,7 @@ describe("notify", () => {
 		expect(rest).toEqual([]);
 		expect(notify?.name).toBe("notify");
 		expect((notify as unknown as { description: string }).description).toBe(
-			"Send Owner a direct message on Discord. Use only when they asks to be notified or reminded by DM; your normal reply already reaches them.",
+			"Send Owner a direct message on Discord. It goes out on this conversation's own surface. Use only when they asks to be notified or reminded; your normal reply already reaches them.",
 		);
 	});
 
@@ -65,11 +65,11 @@ describe("notify", () => {
 				),
 			),
 		).toBe(
-			"Send Ann a direct message on Discord. Use only when Ann asks to be notified or reminded by DM; your normal reply already reaches Ann.",
+			"Send Ann a direct message on Discord. It goes out on this conversation's own surface. Use only when Ann asks to be notified or reminded; your normal reply already reaches Ann.",
 		);
 		// In a shared conversation of a single-owner host only the owner may notify, so it names them.
 		expect(await description(contextOf(ANN, HOME))).toBe(
-			"Send Owner a direct message on Discord. Use only when they asks to be notified or reminded by DM; your normal reply already reaches them.",
+			"Send Owner a direct message on Discord. It goes out on this conversation's own surface. Use only when they asks to be notified or reminded; your normal reply already reaches them.",
 		);
 		// Once another owner, or anyone else, may use it, the notice is whoever speaks.
 		const second = { id: "p_bo", displayName: "Bo", disabled: false };
@@ -84,7 +84,7 @@ describe("notify", () => {
 		expect(
 			await description(contextOf(ANN, HOME), { tiers: { notify: "admin" } }),
 		).toBe(
-			"Send the speaker a direct message on Discord. Use only when the speaker asks to be notified or reminded by DM; your normal reply already reaches the speaker.",
+			"Send the speaker a direct message on Discord. It goes out on this conversation's own surface. Use only when the speaker asks to be notified or reminded; your normal reply already reaches the speaker.",
 		);
 	});
 

@@ -33,6 +33,7 @@ export function webDirectChannel(
 	};
 	return {
 		name: `webchat:${surface}`,
+		surface,
 		label: "a notice in the web inbox",
 		knows,
 		reaches: async (principalId) => {

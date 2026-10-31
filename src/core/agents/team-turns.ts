@@ -31,6 +31,7 @@ import {
 	coordinatorOf,
 	discordIdOf,
 	discordKey,
+	groupSeatChannel,
 	scopeOf,
 } from "./team-keys.ts";
 import {
@@ -429,10 +430,7 @@ export class TeamTurns {
 			: undefined;
 		if (!group) return scope.home;
 		// A seat of a room's group runs in that room; its running turn knows which.
-		return (
-			this.#posting.get(scope.session) ??
-			(group.channelId ? discordKey(group.channelId) : scope.home)
-		);
+		return this.#posting.get(scope.session) ?? groupSeatChannel(group, scope);
 	}
 
 	/**

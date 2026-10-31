@@ -24,22 +24,22 @@ function inbox(
 }
 
 describe("the direct channels", () => {
-	test("reach a person through the first provider, in contribution order, that reaches them", async () => {
+	test("reach a person on the origin's surface first, and on another only when none there reaches them", async () => {
 		const first = inbox("first", { ada: "first:ada" });
 		const second = inbox("second", { ada: "second:ada", bo: "second:bo" });
 		const port = directChannelsPort(() => [first, second], {
 			sendReply: async () => undefined,
 		});
 		expect(port.providers()).toEqual([first, second]);
-		expect(await port.reach("ada")).toEqual({
+		expect(await port.reach("first:room", "ada")).toEqual({
 			provider: first,
 			channel: "first:ada",
 		});
-		expect((await port.reach("bo"))?.channel).toBe("second:bo");
-		expect(await port.reach("kai")).toBeUndefined();
+		expect((await port.reach("first:room", "bo"))?.channel).toBe("second:bo");
+		expect(await port.reach("first:room", "kai")).toBeUndefined();
 	});
 
-	test("know a person by the first provider that knows them without the network, or else that reaches them", async () => {
+	test("know a person by the origin surface's provider, then another, that knows them without the network, or else that reaches them", async () => {
 		const offline: DirectChannelProvider = {
 			...inbox("offline", {}),
 			knows: async (principalId) => principalId === "ada",
@@ -51,9 +51,9 @@ describe("the direct channels", () => {
 		const port = directChannelsPort(() => [offline, second], {
 			sendReply: async () => undefined,
 		});
-		expect(await port.known("ada")).toBe(offline);
-		expect(await port.known("bo")).toBe(second);
-		expect(await port.known("kai")).toBeUndefined();
+		expect(await port.known("offline:room", "ada")).toBe(offline);
+		expect(await port.known("offline:room", "bo")).toBe(second);
+		expect(await port.known("offline:room", "kai")).toBeUndefined();
 	});
 
 	test("notify through the provider's own delivery, or else posts in the channel it reaches; false for someone none reaches", async () => {
@@ -69,9 +69,9 @@ describe("the direct channels", () => {
 					void posted.push({ channel, chunks: [...reply.chunks] }),
 			},
 		);
-		expect(await port.notify("ada", "one")).toBe(true);
-		expect(await port.notify("bo", "two")).toBe(true);
-		expect(await port.notify("kai", "three")).toBe(false);
+		expect(await port.notify("own:room", "ada", "one")).toBe(true);
+		expect(await port.notify("own:room", "bo", "two")).toBe(true);
+		expect(await port.notify("own:room", "kai", "three")).toBe(false);
 		expect(delivered).toEqual([
 			{ name: "own", principalId: "ada", text: "one" },
 		]);
@@ -99,13 +99,53 @@ describe("the direct channels", () => {
 			{ sendReply: async () => undefined },
 			{ warn: (...args: unknown[]) => void warned.push(args) },
 		);
-		expect(await port.notify("ada", "ping")).toBe(true);
+		expect(await port.notify("a:room", "ada", "ping")).toBe(true);
 		// A delivered, so only B is mirrored (A is not echoed its own delivery); the rejecting mirror is only logged.
 		expect(mirrored).toEqual([{ name: "b", principalId: "ada", text: "ping" }]);
 		expect(warned).toHaveLength(1);
 		// Nobody reached: nothing delivered, nothing mirrored.
 		mirrored.length = 0;
-		expect(await port.notify("kai", "ping")).toBe(false);
+		expect(await port.notify("a:room", "kai", "ping")).toBe(false);
 		expect(mirrored).toEqual([]);
+	});
+
+	test("prefer the provider on the origin's surface over an earlier one, and log a fallback with both surfaces", async () => {
+		const warned: { fields: Record<string, unknown>; message: string }[] = [];
+		const discord = inbox("discord", { ada: "discord:dm-ada" });
+		const web: DirectChannelProvider = {
+			...inbox("web:app", { ada: "app:home" }),
+			surface: "app",
+		};
+		const port = directChannelsPort(
+			() => [discord, web],
+			{ sendReply: async () => undefined },
+			{
+				warn: (fields: unknown, message?: string) =>
+					void warned.push({
+						fields: fields as Record<string, unknown>,
+						message: message ?? "",
+					}),
+			},
+		);
+		expect((await port.reach("app:agent.academic", "ada"))?.provider).toBe(web);
+		expect((await port.reach("discord:123", "ada"))?.provider).toBe(discord);
+		expect(warned).toEqual([]);
+		// Only Discord reaches Bo: a web conversation falls back to it, and says so.
+		const onlyDiscord = directChannelsPort(
+			() => [web, inbox("discord", { bo: "discord:dm-bo" })],
+			{ sendReply: async () => undefined },
+			{
+				warn: (fields: unknown, message?: string) =>
+					void warned.push({
+						fields: fields as Record<string, unknown>,
+						message: message ?? "",
+					}),
+			},
+		);
+		expect((await onlyDiscord.reach("app:room", "bo"))?.channel).toBe(
+			"discord:dm-bo",
+		);
+		expect(warned).toHaveLength(1);
+		expect(warned[0]?.fields).toMatchObject({ from: "app", to: "discord" });
 	});
 });
