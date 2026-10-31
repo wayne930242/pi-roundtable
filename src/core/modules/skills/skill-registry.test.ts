@@ -436,7 +436,10 @@ describeDb("PostgreSQL", () => {
 				},
 			]);
 			registry.groups()[0]?.skills.push("mutated");
-			expect(registry.groups()[0]?.skills).toEqual(["plan-work", "write-tests"]);
+			expect(registry.groups()[0]?.skills).toEqual([
+				"plan-work",
+				"write-tests",
+			]);
 			await refuses(
 				() => registry.setGroup("coding", " ", []),
 				"needs a description",

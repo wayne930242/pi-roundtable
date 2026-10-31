@@ -343,11 +343,7 @@ export class StoredSkillRegistry implements SkillRegistry {
 		return this.#removed(name, detached);
 	}
 
-	groups(): SkillGroup[] {
-		return this.#options.store
-			.groups()
-			.map((group) => ({ ...group, skills: [...group.skills] }));
-	}
+	readonly groups = (): SkillGroup[] => this.#options.store.groups();
 
 	async setGroup(
 		name: string,

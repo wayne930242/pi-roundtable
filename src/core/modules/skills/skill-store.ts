@@ -209,10 +209,11 @@ export class SkillStore {
 		return this.#skills.get(name);
 	}
 
+	/** Copies, by name, so a caller's change reaches no stored group. */
 	groups(): SkillGroup[] {
-		return [...this.#groups.values()].sort((a, b) =>
-			a.name.localeCompare(b.name),
-		);
+		return [...this.#groups.values()]
+			.map((group) => ({ ...group, skills: [...group.skills] }))
+			.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
 	group(name: string): SkillGroup | undefined {
