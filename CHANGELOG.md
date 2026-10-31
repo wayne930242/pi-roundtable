@@ -9,6 +9,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `SkillRegistry.groups()`, `setGroup(name, description, skills)` and `deleteGroup(name)` are part of the skill registry interface (`SkillGroup`: `name`, `description`, `skills`), so a host surface can manage skill groups. A group stays a filter and a list to apply once: an agent carries skills, not groups. `SkillRegistry` has three new required methods, so a hand-built stand-in must set them.
 
+### Changed
+
+- Delivery follows the conversation the work came from. One delivery router (`src/core/presence/delivery-router.ts`) decides where a notice or run for a person goes from its origin: a provider on the origin's surface first, another surface only when none there reaches the person, logged with both surfaces. A schedule made in a web room that calls `notify` now notices in the web app (Home notice and push) instead of a Discord direct message. The web app's push mirror of a notice Discord delivered stays, to the same person only.
+- Breaking: `DirectChannels.reach`, `known`, and `notify` take the origin `ChannelKey` first (`reach(origin, principalId)`, `notify(origin, principalId, text)`), and `DirectChannels` no longer extends `Notifier`. `DirectChannelProvider.surface` (optional, default `name`) names the surface a provider reaches; the Discord, web, and webchat providers set it.
+- `message_agent` without `conversation` reaches the target's place on the sender's surface (`routing.agents.<name>.agentMessage` default `origin-surface`), never the conversation it used most recently on another surface; with no place there it lands in the primary place, logged. `latest` now follows only on the sender's surface. `RoutingTable.of(agent, "agentMessage", origin)` requires the origin.
+- The notify tool's description says it goes out on the conversation's own surface.
+
+### Fixed
+
+- A group seat outside its running turn, such as after a start-over, stays in the group's room on its own surface instead of falling out to the group's Discord channel.
+
 ## [0.28.0] - 2026-10-31
 
 ### Added

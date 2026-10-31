@@ -69,7 +69,7 @@ member 的記憶工具讀寫的是那位 member 的記憶，不是 owner 的。
 | `schedule_update` | 修改排程的標題、提示詞或時間。 | `admin` |
 | `schedule_cancel` | 刪除排程。 | `admin` |
 | `delegate_task` | 把網路研究在背景交給比較便宜的 worker 模型。報告會以新的一輪回來。 | `admin` |
-| `notify` | 私訊這個對話服務的人。舊設定裡寫 `notify_owner` 的仍可使用，直到 1.0。 | `owner` |
+| `notify` | 在這段對話自己的 surface 上通知它服務的人：從 web room 是 web app 的通知加推播，從 Discord 是 Discord 私訊。舊設定裡寫 `notify_owner` 的仍可使用，直到 1.0。 | `owner` |
 
 ## Shell 和檔案
 

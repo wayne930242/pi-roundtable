@@ -117,12 +117,21 @@ The bot needs Create Public Threads for the thread; see [Set up the Discord bot]
 
 ## Direct messages to you
 
-`notify` (`notify_owner` in 0.8, still accepted until 1.0) sends you a direct message.
-An agent uses it only when you ask to be notified or reminded by direct message, because its normal reply already reaches you in the channel.
+`notify` (`notify_owner` in 0.8, still accepted until 1.0) sends you a notice on the surface of the conversation it came from: from a web app room, a notice on the web app's Home and a push to your devices; from Discord, a Discord direct message.
+An agent uses it only when you ask to be notified or reminded, because its normal reply already reaches you in the conversation.
 Only your own turns can use it.
 
 ```text
 Every Friday at 16:00, check the open tasks and send me the list by direct message.
 ```
+
+## Where things are delivered
+
+Everything an agent sends goes back to the conversation the work came from, on its surface.
+A schedule made in a web app room runs in that room, and its report and any notice it sends stay in the web app; one made in a Discord channel stays in Discord.
+The same holds for a delegated or coding task's thread and report, a question card, a timeout card, and a message between agents: `message_agent` without a conversation reaches the other agent's room when sent from a room, and its Discord channel when sent from Discord.
+
+Only when the conversation's own surface cannot reach you, for example you have no web app on a host where the schedule ran in a conversation without one, does a notice go to another surface, and the host logs that it did, naming both surfaces.
+The web app may also push to your phone a notice that Discord delivered: that echo goes only to you, never into a conversation.
 
 {/* Sources: src/core/shared/schedule-tools.ts:6-120, src/core/modules/schedules/schedule-tools.ts:18-190, src/core/modules/schedules/schedules.ts:28-95, src/core/modules/schedules/scheduler.ts:15-70, src/core/modules/schedules/recurrence.ts:13-60, src/core/agents/agent-claim.ts:31-40, src/core/builtin/modules.ts:43-60, src/core/discord/schedule-commands.ts:25-160, src/core/agents/team-lifecycle.ts:155-162, src/core/modules/delegation/delegator.ts:20-160, src/core/shared/delegate-tool.ts, src/core/modules/delegation/web-research-worker.ts:15-20, src/core/config/config.ts:290-300, src/core/modules/notify/notify.ts, src/core/discord/discord-surface.ts:327-330, src/core/modules/background/background-turns.ts:36-67, docs/plugins.md:305-318 */}

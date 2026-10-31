@@ -73,7 +73,7 @@ Any speaker can use it.
 
 An agent can hand a request to another agent with `message_agent`.
 It takes `to`, the other agent's name, and `text`, a self-contained request of up to 4,000 characters.
-An agent has one conversation on each surface, its Discord channel and its room in the web app, and the request lands in the one the target used most recently, so work it started in the web app is answered there.
+An agent has one conversation on each surface, its Discord channel and its room in the web app, and the request lands in the target's conversation on the sender's surface: its room when sent from a web room, its Discord channel when sent from Discord. It never follows the target onto another surface.
 An optional `conversation` picks another: `discord`, `web`, or one of the conversation keys `agent_get` lists.
 
 1. The call returns at once, so the sender keeps going.

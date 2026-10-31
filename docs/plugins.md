@@ -182,7 +182,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 | `observe(filter, observer)` | Hears inbound messages without owning or admitting them: [`observe`](#observe-hearing-messages-without-owning-them). Returns a function that stops it; may be called during `setup` |
-| `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(principalId)`, `known(principalId)`, and `notify(principalId, text)` |
+| `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(origin, principalId)`, `known(origin, principalId)`, and `notify(origin, principalId, text)`, each through the [delivery router](#where-things-are-delivered) |
 | `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
 `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, and `dashboard()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
@@ -2999,6 +2999,7 @@ setup: ({ services }) => ({
 	directChannels: [
 		{
 			name: "inbox",
+			surface: "chat",
 			label: "a notice in the web chat's inbox",
 			reaches: async (principalId) => inboxOf(principalId),
 			deliver: async (principalId, text) => postNotice(principalId, text),
@@ -3010,22 +3011,35 @@ setup: ({ services }) => ({
 | Field | What it is |
 |---|---|
 | `name` | Unique across every plugin; a second provider of one name is a `PluginError` naming both plugins |
+| `surface` | Optional: the surface whose conversations it reaches, the key prefix of the channels `reaches` names, such as `discord` or the web app's `app`. Work from a conversation on that surface reaches the person here first. Without it, `name` |
 | `label` | How the `notify` tool names a notice sent through it, completing "Send Ada …", such as `a direct message on Discord` |
 | `reaches(principalId)` | The person's own conversation here, as a channel key, or `undefined` when they have none here. It may reach the network and throw |
 | `knows(principalId)` | Optional: whether the person has a conversation here, from the host's own records such as their linked identities, without the network. A session asks it when it decides whether to offer `notify` or the schedule and delegation tools, so an outage then does not take them away; without it the host asks `reaches` |
 | `deliver(principalId, text)` | Optional: sends the notice itself. Without it the host posts the text in the channel `reaches` names, through the surface that serves it |
-| `mirror(principalId, text)` | Optional: echoes a notice another provider delivered, such as a web app pushing to a phone that Discord's direct message already reached. `notify` calls it on every provider but the one that delivered, only after a delivery; a failure is logged and never changes the result |
+| `mirror(principalId, text)` | Optional: echoes a notice another provider delivered to the same person, such as a web app pushing to a phone that Discord's direct message already reached. `notify` calls it on every provider but the one that delivered, only after a delivery; a failure is logged and never changes the result |
 
-The host reaches a person through the first provider, in contribution order, that reaches them.
-`context.directChannels.reach(principalId)` resolves that provider and channel, or `undefined`; `known(principalId)` resolves the first provider that knows the person without the network; `notify(principalId, text)` sends a notice there and resolves `false` when no provider reaches the person.
+Every lookup takes the *origin*: the conversation the work came from. The host reaches a person through a provider on the origin's surface, and through another only when none there reaches them, as [Where things are delivered](#where-things-are-delivered) describes.
+`context.directChannels.reach(origin, principalId)` resolves that provider and channel, or `undefined`; `known(origin, principalId)` resolves the provider that knows the person without the network, in the same order; `notify(origin, principalId, text)` sends a notice there and resolves `false` when no provider reaches the person.
 The Discord plugin contributes one named `discord`: it finds a principal's Discord identities through `IDENTITY` and reaches the first one's direct messages, the primary owner's configured identity first, so a single owner is reached in the same direct messages as in 0.8.
 
 The `notify` tool, 0.8's `notify_owner`, sends such a notice. A session has it only when a provider is contributed, and a private conversation only when a provider knows its person; the channel itself is reached when a notice is sent.
 It notifies the conversation's person in a private conversation and the turn's speaker in a shared one, and refuses when no provider reaches them or when the speaker is not the private conversation's person; the host's own turns, such as a report's, notify the conversation's person in a private conversation and the primary owner elsewhere, as `notify_owner` did.
-Its description names the channels that can reach the person, so a host with only Discord reads `Send Ada a direct message on Discord. …` as 0.8 did.
+It sends on the conversation's own surface: from a web room the web app's notice and push, from Discord a Discord direct message. Its description names the channel on that surface that can reach the person, and says it goes out on the conversation's own surface, such as `Send Ada a direct message on Discord. It goes out on this conversation's own surface. …`.
 In a shared conversation it names the primary owner while only they can receive a notice (the host has no other owner, and only owners may use it), and "the speaker" otherwise; this is checked again before each turn, so an open session follows an owner granted or revoked meanwhile.
 Until 1.0 the name `notify_owner` still selects it in a selection or a profile and names it in a task's `exclude` and a plugin's `requiredTools`, and an operator's or a plugin's `toolTiers` entry for `notify_owner` applies to `notify` unless `notify` has its own.
 Using the old name logs a deprecation warning once per logger, whether in a selection or in `toolTiers`.
+
+### Where things are delivered
+
+Everything the host sends goes back where the work came from. Every turn knows its *origin*, the conversation it runs in (a `ChannelKey` whose prefix is its surface), and so does everything a turn leaves behind: a schedule keeps the conversation it was made in, a delegated or coding job its channel and origin, a kept agent message its target's conversation and the sender's, a dispatch thread its parent. Nothing chooses a destination from a global default: not the first provider contributed, not the conversation an agent used most recently, not an agent's Discord channel.
+
+- **Replies, cards, and threads** go through `SurfacePort`, which picks the surface by the channel key's prefix: an `ask_user` card, a timeout card, a message's request and answer cards, a job's thread and report all land in the origin's conversation, on its surface.
+- **The delivery router** (`src/core/presence/delivery-router.ts`) is the one place that decides where a notice or run for a *person* goes. Given the origin, it tries the direct channels on the origin's surface first: a web conversation reaches the web app's channel (a Home notice and a push), a Discord conversation a Discord direct message. Only when no provider on that surface reaches the person does it try another surface, and it logs that fallback with both surfaces (`from`, `to`). `notify`, `context.directChannels`, and the run channel of a schedule or delegated task made in a conversation no chat surface carries (`runChannelFor`) all go through it.
+- **Mirroring** is the provider's own declaration: after a delivery, each other provider that implements `mirror` echoes the notice to the *same person*, such as the web app pushing to their phone a notice Discord delivered. It never sends to anyone else and never posts in a conversation.
+- **`message_agent`** without `conversation` reaches the target's place on the *sender's* surface: from a web room, the target's room on that surface; from Discord, the target's Discord channel. When the target has no place there, it lands in the target's primary place, and the crossing is logged. A routing rule may pin it elsewhere; `latest` follows the conversation the target last used only on the sender's surface.
+- **A group seat** outside its running turn, such as after a start-over, posts in the group's room on its own surface and never falls out to the group's Discord channel.
+
+`scripts/delivery-scan.test.ts` fails the build when code outside the router asks a provider to reach someone, walks the providers to pick one, or reads an agent's Discord channel id outside the files listed there; `src/core/presence/cross-surface.test.ts` starts each outbound feature from a web and from a Discord conversation and checks the other surface received nothing.
 
 ### `surfaces`: a chat network of your own
 
@@ -3087,7 +3101,7 @@ An agent has a *place* on each surface that holds one: its Discord channel, and 
 | `primary(agent)` | The primary place: the surface the rules name, and with `auto` the agent's Discord channel when it has one, else its room on the first surface that hosts rooms. Undefined for an unknown agent. |
 | `placeOn(agent, surface)` | The agent's place on a surface (`web` for the one surface that hosts rooms); undefined when it has none there. |
 | `of(agent, "integration", origin)` | Where the report turn of a foreign webhook's post made in `origin` runs; `origin` itself by default, and also when the destination has vanished. |
-| `of(agent, "agentMessage", from)` | The conversation a `message_agent` call that names none reaches: by default the agent's latest, never out of a room into Discord. Throws `AgentError` when the agent has no place. |
+| `of(agent, "agentMessage", from)` | The conversation a `message_agent` call that names none reaches: by default (`origin-surface`) the agent's place on the surface `from` is on, else its primary place, logged; it never crosses surfaces by recency. Throws `AgentError` when the agent has no place. |
 | `of(agent, "opening", origin?)` | Where an opening task runs: by default the agent's place on the surface `origin` is on, else its primary place; undefined when it has no place at all. |
 | `place("ops")` | A named place of the host: the conversation, or the primary place of the agent it names while that agent is active. |
 

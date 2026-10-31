@@ -178,7 +178,7 @@ agent 做的大部分事都由一個人開頭，並在那個人所在的地方�
 | --- | --- | --- | --- |
 | `routing.agents.<name>.primary` | `auto`，或 surface 名稱 | `auto` | agent 的 primary place。用 `"*"` 取代名稱就是所有 agent 的預設；agent 自己的鍵逐鍵優先。名稱對之後才建立的 agent 一樣適用。 |
 | `routing.agents.<name>.integration` | `origin`、`primary`，或 surface 名稱 | `origin` | 外部 webhook 在 agent 頻道的貼文，它的回報那一輪在哪裡跑。貼文本身留在原處；那一輪會寫出它來自哪個 place。目的地已經不在時，那一輪改在貼文發出的地方跑並記一則警告，絕不丟棄。 |
-| `routing.agents.<name>.agentMessage` | `latest`、`primary`，或 surface 名稱 | `latest` | 呼叫沒指定對話時 `message_agent` 送到哪。`latest` 是 agent 上次跑回合的那一段，從 room 發出的訊息不會跟著它出去到 Discord；沒有時退到寄件者所在的 room surface，再退到 primary place。`primary` 把訊息固定送到 primary place，即使是從 room 送進 Discord。呼叫裡明確指定對話，勝過所有規則。 |
+| `routing.agents.<name>.agentMessage` | `origin-surface`、`latest`、`primary`，或 surface 名稱 | `origin-surface` | 呼叫沒指定對話時 `message_agent` 送到哪。`origin-surface` 是 agent 在寄件者所在 surface 上的位置（從 room 發出就是它的 room，從 Discord 發出就是它的 Discord 頻道）；沒有時退到 primary place，並記一筆 log。`latest` 是 agent 上次跑回合的那一段，但只限寄件者所在的 surface，否則同 `origin-surface`。`primary` 把訊息固定送到 primary place，即使是從 room 送進 Discord。呼叫裡明確指定對話，勝過所有規則。 |
 | `routing.agents.<name>.opening` | `origin-surface`、`primary` | `origin-surface` | agent 的開場任務（`agent_create` 的 `task`）在哪裡跑：agent 在建立請求來源 surface 上的 place，沒有就用它的 primary place；或一律用它的 primary place。 |
 | `routing.agents.<name>.mirror` | surface 名稱的清單 | 無 | 保留；非空清單會讓啟動中止。 |
 | `routing.places.ops` | `"<surface>:<id>"`，或 `{ agent }` | 無 | 行程自己的錯誤回報送到哪，和 `ops.conversation`、`ops.agent` 一樣。agent 的寫法會落在該 agent 的 primary place，要有 agent server，但不必有 Discord。最上層的 `ops` 是已棄用的別名，1.0 會移除；兩者只能設一個。 |
