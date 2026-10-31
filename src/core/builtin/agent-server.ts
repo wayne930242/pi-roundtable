@@ -35,7 +35,6 @@ import {
 	RUNTIME,
 	SCHEDULES,
 	SKILLS,
-	THREADS,
 } from "../services.ts";
 import type { SessionTool } from "../sessions.ts";
 import type { Tier } from "../speakers.ts";
@@ -217,8 +216,6 @@ export function agentServerPlugin(
 		setup: async (context) => {
 			// Absent on a host without Discord: then the team has no channels or dashboard.
 			const discord = context.services.find(DISCORD);
-			// Dispatch threads on any surface that hosts them, Discord's or a room surface's.
-			const threads = context.services.find(THREADS);
 			const schedules = context.services.get(SCHEDULES);
 			const connection = discord?.connection;
 			const { logger, providers, surfaces } = context;
@@ -348,7 +345,6 @@ export function agentServerPlugin(
 				modes: () => context.services.find(MODES),
 				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
 				principals: () => context.services.find(IDENTITY),
-				...(threads ? { threads } : {}),
 				logger,
 			});
 			connection?.onChannelDeleted((channelId) => {

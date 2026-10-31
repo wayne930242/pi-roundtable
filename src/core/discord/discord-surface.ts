@@ -47,6 +47,7 @@ import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
 import { lateAnswerMessage } from "./inbound-message.ts";
+import type { IntercomTexts } from "./intercom-cards.ts";
 import { listenForMessages, reportChanges } from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
@@ -73,6 +74,8 @@ export interface DiscordSurfaceOptions {
 	freshMarker?: string | false;
 	/** What the model is told about how replies render here; `false` tells it nothing. Default: `DISCORD_FORMATTING`. */
 	formatting?: string | false;
+	/** Where the agents' message cards keep their whole texts for the open button; without it a card posts as text. */
+	intercomTexts?: IntercomTexts;
 	/** Reads the channel context of an addressed message; without it the surface has none. */
 	channelContext?: (
 		message: InboundMessage,
@@ -157,7 +160,11 @@ export class DiscordSurface
 
 	/** The agent server's channels and webhooks. */
 	agentChannels(guildId: string): AgentChannels {
-		return new DiscordAgentChannels(this.#client, guildId);
+		return new DiscordAgentChannels(
+			this.#client,
+			guildId,
+			this.#options.intercomTexts,
+		);
 	}
 
 	/** Threads for background dispatches, in the channel that started each. */

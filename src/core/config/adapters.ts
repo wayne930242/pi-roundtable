@@ -84,7 +84,8 @@ export interface DiscordConfig {
 	 * for `keepDays` (default 30), in `card-copies.json` under the data directory, so the buttons
 	 * work after a restart. `false` keeps them in memory only, with the same limits: they are gone
 	 * when the process restarts, and the button then says so. Discarding a conversation does not
-	 * remove them; they age out.
+	 * remove them; they age out. The whole texts behind the agents' message cards follow the same
+	 * choice and `keepDays`, the newest 300, in `intercom-texts.json`.
 	 */
 	cardCopies?: { keepDays?: number; keep?: number } | false;
 	/**

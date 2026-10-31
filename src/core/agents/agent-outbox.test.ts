@@ -42,6 +42,14 @@ async function coordinatorTurn(during: () => void): Promise<void> {
 	await settle();
 }
 
+/** The cards of messages between agents in the coordinator's channel, as `kind: text`. */
+const cards = () =>
+	fx.channels.posts.flatMap((p) =>
+		p.channelId === ENTRY && p.post.intercom
+			? [`${p.post.intercom.kind}: ${p.post.intercom.text}`]
+			: [],
+	);
+
 const coordinator = () => ({
 	name: "coordinator",
 	session: discordKey(ENTRY),
@@ -82,10 +90,14 @@ describeDb("agent messages that survive a stop", () => {
 			"infra",
 		]);
 
+		// The answer's card went out before the follow-up was refused.
+		expect(cards()).toEqual(["sent: check the disk", "answered: disk 40%"]);
+
 		await restart();
 
 		expect(fx.runtime.turns.map((t) => t.agent?.name)).toEqual(["coordinator"]);
 		expect(fx.runtime.turns[0]?.text).toContain("disk 40%");
+		expect(cards()).toEqual(["sent: check the disk", "answered: disk 40%"]);
 		expect(fx.runtime.turns[0]?.channel).toBe(discordKey(ENTRY));
 		expect(await fx.store.outbox.pending()).toEqual([]);
 	});
@@ -104,9 +116,16 @@ describeDb("agent messages that survive a stop", () => {
 			channel: agentChannel("infra"),
 		});
 
+		// The request's card shows at once; the answer's waits for the replay.
+		expect(cards()).toEqual(["sent: check the disk"]);
+
 		fx.runtime.reply = (r) =>
 			r.agent?.name === "infra" ? "disk 40%" : "noted";
 		await restart();
+		// The replayed answer's card follows the request's, which is not posted again.
+		expect(cards()).toHaveLength(2);
+		expect(cards()[0]).toBe("sent: check the disk");
+		expect(cards()[1]).toStartWith("answered: ");
 		// restart() replaced the runtime; the replayed turns ran on the new one before it settled.
 		expect(fx.runtime.turns.map((t) => t.agent?.name)).toEqual([
 			"infra",

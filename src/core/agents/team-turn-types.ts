@@ -3,6 +3,7 @@ import type { SurfacePort } from "../contract/surface.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
+	IntercomCard,
 	PendingConfirmation,
 	TurnResult,
 } from "../domain/conversation.ts";
@@ -14,10 +15,6 @@ import type { EventSink } from "../plugin.ts";
 import type { AvatarStudio } from "../services.ts";
 import type { TurnSelection } from "../sessions.ts";
 import type { Speaker } from "../speakers.ts";
-import type {
-	DispatchThread,
-	DispatchThreads,
-} from "../threads/dispatch-threads.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
 import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
@@ -34,12 +31,6 @@ export interface Chain {
 	messages: number;
 	/** Whoever started the run; the agents it wakes work for the same person. */
 	speaker: Speaker;
-}
-
-/** A message's thread in the sender's turn channel, which holds the request and the answer. */
-export interface Exchange {
-	parent: ChannelKey;
-	thread: DispatchThread;
 }
 
 export interface TeamTurnsOptions {
@@ -99,8 +90,6 @@ export interface TeamTurnsOptions {
 	 * stored speaker is kept.
 	 */
 	principals?: () => Pick<IdentityService, "speakerFor"> | undefined;
-	/** A thread for each message between agents; without it both go in the sender's channel. */
-	threads?: Pick<DispatchThreads, "open">;
 }
 
 /** How a turn runs, beyond its text. */
@@ -150,7 +139,12 @@ export interface TurnHost {
 	post(
 		channel: ChannelKey,
 		as: Agent,
-		body: { thinking?: string; chunks: string[]; threadId?: string },
+		body: {
+			thinking?: string;
+			chunks: string[];
+			threadId?: string;
+			intercom?: IntercomCard;
+		},
 	): Promise<void>;
 	/** The agent's latest row. */
 	current(agent: Agent): Agent;

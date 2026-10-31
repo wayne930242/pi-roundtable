@@ -1,9 +1,9 @@
-import type { ChannelKey } from "../domain/conversation.ts";
+import type { ChannelKey, IntercomCard } from "../domain/conversation.ts";
 import { AgentError, IdentityError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { HostStoppingError } from "../errors.ts";
-import { messages } from "../i18n/index.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { addressee, type Speaker } from "../speakers.ts";
@@ -14,14 +14,12 @@ import {
 	agentReplyText,
 	chainLimitReason,
 	deliveredMessagePost,
-	returnedAnswerPost,
 } from "./agent-prompt.ts";
 import type { Agent } from "./agent-store.ts";
 import { conversationLabel, messageTarget } from "./message-target.ts";
 import { discordIdOf, discordKey, scopeOf } from "./team-keys.ts";
 import {
 	type Chain,
-	type Exchange,
 	MAX_CHAIN_MESSAGES,
 	type TurnHost,
 } from "./team-turn-types.ts";
@@ -90,25 +88,18 @@ export class AgentMessages {
 		chain.messages += 1;
 		// A temp knight is working from the moment a message is handed to it until it has answered.
 		this.#host.helpers.begin(target.name);
-		// The thread opens in the sender's turn channel, on its surface when that hosts threads; a
-		// surface that hosts none leaves the answer returning to the sender's conversation.
-		const exchange = this.#openExchange(parent, sender, target, text);
+		// The request shows in the sender's turn channel as a small card under the sender's name.
+		this.#card(parent, sender, {
+			kind: "sent",
+			peer: this.#peer(target),
+			text,
+		});
 		void queue
 			.run(targetChannel, async () =>
-				this.#deliver(
-					sender,
-					target,
-					text,
-					chain,
-					await exchange,
-					targetChannel,
-					parent,
-				),
+				this.#exchange(sender, target, text, chain, targetChannel, parent),
 			)
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
-					// Refused before it started: the thread it opened has nothing more to hold.
-					void exchange.then((opened) => opened?.thread.close());
 					this.#keep({
 						kind: "message",
 						sender: sender.name,
@@ -139,69 +130,36 @@ export class AgentMessages {
 		return `Sent to "${target.displayName}" in its ${conversationLabel(targetChannel)}. It works there; its answer comes back to you as a new turn.`;
 	}
 
+	/** The other agent of a card, as it is named now. */
+	#peer(agent: Agent): IntercomCard["peer"] {
+		const current = this.#host.current(agent);
+		return { name: current.name, displayName: current.displayName };
+	}
+
 	/**
-	 * Opens the message's thread in the sender's turn channel, a Discord channel or a room, and
-	 * posts the request there under the sender's name; undefined where no thread opens. Never
-	 * rejects.
+	 * Posts a card of the exchange in the channel under `as`'s name: the card where the channel's
+	 * surface shows cards, and its heading and text where it shows none. Never rejects.
 	 */
-	async #openExchange(
-		parent: ChannelKey,
-		sender: Agent,
-		target: Agent,
-		text: string,
-	): Promise<Exchange | undefined> {
-		const thread = await this.#host.options.threads?.open(
-			parent,
-			`→ ${target.displayName}`,
-		);
-		if (!thread) return undefined;
-		await this.#host
-			.post(parent, this.#host.current(sender), {
-				chunks: splitReply(
-					deliveredMessagePost(this.#host.current(target), text),
-				),
-				threadId: thread.id,
+	#card(channel: ChannelKey, as: Agent, card: IntercomCard): Promise<void> {
+		return this.#host
+			.post(channel, this.#host.current(as), {
+				chunks: splitReply(intercomPlain(card)),
+				intercom: card,
 			})
 			.catch((error: unknown) =>
 				this.#host.options.logger.warn(
-					{ err: error },
-					"agent request not threaded",
+					{ channel, kind: card.kind, err: error },
+					"agent message card not posted",
 				),
 			);
-		return { parent, thread };
 	}
 
-	/** Runs the target's turn, then posts its answer and wakes the sender; closes the thread either way. */
-	async #deliver(
-		sender: Agent,
-		target: Agent,
-		text: string,
-		chain: Chain,
-		exchange: Exchange | undefined,
-		targetChannel: ChannelKey,
-		senderChannel: ChannelKey,
-	): Promise<void> {
-		try {
-			await this.#exchange(
-				sender,
-				target,
-				text,
-				chain,
-				exchange,
-				targetChannel,
-				senderChannel,
-			);
-		} finally {
-			await exchange?.thread.close();
-		}
-	}
-
+	/** Runs the target's turn, then shows its answer in the sender's channel and wakes the sender. */
 	async #exchange(
 		sender: Agent,
 		target: Agent,
 		text: string,
 		chain: Chain,
-		exchange: Exchange | undefined,
 		targetChannel: ChannelKey,
 		senderChannel: ChannelKey,
 	): Promise<void> {
@@ -223,9 +181,6 @@ export class AgentMessages {
 			chain,
 			{ unattended: true },
 		);
-		const thread = exchange?.thread;
-		if (thread && !result.ok)
-			await thread.close(messages().agentNoReply(result.error.message));
 		// A target with nothing to answer sends nothing back and wakes nobody.
 		if (isQuiet(result)) {
 			logger.info(
@@ -236,29 +191,22 @@ export class AgentMessages {
 		}
 		const current = this.#host.options.store.agent(sender.name);
 		if (current?.status !== "active") return;
-		// With a thread the answer goes there, leaving the sender's channel its own reply.
-		if (result.ok)
-			await this.#host
-				.post(senderChannel, this.#host.current(target), {
-					chunks: splitReply(returnedAnswerPost(result.text)),
-					...(thread ? { threadId: thread.id } : {}),
-				})
-				.catch((error: unknown) =>
-					logger.error({ err: error }, "agent answer not posted back"),
-				);
-		await thread?.close();
+		// The answer, or why none came, shows in the sender's channel as a small card.
+		await this.#card(senderChannel, target, {
+			kind: result.ok ? "answered" : "failed",
+			peer: this.#peer(target),
+			text: result.ok ? result.text : result.error.message,
+		});
 		const followUp = result.ok
 			? agentReplyText(
 					addressee(chain.speaker, this.#host.options.owner),
 					this.#host.current(target),
 					result.text,
-					thread?.mention,
 				)
 			: agentFailureText(
 					addressee(chain.speaker, this.#host.options.owner),
 					this.#host.current(target),
 					result.error.message,
-					thread?.mention,
 				);
 		// The answer is a report back to the sender, so its turn may ask the owner on cards.
 		void queue
@@ -407,7 +355,7 @@ export class AgentMessages {
 			await this.#followUp(sender, entry.channel, entry.text, chain);
 			return;
 		}
-		// Its thread was closed when the host refused it, so the answer returns to the sender's conversation.
+		// Its request card was posted when it was sent; the answer's card follows as it would have.
 		this.#host.helpers.begin(target.name);
 		try {
 			await this.#exchange(
@@ -415,7 +363,6 @@ export class AgentMessages {
 				target,
 				entry.text,
 				chain,
-				undefined,
 				entry.channel,
 				origin,
 			);

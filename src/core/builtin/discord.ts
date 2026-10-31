@@ -5,6 +5,7 @@ import type {
 	ChannelContextOptions,
 } from "../contract/channel-context.ts";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
+import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -15,6 +16,7 @@ import type {
 	CommandGuard,
 	CommandRegistrar,
 } from "../discord/interaction-module.ts";
+import { intercomButtonModule } from "../discord/intercom-cards.ts";
 import { OwnerCards } from "../discord/owner-cards.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import type { DiscordPoster } from "../discord/poster/poster.ts";
@@ -88,10 +90,14 @@ export interface DiscordOptions {
 	 * How the texts behind approval cards' copy buttons are kept: the newest `keep` (default 100)
 	 * for `keepDays` (default 30), in `card-copies.json` under `dataDir`, so the buttons work after
 	 * a restart. `false` keeps them in memory only, with the same limits: they are gone when the
-	 * process restarts and the button then says so.
+	 * process restarts and the button then says so. The whole texts behind the agents' message
+	 * cards follow the same choice and `keepDays`, the newest 300, in `intercom-texts.json`.
 	 */
 	cardCopies?: { keepDays?: number; keep?: number } | false;
 }
+
+/** How many agent message cards keep their whole text for the open button, the newest. */
+const INTERCOM_KEEP = 300;
 
 /**
  * The Discord connection and what stands on it: the owner's cards, the command guard, and the
@@ -114,11 +120,24 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 		setup: async ({ conversations, services, logger }) => {
 			const identity = services.find(IDENTITY);
 			// A host that keeps no copy texts on disk drops what an earlier run left.
-			if (options.cardCopies === false) {
-				const file = join(options.dataDir, "card-copies.json");
-				rmSync(file, { force: true });
-				rmSync(`${file}.tmp`, { force: true });
-			}
+			if (options.cardCopies === false)
+				for (const name of ["card-copies.json", "intercom-texts.json"]) {
+					const file = join(options.dataDir, name);
+					rmSync(file, { force: true });
+					rmSync(`${file}.tmp`, { force: true });
+				}
+			// The whole texts behind the agents' message cards, kept as the copy texts are.
+			const intercomTexts = new CardCopies({
+				...(options.cardCopies === false
+					? {}
+					: { path: join(options.dataDir, "intercom-texts.json") }),
+				keep: INTERCOM_KEEP,
+				...(options.cardCopies
+					? { keepDays: options.cardCopies.keepDays }
+					: {}),
+				logger,
+				what: "agent message texts",
+			});
 			// The surface exists by the time a turn posts a card.
 			const cards: OwnerCards = new OwnerCards({
 				ownerId: options.ownerId,
@@ -142,6 +161,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				ownerId: options.ownerId,
 				ownerName: options.ownerName,
 				prompts: (channel, scope) => cards.prompts(channel, scope),
+				intercomTexts,
 				// Built below, once the surface can read messages; called only after setup.
 				channelContext: (message, given) => context.of(message, given),
 				logger,
@@ -171,6 +191,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			collection.registrar.add({
 				module: stopButtonModule({ guard, conversations }),
 			});
+			collection.registrar.add({ module: intercomButtonModule(intercomTexts) });
 			// Marks the owners in channel context: the primary owner, and every other owner's Discord identities.
 			const owners = new DiscordOwners({
 				ownerId: options.ownerId,
@@ -210,8 +231,14 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					// The copy texts of the last cards are on disk before the host exits.
 					{
 						name: "card-copies",
-						start: () => cards.startCopies(),
-						stop: () => cards.stopCopies(),
+						start: () => {
+							cards.startCopies();
+							intercomTexts.start();
+						},
+						stop: async () => {
+							await cards.stopCopies();
+							await intercomTexts.stop();
+						},
 					},
 				],
 			};

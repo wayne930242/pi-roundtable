@@ -35,6 +35,8 @@ export interface CardCopiesOptions {
 	setInterval?: typeof setInterval;
 	/** Replaceable in tests, with `setInterval`. */
 	clearInterval?: typeof clearInterval;
+	/** What the texts are, as the log names them; default "card copy texts". */
+	what?: string;
 }
 
 /**
@@ -69,7 +71,7 @@ export class CardCopies {
 		} catch (error) {
 			logger.warn(
 				{ path, err: error },
-				"card copy texts not read; copy buttons of earlier cards will say they are gone",
+				`${options.what ?? "card copy texts"} not read; buttons of earlier cards will say they are gone`,
 			);
 		}
 	}
@@ -172,7 +174,10 @@ export class CardCopies {
 			await chmod(temporary, 0o600);
 			await rename(temporary, path);
 		} catch (error) {
-			logger.warn({ path, err: error }, "card copy texts not saved");
+			logger.warn(
+				{ path, err: error },
+				`${this.#options.what ?? "card copy texts"} not saved`,
+			);
 		}
 	}
 }

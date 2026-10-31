@@ -2,6 +2,7 @@ import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type {
 	ChannelKey,
+	IntercomCard,
 	PendingConfirmation,
 	PostAuthor,
 	ReplyFile,
@@ -363,6 +364,7 @@ export class TeamTurns {
 			files?: ReplyFile[];
 			threadId?: string;
 			failed?: true;
+			intercom?: IntercomCard;
 		},
 	): Promise<void> {
 		const { store, channels, studio, surfaces, logger } = this.#options;
@@ -378,7 +380,7 @@ export class TeamTurns {
 		if (discordIdOf(channel) === undefined) {
 			if (!surfaces)
 				throw new AgentError(`no surface serves the room ${channel}`);
-			const { thinking, chunks, files, threadId } = rest;
+			const { thinking, chunks, files, threadId, intercom } = rest;
 			// A thread of the room's surface is a channel of that surface, and speaks there.
 			return surfaces.sendReply(
 				threadId === undefined
@@ -390,6 +392,7 @@ export class TeamTurns {
 					...(files?.length ? { files } : {}),
 					author: this.#author(as),
 					...(failed ? { failed } : {}),
+					...(intercom ? { intercom } : {}),
 				},
 			);
 		}
