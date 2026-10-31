@@ -13,6 +13,7 @@ import {
 	channelKey,
 	characterOf,
 	groupRoomKey,
+	helperSurface,
 	isHelper,
 	roomOf,
 } from "pi-roundtable";
@@ -74,6 +75,8 @@ const THREAD_ID = /^thread\.[0-9a-f-]{36}$/;
  */
 export class Rooms {
 	readonly #options: RoomsOptions;
+	/** The rooms of temp knights made on Discord that someone opened by their address here. */
+	readonly #opened = new Set<string>();
 
 	constructor(options: RoomsOptions) {
 		this.#options = options;
@@ -204,6 +207,19 @@ export class Rooms {
 		};
 	}
 
+	/**
+	 * The view of a temp knight's room that the list leaves out, opened by its address: from then on
+	 * the list shows it. Undefined for any other room.
+	 */
+	async openHelper(key: ChannelKey): Promise<RoomView | undefined> {
+		const room = await this.resolve(key);
+		if (room?.kind !== "agent") return undefined;
+		const agent = this.#options.directory.agent(room.name);
+		if (helperSurface(agent) !== "discord") return undefined;
+		this.#opened.add(room.name);
+		return (await this.list()).find((one) => one.key === key);
+	}
+
 	async list(): Promise<RoomView[]> {
 		const { surface, directory, modes, mutes, activity, log, threads } =
 			this.#options;
@@ -274,9 +290,21 @@ export class Rooms {
 		// Home first; the others keep the team's order.
 		rooms.sort((a, b) => Number(b.home) - Number(a.home));
 		const last = await log.lastOf(rooms.map((room) => room.key));
-		return rooms.map((room) => {
+		// A temp knight made on Discord works there: its room here shows once it has a message or
+		// someone opened it by its address.
+		const quiet = new Set<string>(
+			agents
+				.filter(
+					(agent) =>
+						helperSurface(agent) === "discord" && !this.#opened.has(agent.name),
+				)
+				.map((agent) => agentRoomKey(surface, agent.name))
+				.filter((key) => !last.has(key)),
+		);
+		return rooms.flatMap((room) => {
+			if (quiet.has(room.key)) return [];
 			const message = last.get(room.key);
-			return message ? { ...room, last: message } : room;
+			return [message ? { ...room, last: message } : room];
 		});
 	}
 }

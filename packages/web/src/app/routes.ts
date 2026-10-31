@@ -586,8 +586,11 @@ export class AppApi {
 		const room = await rooms.resolve(key);
 		if (!room) throw notFound();
 		if (!action && method === "GET") {
-			// A thread dismissed from the list still opens by its address; the page asks for its view.
-			const view = await rooms.threadView(room.key);
+			// A thread dismissed from the list, or a temp knight's room the list leaves out, still opens
+			// by its address; the page asks for its view.
+			const view =
+				(await rooms.threadView(room.key)) ??
+				(await rooms.openHelper(room.key));
 			if (!view) throw notFound();
 			return json({ room: view } satisfies RoomOneView);
 		}

@@ -67,6 +67,7 @@ function setup() {
 				known.get(key)?.kind === "thread"
 					? ({ key, kind: "thread", closed: true } as unknown as RoomView)
 					: undefined,
+			openHelper: async () => undefined,
 			placeable: () => new Set(),
 			homeKey: () => GUIDE,
 			list: async () =>

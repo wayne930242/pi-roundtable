@@ -10,7 +10,11 @@ const agent = (name: string, status: Agent["status"] = "active"): Agent => ({
 	status,
 });
 
-function rooms(agents: Agent[], coordinator: string | undefined) {
+function rooms(
+	agents: Agent[],
+	coordinator: string | undefined,
+	last: Map<string, unknown> = new Map(),
+) {
 	return new Rooms({
 		surface: "app",
 		mount: "/console",
@@ -23,7 +27,14 @@ function rooms(agents: Agent[], coordinator: string | undefined) {
 		team: { coordinator: () => coordinator },
 		avatars: { url: () => "/avatars/x.png" },
 		threads: { get: async () => undefined, list: async () => [] },
-		log: { lastOf: async () => new Map() },
+		log: {
+			lastOf: async (keys: readonly string[]) =>
+				new Map(
+					keys.flatMap((key) =>
+						last.has(key) ? [[key, last.get(key)] as const] : [],
+					),
+				) as never,
+		},
 		modes: { peek: () => ({ yolo: false, longRunning: false }) },
 		mutes: { all: async () => new Set() },
 		activity: () => ({ typing: false, stoppable: false }),
@@ -80,4 +91,44 @@ test("a room shows an inherited mode with the name of where it comes from, or it
 		longRunning: false,
 		inheritedFrom: "app:agent.infra",
 	});
+});
+
+const helper = (name: string, origin: string): Agent => ({
+	...agent(name),
+	parent: "boss",
+	origin,
+});
+
+test("a temp knight made on Discord shows here once its room has a message", async () => {
+	const team = [
+		agent("boss"),
+		helper("boss-1", "discord:1000"),
+		helper("boss-2", "app:agent.boss"),
+		{ ...agent("boss-3"), parent: "boss" },
+	];
+	const names = async (last?: Map<string, unknown>) =>
+		(await rooms(team, "boss", last).list()).map((room) => room.name);
+	// The web-born one and one made before the origin was kept show as before.
+	expect(await names()).toEqual(["boss", "boss-2", "boss-3"]);
+	expect(
+		await names(new Map([["app:agent.boss-1", { id: 1, text: "hi" }]])),
+	).toEqual(["boss", "boss-1", "boss-2", "boss-3"]);
+});
+
+test("a temp knight made on Discord shows here once it is opened by its address", async () => {
+	const directory = rooms(
+		[agent("boss"), helper("boss-1", "discord:1000")],
+		"boss",
+	);
+	expect((await directory.list()).map((room) => room.name)).toEqual(["boss"]);
+	const opened = await directory.openHelper("app:agent.boss-1" as ChannelKey);
+	expect(opened?.helper?.parent).toBe("app:agent.boss");
+	expect((await directory.list()).map((room) => room.name)).toEqual([
+		"boss",
+		"boss-1",
+	]);
+	// No other room opens this way.
+	expect(
+		await directory.openHelper("app:agent.boss" as ChannelKey),
+	).toBeUndefined();
 });
