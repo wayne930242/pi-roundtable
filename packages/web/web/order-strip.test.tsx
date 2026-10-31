@@ -27,7 +27,7 @@ const crew: RoomView = {
 	displayName: "Crew",
 	home: false,
 	readOnly: false,
-	members: ["guide", "scout", "mason"],
+	members: ["osguide", "osscout", "osmason"],
 	mode: { yolo: false, longRunning: false },
 	typing: false,
 	stoppable: false,
@@ -60,7 +60,7 @@ afterAll(async () => {
 const show = async (frame?: RoundView) => {
 	store.dispatch({
 		type: "rooms_loaded",
-		rooms: [agent("guide"), agent("scout"), agent("mason"), crew],
+		rooms: [agent("osguide"), agent("osscout"), agent("osmason"), crew],
 	});
 	if (frame) store.dispatch({ type: "round", room: CREW, round: frame });
 	await page.render(<OrderStrip roomKey={CREW} />);
@@ -81,23 +81,23 @@ test("nothing shows until a round has run in the room", async () => {
 test("a running round lists who spoke with a check, who speaks, and who is next with numbers, and says which reply it is on", async () => {
 	await show(
 		round({
-			spoken: ["guide"],
-			current: "scout",
-			next: ["mason", "guide"],
+			spoken: ["osguide"],
+			current: "osscout",
+			next: ["osmason", "osguide"],
 			replies: 1,
 		}),
 	);
 	expect(faces()).toEqual([
-		["spoken", "GUIDE", "✓"],
-		["current", "SCOUT", ""],
-		["next", "MASON", "1"],
-		["next", "GUIDE", "2"],
+		["spoken", "OSGUIDE", "✓"],
+		["current", "OSSCOUT", ""],
+		["next", "OSMASON", "1"],
+		["next", "OSGUIDE", "2"],
 	]);
 	expect(chip()).toBe("Reply 2 of 8");
 });
 
 test("the strip follows the round's frames, and each end says how it ended", async () => {
-	await show(round({ current: "guide", next: ["scout"] }));
+	await show(round({ current: "osguide", next: ["osscout"] }));
 	expect(chip()).toBe("Reply 1 of 8");
 	const send = (over: Partial<RoundView>) =>
 		page.act(() =>
@@ -106,7 +106,7 @@ test("the strip follows the round's frames, and each end says how it ended", asy
 	await send({
 		state: "ended",
 		ended: "done",
-		spoken: ["guide", "scout"],
+		spoken: ["osguide", "osscout"],
 		replies: 2,
 	});
 	expect(chip()).toBe("2 of 8 replies");
@@ -116,22 +116,22 @@ test("the strip follows the round's frames, and each end says how it ended", asy
 	await send({
 		state: "ended",
 		ended: "limit",
-		spoken: ["guide", "scout"],
-		next: ["guide"],
+		spoken: ["osguide", "osscout"],
+		next: ["osguide"],
 		replies: 8,
 	});
 	expect(chip()).toBe("Limit reached");
 	await send({
 		state: "ended",
 		ended: "stopped",
-		spoken: ["guide"],
+		spoken: ["osguide"],
 		replies: 1,
 	});
 	expect(chip()).toBe("Round stopped");
 });
 
 test("an owner message waiting for the next round is said while the round runs", async () => {
-	await show(round({ current: "guide", queued: 1 }));
+	await show(round({ current: "osguide", queued: 1 }));
 	expect(page.container.querySelector(".order-queued")?.textContent).toBe(
 		"Your message waits for the next round",
 	);
@@ -139,14 +139,14 @@ test("an owner message waiting for the next round is said while the round runs",
 		store.dispatch({
 			type: "round",
 			room: CREW,
-			round: round({ current: "guide" }),
+			round: round({ current: "osguide" }),
 		}),
 	);
 	expect(page.container.querySelector(".order-queued")).toBeNull();
 });
 
 test("a screen reader hears each face's place, and the list is named", async () => {
-	await show(round({ spoken: ["guide"], current: "scout", next: ["mason"] }));
+	await show(round({ spoken: ["osguide"], current: "osscout", next: ["osmason"] }));
 	expect(
 		page.container.querySelector(".order-faces")?.getAttribute("aria-label"),
 	).toBe("Speaking order");
@@ -154,8 +154,8 @@ test("a screen reader hears each face's place, and the list is named", async () 
 		(one) => one.textContent,
 	);
 	expect(heard).toEqual([
-		"GUIDE, has spoken",
-		"SCOUT, speaking",
-		"MASON, next",
+		"OSGUIDE, has spoken",
+		"OSSCOUT, speaking",
+		"OSMASON, next",
 	]);
 });
