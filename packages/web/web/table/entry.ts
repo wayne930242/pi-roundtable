@@ -173,7 +173,7 @@ export async function mountRoundTable(
 	// The menu's gestures (a hold, a right click, the Menu key) are the page's; their code loads only when the page asks.
 	let detachMenu: (() => void) | undefined;
 	const onSeatMenu = opts.onSeatMenu;
-	if (onSeatMenu && !compact) {
+	if (onSeatMenu) {
 		const { attachSeatMenu } = await import("./seat-menu");
 		detachMenu = attachSeatMenu(
 			root,

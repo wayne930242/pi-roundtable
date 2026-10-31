@@ -21,7 +21,13 @@ import {
 	uploadForSend,
 	usedSlots,
 } from "../lib/attach.ts";
-import { draftOf, keepDraft, onDraftInserted } from "../lib/drafts.ts";
+import {
+	draftOf,
+	keepDraft,
+	onDraftInserted,
+	onMentionRequested,
+	withMention,
+} from "../lib/drafts.ts";
 import { size as bytes } from "../lib/format.ts";
 import { composingKey } from "../lib/ime.ts";
 import { hasLeadingAiMention } from "../lib/mention.ts";
@@ -102,6 +108,28 @@ export function Composer(props: {
 			setText(next);
 		});
 	}, [draftKey]);
+	/** Where a mention put the caret; the box takes it once it shows the text. */
+	const caretAt = useRef<number | undefined>(undefined);
+	useEffect(() => {
+		if (draftKey === undefined) return;
+		return onMentionRequested(draftKey, (name) => {
+			const element = area.current;
+			// The box in use takes the mention where its caret is; otherwise it goes after the text.
+			const inBox = element !== null && document.activeElement === element;
+			const made = inBox
+				? withMention(
+						element.value,
+						name,
+						element.selectionStart,
+						element.selectionEnd,
+					)
+				: withMention(element?.value ?? draftOf(draftKey), name);
+			caretAt.current = made.caret;
+			typed.current = made.text;
+			setText(made.text);
+			element?.focus();
+		});
+	}, [draftKey]);
 	const [files, setFilesState] = useState<Attached[]>([]);
 	// The newest list, so two pastes before a redraw count each other's files.
 	const latest = useRef<Attached[]>([]);
@@ -118,6 +146,14 @@ export function Composer(props: {
 	const inputId = useId();
 	const { limits } = props;
 
+	useEffect(() => {
+		const element = area.current;
+		if (!element || caretAt.current === undefined) return;
+		const at = Math.min(caretAt.current, text.length);
+		caretAt.current = undefined;
+		element.focus();
+		element.setSelectionRange(at, at);
+	}, [text]);
 	useEffect(() => {
 		const element = area.current;
 		if (!element || !caretToEnd.current) return;

@@ -61,6 +61,53 @@ test("the compact variant is the 2D strip", async () => {
 	table.dispose();
 });
 
+test("the compact strip stands every figure whole inside its box, from two seats to eight, wide or narrow", async () => {
+	const sized = (name: "clientWidth" | "clientHeight", value: number) => {
+		const own = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+		Object.defineProperty(HTMLElement.prototype, name, {
+			configurable: true,
+			get: () => value,
+		});
+		return () => {
+			if (own) Object.defineProperty(HTMLElement.prototype, name, own);
+			else
+				delete (HTMLElement.prototype as unknown as Record<string, unknown>)[
+					name
+				];
+		};
+	};
+	const picture =
+		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10" height="10"></svg>';
+	for (const width of [1000, 390]) {
+		const restore = [sized("clientWidth", width), sized("clientHeight", 120)];
+		for (const count of [2, 4, 8]) {
+			const { container, table } = await mount({
+				variant: "compact",
+				seats: Array.from({ length: count }, (_, index) => ({
+					id: `s${index}`,
+					name: `S${index}`,
+					color: "#1f7a72",
+					avatarSvg: picture,
+				})),
+			});
+			const tops = [...container.querySelectorAll("g.seat")].map((seat) => {
+				const foot = Number(
+					/translate\([\d.]+ ([\d.]+)\)/.exec(
+						seat.getAttribute("transform") ?? "",
+					)?.[1],
+				);
+				const image = seat.querySelector("image");
+				return foot + Number(image?.getAttribute("y"));
+			});
+			expect(tops).toHaveLength(count);
+			// The top of every picture is inside the strip, whatever the seats' number or the width.
+			for (const top of tops) expect(top).toBeGreaterThanOrEqual(0);
+			table.dispose();
+		}
+		for (const undo of restore) undo();
+	}
+});
+
 test("listBelow shows a visible button per seat that opens the seat", async () => {
 	const { container, table, clicked } = await mount({ listBelow: true });
 	const buttons = [

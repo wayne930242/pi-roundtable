@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A tap or Enter on a podium in the council's chat-mode strip mentions that knight in the council's message box instead of opening the knight's room: `@<name> ` goes in at the caret when the box is the one being typed in, and after the text when it is not, and the box takes the focus. The strip's podiums now have the knight's menu too (a long press, a right click or the Menu key), where "Private chat" opens the knight's own room. The animated scene is as it was: a tap turns the camera.
+
+### Fixed
+
+- In the council's chat-mode strip the room header no longer cuts the figures off at the chin. The figures were drawn larger than the 120 px strip, so only mouths and bodies showed; the podiums now size to the strip (a podium at most 67 px wide, 46 px at the narrowest) and every head stands whole under the header, from two members to eight, at desktop and 390 px width. The strip is as high as before.
+
 ## [0.29.1] - 2026-10-31
 
 ### Added
