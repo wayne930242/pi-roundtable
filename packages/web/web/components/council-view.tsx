@@ -300,6 +300,7 @@ export function CouncilView(props: {
 								<Composer
 									key={roomKey}
 									draftKey={roomKey}
+									mentionable={roster}
 									name={name}
 									commands={commands}
 									onAddressed={setAddressed}

@@ -23,16 +23,11 @@ import {
 	uploadForSend,
 	usedSlots,
 } from "../lib/attach.ts";
-import {
-	draftOf,
-	keepDraft,
-	onDraftInserted,
-	onMentionRequested,
-	withMention,
-} from "../lib/drafts.ts";
+import { draftOf, keepDraft, onDraftInserted } from "../lib/drafts.ts";
 import { size as bytes } from "../lib/format.ts";
 import { composingKey } from "../lib/ime.ts";
 import { hasLeadingAiMention } from "../lib/mention.ts";
+import type { Mentionable } from "../lib/mention-pick.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { RoomsState } from "../lib/rooms.ts";
 import {
@@ -41,11 +36,16 @@ import {
 	type SlashCommand,
 } from "../lib/slash-commands.ts";
 import { toast } from "../lib/toast.ts";
+import { useMentionInsert } from "../lib/use-mention-insert.ts";
 import { type Attached, AttachedChips } from "./attached-chips.tsx";
 import { Icon } from "./icons.tsx";
 
 // The menu of commands, and its styles, load when the text first starts with a slash.
 const CommandMenu = lazy(() => import("./command-menu.tsx"));
+// The member list that an `@` opens is read only in a room that has members to name.
+const MentionMenu = lazy(() =>
+	import("./mention-menu.tsx").then((m) => ({ default: m.MentionMenu })),
+);
 
 /** A touch screen's keyboard has no Shift, so Enter there starts a new line and the button sends. */
 const touchPrimary = () =>
@@ -63,6 +63,8 @@ export function Composer(props: {
 	above?: ReactNode;
 	/** The room whose unsent text the box keeps: it comes back when the room is opened again. */
 	draftKey?: string;
+	/** The members an `@` at a word start offers; without them the box offers none. */
+	mentionable?: readonly Mentionable[];
 	limits: RoomsState["limits"];
 	stoppable: boolean;
 	/** `addressed`: the person typed `@AI` at the start of the text (see `Composer`'s note on what counts). */
@@ -111,28 +113,6 @@ export function Composer(props: {
 			setText(next);
 		});
 	}, [draftKey]);
-	/** Where a mention put the caret; the box takes it once it shows the text. */
-	const caretAt = useRef<number | undefined>(undefined);
-	useEffect(() => {
-		if (draftKey === undefined) return;
-		return onMentionRequested(draftKey, (name) => {
-			const element = area.current;
-			// The box in use takes the mention where its caret is; otherwise it goes after the text.
-			const inBox = element !== null && document.activeElement === element;
-			const made = inBox
-				? withMention(
-						element.value,
-						name,
-						element.selectionStart,
-						element.selectionEnd,
-					)
-				: withMention(element?.value ?? draftOf(draftKey), name);
-			caretAt.current = made.caret;
-			typed.current = made.text;
-			setText(made.text);
-			element?.focus();
-		});
-	}, [draftKey]);
 	const [files, setFilesState] = useState<Attached[]>([]);
 	// The newest list, so two pastes before a redraw count each other's files.
 	const latest = useRef<Attached[]>([]);
@@ -148,15 +128,8 @@ export function Composer(props: {
 	const counter = useRef(0);
 	const inputId = useId();
 	const { limits } = props;
+	const putMention = useMentionInsert(draftKey, area, typed, text, setText);
 
-	useEffect(() => {
-		const element = area.current;
-		if (!element || caretAt.current === undefined) return;
-		const at = Math.min(caretAt.current, text.length);
-		caretAt.current = undefined;
-		element.focus();
-		element.setSelectionRange(at, at);
-	}, [text]);
 	useEffect(() => {
 		const element = area.current;
 		if (!element || !caretToEnd.current) return;
@@ -403,6 +376,16 @@ export function Composer(props: {
 				send();
 			}}
 		>
+			{props.mentionable?.length && text.includes("@") ? (
+				<Suspense fallback={null}>
+					<MentionMenu
+						area={area}
+						text={text}
+						members={props.mentionable}
+						onPick={putMention}
+					/>
+				</Suspense>
+			) : null}
 			{props.above}
 			<AttachedChips
 				files={files}

@@ -3,7 +3,7 @@ import { type OwnerIdentity, ownerWords } from "../identity.ts";
 import type { Logger } from "../log.ts";
 import type { Agent, GroupMessage } from "./agent-store.ts";
 
-/** Members at or above this relevance answer an owner message nobody is named in. */
+/** Members at or above this relevance answer an owner message nobody is named in; a message naming members is answered by them alone. */
 export const RELEVANCE_THRESHOLD = 0.5;
 /** Replies one round may hold, handoffs included (spec behavior 29). */
 export const MAX_ROUND_REPLIES = 8;

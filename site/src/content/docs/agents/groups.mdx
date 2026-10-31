@@ -31,15 +31,19 @@ It is kept up to date when you change either.
 
 ## Who answers
 
-For each of your messages, a judge scores every member on whether the message fits its role or it can add a view the others would not.
+When your message names no one, a judge scores every member on whether the message fits its role or it can add a view the others would not.
 The agents that score at least 0.5 answer.
-Three rules decide the rest:
+Four rules decide the rest:
 
-- An agent you name with `@display name` or `@name` always answers, and so does the agent whose message you reply to.
+- Name an agent with `@display name` or `@name` and only the agents you name answer: nobody is scored, and no one else joins by score.
+  The agent whose message you reply to also answers, and so does an agent holding an action that waits for your approval.
 - The members answer one at a time.
   Each one sees every group message since its last turn.
   The most relevant agent speaks last.
-- When nobody fits, the host answers.
+- The members answer one at a time.
+  Each one sees every group message since its last turn.
+  The most relevant agent speaks last.
+- When you name no one and nobody fits, the host answers.
   The host also answers alone when the judge cannot score.
 
 Members can hand the next word to each other by mentioning a name, such as `@Editor`, in their reply.
@@ -81,6 +85,8 @@ See [Archive and channels](/agents/archive-and-channels/).
 
 The web app's round table shows one group, which it calls a council: the members, at most eight, at the podiums, and the group's room in the dialogue box under them.
 A message sent there starts a round under the rules above.
+Tap a knight in the scene and the camera turns to it while `@<name> ` goes into the message box; typing `@` at the start of a word opens a list of the members, filtered as you type.
+Arrow keys move, Enter or Tab pick, Escape closes it, and a tap picks on a phone.
 An order strip over the box shows the faces in the order of the round: who has spoken, who speaks now, who is next, and which reply of 8 it is on; the seats wear the same check or number.
 A sheet with a tick list edits the group in place, or saves the ticks as another group; a group saved there opens its Discord channel like any other.
 A group made in Discord, or by `group_create`, is in the council list at once.

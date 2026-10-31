@@ -11,6 +11,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Typing `/` at the start of the message box opens a small menu of commands above it, with a line on each (`/clear` is the first): ↑ and ↓ move, Enter runs the choice, Tab writes its name into the box, Esc closes it until the text changes, and a tap picks on a phone without closing its keyboard. Nothing acts while an input method composes. The menu and its styles are a lazy chunk. `Composer` takes a `commands` list (`SlashCommand`: name, aliases, one-line description, `run`), so a command to come is one more entry in `lib/room-commands.ts`.
 - In a knight's room the same menu also lists the skills the knight carries (`/skill:<name>`, built-in ones included) and the Pi extension commands that plugins declared safe for chat (`chatCommands`, see the core changelog); none of the second kind is listed until a plugin declares it. Picking one writes its name and a space into the box for the arguments, and the message is sent as it is: Pi expands a skill and runs an extension command, and only the owner's message can start either. `GET api/rooms/<room>/commands` (`RoomCommandsView`) lists them; it is an owners-only room route (404 to anyone else), and a group, a thread or a read-only room has none. `AppApiOptions.chatCommands` and `skills.carried` feed it.
 - The `?` shortcut list names `/clear`.
+- Typing `@` at the start of a word in a council's message box (chat mode and the animated scene) opens a list of the council's members over the box, filtered as you type. The arrows move, Enter or Tab pick, Escape closes it, and a tap picks on a phone; it never acts while an input method is composing. A picked member goes in as `@<display name> `. A leading `@AI` still only toggles the agent and never opens the list. The list is a lazy chunk.
+
+### Changed
+
+- A tap or click on a knight in the animated scene now also puts `@<display name> ` into the room's message box, at the caret or after the text, and focuses the box, as a tap on a podium in the chat-mode strip does. The camera still turns to that knight and the page does not navigate. The camera still follows only a member's own lines.
 
 ## [0.29.2] - 2026-10-31
 
