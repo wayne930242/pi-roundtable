@@ -1196,6 +1196,25 @@ button.room-picture:hover:not(:disabled) {
 	}
 }
 
+/* The cards waiting on the person, in the top bar, the rail and a room's header. */
+.waiting-button {
+	min-height: 2rem;
+	padding: 0 var(--space-2);
+	gap: var(--space-1);
+	border-radius: var(--radius-full);
+	border-color: transparent;
+	background: var(--warn);
+	color: var(--bg);
+	font-weight: var(--weight-bold);
+}
+
+/* Beside the rail, which shows it, a room's header does not repeat it. */
+@media (min-width: 720px) {
+	.room-head .waiting-button {
+		display: none;
+	}
+}
+
 .to-end {
 	position: absolute;
 	right: var(--space-4);

@@ -20,6 +20,7 @@ import {
 } from "../components/room-log.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
+import { WaitingButton } from "../components/waiting-button.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
@@ -34,11 +35,14 @@ import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
-import { timeline } from "../lib/rooms.ts";
+import { timeline, waitingCards } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { useTableMode } from "../lib/table-mode.ts";
 import { openTeamSheet } from "../lib/team-sheet.ts";
+
+// The chip that brings back a waiting card out of view, and a jump's card, load while a card waits here.
+const WaitingChip = lazy(() => import("../components/waiting-chip.tsx"));
 
 // A group room's table strip is read only when a group room opens: it carries the round table's drawing.
 const GroupTable = lazy(() =>
@@ -135,6 +139,10 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const character = view?.character ?? parentView?.character;
 	const accent = useAccentStyle(character);
 	const { loaded, error } = useRoomHistory(roomKey);
+	const waiting = useSelector(
+		(state) => waitingCards(state, roomKey) > 0,
+		roomKey,
+	);
 	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [menu, setMenu] = useState(false);
 	/** The menu has been opened once, so its code is wanted. */
@@ -379,6 +387,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						/>
 					</Suspense>
 				) : null}
+				<WaitingButton />
 				<button
 					ref={menuButton}
 					type="button"
@@ -411,6 +420,15 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 				</Suspense>
 			) : (
 				<>
+					{waiting ? (
+						<Suspense fallback={null}>
+							<WaitingChip
+								roomKey={roomKey}
+								scroller={scroller}
+								loaded={loaded}
+							/>
+						</Suspense>
+					) : null}
 					<div
 						className="room-scroll"
 						ref={scroller}

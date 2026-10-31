@@ -36,9 +36,11 @@ test("the page builds with relative URLs only, and every file it names is in the
  * the entry script 16 bytes longer and 66 bytes larger gzipped, on 16 bytes of headroom. The 260
  * bytes after that are a start-over clearing the room on every page (251 bytes gzipped): the room
  * state drops what came before the line, and the line itself, its styles and the archived
- * conversation are lazy chunks.
+ * conversation are lazy chunks. The 300 bytes after that are the waiting cards' button in the top
+ * bar, the rail and a room's header, with its styles and the room's test for a waiting card; the
+ * list of cards, the jump and the room's chip are lazy chunks.
  */
-const FIRST_LOAD_BASELINE = 145_612 + 8_707 + 2_000 + 200 + 260;
+const FIRST_LOAD_BASELINE = 145_612 + 8_707 + 2_000 + 200 + 260 + 300;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
