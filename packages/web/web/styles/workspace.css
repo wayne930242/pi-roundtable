@@ -203,6 +203,10 @@
 	color: var(--muted);
 }
 
+.ws-twist:hover:not(:disabled) {
+	background: var(--surface-2);
+}
+
 .ws-twist svg {
 	transition: transform var(--dur-fast) var(--ease-out);
 }
@@ -436,6 +440,10 @@ a.ws-row-link:hover {
 	border: 0;
 	background: none;
 	cursor: zoom-in;
+}
+
+.ws-image-toggle:hover:not(:disabled) {
+	background: none;
 }
 
 .ws-image[data-actual] .ws-image-toggle {

@@ -177,6 +177,10 @@ export const HOST_CSS = `
 	cursor: pointer;
 }
 
+.seen-toggle:hover:not(:disabled) {
+	background: none;
+}
+
 .seen-toggle .hpic + .hpic {
 	margin-left: -0.35rem;
 	box-shadow: 0 0 0 1.5px var(--bg);
@@ -271,6 +275,10 @@ export const HOST_CSS = `
 	font-size: var(--text-sm);
 	text-align: left;
 	overflow: hidden;
+}
+
+.host-cards-toggle:hover:not(:disabled) {
+	background: var(--surface-2);
 }
 
 .host-cards-toggle > span {

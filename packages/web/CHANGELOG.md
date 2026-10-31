@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Buttons with a quiet look of their own no longer turn into unreadable text on the accent fill when hovered or, on a phone, after a tap: the "N earlier tools" chip, the character creator's tiles, the files pane's folder twist and image toggle, the host room's cards toggle and seen faces, and a knight's temp knights header now say what hover does to them. A test fails for any new button that sets its own fill or text colour without a hover rule.
+- The character creator's styles load with the creator instead of with the page, which leaves room in what the page loads first.
+
 ## [0.29.0] - 2026-10-31
 
 ### Added
