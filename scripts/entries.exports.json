@@ -65,6 +65,7 @@
 			"defineRoundtable",
 			"defineTool",
 			"groupRoomKey",
+			"helperSurface",
 			"isHelper",
 			"migrateDatabase",
 			"parseChannelKey",

@@ -4,7 +4,11 @@ export {
 	AGENT_SERVER_PRIORITY,
 	OWNER_TARGET,
 } from "./core/agents/agent-claim.ts";
-export { characterOf, isHelper } from "./core/agents/agent-rules.ts";
+export {
+	characterOf,
+	helperSurface,
+	isHelper,
+} from "./core/agents/agent-rules.ts";
 export type {
 	Agent,
 	AgentGroup,

@@ -132,6 +132,15 @@ export interface AgentOps {
 		text: string,
 		conversation?: string,
 	): string;
+	/**
+	 * Readies the place a message is about to reach: a temp knight made in the web app gets its
+	 * Discord thread when the caller may message it and names "discord". Never rejects.
+	 */
+	reach?(
+		caller: AgentTurnScope,
+		to: string,
+		conversation?: string,
+	): Promise<void>;
 	createGroup(input: {
 		name: string;
 		displayName: string;
@@ -436,13 +445,12 @@ function toolDefs(
 					}),
 				),
 			}),
-			run: (i) =>
-				ops.message(
-					scope,
-					requiredString(i, "to"),
-					requiredString(i, "text"),
-					optionalString(i, "conversation"),
-				),
+			run: async (i) => {
+				const to = requiredString(i, "to");
+				const conversation = optionalString(i, "conversation");
+				await ops.reach?.(scope, to, conversation);
+				return ops.message(scope, to, requiredString(i, "text"), conversation);
+			},
 		});
 	return defs;
 }

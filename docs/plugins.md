@@ -3123,13 +3123,13 @@ It follows its knight's routing rules, and its yolo and long-running modes follo
 
 | Rule | What happens |
 |---|---|
-| Place | On Discord a temp knight lives in a thread under its knight's channel, whose posts go through the channel's webhook under the temp knight's own name and picture; a knight with no Discord channel gives it a room on a surface that hosts rooms. Archiving a temp knight archives and locks its thread, and restoring it unarchives the thread. |
+| Place | A temp knight lives on the surface of the conversation that made it, kept in `Agent.origin`; its place on the other surface is made only when someone uses it there. Made on Discord, it lives in a thread under its knight's channel, whose posts go through the channel's webhook under the temp knight's own name and picture; a surface's room list leaves its room out until the room has a message or someone opens it by its address. Made in a room, it gets no thread: the thread is made, once, when a `message_agent` call names `conversation: "discord"` from a turn that may message it. A knight with no Discord channel gives it a room on a surface that hosts rooms. Archiving a temp knight archives and locks its thread when it has one; restoring it unarchives the thread, and only one made on Discord gets a new thread when the old one is gone. A temp knight made before its origin was kept is placed as one made on Discord. |
 | Finished | Derived, never set by the knight: nothing runs, nothing is queued, no card waits for the owner and no message from its knight is still unanswered. `Agent.finishedAt` carries the stamp. |
 | Limits | `helpers.perParent` (default 4) and `helpers.perHost` (default 12) count active temp knights; depth is one, so a temp knight cannot make one. At a limit the knight's oldest finished temp knight is archived to make room, and the call is refused only when every one of them is busy. |
 | Cleanup | `helper_end`, the owner's clearing in a surface, a knight's own archive (which archives its temp knights first), and, after `helpers.archiveFinishedAfterHours` (default 24), an hourly sweep. An archived temp knight keeps its history and comes back with `restoreHelpers`. Deleting an archived knight deletes its temp knights. |
 
 `AgentTeam` offers `helpersOf(parent)`, `finishedHelpers(parents?)`, `archiveHelpers(names, by)`, `restoreHelpers(names)` (only a name that is still an archived temp knight of an active knight is restored) and `onHelpersEnded(listener)`, which hears a knight's own `helper_end` and nothing else, so a surface can offer the owner an undo.
-`isHelper(agent)` tells a temp knight, for a surface that lists agents; a group never takes one.
+`isHelper(agent)` tells a temp knight, for a surface that lists agents, and `helperSurface(agent)` the surface it was made on (undefined for one made before its origin was kept); a group never takes one.
 The `helpers` block of the configuration turns the limits and the sweep; `helpers: false` offers neither tool, and a value out of its range, or a `perParent` above `perHost`, stops the start with a `ConfigError`:
 
 ```ts
@@ -4417,6 +4417,7 @@ Import from the entries listed below; source area files are internal.
 | `AvatarStudio` | `pi-roundtable` | type |
 | `PROMPTS` | `pi-roundtable` | value |
 | `characterOf` | `pi-roundtable` | value |
+| `helperSurface` | `pi-roundtable` | value |
 | `isHelper` | `pi-roundtable` | value |
 | `BACKGROUND_TURNS` | `pi-roundtable` | value |
 | `CONVERSATIONS` | `pi-roundtable` | value |

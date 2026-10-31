@@ -42,6 +42,33 @@ export interface Agent {
 export const isHelper = (agent: Pick<Agent, "parent"> | undefined): boolean =>
 	agent?.parent !== undefined;
 
+/**
+ * Whether `sender`, writing from `from` in a run `speaker` started, may message `target`: a temp
+ * knight answers only its knight in the conversation that made it, and the owners.
+ */
+export const answersTo = (
+	target: Pick<Agent, "parent" | "origin">,
+	sender: string,
+	from: string,
+	speaker: { tier: string },
+): boolean =>
+	target.parent === undefined ||
+	speaker.tier === "owner" ||
+	(sender === target.parent && target.origin === from);
+
+/**
+ * The surface a temp knight was made on, such as "discord" or the web app's, read off its origin;
+ * undefined for a permanent knight and for a temp knight made before the origin was kept. A temp
+ * knight lives on that surface; its place on another is made only when someone uses it there.
+ */
+export const helperSurface = (
+	agent: Pick<Agent, "parent" | "origin"> | undefined,
+): string | undefined => {
+	const origin = agent?.parent === undefined ? undefined : agent.origin;
+	const colon = origin?.indexOf(":") ?? -1;
+	return origin && colon > 0 ? origin.slice(0, colon) : undefined;
+};
+
 export interface AgentGroup {
 	name: string;
 	displayName: string;

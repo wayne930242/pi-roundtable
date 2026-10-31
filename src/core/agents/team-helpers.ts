@@ -1,7 +1,7 @@
 import { helpersOf } from "../config/helpers.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { isHelper } from "./agent-rules.ts";
+import { answersTo, helperSurface, isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import type { HelpersEnded } from "./helper-ops.ts";
 import type { TeamContext } from "./team-options.ts";
@@ -11,8 +11,9 @@ const SWEEP_EVERY_MS = 3_600_000;
 
 /**
  * The team's temp knights after they are made: which a knight has, which are finished, and their
- * archive, restore, and sweep. Archiving one closes its Discord thread, since a temp knight's
- * place is a thread of its parent's channel; an archived one keeps its history.
+ * archive, restore, and sweep. A temp knight made on Discord lives in a thread of its parent's
+ * channel; one made in the web app gets that thread only once someone reaches for it on Discord.
+ * Archiving one closes its thread, when it has one; an archived one keeps its history.
  */
 export class TeamHelpers {
 	readonly #ctx: TeamContext;
@@ -20,6 +21,8 @@ export class TeamHelpers {
 	readonly #archiveAgent: (agent: Agent) => Promise<void>;
 	readonly #ended: ((event: HelpersEnded) => void)[] = [];
 	#sweeper: ReturnType<typeof setInterval> | undefined;
+	/** The threads being made for web-born temp knights, by name, so two reaches make one. */
+	readonly #placing = new Map<string, Promise<void>>();
 
 	constructor(ctx: TeamContext, archiveAgent: (agent: Agent) => Promise<void>) {
 		this.#ctx = ctx;
@@ -125,9 +128,68 @@ export class TeamHelpers {
 		return restored;
 	}
 
+	/** A `message_agent` call that names "discord" gives a web-born temp knight its thread first. */
+	async reach(
+		caller: AgentTurnScope,
+		to: string,
+		conversation?: string,
+	): Promise<void> {
+		const { store } = this.#ctx.options;
+		const { turns } = this.#ctx;
+		const target = store.agent(to);
+		const speaker = turns.speakerOf(caller);
+		if (conversation?.trim() !== "discord" || !target || !speaker) return;
+		if (answersTo(target, caller.name, turns.turnChannel(caller), speaker))
+			await this.placeOnDiscord(to);
+	}
+
+	/**
+	 * Gives an active temp knight made in the web app its thread under the parent's channel, the
+	 * first time someone reaches for it on Discord. One made on Discord, or before the origin was
+	 * kept, already has its place, and a host without Discord threads makes none; never rejects.
+	 */
+	placeOnDiscord(name: string): Promise<void> {
+		const pending = this.#placing.get(name);
+		if (pending) return pending;
+		const placing = this.#placeOnDiscord(name).finally(() =>
+			this.#placing.delete(name),
+		);
+		this.#placing.set(name, placing);
+		return placing;
+	}
+
+	async #placeOnDiscord(name: string): Promise<void> {
+		const { store, channels, logger } = this.#ctx.options;
+		const agent = store.agent(name);
+		const surface = helperSurface(agent);
+		if (agent?.status !== "active" || agent.channelId) return;
+		if (surface === undefined || surface === "discord") return;
+		const parent = store.agent(agent.parent as string);
+		if (!parent?.channelId || !channels?.createThread) return;
+		try {
+			const channelId = await channels.createThread(
+				parent.channelId,
+				agent.displayName,
+			);
+			await store.updateAgent(name, { channelId });
+		} catch (error) {
+			logger.warn(
+				{ agent: name, err: error },
+				"temp knight's thread not made; it stays in its rooms",
+			);
+			return;
+		}
+		logger.info(
+			{ agent: name, parent: parent.name },
+			"temp knight's thread made",
+		);
+		this.#ctx.changed();
+	}
+
 	/**
 	 * Restores one archived temp knight: its thread opens again, or a new one is made when the old
-	 * is gone. It comes back finished, with nothing running.
+	 * is gone. One made in the web app never gets a new thread: its old one reopens, if it had one
+	 * that is still there. It comes back finished, with nothing running.
 	 */
 	async restoreOne(agent: Agent): Promise<void> {
 		const { store, channels, logger } = this.#ctx.options;
@@ -137,6 +199,8 @@ export class TeamHelpers {
 				`"${agent.name}" belongs to "${agent.parent}", which is archived; restore it first.`,
 			);
 		let { channelId } = agent;
+		const surface = helperSurface(agent);
+		const bornOnDiscord = surface === undefined || surface === "discord";
 		if (channels?.createThread && parent.channelId) {
 			if (
 				channelId &&
@@ -144,7 +208,7 @@ export class TeamHelpers {
 				(await channels.exists(channelId))
 			)
 				await channels.openThread(channelId);
-			else
+			else if (bornOnDiscord)
 				channelId = await channels.createThread(
 					parent.channelId,
 					agent.displayName,

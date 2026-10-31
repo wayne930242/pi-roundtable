@@ -220,9 +220,9 @@ export class TeamEditing {
 			creator: Agent | undefined;
 			/** The surface whose room runs the opening task. */
 			openIn?: string | undefined;
-			/** Makes the agent a temp knight of this knight: its place is a thread of the parent's channel, and it settles on the parent's model. */
+			/** Makes the agent a temp knight of this knight, which settles on the parent's model. */
 			parent?: Agent | undefined;
-			/** The conversation a temp knight is made from. */
+			/** The conversation a temp knight is made from: made on Discord, it lives in a thread of the parent's channel, made elsewhere in its rooms alone. */
 			origin?: string | undefined;
 		},
 		input: {
@@ -279,10 +279,10 @@ export class TeamEditing {
 		const suggested = suggestCharacter(input, taken);
 		const character = this.#resolve(wanted ?? {}, suggested);
 		const avatarHash = await studio.render(character);
-		// Without Discord channels the agent lives in its rooms, which exist as soon as it does. A
-		// temp knight lives in a thread of its parent's channel, or in rooms alone without one.
+		// Without Discord channels the agent lives in its rooms, which exist as soon as it does.
+		const onDiscord = who.origin?.startsWith("discord:") !== false;
 		const channelId = who.parent
-			? who.parent.channelId && channels?.createThread
+			? onDiscord && who.parent.channelId && channels?.createThread
 				? await channels.createThread(who.parent.channelId, input.displayName)
 				: undefined
 			: await channels?.createChannel(

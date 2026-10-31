@@ -15,6 +15,7 @@ import {
 	chainLimitReason,
 	deliveredMessagePost,
 } from "./agent-prompt.ts";
+import { answersTo } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import { conversationLabel, messageTarget } from "./message-target.ts";
 import { discordIdOf, discordKey, scopeOf } from "./team-keys.ts";
@@ -78,13 +79,10 @@ export class AgentMessages {
 			);
 		// A temp knight talks only to the conversation it was made from (and to the owners), so one
 		// person's helper session is not open to another person's turn.
-		if (target.parent !== undefined && chain.speaker.tier !== "owner") {
-			const own = sender.name === target.parent && target.origin === parent;
-			if (!own)
-				throw new AgentError(
-					`"${target.name}" is a temp knight of "${target.parent}" and answers only the conversation that made it; ask "${target.parent}" there.`,
-				);
-		}
+		if (!answersTo(target, caller.name, parent, chain.speaker))
+			throw new AgentError(
+				`"${target.name}" is a temp knight of "${target.parent}" and answers only the conversation that made it; ask "${target.parent}" there.`,
+			);
 		chain.messages += 1;
 		// A temp knight is working from the moment a message is handed to it until it has answered.
 		this.#host.helpers.begin(target.name);

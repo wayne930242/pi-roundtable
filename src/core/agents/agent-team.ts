@@ -19,6 +19,7 @@ import {
 import type { HelperTeam } from "./helper-ops.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
+import type { TeamHelpers } from "./team-helpers.ts";
 import {
 	channelOwner,
 	coordinatorOf,
@@ -319,6 +320,10 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	message(...args: Parameters<TeamTurns["message"]>): string {
 		return this.#turns.message(...args);
+	}
+
+	reach(...args: Parameters<TeamHelpers["reach"]>): Promise<void> {
+		return this.#lifecycle.helpers.reach(...args);
 	}
 
 	async read(
