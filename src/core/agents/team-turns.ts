@@ -322,8 +322,10 @@ export class TeamTurns {
 		const { store, channels, studio, surfaces } = this.#options;
 		if (discordIdOf(channel) === undefined) {
 			// A room's interim posts are its surface's, under the agent as author.
-			if (!surfaces?.interim(channel, this.#author(agent))) return undefined;
+			const first = surfaces?.interim(channel, this.#author(agent));
+			if (!surfaces || !first) return undefined;
 			return {
+				...(first.tools === false ? { tools: false } : {}),
 				post: async (text) => {
 					if (!channelOwner(store, channel, this.#rooms(channel)))
 						throw new AgentError(`${channel} is archived`);

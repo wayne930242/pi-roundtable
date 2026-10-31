@@ -86,8 +86,9 @@ export interface InterimPosterOptions {
 /**
  * Posts a turn's intermediate text as it goes. A tool-calling assistant message whose text is
  * primary is posted as ordinary messages; shorter text joins the run's progress message with
- * the tools called, edited in place. A primary post or a card starts a new run. Posts go out
- * in order, and a failed one is logged, never thrown.
+ * the tools called, edited in place, or without them where the posts say `tools: false`. A
+ * primary post or a card starts a new run. Posts go out in order, and a failed one is logged,
+ * never thrown.
  */
 export class InterimPoster {
 	readonly #posts: InterimPosts;
@@ -163,9 +164,11 @@ export class InterimPoster {
 	}
 
 	#render(run: Run): void {
-		if (run.lines.length === 0 && run.tools.size === 0) return;
+		// A surface that shows the tools elsewhere gets no tool line.
+		const tools = this.#posts.tools === false ? new Map() : run.tools;
+		if (run.lines.length === 0 && tools.size === 0) return;
 		run.lastAt = now();
-		const text = progressText(run.lines, run.tools);
+		const text = progressText(run.lines, tools);
 		this.#enqueue(async () => {
 			if (text === run.shown) return;
 			if (run.message) await run.message.edit(text);

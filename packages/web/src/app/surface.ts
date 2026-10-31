@@ -384,6 +384,8 @@ export class AppSurface implements ChatSurface {
 
 	interim(channel: ChannelKey, as?: PostAuthor): InterimPosts {
 		return {
+			// The room's progress pane shows the tools a turn calls, so its live text leaves them out.
+			tools: false,
 			post: async (text) => {
 				this.#speaks(channel, as?.agent);
 				const live = crypto.randomUUID();

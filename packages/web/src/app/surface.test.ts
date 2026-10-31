@@ -98,6 +98,11 @@ test("a message between agents is stored as its card with its whole text, ends n
 	expect(frames.some((frame) => frame.outcome !== undefined)).toBe(false);
 });
 
+test("a room's interim posts leave the tools to the progress pane", () => {
+	const { surface } = surfaceAt({ now: 0 });
+	expect(surface.interim(ROOM).tools).toBe(false);
+});
+
 test("a room's old page message is forgotten when another room is asked", async () => {
 	const clock = { now: 1_000_000 };
 	const { surface, heard } = surfaceAt(clock);

@@ -940,7 +940,7 @@
 		"src/core/domain/errors.d.ts#MemoryError": "declare class MemoryError extends Error {\n    name: string;\n}",
 		"src/core/domain/errors.d.ts#ScheduleError": "declare class ScheduleError extends Error {\n    name: string;\n}",
 		"src/core/domain/interim.d.ts#InterimMessage": "interface InterimMessage {\n    edit(text: string): Promise<void>;\n}",
-		"src/core/domain/interim.d.ts#InterimPosts": "interface InterimPosts {\n    post(text: string): Promise<InterimMessage>;\n}",
+		"src/core/domain/interim.d.ts#InterimPosts": "interface InterimPosts {\n    post(text: string): Promise<InterimMessage>;\n    \n    tools?: boolean;\n}",
 		"src/core/domain/interim.d.ts#InterimTextMode": "type InterimTextMode = \"on\" | \"off\";",
 		"src/core/domain/ports.d.ts#Notifier": "interface Notifier {\n    notify(principalId: string, text: string): Promise<boolean>;\n}",
 		"src/core/domain/ports.d.ts#OwnerNotifier": "interface OwnerNotifier {\n    notifyOwner(text: string): Promise<void>;\n}",

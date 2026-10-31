@@ -212,6 +212,33 @@ describe("agent rooms", () => {
 		expect(discordInterims).toEqual([]);
 	});
 
+	test("a room surface that shows the tools elsewhere keeps them off the turn's interim posts", async () => {
+		const { port } = roomSurface();
+		let tools: unknown = "unset";
+		const { team } = setup(
+			(request) => {
+				tools = request.interim?.tools;
+				return { ok: true, text: "done" };
+			},
+			{
+				...port,
+				interim: (channel, as) => {
+					const posts = port.interim(channel, as);
+					return posts && { ...posts, tools: false };
+				},
+			},
+		);
+		await ask(team);
+		expect(tools).toBe(false);
+		// One that does not say so keeps them, as Discord does.
+		const plain = setup((request) => {
+			tools = request.interim?.tools;
+			return { ok: true, text: "done" };
+		}, port);
+		await ask(plain.team);
+		expect(tools).toBeUndefined();
+	});
+
 	test("a surface without interim posts leaves the room turn with none", async () => {
 		const { port } = roomSurface();
 		let seen: unknown = "unset";
