@@ -5,33 +5,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.1] - 2026-10-31
+
 ### Added
 
 - A message's files are one attachment block: a heading "Attachments (N)" in a bordered box unlike inline code, each file a full-width chip with its icon, name and size, on phones and desktops. Agent rooms, host rooms, notes and the round table's dialogue box all show it; a host room still says how many files were removed.
 - "Download all" in the heading of a message with two or more files downloads them as one zip, from `GET api/files/zip?room=<room>&message=<id>`. The route answers the room and each file as the single file route does, so someone who may not read the room gets the same refusal. It packs only the files still kept, each under its own name (a repeated name becomes `name-2`, `name-3`), in `attachments-<YYYYMMDD-HHMM>.zip` (the message's UTC time), stored without compression, and refuses past 200 MB with a message to download the files one by one. The zip is named after when the message was sent on the host's clock (`attachments-20261031-2028.zip`); `OwnerAppOptions.timeZone` and `AppApiOptions.timeZone` carry the host's zone, UTC when absent.
 - A bubble with files that is taller than about one screen opens with a paperclip line "N attachments", which scrolls to the block, smoothly unless the person asked for less motion.
 
-### Fixed
-
-- jsonb columns are stored as JSON values: a room message's `files`, `picture` and `intercom`, an ended card's `frame` and `answer`, a host card, a notice's `open` and a session's actor were stored as JSON strings. Migrations (`web-room-messages-json-values`, `web-room-cards-json-values`, `web-host-cards-json-values`, `web-notices-json-values`, `web-sessions-json-values`) convert the rows stored that way; reads still take either.
-### Fixed
-
-- Buttons with a quiet look of their own no longer turn into unreadable text on the accent fill when hovered or, on a phone, after a tap: the "N earlier tools" chip, the character creator's tiles, the files pane's folder twist and image toggle, the host room's cards toggle and seen faces, and a knight's temp knights header now say what hover does to them. A test fails for any new button that sets its own fill or text colour without a hover rule.
-- The character creator's styles load with the creator instead of with the page, which leaves room in what the page loads first.
-### Fixed
-
-- The room drawer opens on a phone. A swipe right in a room never reached the page in Chrome: the room had the default `touch-action`, so Chrome took a sideways drag for itself a few pixels in and cancelled the touch before the swipe was 24 px long. The room, its message list, the composer and the drawer's own list now allow only up-down panning and pinch zoom, which leaves sideways drags to the page. A swipe that starts in a sideways-scrolling code block or table, a field, a card's option row, a sheet over the page, or a scene that takes every touch is still not the room's.
-
 ### Changed
 
 - A swipe right opens the room drawer from anywhere in the left half of the screen, the left edge included, over the header and empty space as well as over the messages. It was the messages only, and not within 32 px of either edge. The right edge stays the system's Back, and the drawer closes by a swipe left from anywhere but there.
 - Host rooms have the drawer too: the swipe, and a tap on the room's picture in the header. The waiting-cards strip of a host room moved to its own file.
 - A message of yours sent while a turn runs shows where it stands under it, live and after a reload: "Added to this turn" when the running turn took it, "Queued" while it waits for its own turn (the line goes when the turn starts), and "Cancelled" for one you cancelled, which stays in the room dimmed and never runs. A queued message's long-press or right-click menu offers its author Edit (a sheet with the text; the turn runs on the new text and the message shows as edited) and Cancel. Once the turn has started a notice says it is too late. `RoomMessage.delivery` carries the state (`steered` and `cancelled` are stored, in a new `delivery` column; `queued` is read from the host's queue and so does not outlive a restart); client frames `edit_queued` and `cancel_queued` (`room`, `message` id, `text`) answer with the changed message as an `edited` frame or a `refused` frame (`not_queued` when the turn has started, `forbidden` for another person's message). With a core that has no `ConversationPort.cancelQueued` and `editQueued`, both answer `not_queued`.
-
 - Pressing ↑ in an empty message box opens Edit on your latest message in the room that still waits for its turn (not while an input method composes; Alt+↑ / Alt+↓ still switch rooms), and the `?` shortcut list names it.
 
 ### Fixed
 
+- jsonb columns are stored as JSON values: a room message's `files`, `picture` and `intercom`, an ended card's `frame` and `answer`, a host card, a notice's `open` and a session's actor were stored as JSON strings. Migrations (`web-room-messages-json-values`, `web-room-cards-json-values`, `web-host-cards-json-values`, `web-notices-json-values`, `web-sessions-json-values`) convert the rows stored that way; reads still take either.
+- Buttons with a quiet look of their own no longer turn into unreadable text on the accent fill when hovered or, on a phone, after a tap: the "N earlier tools" chip, the character creator's tiles, the files pane's folder twist and image toggle, the host room's cards toggle and seen faces, and a knight's temp knights header now say what hover does to them. A test fails for any new button that sets its own fill or text colour without a hover rule.
+- The character creator's styles load with the creator instead of with the page, which leaves room in what the page loads first.
+- The room drawer opens on a phone. A swipe right in a room never reached the page in Chrome: the room had the default `touch-action`, so Chrome took a sideways drag for itself a few pixels in and cancelled the touch before the swipe was 24 px long. The room, its message list, the composer and the drawer's own list now allow only up-down panning and pinch zoom, which leaves sideways drags to the page. A swipe that starts in a sideways-scrolling code block or table, a field, a card's option row, a sheet over the page, or a scene that takes every touch is still not the room's.
 - Two edits of a waiting message from two sockets reach the room's log in the order the host took them, so the room shows the text the turn runs.
 
 ## [0.29.0] - 2026-10-31
