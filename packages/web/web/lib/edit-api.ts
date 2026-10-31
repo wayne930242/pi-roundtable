@@ -58,8 +58,9 @@ export const editApi = {
 	deleteSkillGroup: (name: string) =>
 		send<SkillGroupChanged>(`skill-groups/${named(name)}`, "DELETE"),
 	/** Switches on the group's skills a knight lacks; nothing is switched off. */
-	applySkillGroup: (name: string, agent: string) =>
+	applySkillGroup: (name: string, agent: string, on = true) =>
 		send<SkillGroupApplied>(`skill-groups/${named(name)}/apply`, "POST", {
 			agent,
+			on,
 		}),
 };

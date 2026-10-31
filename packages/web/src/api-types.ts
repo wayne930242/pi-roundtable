@@ -1022,14 +1022,19 @@ export interface SkillGroupSave {
 	from?: string;
 }
 
-/** The body of `POST api/skill-groups/<name>/apply`. */
+/**
+ * The body of `POST api/skill-groups/<name>/apply`. `on` (the default) switches on the group's skills
+ * the knight lacks; `on: false` switches off the group's skills it carries, built-in ones excepted.
+ */
 export interface SkillGroupApply {
 	agent: string;
+	on?: boolean;
 }
 
-/** The answer of applying a group: the skills newly switched on, in the group's order; none were switched off. */
+/** The answer of applying a group: the skills newly switched on and those switched off, in the group's order. */
 export interface SkillGroupApplied {
 	added: string[];
+	removed: string[];
 }
 
 /** The answer of a group's save or delete: the registry's words. */

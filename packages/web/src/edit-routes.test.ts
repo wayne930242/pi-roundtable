@@ -945,6 +945,18 @@ describe("api/skill-groups", () => {
 		expect(calls).toEqual(["attach scout +tidy,daily-notes -"]);
 	});
 
+	test("applying a group off switches off the group's skills the knight carries, built-in ones excepted", async () => {
+		const response = await call(setup(), "POST", "skill-groups/coding/apply", {
+			body: { agent: "scout", on: false },
+		});
+		expect(response.status).toBe(200);
+		expect((await response.json()) as SkillGroupApplied).toEqual({
+			added: [],
+			removed: ["kit-do"],
+		});
+		expect(calls).toEqual(["attach scout + -kit-do"]);
+	});
+
 	test("applying a group the knight already carries changes nothing", async () => {
 		skillGroups = [
 			{

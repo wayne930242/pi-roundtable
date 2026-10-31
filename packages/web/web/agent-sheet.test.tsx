@@ -836,7 +836,7 @@ test("a refused skill change shows the server's words and leaves the switch wher
 	}
 });
 
-test("Apply a group says what each group lacks, asks first, switches on only the missing skills and names them", async () => {
+test("a skill group's switch says what it lacks, asks first, switches on only the missing skills and switches them off again", async () => {
 	skillGroups.mockResolvedValue({
 		groups: [
 			{ name: "basics", description: "Basics.", skills: ["writing-skills"] },
@@ -848,45 +848,63 @@ test("Apply a group says what each group lacks, asks first, switches on only the
 		],
 	});
 	const apply = spyOn(editApi, "applySkillGroup").mockImplementation(
-		async () => {
-			skills.mockResolvedValue(skillList(["kit-do"]));
-			return { added: ["kit-do"] };
+		async (_group, _agent, on = true) => {
+			skills.mockResolvedValue(skillList(on ? ["kit-do"] : []));
+			return on
+				? { added: ["kit-do"], removed: [] }
+				: { added: [], removed: ["kit-do"] };
 		},
 	);
 	try {
 		await open({ creator: false });
 		await page.act(() => settle(80));
-		const row = (group: string) =>
-			q(`.skill-apply button[aria-label="Apply ${group}"]`)?.closest("li");
+		const toggle = (group: string) =>
+			q<HTMLButtonElement>(
+				`.skill-apply button[aria-label="Skill group ${group}"]`,
+			);
+		const row = (group: string) => toggle(group)?.closest("li");
 		expect(row("basics")?.textContent).toContain("Carries all of it.");
-		expect(
-			q<HTMLButtonElement>('.skill-apply button[aria-label="Apply basics"]')
-				?.disabled,
-		).toBe(true);
+		expect(toggle("basics")?.getAttribute("aria-checked")).toBe("true");
+		// Only built-in skills: there is nothing to switch off.
+		expect(toggle("basics")?.disabled).toBe(true);
 		expect(row("coding")?.textContent).toContain("Lacks 1: kit-do");
-		await page.click(q('.skill-apply button[aria-label="Apply coding"]'));
-		const confirm = q<HTMLDialogElement>(
-			'dialog[aria-label="Apply this skill group?"]',
+		expect(toggle("coding")?.getAttribute("aria-checked")).toBe("false");
+		await page.click(toggle("coding"));
+		const confirmOn = q<HTMLDialogElement>(
+			'dialog[aria-label="Switch this skill group on?"]',
 		);
-		expect(confirm?.open).toBe(true);
-		expect(confirm?.textContent).toContain("scout will also carry: kit-do.");
+		expect(confirmOn?.open).toBe(true);
+		expect(confirmOn?.textContent).toContain("scout will also carry: kit-do.");
 		expect(apply).not.toHaveBeenCalled();
-		await page.click(button("Apply group"));
+		await page.click(button("Switch on"));
 		await page.act(() => settle(80));
-		expect(apply).toHaveBeenCalledWith("coding", "scout");
+		expect(apply).toHaveBeenCalledWith("coding", "scout", true);
 		expect(document.body.textContent).toContain("Switched on: kit-do");
 		expect(
 			q(
 				'section[aria-label="Skills"] button[aria-label="kit-do"]',
 			)?.getAttribute("aria-checked"),
 		).toBe("true");
-		expect(row("coding")?.textContent).toContain("Carries all of it.");
+		expect(toggle("coding")?.getAttribute("aria-checked")).toBe("true");
+		await page.click(toggle("coding"));
+		const confirmOff = q<HTMLDialogElement>(
+			'dialog[aria-label="Switch this skill group off?"]',
+		);
+		expect(confirmOff?.open).toBe(true);
+		expect(confirmOff?.textContent).toContain(
+			"scout will no longer carry: kit-do.",
+		);
+		await page.click(button("Switch off"));
+		await page.act(() => settle(80));
+		expect(apply).toHaveBeenLastCalledWith("coding", "scout", false);
+		expect(document.body.textContent).toContain("Switched off: kit-do");
+		expect(toggle("coding")?.getAttribute("aria-checked")).toBe("false");
 	} finally {
 		apply.mockRestore();
 	}
 });
 
-test("without skill groups the sheet shows no Apply a group", async () => {
+test("without skill groups the sheet shows no group switches", async () => {
 	await open({ creator: false });
 	await page.act(() => settle(80));
 	expect(q('section[aria-label="Skills"]')).not.toBeNull();

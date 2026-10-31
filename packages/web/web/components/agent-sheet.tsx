@@ -566,9 +566,10 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 }
 
 /**
- * Applies a skill group once: after a confirmation, the group's skills the knight lacks are switched
- * on and none is switched off. The knight carries the skills, not the group. A host without groups,
- * or an app without them, shows nothing.
+ * A switch per skill group: on, after a confirmation, switches on the group's skills the knight lacks;
+ * off switches off the group's skills it carries, built-in ones excepted. A group shows on when the
+ * knight carries all of it. The knight carries the skills, not the group. A host without groups, or an
+ * app without them, shows nothing.
  */
 function ApplyGroup({
 	name,
@@ -580,7 +581,11 @@ function ApplyGroup({
 	onApplied(): void;
 }) {
 	const [groups, setGroups] = useState<SkillGroupView[]>();
-	const [applying, setApplying] = useState<SkillGroupView>();
+	const [pending, setPending] = useState<{
+		group: SkillGroupView;
+		on: boolean;
+	}>();
+	const prefix = useId();
 	useEffect(() => {
 		let current = true;
 		editApi.skillGroups().then(
@@ -595,26 +600,35 @@ function ApplyGroup({
 	const carried = new Set(
 		view.skills.filter((skill) => skill.carried).map((skill) => skill.name),
 	);
+	const locked = new Set(
+		view.skills.filter((skill) => skill.builtin).map((skill) => skill.name),
+	);
 	const lacking = (group: SkillGroupView) =>
 		group.skills.filter((skill) => !carried.has(skill));
+	const dropping = (group: SkillGroupView) =>
+		group.skills.filter((skill) => carried.has(skill) && !locked.has(skill));
 	return (
 		<div className="stack skill-apply">
-			<h4>{t("Apply a group")}</h4>
+			<h4>{t("Skill groups")}</h4>
 			<p className="meta">
 				{t(
-					"Switches on every skill of the group this knight lacks; nothing is switched off.",
+					"Switching a group on switches on its skills this knight lacks; switching it off switches off its skills, built-in ones excepted.",
 				)}
 			</p>
 			<ul className="menu">
-				{groups.map((group) => {
+				{groups.map((group, index) => {
 					const missing = lacking(group);
+					const on = missing.length === 0;
 					return (
 						<li key={group.name}>
-							<div className="menu-item menu-toggle">
+							<label
+								className="menu-item menu-toggle"
+								htmlFor={`${prefix}-group-${index}`}
+							>
 								<span className="menu-text">
 									<strong>{group.name}</strong>
 									<span className="meta">
-										{missing.length === 0
+										{on
 											? t("Carries all of it.")
 											: t("Lacks {count}: {skills}", {
 													count: missing.length,
@@ -622,45 +636,58 @@ function ApplyGroup({
 												})}
 									</span>
 								</span>
-								<button
-									type="button"
-									className="secondary"
-									disabled={missing.length === 0}
-									aria-label={t("Apply {name}", { name: group.name })}
-									onClick={() => setApplying(group)}
-								>
-									{t("Apply")}
-								</button>
-							</div>
+								<Switch
+									id={`${prefix}-group-${index}`}
+									checked={on}
+									label={t("Skill group {name}", { name: group.name })}
+									disabled={on && dropping(group).length === 0}
+									onChange={(next) => setPending({ group, on: next })}
+								/>
+							</label>
 						</li>
 					);
 				})}
 			</ul>
 			<Confirm
-				open={applying !== undefined}
-				title={t("Apply this skill group?")}
-				confirmLabel={t("Apply group")}
-				tone="primary"
-				onClose={() => setApplying(undefined)}
+				open={pending !== undefined}
+				title={
+					pending?.on
+						? t("Switch this skill group on?")
+						: t("Switch this skill group off?")
+				}
+				confirmLabel={pending?.on ? t("Switch on") : t("Switch off")}
+				tone={pending?.on ? "primary" : "danger"}
+				onClose={() => setPending(undefined)}
 				onConfirm={async () => {
-					if (!applying) return;
-					const { added } = await editApi.applySkillGroup(applying.name, name);
+					if (!pending) return;
+					const { added, removed } = await editApi.applySkillGroup(
+						pending.group.name,
+						name,
+						pending.on,
+					);
 					toast(
 						added.length
 							? t("Switched on: {skills}", { skills: added.join(", ") })
-							: t("Nothing to add: it carries all of {name}.", {
-									name: applying.name,
-								}),
+							: removed.length
+								? t("Switched off: {skills}", { skills: removed.join(", ") })
+								: t("Nothing changed for {name}.", {
+										name: pending.group.name,
+									}),
 					);
 					onApplied();
 				}}
 			>
 				<p>
-					{applying
-						? t("{agent} will also carry: {skills}.", {
-								agent: name,
-								skills: lacking(applying).join(", "),
-							})
+					{pending
+						? pending.on
+							? t("{agent} will also carry: {skills}.", {
+									agent: name,
+									skills: lacking(pending.group).join(", "),
+								})
+							: t("{agent} will no longer carry: {skills}.", {
+									agent: name,
+									skills: dropping(pending.group).join(", "),
+								})
 						: null}
 				</p>
 			</Confirm>

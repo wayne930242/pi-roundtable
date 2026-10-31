@@ -36,7 +36,8 @@ export interface SkillGroupApiOptions {
 /**
  * The app's REST for skill groups: listing them, creating or replacing one, deleting one, and
  * applying one to a knight. Applying switches on the group's skills the knight lacks through the
- * per-skill toggle's path and switches nothing off; the knight carries skills, not the group.
+ * per-skill toggle's path; applying it off switches off the group's skills the knight carries, built-in
+ * ones excepted. The knight carries skills, not the group.
  * Every call is an owner's; the registry's refusals are a 400 in its words.
  */
 export class SkillGroupApi {
@@ -95,25 +96,30 @@ export class SkillGroupApi {
 		}
 		if (action === "apply" && method === "POST" && parts.length === 4) {
 			const body = await bodyOf(request);
-			const apply: SkillGroupApply = { agent: requiredText(body, "agent") };
+			const apply: SkillGroupApply = {
+				agent: requiredText(body, "agent"),
+				on: body.on !== false,
+			};
 			if (!this.#options.active(apply.agent))
 				throw new HttpError(404, "There is no such room, knight or file.");
 			const catalog = new Map(
 				this.#options.catalog().map((entry) => [entry.name, entry]),
 			);
-			// A built-in skill is carried already; a carried one stays as it is.
-			const added = group.skills.filter((skill) => {
-				const entry = catalog.get(skill);
-				return !(
-					entry?.source.kind === "builtin" ||
-					entry?.carriers.includes(apply.agent)
-				);
-			});
-			if (added.length > 0) {
-				await this.#options.attach(apply.agent, added, []);
+			// A built-in skill is carried always: it is never added nor switched off.
+			const switchable = group.skills.filter(
+				(skill) => catalog.get(skill)?.source.kind !== "builtin",
+			);
+			const carries = (skill: string) =>
+				catalog.get(skill)?.carriers.includes(apply.agent) ?? false;
+			const added = apply.on
+				? switchable.filter((skill) => !carries(skill))
+				: [];
+			const removed = apply.on ? [] : switchable.filter(carries);
+			if (added.length > 0 || removed.length > 0) {
+				await this.#options.attach(apply.agent, added, removed);
 				this.#options.changed();
 			}
-			return json({ added } satisfies SkillGroupApplied);
+			return json({ added, removed } satisfies SkillGroupApplied);
 		}
 		throw new HttpError(404, "There is no such API.");
 	}
