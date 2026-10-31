@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The round table and a group's room share one header (`CouncilHead`): the council's picture, its name with "Group" under it, the reset button where the scene has one, the scene/chat switch, the waiting cards and the room menu. The separate "Council: <name>" chip is gone, and the name no longer shows twice. On the round table the name is the council picker (`<name> ▾` opens the council sheet); in the room it still edits the group, and the room menu has "Edit this council", which opens the same sheet. The header is one row on a 390 px phone.
+- The scene/chat switch shows an icon beside its words on a desktop and the icon alone on a narrow or touch screen; the words stay for a screen reader and as the tooltip.
 - A tap or click on a knight in the animated scene now also puts `@<display name> ` into the room's message box, at the caret or after the text, and focuses the box, as a tap on a podium in the chat-mode strip does. The camera still turns to that knight and the page does not navigate. The camera still follows only a member's own lines.
 
 ## [0.29.2] - 2026-10-31
