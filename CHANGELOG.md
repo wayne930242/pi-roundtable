@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
 ### Added
 
 - `ChatCommand`, `Contribution.chatCommands` and `PluginContext.chatCommands()`: a plugin declares the Pi extension commands (`pi.registerCommand`) of its `piPackages` or `sessionTools` that are safe to run from an owner's chat message, as `{ name, description }`. None is listed until a plugin declares it. `clear`, `new` and `skill` are the web app's own and refused, as is a repeated name; `context.chatCommands()` returns every declaration once linked (`NotLinkedError` during setup, also in `testing`). The web app lists them in a room's command menu. See "chatCommands" in docs/plugins.md.

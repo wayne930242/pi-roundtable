@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
 ### Added
 
 - `/clear` in the message box of an agent's or group's room starts the room over, as the room menu's Start over does: nothing is posted, the same question comes up first ("Start over <name>?"), and the screen clears to the one start-over line, with the old messages open read-only from it as the archived conversation. `/new` does the same. The text must be the command whole (spaces around it and the case do not matter); `/clear now` or a `/clear` with files waiting is a message like any other. A host's room keeps its own conversation, so `/clear` there answers with a notice instead of being sent.
