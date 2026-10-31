@@ -21,7 +21,10 @@ export type SteeringSession = Pick<
 	| "abort"
 	| "prompt"
 	| "waitForIdle"
->;
+> & {
+	/** Pi's extension commands: a message that names one runs it instead of reaching the model. */
+	extensionRunner?: { getCommand(name: string): unknown };
+};
 
 /**
  * One turn of a Pi session that the owner may steer or stop. Pi checks its queue once more
@@ -83,13 +86,32 @@ export class SteerableRun {
 		}
 	}
 
-	/** Adds the text to the running turn; false when it must wait for a turn of its own. */
+	/**
+	 * Whether the text asks Pi for something it expands or runs rather than sends: an extension
+	 * command (Pi refuses to queue it) or a skill (Pi queues its expansion, which no longer matches
+	 * the text the leftover check looks for).
+	 */
+	#isCommand(text: string): boolean {
+		if (!text.startsWith("/")) return false;
+		const name = text.slice(1).split(/\s/, 1)[0] ?? "";
+		return (
+			name.startsWith("skill:") ||
+			this.#session.extensionRunner?.getCommand(name) !== undefined
+		);
+	}
+
+	/**
+	 * Adds the text to the running turn; false when it must wait for a turn of its own. A message
+	 * that names an extension command or a skill waits too, as a message like any other: Pi runs
+	 * or expands it when its turn comes.
+	 */
 	async steer(text: string, images: PromptImages): Promise<boolean> {
 		if (
 			this.#stopped ||
 			this.#done ||
 			!this.#session.isStreaming ||
-			!this.#canSteer()
+			!this.#canSteer() ||
+			this.#isCommand(text)
 		)
 			return false;
 		const steer = { text, images };

@@ -54,7 +54,11 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const characters = useCharacters();
 	const state = useRoomState(roomKey);
 	const view = room?.view;
-	const commands = useRoomCommands(roomKey, view?.displayName ?? roomKey);
+	const commands = useRoomCommands(
+		roomKey,
+		view?.displayName ?? roomKey,
+		view?.kind === "agent" && !view.readOnly,
+	);
 	// A dispatch thread has no character of its own; it wears its parent room's.
 	const parentView = view?.parent ? rooms[view.parent]?.view : undefined;
 	const character = view?.character ?? parentView?.character;

@@ -1,6 +1,7 @@
 import { CharacterError, resolveCharacter } from "../../characters/index.ts";
 import type { AgentSeed } from "../agents/agent-store.ts";
 import type { BackgroundTarget, ChannelClaim } from "../contract/channels.ts";
+import type { ChatCommand } from "../contract/chat-command.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { ToolContribution } from "../define.ts";
 import { NotLinkedError, PluginError } from "../errors.ts";
@@ -33,6 +34,7 @@ import {
 } from "../sessions.ts";
 import { TIERS } from "../speakers.ts";
 import type { ToolTierTable } from "../tool-tiers.ts";
+import { claimChatCommand } from "./chat-commands.ts";
 import { ServiceRegistry } from "./services.ts";
 import { surfaceService } from "./surface-service.ts";
 
@@ -54,6 +56,7 @@ export interface Registry {
 	/** The contributed direct channels, in contribution order. */
 	directChannels: DirectChannelProvider[];
 	dashboard: string[];
+	chatCommands: ChatCommand[];
 	tools: ToolContribution[];
 	seeds: AgentSeed[];
 	prompt: PromptSection[];
@@ -75,6 +78,7 @@ export const emptyRegistry = (): Registry => ({
 	backgroundTargets: [],
 	directChannels: [],
 	dashboard: [],
+	chatCommands: [],
 	tools: [],
 	seeds: [],
 	prompt: [],
@@ -309,6 +313,7 @@ export async function collectContributions(
 	const directChannelNames = new Names("direct channel");
 	const personaKinds = new Map<string, string>();
 	const targetNames = new Map<string, string>();
+	const chatCommandNames = new Map<string, string>();
 	for (const plugin of plugins) {
 		let contribution: Contribution;
 		try {
@@ -347,6 +352,7 @@ export async function collectContributions(
 			backgroundTargets = [],
 			directChannels = [],
 			dashboard = [],
+			chatCommands = [],
 			tools = [],
 			seeds = [],
 			prompt = [],
@@ -364,6 +370,7 @@ export async function collectContributions(
 			backgroundTargets,
 			directChannels,
 			dashboard,
+			chatCommands,
 			tools,
 			seeds,
 			prompt,
@@ -444,6 +451,9 @@ export async function collectContributions(
 		registry.backgroundTargets.push(...backgroundTargets);
 		registry.directChannels.push(...directChannels);
 		registry.dashboard.push(...dashboard);
+		for (const command of chatCommands)
+			claimChatCommand(chatCommandNames, plugin.name, command);
+		registry.chatCommands.push(...chatCommands);
 		checkSeedCharacters(plugin.name, seeds);
 		registry.seeds.push(...seeds);
 		registry.prompt.push(...prompt);

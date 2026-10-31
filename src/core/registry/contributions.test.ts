@@ -365,6 +365,46 @@ describe("collectContributions", () => {
 		).rejects.toThrow('background target "support" is already registered');
 	});
 
+	test("chat commands are collected in contribution order; a bad name, a name the app has, a missing description and a repeat are refused", async () => {
+		const stats = { name: "stats", description: "Show the stats" };
+		const registry = await collect([
+			plugin("a", { chatCommands: [stats] }),
+			plugin("b", {
+				chatCommands: [{ name: "sync_all", description: "Sync" }],
+			}),
+		]);
+		expect(registry.chatCommands.map((one) => one.name)).toEqual([
+			"stats",
+			"sync_all",
+		]);
+		await expect(
+			collect([
+				plugin("a", { chatCommands: [{ name: "Stats", description: "x" }] }),
+			]),
+		).rejects.toThrow("plugin a: a chat command needs a name of lowercase");
+		for (const taken of ["clear", "new", "skill"])
+			await expect(
+				collect([
+					plugin("a", { chatCommands: [{ name: taken, description: "x" }] }),
+				]),
+			).rejects.toThrow(
+				`the chat command "${taken}" is one the app has itself`,
+			);
+		await expect(
+			collect([
+				plugin("a", { chatCommands: [{ name: "stats", description: " " }] }),
+			]),
+		).rejects.toThrow('the chat command "stats" needs a description');
+		await expect(
+			collect([
+				plugin("a", { chatCommands: [stats] }),
+				plugin("b", { chatCommands: [stats] }),
+			]),
+		).rejects.toThrow(
+			'plugin b: chat command "stats" is already declared by plugin a. Keep one declaration per name.',
+		);
+	});
+
 	test("direct channels are collected in contribution order, and two of one name are refused, naming both plugins", async () => {
 		const channel = (name: string) => ({
 			name,

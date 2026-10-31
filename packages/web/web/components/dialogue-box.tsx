@@ -208,7 +208,11 @@ export function DialogueBox(props: DialogueBoxProps) {
 	);
 	const characters = useCharacters();
 	const { room, view, line: newest, displayOf } = useRoomLine(roomKey);
-	const commands = useRoomCommands(roomKey, view?.displayName ?? roomKey);
+	const commands = useRoomCommands(
+		roomKey,
+		view?.displayName ?? roomKey,
+		false,
+	);
 	// The box types one speaker's words out whole before the next speaker takes it; later lines wait in order.
 	const staged = useRef<{ room: string; stage: Stage }>(undefined);
 	if (staged.current?.room !== roomKey)

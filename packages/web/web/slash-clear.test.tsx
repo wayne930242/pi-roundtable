@@ -267,6 +267,9 @@ test("a room's /clear asks the same question as Start over, and restarts the roo
 		more: false,
 		cards: [],
 	});
+	const served = spyOn(api, "roomCommands").mockResolvedValue({
+		commands: [],
+	});
 	try {
 		store.dispatch({ type: "rooms_loaded", rooms: [view(ROOM)] });
 		await page.render(
@@ -296,6 +299,105 @@ test("a room's /clear asks the same question as Start over, and restarts the roo
 	} finally {
 		startOver.mockRestore();
 		history.mockRestore();
+		served.mockRestore();
+	}
+});
+
+test("a knight's room lists its skills and declared commands after /clear; picking one writes its name into the box and sends nothing", async () => {
+	const ROOM = "app:agent.slash-skills-room";
+	const history = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
+	const served = spyOn(api, "roomCommands").mockResolvedValue({
+		commands: [
+			{
+				name: "skill:kit-do",
+				description: "Use when changing source.",
+				source: "skill",
+			},
+			{ name: "stats", description: "Show the stats", source: "extension" },
+		],
+	});
+	try {
+		store.dispatch({ type: "rooms_loaded", rooms: [view(ROOM)] });
+		await page.render(
+			<ConfigContext.Provider value={config}>
+				<RoomPage roomKey={ROOM} />
+			</ConfigContext.Provider>,
+		);
+		await page.act(() => settle(120));
+		expect(served).toHaveBeenCalledWith(ROOM);
+		await type("/");
+		const names = [...(menu()?.querySelectorAll(".command-name") ?? [])].map(
+			(one) => one.textContent,
+		);
+		expect(names).toEqual(["/clear", "/skill:kit-do", "/stats"]);
+		await type("/sk");
+		expect(menu()?.querySelectorAll("[role=option]")).toHaveLength(1);
+		// Enter writes the name and a space; the person adds the arguments.
+		await press("Enter");
+		expect(area()?.value).toBe("/skill:kit-do ");
+		expect(said).toEqual([]);
+		expect(menu()).toBeNull();
+		// Tab does the same for a command with no arguments to give.
+		await type("/st");
+		await press("Tab");
+		expect(area()?.value).toBe("/stats ");
+	} finally {
+		history.mockRestore();
+		served.mockRestore();
+	}
+});
+
+test("a command that is the agent's text is sent as the message it is, whole or with arguments", async () => {
+	const sent: string[] = [];
+	await page.render(
+		box(
+			[{ name: "skill:kit-do", description: "Use when changing source." }],
+			"app:agent.insert-sent",
+			sent,
+		),
+	);
+	for (const typed of ["/skill:kit-do", "/skill:kit-do the diff"]) {
+		await type(typed);
+		await page.act(() => {
+			page.container
+				.querySelector("form")
+				?.dispatchEvent(
+					new Event("submit", { bubbles: true, cancelable: true }),
+				);
+		});
+	}
+	expect(sent).toEqual(["/skill:kit-do", "/skill:kit-do the diff"]);
+});
+
+test("a group's room asks the host for no commands", async () => {
+	const ROOM = "app:group.slash-group-room";
+	const history = spyOn(api, "messages").mockResolvedValue({
+		messages: [],
+		more: false,
+		cards: [],
+	});
+	const served = spyOn(api, "roomCommands").mockResolvedValue({
+		commands: [],
+	});
+	try {
+		store.dispatch({
+			type: "rooms_loaded",
+			rooms: [view(ROOM, { kind: "group", members: [] })],
+		});
+		await page.render(
+			<ConfigContext.Provider value={config}>
+				<RoomPage roomKey={ROOM} />
+			</ConfigContext.Provider>,
+		);
+		await page.act(() => settle(150));
+		expect(served).not.toHaveBeenCalled();
+	} finally {
+		history.mockRestore();
+		served.mockRestore();
 	}
 });
 

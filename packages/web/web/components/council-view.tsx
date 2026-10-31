@@ -187,7 +187,7 @@ export function CouncilView(props: {
 	}, [connection, roomKey]);
 
 	const name = view?.displayName ?? roomKey;
-	const commands = useRoomCommands(roomKey, name);
+	const commands = useRoomCommands(roomKey, name, false);
 	const mine = room?.mode;
 	const seated = roster.length > 0 || props.empty === undefined;
 	const scene = seated && mode === "scene";

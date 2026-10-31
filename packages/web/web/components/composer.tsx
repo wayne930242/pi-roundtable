@@ -250,12 +250,20 @@ export function Composer(props: {
 	/** The menu's keys; the menu sets them while it is open. */
 	const menuKeys = useRef<(event: KeyboardEvent) => boolean>(undefined);
 	const runCommand = useCallback((command: SlashCommand) => {
+		if (!command.run) {
+			// Text for the agent: its name goes in with a space, and the caret waits after it.
+			caretToEnd.current = true;
+			typed.current = `/${command.name} `;
+			setText(typed.current);
+			area.current?.focus();
+			return;
+		}
 		setText("");
 		command.run({ focus: () => area.current });
 	}, []);
 	const completeCommand = useCallback((command: SlashCommand) => {
 		caretToEnd.current = true;
-		typed.current = `/${command.name}`;
+		typed.current = `/${command.name}${command.run ? "" : " "}`;
 		setText(typed.current);
 	}, []);
 	// A command is the whole text and nothing else; with files waiting it is a message like any other.

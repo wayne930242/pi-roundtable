@@ -19,6 +19,8 @@ const COMMAND_MENU_CSS = `
 
 .command-menu {
 	position: absolute;
+	max-height: min(40vh, 18rem);
+	overflow-y: auto;
 	right: 0;
 	bottom: var(--space-2);
 	left: 0;
@@ -103,6 +105,12 @@ export default function CommandMenu(props: {
 	const at = Math.min(active, found.length - 1);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the first choice is the one at every new text
 	useEffect(() => setActive(0), [props.text]);
+	// A choice made with the keys stays in view in a long list.
+	useEffect(() => {
+		document
+			.getElementById(`${id}-${at}`)
+			?.scrollIntoView?.({ block: "nearest" });
+	}, [id, at]);
 	// The box asks the menu first; a key it takes, the box leaves alone.
 	const { keys, area, onRun, onComplete } = props;
 	useEffect(() => {

@@ -10,6 +10,7 @@ import type {
 	ObserveFilter,
 	QueuePort,
 } from "./contract/channels.ts";
+import type { ChatCommand } from "./contract/chat-command.ts";
 import type { Providers, ResolvedProviders } from "./contract/providers.ts";
 import type { ServiceKey, Services } from "./contract/services.ts";
 import type { ChatSurface, SurfacePort } from "./contract/surface.ts";
@@ -189,6 +190,8 @@ export interface Contribution {
 	holdRules?: readonly HoldRule[];
 	/** Pi packages every conversation session loads, in contribution order. */
 	piPackages?: readonly string[];
+	/** The Pi extension commands of `piPackages` or `sessionTools` that are safe to run from an owner's chat message; none is listed until declared. */
+	chatCommands?: readonly ChatCommand[];
 	/** Extensions of every conversation session, placed by phase around the core's own. */
 	sessionTools?: readonly SessionTool[];
 	/** The channels whose conversations the plugin owns. */
@@ -251,6 +254,7 @@ export const CONTRIBUTION_KEYS = [
 	"http",
 	"holdRules",
 	"piPackages",
+	"chatCommands",
 	"sessionTools",
 	"channels",
 	"surfaces",
@@ -374,6 +378,8 @@ export interface PluginContext {
 	providers: ResolvedProviders;
 	/** Every plugin's dashboard lines, in contribution order; throws NotLinkedError during setup. */
 	dashboard(): readonly string[];
+	/** Every plugin's declared chat commands, in contribution order; throws NotLinkedError during setup. */
+	chatCommands(): readonly ChatCommand[];
 	/**
 	 * The credential the host's model login holds for a provider, such as `openai-codex`: the same
 	 * login the agents use. Resolves to `undefined` when the host has none for that provider, and

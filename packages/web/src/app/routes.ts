@@ -3,6 +3,7 @@ import type {
 	AgentTeam,
 	AvatarStudio,
 	ChannelKey,
+	ChatCommand,
 	ConversationModes,
 	ConversationPort,
 	IdentityService,
@@ -52,6 +53,7 @@ import type { PushMutes } from "../push/mutes.ts";
 import { viewerOf, type WebAppRegistry } from "../web-app.ts";
 import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
+import { CommandRoutes } from "./command-routes.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
 import { HelperRoutes } from "./helper-routes.ts";
 import type { LayoutStore } from "./layout.ts";
@@ -154,6 +156,8 @@ export interface AppApiOptions {
 	/** Present when the host has the skills addon: the catalog an agent's skills are chosen from, and the change of what it carries. */
 	skills?: {
 		catalog(): SkillView[];
+		/** The skills an agent carries, built-in ones included: what `/skill:<name>` can name in its room. */
+		carried?(agent: string): readonly { name: string; description: string }[];
 		attach(
 			agent: string,
 			add: readonly string[],
@@ -171,6 +175,8 @@ export interface AppApiOptions {
 		/** The registry's skill groups: listed, saved and deleted. */
 		groups: Pick<SkillRegistry, "groups" | "setGroup" | "deleteGroup">;
 	};
+	/** The Pi extension commands plugins declared safe to run from chat (`PluginContext.chatCommands`). */
+	chatCommands?(): readonly ChatCommand[];
 	/** Present when the host has prompt documents (the prompts plugin): the main prompts the owner edits. */
 	prompts?: PromptApiOptions["prompts"];
 	avatars: Pick<AvatarStudio, "serve">;
@@ -311,6 +317,7 @@ export class AppApi {
 	readonly #team: TeamApi;
 	readonly #layout: LayoutRoutes;
 	readonly #helpers: HelperRoutes;
+	readonly #commands: CommandRoutes;
 	readonly #prompts: PromptApi | undefined;
 	readonly #skillDocs: SkillDocApi | undefined;
 	readonly #skillGroups: SkillGroupApi | undefined;
@@ -330,6 +337,10 @@ export class AppApi {
 			directory: options.directory,
 			team: options.team,
 			changed: () => options.changed(),
+		});
+		this.#commands = new CommandRoutes({
+			declared: () => options.chatCommands?.() ?? [],
+			...(options.skills?.carried ? { skillsOf: options.skills.carried } : {}),
 		});
 		this.#prompts = options.prompts
 			? new PromptApi({ prompts: options.prompts })
@@ -621,6 +632,8 @@ export class AppApi {
 			if (!view) throw notFound();
 			return json({ room: view } satisfies RoomOneView);
 		}
+		if (action === "commands" && method === "GET" && parts.length === 4)
+			return this.#commands.list(room, await this.#owner(admission));
 		if (action === "dismiss" && method === "POST" && parts.length === 4)
 			return this.#dismiss(room, admission);
 		if (action === "dismiss-threads" && method === "POST" && parts.length === 4)
