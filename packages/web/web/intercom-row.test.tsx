@@ -102,12 +102,14 @@ test("an answer that fits its line does not open; a failure says no answer came"
 test("the headings read in Traditional Chinese on a zh-TW page", async () => {
 	await loadBuiltInMessages("zh-TW");
 	setPresentation({ ...base, locale: "zh-TW" });
-	const row = await draw(card(4, { kind: "sent", peer }, "看一下磁碟"));
+	const row = await draw(card(4, { kind: "sent", peer }, "check the disk"));
 	expect(row?.querySelector(".intercom-heading")?.textContent).toBe(
 		(ZH_TW["→ To {name}"] as string).replace("{name}", "Scout"),
 	);
-	expect(ZH_TW["← From {name}"]).toBe("← 來自 {name}");
-	expect(ZH_TW["No answer from {name}"]).toBe("{name} 沒有回覆");
+	expect(ZH_TW["← From {name}"]).toBe("← \u4f86\u81ea {name}");
+	expect(ZH_TW["No answer from {name}"]).toBe(
+		"{name} \u6c92\u6709\u56de\u8986",
+	);
 });
 
 test("a card's summary is the first line with words, cut with an ellipsis", () => {

@@ -13,10 +13,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - An "MCP authorizations" section behind the optional `mcpGrants` port: each bundle with its channels, allowed operations and recent audit entries; authorize a channel (an existing or new bundle, a channel from the host's list, the operations), rename and re-purpose, revoke behind a confirmation, and replace a bundle's URL. A new URL is shown once with a copy button. The host supplies the channels and the acting owner's Discord ID; pi-roundtable-mcp's `REMOTE_MCP` provides the rest.
 - The routes are under `api/connectors/` and answer owners only. A port's rejection carrying `refusal: true` answers 400 with its message; any other is logged and answered 502 with a fixed message. The config's `connectorParts` names the sections served, and a section whose port is absent is hidden. The `connectors` pane may be served with `mcpGrants` alone.
 - The fixture hosts serve in-memory connector and authorization ports.
+- Rooms store and draw messages between agents as collapsible intercom cards (`RoomMessage.intercom`, migration `web-room-messages-intercom`).
+- The table page switches between the animated scene and a chat view of the council, kept per device, with the draft carried over; a message sent from the table closes a phone's keyboard.
+- Waiting cards show as a count in the top bar, the rail and a room's header; a press jumps to the card (or a list of them) and highlights it, and a chip in the room brings back a card scrolled out of view.
+- Starting over clears the room on every page; the old messages open read-only as the archived conversation from the start-over line (`?archive=`, migration `web-room-messages-start-over`).
+- "Select text" opens the message alone in a sheet where the phone's own partial selection works, with Copy all; a room's interface text is no longer selectable.
+- A temp knight's mode banner says whose modes it follows and hides its switches.
+
+### Changed
+
+- Rooms no longer post the interim tool-trail line; the progress pane keeps the tools.
+- The round table's dialogue box folds to one bar with a labelled collapse / expand button and gives the height back to the scene.
+- A round-table seat is lit only while its words show, thinking until then, and a speaking figure's mouth moves in 3D and 2D (still under reduced motion).
+- The council hint drops "Pick who sits."
 
 ### Fixed
 
 - A link click reaches every `useRoute`, not only the first that listened. The Files page, kept mounted across folders since 0.26.2, no longer ignores taps on its folders when reached from another page (the phone's tab bar).
+- The overview's Start over resets an agent's or group's web room, not its Discord channel's sessions.
 
 ## [0.27.1] - 2026-10-31
 

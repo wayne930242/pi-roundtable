@@ -238,9 +238,9 @@ describe("linePreview", () => {
 			linePreview("\n## Found **three** [leads](https://x.test)\nmore"),
 		).toBe("Found three leads");
 		expect(linePreview("> - `quoted` item")).toBe("quoted item");
-		expect(linePreview("牆已經砌好了。".repeat(20), 10)).toBe(
-			"牆已經砌好了。牆已…",
-		);
+		expect(
+			linePreview("\u7246\u5df2\u7d93\u780c\u597d\u4e86\u3002".repeat(20), 10),
+		).toBe("\u7246\u5df2\u7d93\u780c\u597d\u4e86\u3002\u7246\u5df2…");
 		expect(linePreview("")).toBe("");
 	});
 });

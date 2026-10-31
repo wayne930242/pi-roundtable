@@ -693,7 +693,7 @@
 		"src/characters/catalog.d.ts#STATE_EXPRESSION": "declare const STATE_EXPRESSION: Readonly<Record<AvatarState, Expression>>;",
 		"src/characters/compose.d.ts#accentOf": "declare function accentOf(spec: CharacterSpec, on: \"light\" | \"dark\" | CharacterLook): Hex;",
 		"src/characters/compose.d.ts#CharacterLook": "type CharacterLook = \"modern-light\" | \"modern-dark\" | \"camelot-light\" | \"camelot-dark\";",
-		"src/characters/compose.d.ts#ComposeOptions": "interface ComposeOptions {\n    \n    expr?: Expression;\n    \n    state?: AvatarState;\n    \n    look?: CharacterLook;\n    \n    frame?: \"disc\" | \"shield\";\n    \n    bare?: boolean;\n    \n    still?: boolean;\n    \n    uid?: string;\n    \n    size?: number;\n    \n    label?: string;\n    \n    skins?: readonly Hex[] | undefined;\n}",
+		"src/characters/compose.d.ts#ComposeOptions": "interface ComposeOptions {\n    \n    expr?: Expression;\n    \n    mouth?: \"open\" | \"closed\";\n    \n    state?: AvatarState;\n    \n    look?: CharacterLook;\n    \n    frame?: \"disc\" | \"shield\";\n    \n    bare?: boolean;\n    \n    still?: boolean;\n    \n    uid?: string;\n    \n    size?: number;\n    \n    label?: string;\n    \n    skins?: readonly Hex[] | undefined;\n}",
 		"src/characters/compose.d.ts#composeSvg": "declare function composeSvg(spec: CharacterSpec, options?: ComposeOptions): string;",
 		"src/characters/css.d.ts#characterCss": "declare function characterCss(): string;",
 		"src/characters/parse.d.ts#parseCharacter": "declare function parseCharacter(value: unknown): CharacterSpec;",

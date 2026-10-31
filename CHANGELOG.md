@@ -10,6 +10,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - The web console's Connectors page manages the owner's MCP connectors (list, add with a write-only token, change a purpose, remove) and the MCP channel authorizations (bundles with their channels, operations and recent audit; authorize, rename, revoke, and a new bundle URL shown once). See pi-roundtable-web and pi-roundtable-mcp.
+- Yolo mode: an `ask_user` card holds the turn only `autonomy.yolo.questionGraceSeconds` (default 30 s); unanswered, the agent goes on with its recommended option, says what it assumed, and ends the turn only for a truly blocking question, while the card stays open for a late answer. The timeout card waits `autonomy.yolo.timeoutCardSeconds` (default 60 s) and an unanswered one continues the turn up to the long-running cap (`TurnTimeout.autoContinue`). `PromptWait.graceMs` carries a turn's own wait to surfaces. A host that is stopping still posts no card.
+- Temp knights follow the yolo and long-running modes of the conversation that made them, live: their own modes cannot be switched, an origin that is gone reads off, and only an owner's turn makes a temp knight follow (`ConversationModes.follow`, `forget`, `trackOrigins`, `ConversationMode.inheritedFrom`, migration `conversation-modes-follows`).
+- Discord keeps intercom cards' full texts in `intercom-texts.json` (newest 300, following `discord.cardCopies`), opened ephemerally with **Show all**.
+- The character kit's `composeSvg` takes `mouth: "open" | "closed"` for the frames of a talking figure.
+
+### Changed
+
+- `message_agent` opens no thread: the exchange shows in the sender's conversation as small intercom cards (`IntercomCard`, `OutboundReply.intercom`, `AgentPost.intercom`) that open to the whole text. `TeamTurnsOptions.threads` is gone.
+- `InterimPosts.tools: false` leaves the tool line out of the progress message; the web app's rooms set it, Discord keeps the line.
 
 ### Fixed
 

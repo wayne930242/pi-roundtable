@@ -4,7 +4,15 @@
 
 ## [0.28.0] - 2026-10-31
 
-- Release in lockstep with pi-roundtable 0.28.0; no package-specific behavior changes. The core peer range moves to `>=0.28.0 <0.29.0`.
+
+### Added
+
+- Workers run in their own git worktrees, so several can work on one repository at once; a finished branch is rebased and fast-forwarded into the clone, and a conflict keeps the branch and worktree and lists its files in the report.
+- With the new `modes` and `autonomy` options, workers follow the yolo and long-running modes of the owner conversation that started them, live, and the report lists what yolo approved.
+
+### Changed
+
+- A host-wide `maxWorkers` cap (default 4) with a FIFO queue (`maxQueued`, default 16) replaces the per-repository and per-channel limits; `start()` answers `queuePosition` for a queued task, queued tasks are dropped with a notice on stop, and `presentation.taskQueued` words the queued reply. The core peer range moves to `>=0.28.0 <0.29.0`.
 
 ## [0.27.1] - 2026-10-31
 
