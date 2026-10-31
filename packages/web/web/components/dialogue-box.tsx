@@ -23,6 +23,7 @@ import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import type { RoomState } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
+import { installDialogueFoldStyle } from "../lib/table-page-style.ts";
 import { useDialogueFolded } from "../lib/table-view.ts";
 import { PromptCard } from "./cards.tsx";
 import { PageCharacter } from "./character.tsx";
@@ -34,6 +35,8 @@ import { roundChip } from "./order-strip.tsx";
 import { ProgressStrip } from "./progress-strip.tsx";
 import { loadOlderMessages, RoomLog, useRoomHistory } from "./room-log.tsx";
 import { Sheet } from "./sheet.tsx";
+
+installDialogueFoldStyle();
 
 /**
  * Drives a line's reveal: the words come one by one as they stream, a tap shows them all, and
@@ -170,6 +173,8 @@ export interface DialogueBoxProps {
 	onMenu?: ((anchor: HTMLElement) => void) | undefined;
 	/** What stands under the nameplate, over the line: a group's order strip. */
 	strip?: ReactNode;
+	/** A message sent from the box closes a phone's keyboard (the table page's box); the room's own keeps the focus. */
+	blurAfterSend?: boolean;
 }
 
 /**
@@ -370,6 +375,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 						name={view?.displayName ?? roomKey}
 						limits={limits}
 						stoppable={Boolean(room?.stoppable)}
+						blurAfterSend={props.blurAfterSend === true}
 						{...(view?.kind === "group"
 							? { stopLabel: t("Stop the round") }
 							: {})}

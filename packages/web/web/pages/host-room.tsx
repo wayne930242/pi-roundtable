@@ -15,6 +15,7 @@ import { Icon } from "../components/icons.tsx";
 import { ModeToggle } from "../components/mode-toggle.tsx";
 import { ProgressStrip } from "../components/progress-strip.tsx";
 import ReadLog from "../components/read-log.tsx";
+import { useStickToEnd } from "../components/room-chat.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { ApiFailure, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
@@ -29,7 +30,6 @@ import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { toast } from "../lib/toast.ts";
 import { currentQuery } from "../lib/where.ts";
-import { useStickToEnd } from "./room.tsx";
 
 installHostStyle();
 

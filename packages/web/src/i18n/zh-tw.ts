@@ -799,6 +799,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	// 圓桌
 	"Reset view": "重設視角",
 	Log: "記錄",
+	"Show the council as": "評議會的顯示方式",
+	"Animation mode": "動畫模式",
+	"Chat mode": "聊天模式",
 	"Collapse dialogue": "收起對話",
 	"Expand dialogue": "展開對話",
 	"Waiting for your answer": "等你回覆",

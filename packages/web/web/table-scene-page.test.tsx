@@ -7,8 +7,6 @@ import {
 	spyOn,
 	test,
 } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { partial } from "pi-roundtable/testing";
 import type {
 	ClientFrame,
@@ -31,6 +29,7 @@ import {
 	setTableMode,
 	tableModeOf,
 } from "./lib/table-mode.ts";
+import { DIALOGUE_FOLD_CSS } from "./lib/table-page-style.ts";
 import {
 	DIALOGUE_FOLDED_KEY,
 	resetTableView,
@@ -438,9 +437,10 @@ test("on an upright phone a folded box gives the scene its height: the frame say
 	);
 	await arrive();
 	expect(query(".room-scene")?.hasAttribute("data-folded")).toBe(true);
-	const css = readFileSync(join(import.meta.dir, "styles/table.css"), "utf8");
-	const portrait = css.slice(
-		css.indexOf("@media (max-width: 719px) and (orientation: portrait)"),
+	const portrait = DIALOGUE_FOLD_CSS.slice(
+		DIALOGUE_FOLD_CSS.indexOf(
+			"@media (max-width: 719px) and (orientation: portrait)",
+		),
 	);
 	expect(portrait).toContain(
 		".table-frame[data-focused][data-folded] {\n\t\tgrid-template-rows: minmax(0, 1fr) auto;",

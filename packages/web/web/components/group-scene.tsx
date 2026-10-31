@@ -45,6 +45,8 @@ export function GroupStage(props: {
 	focus: string | null;
 	onLook(member: string | null): void;
 	streams?: boolean;
+	/** A message sent from the box closes a phone's keyboard. */
+	blurAfterSend?: boolean;
 	onHandle?(handle: TableHandle | undefined): void;
 	onSeatMenu?(request: SeatMenuRequest): void;
 }) {
@@ -71,6 +73,7 @@ export function GroupStage(props: {
 				roomKey={roomKey}
 				open
 				streams={props.streams ?? false}
+				blurAfterSend={props.blurAfterSend === true}
 				strip={<OrderStrip roomKey={roomKey} />}
 			/>
 		</div>

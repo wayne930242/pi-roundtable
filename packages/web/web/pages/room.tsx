@@ -1,24 +1,10 @@
-import {
-	lazy,
-	Suspense,
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
-import { ProgressStrip } from "../components/progress-strip.tsx";
-import {
-	loadOlderMessages,
-	RoomLog,
-	useRoomHistory,
-} from "../components/room-log.tsx";
-import { Empty, Failure, Loading } from "../components/states.tsx";
+import { RoomChat } from "../components/room-chat.tsx";
+import { Empty, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
@@ -28,13 +14,10 @@ import {
 	useCharacters,
 	useRoomState,
 } from "../lib/characters.ts";
-import { hostUi } from "../lib/frame-taps.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
-import { reducedMotion } from "../lib/motion.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
-import { timeline } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
 import { useTableMode } from "../lib/table-mode.ts";
@@ -54,9 +37,6 @@ const GroupScene = lazy(() =>
 	})),
 );
 
-// The read marks and the divider of new messages load beside the log; until they do the log shows as it is.
-const ReadLog = lazy(() => hostUi().then((ui) => ({ default: ui.ReadLog })));
-
 // The composer's @AI switch, and the styles it brings, are read only in a room that takes notes.
 const ModeToggle = lazy(() =>
 	import("../components/mode-toggle.tsx").then((m) => ({
@@ -69,73 +49,20 @@ const RoomMenu = lazy(() =>
 	import("../components/room-menu.tsx").then((m) => ({ default: m.RoomMenu })),
 );
 
-/**
- * Keeps the end of the list in view while the person is at the end, and says when more arrived
- * while they were not. A scroll event caused by the content growing is not the person moving, so
- * only scrolls that leave the height as it was count as theirs.
- */
-export function useStickToEnd(
-	scroller: React.RefObject<HTMLDivElement | null>,
-) {
-	const stuck = useRef(true);
-	const height = useRef(0);
-	const [away, setAway] = useState(false);
-	const onScroll = useCallback(() => {
-		const element = scroller.current;
-		if (!element) return;
-		if (element.scrollHeight !== height.current) {
-			height.current = element.scrollHeight;
-			return;
-		}
-		stuck.current =
-			element.scrollHeight - element.scrollTop - element.clientHeight < 96;
-		setAway(!stuck.current);
-	}, [scroller]);
-	/** The content changed size: follow it to the end, or note that there is more below. */
-	const onGrow = useCallback(() => {
-		const element = scroller.current;
-		if (!element) return;
-		height.current = element.scrollHeight;
-		if (stuck.current) element.scrollTo({ top: element.scrollHeight });
-		else setAway(true);
-	}, [scroller]);
-	const toEnd = useCallback(
-		(smooth: boolean) => {
-			const element = scroller.current;
-			if (!element) return;
-			stuck.current = true;
-			height.current = element.scrollHeight;
-			element.scrollTo({
-				top: element.scrollHeight,
-				behavior: smooth && !reducedMotion() ? "smooth" : "auto",
-			});
-			setAway(false);
-		},
-		[scroller],
-	);
-	return { away, onScroll, onGrow, toEnd };
-}
-
 export function RoomPage({ roomKey }: { roomKey: string }) {
 	const connection = useConnection();
 	const room = useSelector((state) => state.rooms[roomKey]);
 	const listed = useSelector((state) => state.listed);
 	const open = useSelector((state) => state.connection === "open");
 	const limits = useSelector((state) => state.limits);
-	const parts = useSelector((state) => ({
-		rooms: state.rooms,
-		cards: state.cards,
-		cardOrder: state.cardOrder,
-	}));
+	const rooms = useSelector((state) => state.rooms);
 	const characters = useCharacters();
 	const state = useRoomState(roomKey);
 	const view = room?.view;
 	// A dispatch thread has no character of its own; it wears its parent room's.
-	const parentView = view?.parent ? parts.rooms[view.parent]?.view : undefined;
+	const parentView = view?.parent ? rooms[view.parent]?.view : undefined;
 	const character = view?.character ?? parentView?.character;
 	const accent = useAccentStyle(character);
-	const { loaded, error } = useRoomHistory(roomKey);
-	const [loadingOlder, setLoadingOlder] = useState(false);
 	const [menu, setMenu] = useState(false);
 	/** The menu has been opened once, so its code is wanted. */
 	const [menuOpened, setMenuOpened] = useState(false);
@@ -149,60 +76,14 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const [scene, setScene] = useTableMode(roomKey);
 	const inScene = view?.kind === "group" && scene;
 	const menuButton = useRef<HTMLButtonElement>(null);
-	const scroller = useRef<HTMLDivElement>(null);
-	const content = useRef<HTMLDivElement>(null);
-	const { away, onScroll, onGrow, toEnd } = useStickToEnd(scroller);
 	// Beside the room list (wide screens) the room needs no drawer; elsewhere a swipe right brings one.
 	const switcher = useSwitcher(!useMedia("(min-width: 1024px)"));
-	const mountedLast = useRef<number | undefined>(undefined);
-	const prepend = useRef<number | undefined>(undefined);
 
 	// The page shows this room, so its progress streams here.
 	useEffect(() => {
 		connection.focus(roomKey);
 		return () => connection.focus(undefined);
 	}, [connection, roomKey]);
-
-	const items = useMemo(() => timeline(parts, roomKey), [parts, roomKey]);
-
-	// New messages slide in; the ones present when the room opened do not.
-	if (loaded && mountedLast.current === undefined)
-		mountedLast.current = room?.messages.at(-1)?.id ?? 0;
-
-	// Opening a room lands at its end.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only the first load jumps
-	useLayoutEffect(() => {
-		if (loaded) toEnd(false);
-	}, [loaded]);
-
-	// Older messages added above must not move what the person reads.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the first message's id says older ones came
-	useLayoutEffect(() => {
-		const element = scroller.current;
-		if (element && prepend.current !== undefined) {
-			element.scrollTop += element.scrollHeight - prepend.current;
-			prepend.current = undefined;
-		}
-	}, [room?.messages[0]?.id]);
-
-	// Whatever grows the list (a message, a stream, an image) keeps the end in view for a person who is at it.
-	useEffect(() => {
-		const element = content.current;
-		if (!element || typeof ResizeObserver === "undefined") return;
-		const watcher = new ResizeObserver(onGrow);
-		watcher.observe(element);
-		return () => watcher.disconnect();
-	}, [onGrow]);
-
-	const loadOlder = async () => {
-		const first = room?.messages[0];
-		if (!first || loadingOlder) return;
-		setLoadingOlder(true);
-		prepend.current = scroller.current?.scrollHeight;
-		const done = await loadOlderMessages(roomKey);
-		if (!done) prepend.current = undefined;
-		setLoadingOlder(false);
-	};
 
 	// A thread's link can arrive before the room list does; ask for the list once before giving up.
 	const [rechecked, setRechecked] = useState(false);
@@ -249,14 +130,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		);
 
 	const name = view?.displayName ?? roomKey;
-	const log = {
-		roomKey,
-		enterAfter: mountedLast.current,
-		quotable: !view?.readOnly,
-	};
-	const lastAgent = [...(room?.messages ?? [])]
-		.reverse()
-		.find((m) => m.kind === "agent");
 	const mine = room?.mode;
 	const agentName = view?.kind === "agent" ? view.name : undefined;
 	const groupName = view?.kind === "group" ? view.name : undefined;
@@ -410,130 +283,88 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<GroupScene roomKey={roomKey} members={view?.members ?? []} />
 				</Suspense>
 			) : (
-				<>
-					<div
-						className="room-scroll"
-						ref={scroller}
-						onScroll={onScroll}
-						{...switcher.surface}
-					>
-						<div className="room-content" ref={content}>
-							{error ? <Failure message={error} /> : null}
-							{!loaded && !error ? <Loading /> : null}
-							{room?.more ? (
-								<button
-									type="button"
-									className="secondary older"
-									disabled={loadingOlder}
-									onClick={loadOlder}
-								>
-									{loadingOlder ? t("Loading…") : t("Load earlier messages")}
-								</button>
-							) : null}
-							{loaded && items.length === 0 ? (
-								<Empty>{t("No messages yet. Say hello.")}</Empty>
-							) : null}
-							<Suspense fallback={<RoomLog {...log} />}>
-								<ReadLog {...log} scroller={scroller} />
-							</Suspense>
-							{room?.typing ? (
-								<ProgressStrip
-									name={lastAgent?.author ?? name}
-									progress={room.progress}
-								/>
-							) : null}
-						</div>
-					</div>
-					{away ? (
-						<button
-							type="button"
-							className="to-end"
-							onClick={() => toEnd(true)}
-						>
-							<Icon
-								name="send"
-								size={16}
-								style={{ transform: "rotate(180deg)" }}
+				<RoomChat
+					roomKey={roomKey}
+					name={name}
+					surface={switcher.surface}
+					composer={(toEnd) =>
+						view?.readOnly ? (
+							<p className="room-note">
+								{t(
+									"This is a dispatch thread. It shows what was sent and answered; reply in its parent room.",
+								)}{" "}
+								{parent ? (
+									<a href={hrefFor("room", parent)}>
+										{t("Open the parent room")}
+									</a>
+								) : null}
+							</p>
+						) : (
+							<Composer
+								key={roomKey}
+								draftKey={roomKey}
+								name={name}
+								onAddressed={setAddressed}
+								{...(toggled
+									? {
+											placeholder: note
+												? t("Write an internal note…")
+												: t("Ask AI…"),
+											above: (
+												<Suspense fallback={null}>
+													<ModeToggle
+														on={!note}
+														label={t("@AI")}
+														{...(mentioned
+															? {
+																	locked: t(
+																		"The message starts with @AI, so the knight answers.",
+																	),
+																}
+															: {})}
+														onChange={(next) =>
+															setNoting(next ? undefined : roomKey)
+														}
+													/>
+												</Suspense>
+											),
+										}
+									: {})}
+								limits={limits}
+								stoppable={Boolean(room?.stoppable)}
+								onSend={(text, files, typedAt) => {
+									if (toggled && typedAt) {
+										// Without the token the message may be empty; then it goes as it was typed.
+										const body = withoutLeadingAiMention(text);
+										connection.say(
+											roomKey,
+											body === "" && files.length === 0 ? text : body,
+											files,
+											"turn",
+										);
+									} else
+										connection.say(
+											roomKey,
+											text,
+											files,
+											note ? "note" : undefined,
+										);
+									toEnd(true);
+								}}
+								onStop={() => connection.send({ type: "stop", room: roomKey })}
+								{...(view?.kind === "group"
+									? { stopLabel: t("Stop the round") }
+									: {})}
+								{...(dropped
+									? {
+											incoming: dropped,
+											onIncomingTaken: () => setDropped(undefined),
+										}
+									: {})}
 							/>
-							{t("Latest")}
-						</button>
-					) : null}
-					{view?.readOnly ? (
-						<p className="room-note">
-							{t(
-								"This is a dispatch thread. It shows what was sent and answered; reply in its parent room.",
-							)}{" "}
-							{parent ? (
-								<a href={hrefFor("room", parent)}>
-									{t("Open the parent room")}
-								</a>
-							) : null}
-						</p>
-					) : (
-						<Composer
-							key={roomKey}
-							draftKey={roomKey}
-							name={name}
-							onAddressed={setAddressed}
-							{...(toggled
-								? {
-										placeholder: note
-											? t("Write an internal note…")
-											: t("Ask AI…"),
-										above: (
-											<Suspense fallback={null}>
-												<ModeToggle
-													on={!note}
-													label={t("@AI")}
-													{...(mentioned
-														? {
-																locked: t(
-																	"The message starts with @AI, so the knight answers.",
-																),
-															}
-														: {})}
-													onChange={(next) =>
-														setNoting(next ? undefined : roomKey)
-													}
-												/>
-											</Suspense>
-										),
-									}
-								: {})}
-							limits={limits}
-							stoppable={Boolean(room?.stoppable)}
-							onSend={(text, files, typedAt) => {
-								if (toggled && typedAt) {
-									// Without the token the message may be empty; then it goes as it was typed.
-									const body = withoutLeadingAiMention(text);
-									connection.say(
-										roomKey,
-										body === "" && files.length === 0 ? text : body,
-										files,
-										"turn",
-									);
-								} else
-									connection.say(
-										roomKey,
-										text,
-										files,
-										note ? "note" : undefined,
-									);
-								toEnd(true);
-							}}
-							onStop={() => connection.send({ type: "stop", room: roomKey })}
-							{...(view?.kind === "group"
-								? { stopLabel: t("Stop the round") }
-								: {})}
-							{...(dropped
-								? {
-										incoming: dropped,
-										onIncomingTaken: () => setDropped(undefined),
-									}
-								: {})}
-						/>
-					)}
-				</>
+						)
+					}
+				/>
 			)}
 			{menuOpened ? (
 				<Suspense fallback={null}>
