@@ -20,6 +20,13 @@ test("the routing plugin builds a line per connector from the service", async ()
 		profileSources: () => [
 			{ name: "notion", description: "Pages", serverName: "x-notion" },
 		],
+		add: async () => {
+			throw new Error("not used");
+		},
+		describe: async () => {
+			throw new Error("not used");
+		},
+		remove: async () => {},
 	};
 	const harness = await testPlugin(
 		connectorRouting((lines) => seen.push(lines)),

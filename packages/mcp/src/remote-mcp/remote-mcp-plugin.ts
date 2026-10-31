@@ -212,7 +212,10 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 			discord.commands.add(
 				mcpGrantCommands(discord.guard, grants, options.publicUrl, text),
 			);
-			services.provide(REMOTE_MCP, remoteMcpService(grants, text));
+			services.provide(
+				REMOTE_MCP,
+				remoteMcpService(grants, text, options.publicUrl, discord.guard.root),
+			);
 			// Read before any service starts, by `preflight` above.
 			adopt = async () => {
 				found = await boundPrincipal(identities, identity);

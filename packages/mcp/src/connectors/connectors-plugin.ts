@@ -7,6 +7,7 @@ import {
 import { DISCORD } from "pi-roundtable/discord";
 import type { VirtualServer } from "pi-roundtable/kit";
 import { connectorCommands } from "./connector-commands.ts";
+import { authFrom } from "./connector-input.ts";
 import {
 	type Connector,
 	type ConnectorProfileSource,
@@ -58,6 +59,49 @@ export interface Connectors {
 	resolve(serverName: string): Promise<VirtualServer>;
 	/** What ContextForge holds, upstream gateways and virtual servers, for a host's status view. */
 	readonly admin: Pick<ContextForgeAdmin, "gateways" | "servers">;
+	/**
+	 * Adds a connector as `/<root> connector add` does. No token is no authentication, a token alone
+	 * is sent as `Authorization: Bearer`, and a header name sends the token in that header. The
+	 * token goes to ContextForge only; nothing returned holds it. A refusal is a `ConnectorError`.
+	 */
+	add(
+		input: ConnectorInput,
+	): Promise<{ connector: Connector; skipped: string[] }>;
+	/** Changes a connector's purpose; a refusal is a `ConnectorError`. */
+	describe(name: string, description: string): Promise<Connector>;
+	/** Deletes a connector, its virtual server, and its upstream server with its token. */
+	remove(name: string): Promise<void>;
+}
+
+/** A new connector as the owner gives it; `header` and `token` are optional. */
+export interface ConnectorInput {
+	name: string;
+	url: string;
+	description: string;
+	header?: string;
+	token?: string;
+}
+
+/** The registry's management, with the header and token rules of the Discord form. */
+export function connectorManagement(
+	registry: Pick<ConnectorRegistry, "add" | "describe" | "remove">,
+	text: ConnectorMessages,
+): Pick<Connectors, "add" | "describe" | "remove"> {
+	return {
+		add: async (input) =>
+			registry.add({
+				name: input.name.trim(),
+				url: input.url.trim(),
+				description: input.description.trim(),
+				auth: authFrom(
+					input.header?.trim() ?? "",
+					input.token?.trim() ?? "",
+					text,
+				),
+			}),
+		describe: (name, description) => registry.describe(name, description),
+		remove: (name) => registry.remove(name),
+	};
 }
 
 export const CONNECTORS = serviceKey<Connectors>(
@@ -123,6 +167,7 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 					gateways: () => admin.gateways(),
 					servers: () => admin.servers(),
 				},
+				...connectorManagement(registry, text),
 			});
 			// Nothing is added but what preflight reads.
 			load = () => registry.load();

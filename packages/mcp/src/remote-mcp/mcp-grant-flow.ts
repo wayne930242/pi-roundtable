@@ -13,10 +13,8 @@ import {
 	plain,
 	replyWithPanels,
 } from "pi-roundtable/discord";
-import {
-	type ChannelGrantStore,
-	newChannelEndpoint,
-} from "./channel-grants.ts";
+import type { ChannelBundle, ChannelGrantStore } from "./channel-grants.ts";
+import { GrantOperations } from "./grant-operations.ts";
 import {
 	authorizePanel,
 	describeGrant,
@@ -37,7 +35,7 @@ type ButtonOrMenu = ButtonInteraction | StringSelectMenuInteraction;
  */
 export class McpGrantFlow {
 	readonly #grants: ChannelGrantStore;
-	readonly #publicUrl: string;
+	readonly #ops: GrantOperations;
 	readonly #root: string;
 	readonly #text: RemoteMcpMessages;
 	readonly #pending = new Map<string, Pending>();
@@ -49,7 +47,7 @@ export class McpGrantFlow {
 		text: RemoteMcpMessages,
 	) {
 		this.#grants = grants;
-		this.#publicUrl = publicUrl;
+		this.#ops = new GrantOperations(grants, publicUrl, root, text, plain);
 		this.#root = root;
 		this.#text = text;
 	}
@@ -85,9 +83,7 @@ export class McpGrantFlow {
 		const bundleName = interaction.options.getString("bundle", true).trim();
 		if (sub === "authorize")
 			return this.#beginAuthorize(interaction, bundleName);
-		const bundle = await this.#grants.bundleByName(bundleName);
-		if (!bundle)
-			throw new OwnerFacingError(text.noBundle(plain(bundleName), this.#root));
+		const bundle = await this.#ops.bundle(bundleName);
 		if (sub === "token") {
 			const id = this.#hold(interaction, {
 				bundleName: bundle.name,
@@ -98,14 +94,12 @@ export class McpGrantFlow {
 			await interaction.editReply(rotatePanel(bundle.name, id, text));
 			return;
 		}
-		const channelId =
-			interaction.options.getString("channel_id")?.trim() ??
-			interaction.channelId;
-		if (!/^\d{1,20}$/.test(channelId))
-			throw new OwnerFacingError(text.channelIdRule);
+		const channelId = this.#ops.channelId(
+			interaction.options.getString("channel_id") ?? interaction.channelId,
+		);
 		if (sub === "describe")
 			return this.#describe(interaction, bundle, channelId);
-		const removed = await this.#grants.revoke(bundle.id, channelId);
+		const removed = await this.#ops.revoke(bundle, channelId);
 		for (const [id, value] of this.#pending)
 			if (value.channelId === channelId) this.#pending.delete(id);
 		await interaction.editReply(
@@ -174,15 +168,14 @@ export class McpGrantFlow {
 
 	async #describe(
 		interaction: ChatInputCommandInteraction,
-		bundle: { id: string; name: string },
+		bundle: ChannelBundle,
 		channelId: string,
 	): Promise<void> {
 		const text = this.#text;
-		const displayName = interaction.options.getString("name")?.trim();
-		const description = interaction.options.getString("description")?.trim();
-		if (displayName === undefined && description === undefined)
-			throw new OwnerFacingError(text.nameOrDescription);
-		const changed = await this.#grants.describe(bundle.id, channelId, {
+		const displayName = interaction.options.getString("name") ?? undefined;
+		const description =
+			interaction.options.getString("description") ?? undefined;
+		const changed = await this.#ops.describe(bundle, channelId, {
 			...(displayName === undefined ? {} : { displayName }),
 			...(description === undefined ? {} : { description }),
 		});
@@ -202,14 +195,13 @@ export class McpGrantFlow {
 		bundleId: string,
 	): Promise<void> {
 		const text = this.#text;
-		const endpoint = newChannelEndpoint(this.#publicUrl);
-		await this.#grants.rotateToken(bundleId, endpoint.tokenHash);
+		const url = await this.#ops.rotate(bundleId);
 		await interaction.editReply(
 			ownerPanel({
 				title: text.rotatedTitle,
 				sections: [
 					text.rotated(plain(pending.bundleName)),
-					text.urlSection(endpoint.url),
+					text.urlSection(url),
 				],
 				footer: text.urlFooter,
 			}),
@@ -221,8 +213,7 @@ export class McpGrantFlow {
 		bundleName: string,
 	): Promise<void> {
 		const text = this.#text;
-		if (!bundleName || bundleName.length > 80)
-			throw new OwnerFacingError(text.bundleNameRule);
+		this.#ops.bundleName(bundleName);
 		await managedChannel(
 			interaction.client,
 			interaction.channelId,
@@ -257,44 +248,26 @@ export class McpGrantFlow {
 
 	async #confirm(interaction: ButtonOrMenu, pending: Pending): Promise<void> {
 		const text = this.#text;
-		const channel = await managedChannel(
-			interaction.client,
-			pending.channelId,
-			pending.userId,
-			pending.operations,
-			text,
-		);
-		const endpoint = newChannelEndpoint(this.#publicUrl);
-		const { bundle, created } = await this.#grants.ensureBundle(
-			pending.bundleName,
-			endpoint.tokenHash,
-			pending.operations,
-		);
-		const existing = await this.#grants.grant(bundle.id, channel.id);
-		await this.#grants.save({
-			bundleId: bundle.id,
-			channelId: channel.id,
-			guildId: channel.guildId,
+		const done = await this.#ops.authorize(interaction.client, {
+			bundle: pending.bundleName,
+			channelId: pending.channelId,
+			userId: pending.userId,
 			operations: pending.operations,
-			displayName: pending.displayName ?? existing?.displayName ?? channel.name,
-			description: pending.description ?? existing?.description ?? "",
-			guildName: channel.guild.name,
-			channelName: channel.name,
-			authorizedBy: pending.userId,
-			authorizedAt: new Date(),
+			...(pending.displayName ? { displayName: pending.displayName } : {}),
+			...(pending.description ? { description: pending.description } : {}),
 		});
 		await interaction.editReply(
 			ownerPanel({
 				title: text.grantedTitle,
 				sections: [
 					text.granted(
-						plain(channel.name),
-						plain(bundle.name),
-						opLabels(pending.operations, text),
+						plain(done.channelName),
+						plain(done.bundle),
+						opLabels(done.operations, text),
 					),
-					created ? text.urlSection(endpoint.url) : text.existingUrl,
+					done.url ? text.urlSection(done.url) : text.existingUrl,
 				],
-				footer: created ? text.urlFooter : text.urlLostFooter(this.#root),
+				footer: done.url ? text.urlFooter : text.urlLostFooter(this.#root),
 			}),
 		);
 	}

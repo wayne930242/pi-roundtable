@@ -16,7 +16,10 @@ export const DEFAULT_MAX_TOOL_NAME = 45;
 export const DEFAULT_SERVER_PREFIX = "roundtable-conn-";
 
 /** A request the owner can fix; the message is shown to the owner as is. */
-export class ConnectorError extends Error {}
+export class ConnectorError extends Error {
+	/** Marks the error as one whose message the owner reads, for a host that does not know this class. */
+	readonly refusal = true;
+}
 
 export interface Connector {
 	name: string;

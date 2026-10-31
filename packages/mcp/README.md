@@ -113,6 +113,12 @@ It provides the `CONNECTORS` service (`Connectors`):
 | `token` | The bearer token that the virtual servers' URLs expect; one per process, valid for a year |
 | `resolve(serverName)` | Reads one virtual server's URL and tools by name, for servers the host manages itself rather than as connectors |
 | `admin` | `gateways()` and `servers()`: what ContextForge holds, upstream gateways with their state and every virtual server with its tool names, for a host's status view |
+| `add({ name, url, description, header?, token? })` | Adds a connector as `/<root> connector add` does: no token is no authentication, a token alone is sent as `Authorization: Bearer`, and a header name sends the token in that header. The token goes to ContextForge only; the result, `{ connector, skipped }`, never holds it |
+| `describe(name, description)` | Changes a connector's purpose |
+| `remove(name)` | Deletes a connector, its virtual server, and its upstream server with its token |
+
+A refusal from `add`, `describe` or `remove` is a `ConnectorError` whose message is the configured wording, ready to show the owner; it also carries `refusal: true` for a host that does not import the class.
+`list()` returns each connector's full URL, which may hold a credential in its path or query: show the owner `displayUrl(url, unreadable)` (exported), which keeps only the scheme and host.
 
 The plugin reads the stored connectors, and resolves each one's server in ContextForge, in its `preflight`, which the host runs after every plugin is set up and before any service starts or any listener opens: during `setup` `list()`, `servers()` and `profileSources()` are empty and `version` is 0, and `version` changes once the connectors are loaded. Read them from a service's `start`, or later (a turn, a command, a request); no command or turn arrives before they are loaded. `resolve(serverName)` and `token` work from setup. A host's `Roundtable.check()` runs no preflight, so it needs neither the database nor ContextForge. The runtime's startup tool probe runs before this preflight, so it does not see the connectors' servers: a `requiredTools` entry that only a connector's server provides fails the start; the first real session connects to them instead.
 The plugin does not decide which agent uses which connector.
@@ -208,6 +214,14 @@ The plugin provides the `REMOTE_MCP` service (`RemoteMcpService`) for a host tha
 | --- | --- |
 | `grants` | `bundles()` and `grants(bundleId?)`, read only: every bundle, and the channel grants of one bundle or of all |
 | `describeGrant(client, grant)` | One grant as lines of text for a Discord message: the name the agent sees, where the channel is, its purpose, and the allowed operations, in the plugin's wording |
+| `operations` | Every operation a grant may allow, `{ id, label }`, in order |
+| `bundles(client)` | Every bundle with its channels: names (Discord's current ones, or the last known when the bot cannot see the channel), the name and purpose the agent sees, operations, and each channel's recent audit entries |
+| `revoke(bundle, channelId)` | Removes a channel from a bundle |
+| `describe(bundle, channelId, { displayName?, description? })` | Changes the channel name and purpose that the agent sees |
+| `rotate(bundle)` | Replaces a bundle's MCP URL and returns `{ url }`, this once; only its hash is kept |
+| `authorize(client, { bundle, channelId, userId, operations, displayName?, description? })` | Adds a channel to a bundle, creating the bundle when it does not exist, with the checks `/<root> mcp authorize` makes: a server text or announcement channel that `userId`, the acting owner's Discord ID, may manage, with the permissions behind each operation held by them and the bot. A new bundle's URL is in the result this once |
+
+A refusal from these is a `RemoteMcpError` whose message is the configured wording; it also carries `refusal: true`.
 
 #### `ChannelGrantStore`
 

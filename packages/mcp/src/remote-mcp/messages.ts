@@ -79,6 +79,8 @@ export interface RemoteMcpMessages {
 	rotated(bundle: string): string;
 	urlFooter: string;
 	bundleNameRule: string;
+	/** Refuses an authorization with no operation chosen, or one that is not an operation. */
+	operationsRequired: string;
 	grantedTitle: string;
 	granted(channel: string, bundle: string, operations: string): string;
 	existingUrl: string;
@@ -187,6 +189,7 @@ export const REMOTE_MCP_MESSAGES: RemoteMcpMessages = {
 	urlFooter:
 		"This URL is the access credential and is shown only this once; only its hash is stored.",
 	bundleNameRule: "A bundle name needs 1 to 80 characters.",
+	operationsRequired: "Choose one or more of the allowed operations.",
 	grantedTitle: "Authorized",
 	granted: (channel, bundle, operations) =>
 		`**#${channel}** was added to bundle **${bundle}**, allowing: ${operations}.`,

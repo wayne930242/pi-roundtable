@@ -20,12 +20,12 @@ import {
 	plain,
 	replyWithPanels,
 } from "pi-roundtable/discord";
+import { authFrom, displayUrl } from "./connector-input.ts";
 import {
 	type Connector,
 	ConnectorError,
 	type ConnectorRegistry,
 } from "./connector-registry.ts";
-import type { UpstreamAuth } from "./contextforge.ts";
 import type { ConnectorMessages } from "./messages.ts";
 
 export const CONNECTOR_MODAL_ID = "rtmcp:connector:add";
@@ -38,7 +38,6 @@ const FIELD = {
 	token: "token",
 } as const;
 
-const HEADER_NAME = /^[A-Za-z0-9-]{1,100}$/;
 const TOOL_PREVIEW = 12;
 
 function connectorGroup(text: ConnectorMessages) {
@@ -135,33 +134,6 @@ export function connectorModal(text: ConnectorMessages): ModalBuilder {
 				{ required: false, max: 4000 },
 			),
 		);
-}
-
-function authFrom(
-	header: string,
-	token: string,
-	text: ConnectorMessages,
-): UpstreamAuth {
-	if (!token) {
-		if (header) throw new OwnerFacingError(text.headerNeedsToken);
-		return { type: "none" };
-	}
-	if (!header) return { type: "bearer", token };
-	if (!HEADER_NAME.test(header)) throw new OwnerFacingError(text.headerRule);
-	return { type: "header", name: header, value: token };
-}
-
-/** Scheme and host only: some servers take their credential in the path, query, or user part. */
-export function displayUrl(url: string, unreadable: string): string {
-	const parsed = URL.parse(url);
-	if (!parsed) return unreadable;
-	const hidden =
-		parsed.pathname !== "/" ||
-		parsed.search ||
-		parsed.hash ||
-		parsed.username ||
-		parsed.password;
-	return `${parsed.origin}${hidden ? "/…" : ""}`;
 }
 
 function section(connector: Connector, text: ConnectorMessages): string {
