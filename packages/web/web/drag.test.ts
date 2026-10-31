@@ -154,6 +154,35 @@ test("dragged over another zone it lights that zone and shows a line instead of 
 	expect(folder.querySelector(".drop-line")).toBeNull();
 });
 
+test("the rest keeps its own order: inside it nothing moves over or lights, and a room from elsewhere lights it without a line", async () => {
+	const { root, rows, rest } = page5();
+	const extra = row("E");
+	rest.querySelector("ul")?.append(extra);
+	box(rest, 320, 116);
+	box(extra, 380, 56);
+	let run = start(rows.D as HTMLElement, root, 340);
+	pointer("pointermove", 420);
+	await frames();
+	expect(rows.D?.style.transform).toBe("translate3d(0, 80px, 0)");
+	expect(extra.style.transform).toBe("");
+	expect(root.querySelector("[data-drop-target]")).toBeNull();
+	expect(root.querySelector(".drop-line")).toBeNull();
+	pointer("pointerup", 420);
+	const inside = run.done[0] as Extract<Outcome, { type: "room" }>;
+	expect(inside.drop.zone.kind).toBe("rest");
+
+	run = start(rows.A as HTMLElement, root, 120);
+	pointer("pointermove", 400);
+	await frames();
+	expect(rest.hasAttribute("data-drop-target")).toBe(true);
+	expect(rest.querySelector(".drop-line")).toBeNull();
+	expect(rows.D?.style.transform).toBe("");
+	expect(extra.style.transform).toBe("");
+	pointer("pointerup", 400);
+	const out = run.done[0] as Extract<Outcome, { type: "room" }>;
+	expect(out.drop.zone.kind).toBe("rest");
+});
+
 test("a finger that lets go without moving is a tap, and Escape or a drop outside every zone cancels", async () => {
 	const { root, rows } = page5();
 	let run = start(rows.A as HTMLElement, root, 120);

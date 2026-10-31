@@ -163,8 +163,12 @@ export function lift(options: Lift): () => void {
 			const index = drop ? zones.indexOf(drop.zone) : -1;
 			lit = zoneEls[index];
 			const own = lit?.contains(item) ?? false;
+			// The rest of the rooms keep their own order (newest first), so there is no place in it to
+			// show: a room from elsewhere lights it as a whole, and one already there lights nothing.
+			const ordered = drop?.zone.kind !== "rest";
+			if (!ordered && own) lit = undefined;
 			// In its own list the others move over; into another zone a line shows the place.
-			const items = drop ? drop.zone.items : [];
+			const items = drop && ordered ? drop.zone.items : [];
 			const rows = own
 				? [
 						...(lit as HTMLElement).querySelectorAll<HTMLElement>(
@@ -197,7 +201,7 @@ export function lift(options: Lift): () => void {
 			rows.forEach((row, i) => {
 				if (move[i]) row.style.transform = `translate3d(0, ${move[i]}px, 0)`;
 			});
-			if (lit && drop && !own) {
+			if (lit && drop && !own && ordered) {
 				const next =
 					drop.before === null
 						? undefined

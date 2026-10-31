@@ -33,6 +33,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A link click reaches every `useRoute`, not only the first that listened. The Files page, kept mounted across folders since 0.26.2, no longer ignores taps on its folders when reached from another page (the phone's tab bar).
 - The overview's Start over resets an agent's or group's web room, not its Discord channel's sessions.
+- A room dragged within Ungrouped no longer makes the other rows move aside as if it could be placed among them; Ungrouped keeps its newest-first order, and a room dragged in from a pinned list or a folder lights it without a placement line.
+
 
 ## [0.27.1] - 2026-10-31
 
