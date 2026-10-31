@@ -103,7 +103,8 @@ export function storedLine(message: RoomMessage): Line {
  * room's stored messages and its newest line each time either changes; a line that grows or settles
  * (a stream that becomes its stored reply) updates the one it continues instead of queueing again.
  * `advance` moves on once the line on show is typed out. The first feed, and the one that brings the
- * history in, start from the newest line, so the history a page loads does not replay.
+ * history in, start from the newest line, so the history a page loads does not replay. A room with no
+ * line left, as after a start-over, empties the box and drops what waited.
  */
 export interface Stage {
 	/** The line on show. */
@@ -146,6 +147,12 @@ export function createStage(): Stage {
 			if (!cursor) {
 				cursor = top;
 				lines = newest ? [newest] : [];
+				return;
+			}
+			// the room has no line left, as after a start-over: the box empties, its queue too
+			if (!newest) {
+				cursor = Math.max(cursor, top);
+				lines = [];
 				return;
 			}
 			for (const message of messages)

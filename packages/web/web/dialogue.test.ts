@@ -377,6 +377,23 @@ describe("the stage: one speaker's words typed out whole before the next takes t
 		stage.advance();
 		expect(shown(stage)).toBe("m4");
 	});
+
+	test("a start-over empties the box and drops what waited", () => {
+		const stage = createStage();
+		const log = [knight(1, "otto", "w".repeat(300))];
+		stage.feed(log, storedLineOf(log));
+		log.push(knight(2, "lena"));
+		stage.feed(log, storedLineOf(log));
+		expect(stage.waiting).toBe(1);
+		// the room starts over: its messages are gone and it has no line
+		stage.feed([], undefined);
+		expect(stage.line).toBeUndefined();
+		expect(stage.waiting).toBe(0);
+		// the next words after the start-over show at once
+		const next = [knight(5, "mira")];
+		stage.feed(next, storedLineOf(next));
+		expect(shown(stage)).toBe("m5");
+	});
 });
 
 const storedLineOf = (log: RoomMessage[]) => {
