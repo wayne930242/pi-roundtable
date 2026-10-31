@@ -297,9 +297,8 @@ export class DiscordSurface
 
 	/**
 	 * Discord draws attachments below a message's text, so the card goes out as its own message
-	 * first and produced files last, each on its own. Replies may mention people but never everyone or a role.
-	 * A card is decoration: one Discord refuses (a channel without Attach Files) is logged, and the text still goes out.
-	 */
+	 * first and produced files last, each on its own. Replies may mention people but never everyone or a role. A card
+	 * Discord refuses (a channel without Attach Files) is logged, and the text still goes out. */
 	async sendReply(channel: ChannelKey, reply: OutboundReply): Promise<void> {
 		const target = await this.#sendable(channel);
 		const allowedMentions = { parse: ["users" as const] };
@@ -307,20 +306,15 @@ export class DiscordSurface
 			await target.send({ content: reply.thinking, allowedMentions });
 		}
 		if (reply.card) {
-			try {
-				await target.send({
-					files: [
-						new AttachmentBuilder(Buffer.from(reply.card), {
-							name: "card.png",
-						}),
-					],
-				});
-			} catch (error) {
+			const card = new AttachmentBuilder(Buffer.from(reply.card), {
+				name: "card.png",
+			});
+			await target.send({ files: [card] }).catch((err: unknown) => {
 				this.#options.logger.warn(
-					{ channel, err: error },
+					{ channel, err },
 					"reply card not posted; sending the text alone",
 				);
-			}
+			});
 		}
 		for (const chunk of reply.chunks) {
 			await target.send({ content: chunk, allowedMentions });
