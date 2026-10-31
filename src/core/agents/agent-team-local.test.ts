@@ -211,7 +211,7 @@ describeDb("schedule_list across the rooms of a team with Discord", () => {
 		expect(doctor?.schedules).toBe(2);
 	});
 
-	test("after a restart a message still lands in the web conversation the target last worked in", async () => {
+	test("after a restart the target's latest conversation is kept, and a message stays on the sender's surface", async () => {
 		fx.surfaces.rooms = ["app"];
 		await fx.team.answerOwner(
 			room("infra"),
@@ -226,8 +226,7 @@ describeDb("schedule_list across the rooms of a team with Discord", () => {
 		try {
 			expect(restarted.conversations.latest("infra")).toBe(room("infra"));
 			const infra = restarted.activeAgent("infra");
-			const from = discordKey(restarted.activeAgent("doctor").channelId ?? "");
-			expect(
+			const target = (from: string) =>
 				messageTarget(
 					{
 						store: restarted,
@@ -237,8 +236,13 @@ describeDb("schedule_list across the rooms of a team with Discord", () => {
 					},
 					infra,
 					undefined,
-				),
-			).toBe(room("infra"));
+				);
+			// From Discord it stays on Discord, though the target last worked in its web room.
+			expect(
+				target(discordKey(restarted.activeAgent("doctor").channelId ?? "")),
+			).toBe(discordKey(infra.channelId ?? ""));
+			// From a web room it reaches the target's web room.
+			expect(target(room("doctor"))).toBe(room("infra"));
 			// An agent that has run nothing yet has no latest: the sender's surface decides.
 			expect(restarted.conversations.latest("doctor")).toBeUndefined();
 		} finally {
