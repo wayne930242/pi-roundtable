@@ -209,7 +209,7 @@ function CouncilTable({ named }: { named: string | undefined }) {
 							{council
 								? t("Every member of this council is gone. Edit who sits.")
 								: t(
-										"A council is a group of up to {max} knights who answer in turn. Pick who sits.",
+										"A council is a group of up to {max} knights who answer in turn.",
 										{ max: 8 },
 									)}
 						</p>

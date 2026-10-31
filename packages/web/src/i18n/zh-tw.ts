@@ -294,8 +294,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"The council is empty": "評議會沒有人了",
 	"Every member of this council is gone. Edit who sits.":
 		"這個評議會的成員都不在了。請重新選誰上桌。",
-	"A council is a group of up to {max} knights who answer in turn. Pick who sits.":
-		"評議會是最多 {max} 位騎士組成的群組，他們輪流發言。請選誰上桌。",
+	"A council is a group of up to {max} knights who answer in turn.":
+		"評議會是最多 {max} 位騎士組成的群組，他們輪流發言。",
 	"Edit this council": "編輯這個評議會",
 	"{count} of {max} picked": "已選 {count}/{max}",
 	"At most {max} knights": "最多 {max} 位",
