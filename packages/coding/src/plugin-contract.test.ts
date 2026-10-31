@@ -42,6 +42,15 @@ test("configuration errors are plugin errors and single-character model IDs are 
 	expect(coding({ shelfDir: "/tmp/unused-shelf", model: "a/b" }).name).toBe(
 		"coding",
 	);
+	for (const bad of [
+		{ maxWorkers: 0 },
+		{ maxWorkers: 1.5 },
+		{ maxQueued: -1 },
+		{ autonomy: { longRunningMaxMs: Number.POSITIVE_INFINITY } },
+	])
+		expect(() =>
+			coding({ shelfDir: "/tmp/unused-shelf", model: "a/b", ...bad }),
+		).toThrow(PluginError);
 });
 
 const privateTo = (principalId: string): SessionConversation => ({

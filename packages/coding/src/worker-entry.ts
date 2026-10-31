@@ -34,6 +34,7 @@ export function codingWorkerPrompt(dir: string): string {
 	return [
 		`You are a coding worker in ${dir}. The next message is your approved task. Read this repository's AGENTS.md.`,
 		"Work with the shell and file tools available. Complete and verify the contract, stage files by name and commit using repository conventions, without tool attribution.",
+		"You work in your own worktree on its own branch: commit there and stay on it, without switching branches or rebasing; the host merges your branch back when you finish.",
 		"Do not push or ship. The calling agent reviews your commits and requests the owner's approval through repo_change_report and repo_push.",
 		"Risky calls wait for the owner's approval. An approved call runs; a declined or held call must not be retried or worked around.",
 		"Resolve decisions settled by the task or repository. Put remaining owner decisions and held actions in your report instead of guessing.",

@@ -1,7 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { HeldCall, HoldCheck } from "pi-roundtable";
-import { AgentError, canonicalJson, shellHoldRule } from "pi-roundtable/kit";
+import {
+	AgentError,
+	canonicalJson,
+	holdChain,
+	shellHoldRule,
+} from "pi-roundtable/kit";
 import type {
 	CodingJob,
 	CodingProgress,
@@ -53,6 +58,28 @@ function isMessage(value: unknown): value is WorkerMessage {
 		"type" in value &&
 		typeof value.type === "string"
 	);
+}
+
+/** The worker's own shell rule as a check, for the classes of the calls it holds. */
+const SHELL_CHECK: HoldCheck = holdChain([shellHoldRule]);
+
+/**
+ * The hold classes of a held call, from every check that held it, as the host's gate records them
+ * for yolo mode; undefined when a holding check tells none, which leaves the call unclassed.
+ */
+function classesOf(
+	tool: string,
+	input: Record<string, unknown>,
+	context: { workspace: string; scratchDir?: string },
+	holding: readonly HoldCheck[],
+): string[] | undefined {
+	const found: string[] = [];
+	for (const check of holding) {
+		const classes = check.classesOf?.(tool, input, context);
+		if (!classes?.length) return undefined;
+		found.push(...classes);
+	}
+	return found.length ? [...new Set(found)] : undefined;
 }
 
 /** A fresh Bun process per task; only the host decides whether a held call may run. */
@@ -149,15 +176,24 @@ export class PiCodingWorker implements CodingWorker {
 										? { scratchDir: this.#options.scratchDir }
 										: {}),
 								};
-								const action =
-									shellHoldRule.describe(tool, input, context) ??
-									this.#options.holds?.(tool, input, context);
+								// Every check is asked once, so the classes cover each reason the call is held.
+								const shell = shellHoldRule.describe(tool, input, context);
+								const { holds } = this.#options;
+								const host = holds?.(tool, input, context);
+								const action = shell ?? host;
 								if (!signal.aborted) {
+									const holdClasses = action
+										? classesOf(tool, input, context, [
+												...(shell === undefined ? [] : [SHELL_CHECK]),
+												...(host === undefined || !holds ? [] : [holds]),
+											])
+										: undefined;
 									answer = action
 										? await review({
 												tool,
 												input: canonicalJson(input),
 												action,
+												...(holdClasses ? { holdClasses } : {}),
 											})
 										: "approved";
 									if (action && answer !== "approved")

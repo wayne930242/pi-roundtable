@@ -77,7 +77,7 @@ System report turns cannot call `repo_task`; do the work in the turn or hand it 
 | --- | --- | --- |
 | `repo_add` | `repo` | Clone `owner/repo` into `shelfDir/owner/repo`; refuse invalid names and existing clones. |
 | `repo_list` | `fetch?` | List paths, branches, upstream ahead/behind counts, dirty files, last commits, prose summaries, CI hints and linked skills. |
-| `repo_task` | `repo`, `task`, `skills?` | Start a background worker, returning its job number immediately. The host's own turns, such as a report's, may not. |
+| `repo_task` | `repo`, `task`, `skills?` | Start a background worker in its own worktree, or queue it when every worker slot is taken, returning its job number (and queue position) immediately. The host's own turns, such as a report's, may not. |
 | `repo_change_report` | `repo` | Fetch and post the commits and diffstat ahead of the default branch; return its full SHA. |
 | `repo_push` | `repo`, `sha` | Push the exact reported SHA to the reported default branch, without force, after the hold gate permits it. |
 
@@ -95,10 +95,22 @@ The role is checked when the session is built and again before every extra `skil
 A newly granted role makes the extra tool available once the session is rebuilt.
 
 A worker reads the repository's instructions, edits and checks the work, and commits using repository conventions.
-One worker may use a repository at a time, with up to three per channel.
-Reports and pushes refuse a repository while its coding worker is still running.
-The plugin also reserves repositories during report and push operations, refusing concurrent shipping calls and new coding tasks.
-The worker's report includes its final answer, declined or unanswered actions, branch, HEAD, new commits and uncommitted files.
+Each worker runs in its own linked worktree on its own branch, `worker/<job>` (with a suffix when a kept branch already has that name), cut from the clone's HEAD when it starts, so several workers can work on one repository at once.
+Worktrees live under `shelfDir/.worktrees/<owner>/<repo>/`; the shelf lists no repository there, and owners starting with a dot are refused as repository names.
+The managed clone stays the place reports and pushes ship from.
+
+When a worker finishes, its branch is rebased onto the clone's current HEAD inside its worktree and the clone is fast-forwarded to it; the worktree and branch are then removed, and `repo_change_report` ships the result as before.
+A rebase conflict is aborted in the worktree, so the clone is never left mid-rebase; the branch and worktree are kept and the report names the conflicting files, the branch and the worktree path.
+A clone with uncommitted changes at that moment, or a worktree the worker left uncommitted changes in, is not touched: the report says why and keeps the branch.
+A worker that committed nothing leaves no worktree or branch behind.
+Integrations of one clone run one at a time, and wait for a report or push of it in progress.
+Reports and pushes refuse a repository only while an integration is changing its clone, not while workers run in their worktrees; the desk also refuses a second concurrent report or push of a repository and new coding tasks for it while one runs.
+
+At most `maxWorkers` workers (default 4) run at once on the host, across repositories and channels.
+Past that a task waits in a first-in, first-out queue of at most `maxQueued` tasks (default 16), and `repo_task` answers at once with its queue position; one more is refused.
+A queued task starts when a worker slot frees.
+On host stop queued tasks are dropped and each gets a report saying it never ran; the shutdown drain waits only for running workers.
+The worker's report includes its final answer, declined or unanswered actions, calls approved by yolo mode, what became of its branch, branch, HEAD, new commits and uncommitted files.
 Failures and timeouts also report the final Git state when it can be read.
 By default reports are sent to the caller's surface; `onResult(result)` can instead enqueue a background conversation turn through your host integration.
 Dates are formatted using `context.env.timeZone`, not a process-wide zone.
@@ -132,6 +144,16 @@ While it works, the worker posts its progress into its thread, as the host's own
 The thread's cards come after the text written before them, the final report is posted once, and a failed progress post or edit is logged and never fails the job.
 `interimText: "off"` posts only the task, the held-action notices, the cards and the report; a thread whose host cannot edit its posts gets no progress either.
 `promptSlot` tracks these cards and `workTimeout` excludes their waiting time from the worker's budget (one hour by default).
+
+### Yolo and long-running modes
+
+With `modes` (the host's `MODES` service, `context.services.find(MODES)`) and `autonomy` (the same values as the host's `autonomy` config), a worker follows the yolo and long-running modes of the conversation whose turn started it, read live: switching a mode in that conversation applies to its running workers at once.
+They act only when an owner other than the host's own principal spoke that turn, so a worker gains nothing its starter could not turn on.
+In yolo mode a held call is approved without a card exactly as in the conversation: it needs hold classes, and none of them may be carded by `autonomy.yolo.card`, by `YOLO_CARDED_SHELL_CLASSES` unless `autonomy.yolo.allow` names it, or be an unclassed rule `allow` leaves out; push-class holds that the host cards still stop on a card.
+The worker reports the classes of every check that holds a call: the shell rule's and the host hold check's `classesOf`; a check that holds a call without classes leaves it unclassed, so a card decides.
+Each approval is told to `modes.autoApproved` with the starter's channel and listed under "Approved by yolo mode" in the report.
+In long-running mode a worker that reaches `timeoutMs` goes on, looking again at the mode each minute, up to `autonomy.longRunningMaxMs` of work in all (four hours by default).
+Without `modes` every held call asks a card and the worker stops at `timeoutMs`.
 `timeoutMs` must be positive and finite, and at most 2,147,483,647 ms to fit the host timer.
 A worker's card has no grace period and no deadline: the worker waits for the answer until it is stopped, and the waiting does not count against its time.
 An approved call runs; a declined, missing or failed card blocks it and instructs the worker not to retry or work around the refusal.
@@ -142,7 +164,8 @@ Card expiration is determined by the host's surface implementation, not this pac
 
 The worker runs in a fresh Bun child process with an unsaved Pi session and uses the public `runWorkerTask` helper.
 Timeout and shutdown kill its POSIX process group and wait for exit; normal completion also removes shell descendants left in that group.
-The service advertises running jobs through `busy()` so the host can drain them before shutdown.
+The service advertises running jobs through `busy()` so the host can drain them before shutdown; queued tasks are not among them.
+`CodingDesk.busy()` lists running and queued jobs, marking each queued one with its position, and `queuedChannels()` names the channels of queued tasks.
 Jobs are in memory; they do not resume after a crash.
 The injectable `worker` runner must observe aborts and settle its run; this is a trusted test/integration seam.
 
@@ -181,7 +204,7 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `adoptClones` | `[]` | Startup `{ from, repo }` moves of standalone clones; existing shelf destinations are never replaced. |
 | `resolveRun` | configured model/thinking, caller channel | Per-caller model, thinking, report channel and optional thread origin. |
 | `postChangeReport` | caller surface reply | Post the record using the calling identity and channel. |
-| `presentation` | English package text | Separate change-report post/result text, task-start/omitted-skill wording, and the `repo_list` result (`list(repos, { shelfDir, fetched })`). |
+| `presentation` | English package text | Separate change-report post/result text, task-start/omitted-skill wording, queued-task wording (`taskQueued(job, position, skipped)`), and the `repo_list` result (`list(repos, { shelfDir, fetched })`). |
 | `toolText` | package wording | Trusted description and argument descriptions for each repository tool, as `{ repo_task: { description, parameters: { task: "…" } } }`; it never changes a tool's arguments or approval rules. |
 | `threads` | none | Public `DispatchThreads`-compatible progress and approval thread port. |
 | `threadText` | English package text | Thread introduction, held-action notice, approval title and final report. |
@@ -196,12 +219,17 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `workerPackages` | `[]` | Absolute installed extension paths. |
 | `agentDir` | Pi host directory | Pi credentials and model configuration. |
 | `timeoutMs` | `3600000` | Work-time limit in ms, excluding owner wait; 0 < value <= 2147483647. |
+| `maxWorkers` | `4` | Workers running at once on the host; a whole number of at least 1. |
+| `maxQueued` | `16` | Tasks waiting for a worker slot; a whole number of at least 0. |
+| `modes` | none | The host's conversation modes (`peek`, optional `autoApproved`), for workers to follow their starter's yolo and long-running modes. |
+| `autonomy` | `{ yolo: { allow: [], card: [] }, longRunningMaxMs: 14400000 }` | The host's resolved autonomy limits those modes follow. |
 | `holds` | none | Additional worker hold check. |
 | `clone` | `ghClone` | Git-host clone implementation. |
 | `worker` | `PiCodingWorker` | Trusted worker runner replacement. |
 | `onResult` | surface reply | Report delivery integration. |
 
-`RepoShelf`, `CodingDesk`, `PiCodingWorker`, `CodingWorkerFailure`, `REPO_TOOLS`, `codingReport`, `reportPost` and their option/result types are exported for testing and host integrations.
+`RepoShelf`, `CodingDesk`, `PiCodingWorker`, `CodingWorkerFailure`, `REPO_TOOLS`, `codingReport`, `integrationText`, `reportPost`, `WORKTREES_DIR` and their option/result types are exported for testing and host integrations.
+`CodingResult.integration` tells what became of the worker's branch (`merged`, `nothing`, `conflict` with its files, or `refused` with the reason) and `CodingResult.autoApproved` the calls yolo mode approved; `CodingJob.starter` names the conversation and speaker whose modes the worker follows, and `CodingJob.branch` its branch.
 `resolveRun(turn)` receives the public `ToolTurn`, including the calling agent scope and channel.
 It returns `{ model, thinking, channel, origin? }`; skill selection still follows the caller, not the resolved report destination.
 A `resolveRun` or `postChangeReport` that sends a person's report away from the calling channel sends it to that person's own direct channel, `context.directChannels.reach(turn.speaker.principalId)`, and throws `ToolRefusal` when none reaches them.
@@ -223,7 +251,7 @@ bun run --cwd packages/coding lint
 ```
 
 Tests use temporary bare Git origins, `testPlugin`, fake workers and a real child Pi session with an offline faux provider.
-They cover cloning/listing, reports, push holds and approved pushes, owner exceptions, work-time exclusion, bad names, closed approval paths and child-process exit.
+They cover cloning/listing, reports, push holds and approved pushes, owner exceptions, work-time exclusion, bad names, closed approval paths, child-process exit, parallel workers merging into one clone, kept conflicts, the worker cap and queue, and yolo and long-running modes.
 CI runs those checks.
 The shared `publish.yml` workflow repeats them, checks that every workspace version and core peer range match the single `v*` tag, then uses npm trusted publishing with provenance.
 The owner performs the initial npm publication and configures this package's trust against `publish.yml`; no separate repository or package-specific tag is needed.

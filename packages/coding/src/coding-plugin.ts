@@ -22,9 +22,11 @@ import {
 } from "pi-roundtable/kit";
 import { Type } from "typebox";
 import {
+	type CodingAutonomy,
 	CodingDesk,
 	type CodingJob,
 	type CodingLimits,
+	type CodingModes,
 	type CodingResult,
 	type CodingThreadText,
 	type CodingWorker,
@@ -76,6 +78,12 @@ export interface CodingPresentation {
 		direct: boolean,
 	): { post: string; result: string };
 	taskStarted?(job: CodingJob, skippedSkills: string[]): string;
+	/** The repo_task result for a task waiting for a worker slot, at `position` (from 1) in the queue. */
+	taskQueued?(
+		job: CodingJob,
+		position: number,
+		skippedSkills: string[],
+	): string;
 }
 export interface CodingOptions {
 	shelfDir: string;
@@ -122,6 +130,18 @@ export interface CodingOptions {
 	workerPackages?: string[];
 	agentDir?: string;
 	timeoutMs?: number;
+	/** Workers running at once on the host; default 4. More tasks wait in a queue. */
+	maxWorkers?: number;
+	/** Tasks waiting for a worker slot, first in first out; one more is refused. Default 16. */
+	maxQueued?: number;
+	/**
+	 * The conversations' modes, such as `context.services.find(MODES)`: a worker then follows the
+	 * yolo and long-running modes of the conversation whose owner turn started it, read live.
+	 * Without them a worker asks a card for every held call and stops at `timeoutMs`.
+	 */
+	modes?: CodingModes;
+	/** The host's resolved `autonomy` limits, which the worker's yolo and long-running modes follow. */
+	autonomy?: CodingAutonomy;
 	/** Optional additional worker rules; linked host rules also apply. */
 	holds?: HoldCheck;
 	/** A different Git host or an offline clone implementation. */
@@ -130,6 +150,35 @@ export interface CodingOptions {
 	worker?: CodingWorker;
 	/** Override report delivery, for example to schedule a background conversation turn. */
 	onResult?: (result: CodingResult) => Promise<void>;
+}
+/**
+ * The worker's host hold check: the plugin's extra rules, else the linked host rules, with the
+ * classes of every check that holds a call so yolo mode can judge it; a check that holds a call
+ * without telling its classes leaves the call unclassed.
+ */
+function workerHolds(
+	extra: HoldCheck | undefined,
+	linked: () => HoldCheck,
+): HoldCheck {
+	const check: HoldCheck = (tool, input, scope) =>
+		extra?.(tool, input, scope) ?? linked()(tool, input, scope);
+	check.classesOf = (tool, input, scope) => {
+		const found: string[] = [];
+		for (const holds of extra ? [extra, linked()] : [linked()]) {
+			if (holds(tool, input, scope) === undefined) continue;
+			const classes = holds.classesOf?.(tool, input, scope);
+			if (!classes?.length) return undefined;
+			found.push(...classes);
+		}
+		return found.length ? [...new Set(found)] : undefined;
+	};
+	return check;
+}
+function checkCount(name: string, value: number | undefined, least: number) {
+	if (value !== undefined && (!Number.isSafeInteger(value) || value < least))
+		throw new Error(
+			`${name} must be a whole number of at least ${least}; got ${value}.`,
+		);
 }
 async function refusal<T>(operation: () => Promise<T>): Promise<T> {
 	try {
@@ -150,6 +199,18 @@ export function coding(options: CodingOptions) {
 		checkLimit("limits.heldEntries", options.limits?.heldEntries);
 		checkLimit("limits.heldChars", options.limits?.heldChars);
 		checkLimit("diagnosticChars", options.diagnosticChars);
+		checkCount("maxWorkers", options.maxWorkers, 1);
+		checkCount("maxQueued", options.maxQueued, 0);
+		const longRunning = options.autonomy?.longRunningMaxMs;
+		if (
+			longRunning !== undefined &&
+			(!Number.isFinite(longRunning) ||
+				longRunning <= 0 ||
+				longRunning > 2_147_483_647)
+		)
+			throw new Error(
+				"autonomy.longRunningMaxMs must be positive, finite and at most 2147483647.",
+			);
 	} catch (error) {
 		throw new PluginError(
 			error instanceof Error ? error.message : String(error),
@@ -185,14 +246,20 @@ export function coding(options: CodingOptions) {
 					prompt: options.workerPrompt,
 					blockText: options.workerBlockText,
 					diagnosticChars: options.diagnosticChars,
-					holds: (tool, input, scope) =>
-						options.holds?.(tool, input, scope) ??
-						context.sessions().holds(tool, input, scope),
+					holds: workerHolds(options.holds, () => context.sessions().holds),
 				});
 			const desk = new CodingDesk({
 				shelf,
 				worker,
 				timeoutMs: options.timeoutMs,
+				...(options.maxWorkers !== undefined
+					? { maxWorkers: options.maxWorkers }
+					: {}),
+				...(options.maxQueued !== undefined
+					? { maxQueued: options.maxQueued }
+					: {}),
+				...(options.modes ? { modes: options.modes } : {}),
+				...(options.autonomy ? { autonomy: options.autonomy } : {}),
 				limits: options.limits,
 				logger: context.logger,
 				threads: options.threads,
@@ -215,23 +282,8 @@ export function coding(options: CodingOptions) {
 						});
 					}),
 			});
-			const shipping = new Set<string>();
-			async function ship<T>(
-				repo: string,
-				operation: () => Promise<T>,
-			): Promise<T> {
-				desk.checkIdle(repo);
-				if (shipping.has(repo))
-					throw new AgentError(
-						"A report or push is already in progress for this repository.",
-					);
-				shipping.add(repo);
-				try {
-					return await operation();
-				} finally {
-					shipping.delete(repo);
-				}
-			}
+			const ship = <T>(repo: string, operation: () => Promise<T>) =>
+				desk.ship(repo, operation);
 			context.services.provide(CODING, { shelf, desk });
 			// Whether the principal holds the owner role; no identity service, or a failed lookup,
 			// tells of no one holding it.
@@ -427,7 +479,7 @@ export function coding(options: CodingOptions) {
 						minTier: "owner",
 						description: describe(
 							"repo_task",
-							"Start one background Pi coding worker in a clone. The worker reads repository instructions, edits, checks and commits; shipping uses a separate report and approval. Report returns to this channel.",
+							"Start a background Pi coding worker on a clone. Each worker has its own worktree and branch, so several may work on one repository; when it finishes, its commits are rebased onto the clone and fast-forwarded, and a conflict keeps the branch and is reported. When every worker slot is taken the task waits in a queue. The worker reads repository instructions, edits, checks and commits; shipping uses a separate report and approval. Report returns to this channel.",
 						),
 						parameters: Type.Object({
 							repo: repoSchema("repo_task"),
@@ -447,7 +499,7 @@ export function coding(options: CodingOptions) {
 									throw new AgentError(
 										"the host's own turns, such as a report's, start no coding tasks; ask the owner to start it",
 									);
-								if (shipping.has(repo))
+								if (desk.shipping(repo))
 									throw new AgentError(
 										"A report or push is in progress for this repository.",
 									);
@@ -472,23 +524,48 @@ export function coding(options: CodingOptions) {
 									model: options.model,
 									thinking: options.thinking ?? "medium",
 								};
-								if (shipping.has(repo))
+								if (desk.shipping(repo))
 									throw new AgentError(
 										"A report or push is in progress for this repository.",
 									);
+								const { speaker } = turn;
 								const job = await desk.start({
 									...run,
+									// Its modes follow the conversation this turn runs in, as the turn's own would.
+									...(speaker
+										? {
+												starter: {
+													channel: turn.channel,
+													speaker: {
+														id: speaker.id,
+														principalId: speaker.principalId,
+														...(speaker.name ? { name: speaker.name } : {}),
+														tier: speaker.tier,
+													},
+												},
+											}
+										: {}),
 									repo,
 									task,
 									skillFiles: set?.skills.map((skill) => skill.file) ?? [],
 									skillNames: set?.skills.map((skill) => skill.name) ?? [],
 								});
+								const skipped = set?.missing.map((item) => item.name) ?? [];
+								const skippedText = skipped.length
+									? ` Unavailable implicit skills skipped: ${skipped.join(", ")}.`
+									: "";
+								if (job.queuePosition !== undefined)
+									return (
+										options.presentation?.taskQueued?.(
+											job,
+											job.queuePosition,
+											skipped,
+										) ??
+										`Queued coding task #${job.id} in ${repo} at position ${job.queuePosition}: every worker slot is taken, and it starts on ${job.model} when one frees. Its report returns to ${job.channel}.${skippedText}`
+									);
 								return (
-									options.presentation?.taskStarted?.(
-										job,
-										set?.missing.map((item) => item.name) ?? [],
-									) ??
-									`Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}.${set?.missing.length ? ` Unavailable implicit skills skipped: ${set.missing.map((item) => item.name).join(", ")}.` : ""}`
+									options.presentation?.taskStarted?.(job, skipped) ??
+									`Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}.${skippedText}`
 								);
 							}),
 					}),

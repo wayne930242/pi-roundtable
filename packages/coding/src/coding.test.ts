@@ -353,7 +353,7 @@ test("work timeout excludes owner waiting, then aborts and reports state", async
 	expect(result.state?.branch).toBe("main");
 	expect(desk.busy()).toEqual([]);
 });
-test("missing, declined and failed cards fail closed, and jobs reserve before awaiting", async () => {
+test("missing, declined and failed cards fail closed, and a repository takes a second worker", async () => {
 	const { shelf } = await fixture();
 	await shelf.add("sample/project");
 	for (const mode of ["missing", "declined", "failed"] as const) {
@@ -378,9 +378,8 @@ test("missing, declined and failed cards fail closed, and jobs reserve before aw
 			},
 		});
 		await desk.start(request());
-		await expect(desk.start(request())).rejects.toThrow(
-			"Coding task #1 is still working in sample/project; one worker runs per repository.",
-		);
+		// A second worker on the same repository starts in its own worktree.
+		expect((await desk.start(request())).queuePosition).toBeUndefined();
 		const result = await delivered.promise;
 		await desk.idle();
 		// A declined call is settled; only an unanswered one is held for the report.
@@ -730,7 +729,19 @@ test("rejects timer overflow and bounds injected worker reports and held inputs"
 	const shelf = {
 		dirOf: () => "/tmp",
 		state: async () => ({ branch: "main", head: "abc123", uncommitted: [] }),
-		commitsSince: async () => [],
+		addWorktree: async (repo: string) => ({
+			repo,
+			dir: "/tmp",
+			branch: "worker/1",
+			base: "abc123",
+		}),
+		integrate: async () => ({ status: "nothing" as const }),
+		treeState: async () => ({
+			branch: "worker/1",
+			head: "abc123",
+			uncommitted: [],
+		}),
+		treeCommits: async () => [],
 	};
 	const result = gate<CodingResult>();
 	const options = {
@@ -1360,6 +1371,56 @@ test("the coding service reports the channels it is working for, so a shutdown c
 	const service = harness.contribution.services?.find(
 		(item) => item.name === "coding-desk",
 	);
+	expect(service?.busy?.()).toEqual(["test:room"]);
+	release.resolve("done");
+});
+
+test("repo_task records the starting conversation and says when a task waits in the queue", async () => {
+	const { shelf } = await fixture();
+	await shelf.add("sample/project");
+	const release = gate<string>();
+	const jobs: CodingJob[] = [];
+	const harness = await testPlugin(
+		coding({
+			shelfDir: shelf.dir,
+			model: "faux/worker",
+			maxWorkers: 1,
+			maxQueued: 1,
+			worker: {
+				run: (job) => {
+					jobs.push(job);
+					return release.promise;
+				},
+			},
+			onResult: async () => {},
+		}),
+	);
+	stops.push(() => harness.stop());
+	const call = () =>
+		harness.runTool(
+			"repo_task",
+			{ repo: "sample/project", task: "Do it" },
+			{ channel: "test:room", speaker: OWNER_SPEAKER },
+		);
+	expect(await call()).toContain("Started coding task #1");
+	expect(await call()).toContain(
+		"Queued coding task #2 in sample/project at position 1",
+	);
+	expect(await call()).toContain("All 1 coding workers are busy");
+	await Bun.sleep(50);
+	expect(jobs[0]?.starter).toEqual({
+		channel: "test:room",
+		speaker: {
+			id: OWNER_SPEAKER.id,
+			principalId: OWNER_SPEAKER.principalId,
+			...(OWNER_SPEAKER.name ? { name: OWNER_SPEAKER.name } : {}),
+			tier: "owner",
+		},
+	});
+	const service = harness.contribution.services?.find(
+		(item) => item.name === "coding-desk",
+	);
+	// A shutdown waits for the running worker, not the queued task.
 	expect(service?.busy?.()).toEqual(["test:room"]);
 	release.resolve("done");
 });

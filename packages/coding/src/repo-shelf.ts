@@ -10,6 +10,7 @@ import {
 	readSync,
 	realpathSync,
 	renameSync,
+	rmSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { AgentError, checkRepoName, scrubDiagnostic } from "pi-roundtable/kit";
@@ -53,6 +54,36 @@ export interface RepoState {
 }
 
 export type CloneCommand = (repo: string, dir: string) => Promise<void>;
+
+/** A coding worker's own checkout: a linked worktree on its own branch, cut from the clone's HEAD. */
+export interface WorkerTree {
+	repo: string;
+	/** The worktree's real path, outside the shelf's list of managed repositories. */
+	dir: string;
+	/** The worker's branch, such as `worker/3`. */
+	branch: string;
+	/** The clone's full HEAD the branch was cut from. */
+	base: string;
+}
+
+/** What bringing a worker's branch back into its clone did. */
+export type Integration =
+	/** The branch had no commits beyond the clone; the worktree and branch are gone. */
+	| { status: "nothing" }
+	/** Rebased onto the clone's branch and fast-forwarded it; the worktree and branch are gone. */
+	| { status: "merged"; branch: string; commits: string[] }
+	/** The rebase stopped on these files; it was aborted, and the branch and worktree are kept. */
+	| { status: "conflict"; branch: string; dir: string; files: string[] }
+	/** The clone or the worktree had uncommitted changes, or the clone moved; nothing was touched. */
+	| {
+			status: "refused";
+			branch: string;
+			dir: string;
+			reason: string;
+	  };
+
+/** The folder under the shelf that holds worker worktrees; the shelf lists no repository there. */
+export const WORKTREES_DIR = ".worktrees";
 
 const GIT_TIMEOUT_MS = 60_000;
 const MAX_STAT_FILES = 40;
@@ -218,7 +249,7 @@ export class RepoShelf {
 		if (!existsSync(this.dir)) return [];
 		// pi-lens-ignore: no-sort-without-comparator — the names are strings, and code-unit order gives the same list on every machine
 		return readdirSync(this.dir, { withFileTypes: true })
-			.filter((owner) => owner.isDirectory())
+			.filter((owner) => owner.isDirectory() && !owner.name.startsWith("."))
 			.flatMap((owner) =>
 				readdirSync(join(this.dir, owner.name), {
 					withFileTypes: true,
@@ -235,6 +266,7 @@ export class RepoShelf {
 	/** A managed repository's folder, or an error naming the managed ones. */
 	dirOf(repo: string): string {
 		checkRepoName(repo);
+		refuseHidden(repo);
 		const dir = join(this.dir, repo);
 		if (!existsSync(join(dir, ".git")))
 			throw new AgentError(
@@ -262,6 +294,7 @@ export class RepoShelf {
 	/** Clones a repository into the shelf (behavior 2). */
 	async add(repo: string): Promise<string> {
 		checkRepoName(repo);
+		refuseHidden(repo);
 		const dir = join(this.dir, repo);
 		if (existsSync(dir) || this.#adding.has(repo))
 			throw new AgentError(`${repo} is already present or being cloned.`);
@@ -398,6 +431,176 @@ export class RepoShelf {
 		return log ? log.split("\n") : [];
 	}
 
+	/**
+	 * Cuts a worktree for coding job `id` from the clone's HEAD, on a fresh branch `worker/<id>`
+	 * (with a suffix when an earlier run kept one of that name), under `<shelf>/.worktrees/`.
+	 */
+	async addWorktree(repo: string, id: number): Promise<WorkerTree> {
+		const clone = this.dirOf(repo);
+		const base = await this.#git(clone, "rev-parse", "HEAD");
+		const parent = join(this.dir, WORKTREES_DIR, repo);
+		mkdirSync(parent, { recursive: true });
+		const rel = relative(realpathSync(this.dir), realpathSync(parent));
+		if (rel.startsWith("..") || isAbsolute(rel))
+			throw new AgentError("The worktree folder escapes the shelf.");
+		for (let attempt = 1; ; attempt++) {
+			const name = attempt === 1 ? `${id}` : `${id}-${attempt}`;
+			const branch = `worker/${name}`;
+			const dir = join(parent, name);
+			const taken =
+				existsSync(dir) ||
+				(
+					await run([
+						"git",
+						"-C",
+						clone,
+						"rev-parse",
+						"--verify",
+						"--quiet",
+						`refs/heads/${branch}`,
+					])
+				).code === 0;
+			if (taken) continue;
+			await this.#git(
+				clone,
+				"worktree",
+				"add",
+				"--quiet",
+				"-b",
+				branch,
+				dir,
+				base,
+			);
+			return { repo, dir: realpathSync(dir), branch, base };
+		}
+	}
+
+	/**
+	 * Rebases the worker's branch onto the clone's current HEAD inside its worktree and
+	 * fast-forwards the clone, then removes the worktree and branch. The clone is never left
+	 * mid-rebase: a conflict aborts the rebase in the worktree and keeps both. A clone or worktree
+	 * with uncommitted changes is not touched. The caller serializes integrations of one clone.
+	 */
+	async integrate(tree: WorkerTree): Promise<Integration> {
+		const clone = this.dirOf(tree.repo);
+		const kept = { branch: tree.branch, dir: tree.dir };
+		const dirty = await this.#git(clone, "status", "--porcelain");
+		if (dirty)
+			return {
+				status: "refused",
+				...kept,
+				reason: `the clone has uncommitted changes, so it was left as it is:\n${dirty}`,
+			};
+		const head = await this.#git(clone, "rev-parse", "HEAD");
+		const ahead = Number(
+			await this.#git(clone, "rev-list", "--count", `${head}..${tree.branch}`),
+		);
+		if (ahead === 0) {
+			await this.removeWorktree(tree);
+			return { status: "nothing" };
+		}
+		const treeDir = this.#treeDir(tree);
+		const treeDirty = await this.#git(treeDir, "status", "--porcelain");
+		if (treeDirty)
+			return {
+				status: "refused",
+				...kept,
+				reason: `the worker left uncommitted changes in its worktree:\n${treeDirty}`,
+			};
+		const rebase = await run(["git", "-C", treeDir, "rebase", "--quiet", head]);
+		if (rebase.code !== 0) {
+			const conflicted = await run([
+				"git",
+				"-C",
+				treeDir,
+				"diff",
+				"--name-only",
+				"--diff-filter=U",
+			]);
+			await run(["git", "-C", treeDir, "rebase", "--abort"]);
+			return {
+				status: "conflict",
+				...kept,
+				files: conflicted.out ? conflicted.out.split("\n") : [],
+			};
+		}
+		const merge = await run([
+			"git",
+			"-C",
+			clone,
+			"merge",
+			"--ff-only",
+			"--quiet",
+			tree.branch,
+		]);
+		if (merge.code !== 0)
+			return {
+				status: "refused",
+				...kept,
+				reason: `the clone could not fast-forward to the branch: ${scrubDiagnostic(merge.err, this.#diagnosticChars) || `exit ${merge.code}`}`,
+			};
+		const log = await this.#git(
+			clone,
+			"log",
+			"--format=%h %s",
+			"--abbrev=12",
+			`${head}..HEAD`,
+		);
+		await this.removeWorktree(tree);
+		return {
+			status: "merged",
+			branch: tree.branch,
+			commits: log ? log.split("\n") : [],
+		};
+	}
+
+	/** A worker worktree's state, as `state` reads a clone's. */
+	async treeState(tree: WorkerTree): Promise<RepoState> {
+		const dir = this.#treeDir(tree);
+		const status = await this.#git(dir, "status", "--porcelain");
+		return {
+			branch: await this.#git(dir, "rev-parse", "--abbrev-ref", "HEAD"),
+			head: await this.#git(dir, "rev-parse", "--short=12", "HEAD"),
+			uncommitted: status ? status.split("\n") : [],
+		};
+	}
+
+	/** `<short sha> <subject>` of each commit on the worker's branch after its base, newest first. */
+	async treeCommits(tree: WorkerTree): Promise<string[]> {
+		const log = await this.#git(
+			this.#treeDir(tree),
+			"log",
+			"--format=%h %s",
+			"--abbrev=12",
+			`${tree.base}..HEAD`,
+		);
+		return log ? log.split("\n") : [];
+	}
+
+	/** Removes a worker's worktree and its branch; what is already gone is skipped. */
+	async removeWorktree(tree: WorkerTree): Promise<void> {
+		const clone = this.dirOf(tree.repo);
+		this.#treeDir(tree, false);
+		await run(["git", "-C", clone, "worktree", "remove", "--force", tree.dir]);
+		if (existsSync(tree.dir))
+			rmSync(tree.dir, { recursive: true, force: true });
+		await run(["git", "-C", clone, "worktree", "prune"]);
+		await run(["git", "-C", clone, "branch", "-D", "--quiet", tree.branch]);
+	}
+
+	/** A worktree path, refused unless it lies in this repository's worktree folder. */
+	#treeDir(tree: WorkerTree, mustExist = true): string {
+		const parent = resolve(this.dir, WORKTREES_DIR, tree.repo);
+		const path = mustExist ? realpathSync(tree.dir) : resolve(tree.dir);
+		const root = existsSync(parent) ? realpathSync(parent) : parent;
+		const rel = relative(root, path);
+		if (!rel || rel.startsWith("..") || isAbsolute(rel) || rel.includes("/"))
+			throw new AgentError(
+				"The worktree lies outside the shelf's worktree folder.",
+			);
+		return path;
+	}
+
 	async #summary(repo: string, fetch: boolean): Promise<RepoSummary> {
 		const dir = this.dirOf(repo);
 		const summary = summaryOf(dir);
@@ -497,6 +700,14 @@ export class RepoShelf {
 			);
 		return out;
 	}
+}
+
+/** Owners starting with a dot are the shelf's own folders, such as its worktrees. */
+function refuseHidden(repo: string): void {
+	if (repo.startsWith("."))
+		throw new AgentError(
+			`"${repo}" is not a repository: owners starting with a dot are reserved for the shelf.`,
+		);
 }
 
 /** The report as posted for the owner. */
