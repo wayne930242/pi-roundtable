@@ -434,7 +434,10 @@ export class PiAgentRuntime implements AgentRuntime {
 					(name) => registered.has(name) && this.#tiers.allows(tier, name),
 				);
 			session.setActiveToolsByName([...worker.tools]);
-			const prompted = withoutReplyFiles(() => session.prompt(task.text));
+			// The model wrote the task text, so it is never a command or a skill to expand.
+			const prompted = withoutReplyFiles(() =>
+				session.prompt(task.text, { expandPromptTemplates: false }),
+			);
 			prompted.catch(() => undefined);
 			await Promise.race([prompted, guard.gaveUp]);
 			return workerReport(

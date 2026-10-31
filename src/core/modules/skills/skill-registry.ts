@@ -51,6 +51,8 @@ export class StoredSkillRegistry implements SkillRegistry {
 	readonly #packageSkills = new Map<string, PackageSkill>();
 	/** The tail of the document writes, so a hash is checked and the skill written without another save between. */
 	#documents: Promise<unknown> = Promise.resolve();
+	/** The carried skills already warned of as missing, as agent and name. */
+	readonly #warnedMissing = new Set<string>();
 
 	/** Throws a PluginError when a package skill has the name of a linked or written one. */
 	constructor(options: SkillRegistryOptions) {
@@ -96,11 +98,20 @@ export class StoredSkillRegistry implements SkillRegistry {
 	/** What an agent carries, built-in skills included. */
 	carried(agent: string): SkillSet {
 		const set = this.resolve(this.#options.store.carriedBy(agent));
-		for (const { name, reason } of set.missing)
+		// Every room open and menu fetch asks, so a missing skill is warned of once, until it is back.
+		const gone = new Set(set.missing.map((m) => `${agent}\0${m.name}`));
+		for (const key of this.#warnedMissing)
+			if (key.startsWith(`${agent}\0`) && !gone.has(key))
+				this.#warnedMissing.delete(key);
+		for (const { name, reason } of set.missing) {
+			const key = `${agent}\0${name}`;
+			if (this.#warnedMissing.has(key)) continue;
+			this.#warnedMissing.add(key);
 			this.#options.logger.warn(
 				{ agent, skill: name, reason },
 				"carried skill missing",
 			);
+		}
 		return set;
 	}
 

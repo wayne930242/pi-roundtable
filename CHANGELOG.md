@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A delegated task's text is prompted to its worker with `expandPromptTemplates: false`, so a task text the model wrote that begins with `/name` or `/skill:name` is plain text for the worker's model and can never run an extension command or expand a skill.
+- `SkillRegistry.carried` warns of a carried skill that is missing once, not on every call: opening an agent's room or its command menu no longer repeats the line. It warns again if the skill came back and went.
 - A message that names an extension command or a skill (`/name args`, `/skill:name args`) sent while a turn runs is no longer steered into the turn: Pi refuses to queue an extension command, and the queued expansion of a skill is not the text the run looks for among its leftovers. It waits for its own turn like a message from another speaker, and Pi runs or expands it then.
 
 ### Changed

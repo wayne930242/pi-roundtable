@@ -4,6 +4,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	renameSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -11,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
+import pino from "pino";
 import { AgentError } from "../../domain/errors.ts";
 import { PluginError } from "../../errors.ts";
 import { silentLogger } from "../../log.ts";
@@ -578,6 +580,35 @@ describeDb("PostgreSQL", () => {
 			expect(registry.describeCarried("infra")).toContain(
 				"coding (missing: not registered)",
 			);
+		});
+
+		test("a carried skill that is missing is warned of once, again after it came back and went", async () => {
+			const lines: string[] = [];
+			registry = new StoredSkillRegistry({
+				store,
+				reposDir: join(dir, "repos"),
+				writtenDir: join(dir, "skills"),
+				builtinDir: BUILTIN,
+				packageSkills: discoverPackageSkills(
+					["pi-workflow-skills"],
+					packageDirIn(dir),
+				),
+				logger: pino({ level: "warn" }, { write: (line) => lines.push(line) }),
+			});
+			registry.init();
+			await registry.attach("warn-once", ["coding", "grilling"], []);
+			const gone = join(dir, "node_modules/pi-workflow-skills/skills/grilling");
+			const kept = join(dir, "grilling-kept");
+			renameSync(gone, kept);
+			registry.carried("warn-once");
+			registry.carried("warn-once");
+			expect(lines.length).toBe(1);
+			expect(lines[0]).toContain("carried skill missing");
+			renameSync(kept, gone);
+			expect(registry.carried("warn-once").missing).toEqual([]);
+			renameSync(gone, kept);
+			registry.carried("warn-once");
+			expect(lines.length).toBe(2);
 		});
 
 		test("a linked or written skill with a package skill's name stops startup", async () => {
