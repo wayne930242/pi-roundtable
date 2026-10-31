@@ -5,10 +5,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
-
-- The round table's camera turns to a member by the same rule as the spotlight: only when their words show. A member who only thinks or works no longer takes it when the previous speaker's words finish; the camera stays on whoever spoke last until the next member's words start.
-
 ## [0.29.1] - 2026-10-31
 
 ### Added
@@ -23,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Host rooms have the drawer too: the swipe, and a tap on the room's picture in the header. The waiting-cards strip of a host room moved to its own file.
 - A message of yours sent while a turn runs shows where it stands under it, live and after a reload: "Added to this turn" when the running turn took it, "Queued" while it waits for its own turn (the line goes when the turn starts), and "Cancelled" for one you cancelled, which stays in the room dimmed and never runs. A queued message's long-press or right-click menu offers its author Edit (a sheet with the text; the turn runs on the new text and the message shows as edited) and Cancel. Once the turn has started a notice says it is too late. `RoomMessage.delivery` carries the state (`steered` and `cancelled` are stored, in a new `delivery` column; `queued` is read from the host's queue and so does not outlive a restart); client frames `edit_queued` and `cancel_queued` (`room`, `message` id, `text`) answer with the changed message as an `edited` frame or a `refused` frame (`not_queued` when the turn has started, `forbidden` for another person's message). With a core that has no `ConversationPort.cancelQueued` and `editQueued`, both answer `not_queued`.
 - Pressing ↑ in an empty message box opens Edit on your latest message in the room that still waits for its turn (not while an input method composes; Alt+↑ / Alt+↓ still switch rooms), and the `?` shortcut list names it.
+- The round table's camera turns to a member by the same rule as the spotlight: only when their words show. A member who only thinks or works no longer takes it when the previous speaker's words finish; the camera stays on whoever spoke last until the next member's words start.
 
 ### Fixed
 
