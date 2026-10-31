@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The room drawer opens on a phone. A swipe right in a room never reached the page in Chrome: the room had the default `touch-action`, so Chrome took a sideways drag for itself a few pixels in and cancelled the touch before the swipe was 24 px long. The room, its message list, the composer and the drawer's own list now allow only up-down panning and pinch zoom, which leaves sideways drags to the page. A swipe that starts in a sideways-scrolling code block or table, a field, a card's option row, a sheet over the page, or a scene that takes every touch is still not the room's.
+
+### Changed
+
+- A swipe right opens the room drawer from anywhere in the left half of the screen, the left edge included, over the header and empty space as well as over the messages. It was the messages only, and not within 32 px of either edge. The right edge stays the system's Back, and the drawer closes by a swipe left from anywhere but there.
+- Host rooms have the drawer too: the swipe, and a tap on the room's picture in the header. The waiting-cards strip of a host room moved to its own file.
+
 ## [0.29.0] - 2026-10-31
 
 ### Added

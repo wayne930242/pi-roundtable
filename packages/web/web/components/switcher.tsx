@@ -10,7 +10,7 @@ import {
 	useState,
 } from "react";
 import { translate as t } from "../lib/messages.ts";
-import { blocksSwipe, Swipe } from "../lib/swipe.ts";
+import { blocksSwipe, overPage, Swipe } from "../lib/swipe.ts";
 
 // The rows load apart from the drawer's gesture code: they are only drawn once it opens, and are fetched when it is mounted.
 const loadList = () => import("./switcher-list.tsx");
@@ -46,9 +46,9 @@ interface SwipeHandlers {
 }
 
 /**
- * The room switcher's drawer on a phone: a swipe right over the message list pulls it open
- * (`surface`), `show` opens it from a button, and a tap, a swipe left, Escape or the system Back
- * closes it. A touch that starts within the edge guard is never ours (see `Swipe`).
+ * The room switcher's drawer on a phone: a swipe right that starts anywhere in the left half of
+ * the room pulls it open (`surface`, on the room's page), `show` opens it from a button, and a tap,
+ * a swipe left, Escape or the system Back closes it. The right edge is left to the system (see `Swipe`).
  */
 export function useSwitcher(enabled: boolean): {
 	enabled: boolean;
@@ -143,12 +143,15 @@ export function useSwitcher(enabled: boolean): {
 		return {
 			onPointerDown(event) {
 				if (event.pointerType !== "touch") return;
+				// The room's handlers see the open drawer's touches too, as it sits inside the room.
+				if (from === "closed" && (!enabled || open)) return;
 				// A second finger ends the swipe.
 				if (swipe.current) {
 					swipe.current = undefined;
 					return;
 				}
-				if (from === "closed" && (!enabled || open)) return;
+				if (from === "closed" && overPage(event.target, event.currentTarget))
+					return;
 				if (blocksSwipe(event.target, event.currentTarget)) return;
 				const started = new Swipe(from, window.innerWidth);
 				if (started.begin(event.clientX, event.clientY, event.timeStamp))

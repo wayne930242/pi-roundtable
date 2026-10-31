@@ -2,10 +2,13 @@
 // machine, so its thresholds can be tested without a touch screen.
 
 /**
- * A touch that starts this close to either screen edge is left to the system: many phones use an
- * edge swipe for Back, and a page cannot opt out of it.
+ * A touch that starts this close to the right screen edge is left to the system, and so is a
+ * thread card's swipe near either edge: many phones use an edge swipe for Back. The drawer opens
+ * from the left edge too, where the system lets the page have the touch (see `OPEN_ZONE`).
  */
 export const EDGE_GUARD = 32;
+/** A swipe right opens the drawer from anywhere in this share of the screen's width, counted from the left. */
+export const OPEN_ZONE = 0.5;
 /** How far the finger moves before the swipe is judged. */
 export const MIN_DISTANCE = 24;
 /** The horizontal motion must be this many times the vertical one. */
@@ -24,6 +27,18 @@ export const drawerWidth = (viewport: number): number =>
 /** Whether a touch at `x` starts within the guard of either edge of a screen `viewport` wide. */
 export const atScreenEdge = (x: number, viewport: number): boolean =>
 	x < EDGE_GUARD || x > viewport - EDGE_GUARD;
+
+/**
+ * Whether a touch at `x` may start the swipe that moves a drawer `from` closed or open. Opening
+ * takes the left half of the screen, edge included; closing takes the screen but the right edge,
+ * which the system keeps for Back.
+ */
+export const startsSwipe = (
+	from: "closed" | "open",
+	x: number,
+	viewport: number,
+): boolean =>
+	from === "closed" ? x <= viewport * OPEN_ZONE : x < viewport - EDGE_GUARD;
 
 export type Axis = "wait" | "reject" | "horizontal";
 
@@ -67,9 +82,9 @@ export class Swipe {
 		this.#viewport = viewport;
 	}
 
-	/** Starts the swipe; false when the touch is within the edge guard, which leaves it to the system. */
+	/** Starts the swipe; false when the touch is outside the zone that moves this drawer (see `startsSwipe`). */
 	begin(x: number, y: number, t: number): boolean {
-		if (atScreenEdge(x, this.#viewport)) return false;
+		if (!startsSwipe(this.#from, x, this.#viewport)) return false;
 		this.#origin = { x, y };
 		this.#samples = [{ x, t }];
 		this.#state = "wait";
@@ -125,6 +140,10 @@ export class Swipe {
 const SIDEWAYS =
 	"input, textarea, select, [contenteditable], [data-swipe-ignore]";
 
+/** Whether the element has taken every touch for its own gesture (`touch-action: none`), as a drawn scene does. */
+const takesTouch = (element: Element): boolean =>
+	getComputedStyle(element).touchAction === "none";
+
 /** Whether the element scrolls sideways now, as a wide code block or table does. */
 function scrollsSideways(element: Element): boolean {
 	if (element.scrollWidth <= element.clientWidth + 1) return false;
@@ -134,7 +153,8 @@ function scrollsSideways(element: Element): boolean {
 
 /**
  * Whether a touch that begins at `target` belongs to something else: a field, anything marked
- * `data-swipe-ignore` (a card's option row), or an element between it and `stop` that scrolls sideways.
+ * `data-swipe-ignore` (a card's option row), or an element between it and `stop` that scrolls sideways
+ * or takes every touch.
  */
 export function blocksSwipe(
 	target: EventTarget | null,
@@ -142,9 +162,23 @@ export function blocksSwipe(
 ): boolean {
 	let element = target instanceof Element ? target : null;
 	while (element) {
-		if (element.matches(SIDEWAYS) || scrollsSideways(element)) return true;
+		if (
+			element.matches(SIDEWAYS) ||
+			scrollsSideways(element) ||
+			takesTouch(element)
+		)
+			return true;
 		if (element === stop) return false;
 		element = element.parentElement;
 	}
 	return false;
+}
+
+/**
+ * Whether a touch at `target` is on a dialog or sheet drawn over the page, or on something React
+ * delivered here from outside `stop` (a portal): what those show is theirs, not the room's.
+ */
+export function overPage(target: EventTarget | null, stop: Element): boolean {
+	if (!(target instanceof Element) || !stop.contains(target)) return true;
+	return target.closest('[aria-modal="true"], dialog') !== null;
 }

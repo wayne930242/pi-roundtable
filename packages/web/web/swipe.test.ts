@@ -13,14 +13,18 @@ import {
 	axisOf,
 	drawerWidth,
 	EDGE_GUARD,
+	MIN_DISTANCE,
+	OPEN_FRACTION,
+	OPEN_ZONE,
 	Swipe,
 	settles,
+	startsSwipe,
 } from "./lib/swipe.ts";
 
 const VIEWPORT = 390;
 
 describe("where a swipe may start", () => {
-	test("a touch within 32 px of either screen edge is left to the system", () => {
+	test("a touch within 32 px of either edge is still left to the system for a thread card's swipe", () => {
 		expect(EDGE_GUARD).toBe(32);
 		expect(atScreenEdge(0, VIEWPORT)).toBe(true);
 		expect(atScreenEdge(31, VIEWPORT)).toBe(true);
@@ -30,8 +34,27 @@ describe("where a swipe may start", () => {
 		expect(atScreenEdge(VIEWPORT, VIEWPORT)).toBe(true);
 	});
 
-	test("an edge start never becomes a drag, however far and straight it goes", () => {
-		for (const x of [0, 20, 31, VIEWPORT - 31, VIEWPORT - 1]) {
+	test("the drawer opens from anywhere in the left half, the left edge included", () => {
+		expect(OPEN_ZONE).toBe(0.5);
+		for (const x of [0, 1, 31, 32, 0.4 * VIEWPORT, VIEWPORT / 2]) {
+			expect(startsSwipe("closed", x, VIEWPORT)).toBe(true);
+			expect(new Swipe("closed", VIEWPORT).begin(x, 300, 0)).toBe(true);
+		}
+		for (const x of [VIEWPORT / 2 + 1, 250, VIEWPORT - 31, VIEWPORT]) {
+			expect(startsSwipe("closed", x, VIEWPORT)).toBe(false);
+			expect(new Swipe("closed", VIEWPORT).begin(x, 300, 0)).toBe(false);
+		}
+	});
+
+	test("an open drawer closes by a swipe from anywhere but the right edge, which stays the system's Back", () => {
+		for (const x of [0, 100, 250, VIEWPORT - 33])
+			expect(startsSwipe("open", x, VIEWPORT)).toBe(true);
+		for (const x of [VIEWPORT - 32, VIEWPORT - 31, VIEWPORT])
+			expect(startsSwipe("open", x, VIEWPORT)).toBe(false);
+	});
+
+	test("a start outside the zone never becomes a drag, however far and straight it goes", () => {
+		for (const x of [VIEWPORT / 2 + 1, VIEWPORT - 1]) {
 			const swipe = new Swipe("closed", VIEWPORT);
 			expect(swipe.begin(x, 300, 0)).toBe(false);
 			expect(swipe.move(x + 200, 300, 100)).toEqual({
@@ -42,11 +65,22 @@ describe("where a swipe may start", () => {
 		}
 	});
 
-	test("the first point inside the guard starts a swipe", () => {
-		expect(new Swipe("closed", VIEWPORT).begin(32, 300, 0)).toBe(true);
-		expect(new Swipe("closed", VIEWPORT).begin(VIEWPORT - 32, 300, 0)).toBe(
-			true,
-		);
+	test("a swipe from 40 % of the width, left edge and all, settles open", () => {
+		for (const x of [2, 0.4 * VIEWPORT]) {
+			const swipe = new Swipe("closed", VIEWPORT);
+			expect(swipe.begin(x, 300, 0)).toBe(true);
+			expect(swipe.move(x + MIN_DISTANCE + 1, 304, 20).state).toBe("drag");
+			swipe.move(x + drawerWidth(VIEWPORT) * OPEN_FRACTION + 10, 306, 900);
+			expect(swipe.finish(900)).toBe(true);
+		}
+	});
+
+	test("a vertical scroll from 40 % of the width is no swipe of ours", () => {
+		const swipe = new Swipe("closed", VIEWPORT);
+		swipe.begin(0.4 * VIEWPORT, 600, 0);
+		expect(swipe.move(0.4 * VIEWPORT + 6, 560, 30).state).toBe("reject");
+		expect(swipe.move(0.4 * VIEWPORT + 200, 540, 60).state).toBe("reject");
+		expect(swipe.finish()).toBeUndefined();
 	});
 });
 
@@ -69,8 +103,8 @@ describe("which motion counts", () => {
 		right.begin(100, 300, 0);
 		expect(right.move(130, 302, 50).state).toBe("drag");
 		const left = new Swipe("closed", VIEWPORT);
-		left.begin(200, 300, 0);
-		expect(left.move(160, 300, 50).state).toBe("reject");
+		left.begin(150, 300, 0);
+		expect(left.move(110, 300, 50).state).toBe("reject");
 		expect(left.finish()).toBeUndefined();
 	});
 
@@ -278,5 +312,33 @@ describe("reduced motion", () => {
 		expect(tokens).toMatch(
 			/prefers-reduced-motion: reduce[\s\S]*--dur-slow: 0\.01ms/,
 		);
+	});
+});
+
+describe("touch-action", () => {
+	// Real Chrome cancels a touch's pointer events a few pixels into a sideways drag unless the
+	// element it started on allows only up-down panning; a scroll container needs its own value.
+	const css = readFileSync(new URL("./app.css", import.meta.url), "utf8");
+	const allowing = (selector: string): boolean =>
+		[...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(
+			(rule) =>
+				rule[1]?.split(",").some(
+					(one) =>
+						one
+							.trim()
+							.replace(/^[\s\S]*\*\//, "")
+							.trim() === selector,
+				) && /touch-action:\s*pan-y\b/.test(rule[2] ?? ""),
+		);
+
+	test("the room, its message list, the composer and the drawer's list keep up-down panning only", () => {
+		for (const selector of [
+			".room",
+			".room-scroll",
+			".composer",
+			".switcher-panel",
+			".switcher-scroll",
+		])
+			expect(allowing(selector)).toBe(true);
 	});
 });

@@ -426,6 +426,18 @@
 	background: var(--bg);
 }
 
+/*
+ * A swipe right in a room opens the room drawer (lib/swipe.ts). With the default touch-action the
+ * browser takes a sideways drag for itself after a few pixels and cancels the page's pointer events,
+ * so the page only keeps the up-down scroll and pinch zoom. A scroll container does not take its
+ * ancestors' value, so the message list and the composer name it too.
+ */
+.room,
+.room-scroll,
+.composer {
+	touch-action: pan-y pinch-zoom;
+}
+
 .room-head {
 	display: flex;
 	align-items: center;
@@ -608,6 +620,8 @@ button.room-picture:hover:not(:disabled) {
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
+	/* A scroll container takes no touch-action from the panel; without this a swipe left over the rows would be the browser's. */
+	touch-action: pan-y;
 	overscroll-behavior: contain;
 	padding: 0 var(--space-2) var(--space-3);
 }

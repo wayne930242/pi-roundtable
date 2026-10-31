@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { CharacterStack, PageCharacter } from "../components/character.tsx";
 import { Composer } from "../components/composer.tsx";
+import { HeaderPicture } from "../components/header-picture.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { RoomChat } from "../components/room-chat.tsx";
@@ -222,6 +223,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 		<section
 			className="room"
 			style={accent}
+			{...switcher.surface}
 			onDragOver={(event) => {
 				if (event.dataTransfer.types.includes("Files")) event.preventDefault();
 			}}
@@ -237,7 +239,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 						roomKey={roomKey}
 						lead={lead}
 						go={(council) => navigate("room", council.key, { replace: true })}
-						surface={switcher.surface}
 						incoming={dropped}
 						onIncomingTaken={() => setDropped(undefined)}
 					/>
@@ -275,7 +276,6 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<RoomChat
 						roomKey={roomKey}
 						name={name}
-						surface={switcher.surface}
 						composer={(toEnd) =>
 							view?.readOnly ? (
 								<p className="room-note">
@@ -395,24 +395,5 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 			) : null}
 			<RoomSwitcher {...switcher.drawer} current={roomKey} />
 		</section>
-	);
-}
-
-/** The room's picture in the header; where the room has a drawer, tapping it opens the drawer. */
-function HeaderPicture(props: {
-	open: (() => void) | undefined;
-	children: React.ReactNode;
-}) {
-	if (!props.open) return props.children;
-	return (
-		<button
-			type="button"
-			className="room-picture"
-			aria-label={t("Switch rooms")}
-			aria-haspopup="dialog"
-			onClick={props.open}
-		>
-			{props.children}
-		</button>
 	);
 }

@@ -82,8 +82,6 @@ export function RoomChat(props: {
 	roomKey: string;
 	/** Who the progress strip names when no reply of an agent is there yet. */
 	name: string;
-	/** Handlers the list carries, such as the room drawer's swipe. */
-	surface?: React.HTMLAttributes<HTMLDivElement>;
 	composer(toEnd: (smooth: boolean) => void): ReactNode;
 }) {
 	const { roomKey } = props;
@@ -161,12 +159,7 @@ export function RoomChat(props: {
 					<WaitingChip roomKey={roomKey} scroller={scroller} loaded={loaded} />
 				</Suspense>
 			) : null}
-			<div
-				className="room-scroll"
-				ref={scroller}
-				onScroll={onScroll}
-				{...props.surface}
-			>
+			<div className="room-scroll" ref={scroller} onScroll={onScroll}>
 				<div className="room-content" ref={content}>
 					{error ? <Failure message={error} /> : null}
 					{!loaded && !error ? <Loading /> : null}

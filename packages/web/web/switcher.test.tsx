@@ -54,20 +54,24 @@ const approval = (id: string): PromptFrame =>
 		purpose: "action",
 	}) as PromptFrame;
 
-/** A room's page in little: the hook, the message list it swipes over, and the drawer. */
+/** A room's page in little: the hook on the whole page, its header, the message list, a sheet over it, and the drawer. */
 function Room(props: { current?: string }) {
 	const switcher = useSwitcher(true);
 	return (
-		<div>
-			<button type="button" id="avatar" onClick={switcher.show}>
-				avatar
-			</button>
-			<div id="list" {...switcher.surface}>
+		<div id="room" {...switcher.surface}>
+			<header id="head">
+				<button type="button" id="avatar" onClick={switcher.show}>
+					avatar
+				</button>
+			</header>
+			<div id="list">
 				<pre id="code" />
 				<div id="options" data-swipe-ignore />
+				<div id="scene" />
 				<div id="plain">message</div>
 				<textarea id="box" />
 			</div>
+			<div id="sheet" role="dialog" aria-modal="true" />
 			<RoomSwitcher {...switcher.drawer} current={props.current ?? GUIDE} />
 			<ActionMenuHost />
 		</div>
@@ -179,24 +183,65 @@ test("a short slow swipe leaves it closed, and a quick flick opens it", async ()
 	expect(drawer()).toBe("open");
 });
 
-test("a swipe that starts within 32 px of either screen edge is ignored and leaves Back to the system", async () => {
+test("a swipe right opens the drawer from anywhere in the left half, the left edge included", async () => {
 	await page.render(<Room />);
-	const before = history.length;
-	for (const x of [0, 20, 31]) {
-		await swipe(element("plain"), [x, 300], [x + 250, 300], 400);
+	// 40 % of the screen, the left edge, and just inside the half; a drag long enough to pass 40 % of the drawer.
+	for (const x of [0, 10, 156, 195]) {
+		await swipe(element("plain"), [x, 300], [x + 200, 304], 400);
+		expect(drawer()).toBe("open");
+		await page.act(() => window.history.back());
+		await settle(60);
 		expect(drawer()).toBe("closed");
 	}
-	// A leftward swipe from the right edge opens nothing either.
+});
+
+test("a swipe that starts in the right half does not open it, nor does a leftward one from the right edge", async () => {
+	await page.render(<Room />);
+	const before = history.length;
+	for (const x of [196, 250, 380]) {
+		await swipe(element("plain"), [x, 300], [x + 10, 300], 400);
+		expect(drawer()).toBe("closed");
+	}
 	await swipe(element("plain"), [380, 300], [130, 300], 400);
 	expect(drawer()).toBe("closed");
 	expect(history.length).toBe(before);
-	// The same swipe from just inside the guard opens it.
-	await swipe(element("plain"), [32, 300], [282, 300], 400);
+});
+
+test("the swipe works over the header and in the empty space as it does over the messages", async () => {
+	await page.render(<Room />);
+	await swipe(element("head"), [156, 40], [356, 44], 400);
 	expect(drawer()).toBe("open");
+	await page.act(() => window.history.back());
+	await settle(60);
+	await swipe(element("room"), [100, 600], [300, 604], 400);
+	expect(drawer()).toBe("open");
+});
+
+test("a swipe that starts on a sheet over the page, or on a scene that takes every touch, is not the room's", async () => {
+	await page.render(<Room />);
+	await swipe(element("sheet"), [100, 300], [300, 300], 400);
+	expect(drawer()).toBe("closed");
+	element("scene").style.touchAction = "none";
+	await swipe(element("scene"), [100, 300], [300, 300], 400);
+	expect(drawer()).toBe("closed");
+});
+
+test("a swipe left over the open drawer closes it, though the room's own handler sees the touch too", async () => {
+	await page.render(<Room />);
+	await swipe(element("plain"), [100, 300], [300, 300], 400);
+	expect(drawer()).toBe("open");
+	const panel = page.container.querySelector<HTMLElement>(".switcher-panel");
+	if (!panel) throw new Error("no panel");
+	await swipe(panel, [250, 300], [60, 300], 400);
+	await settle(60);
+	expect(drawer()).toBe("closed");
 });
 
 test("mostly vertical motion, and a leftward swipe, open nothing", async () => {
 	await page.render(<Room />);
+	// A scroll that starts at 40 % of the screen's width and drifts a little sideways.
+	await swipe(element("plain"), [156, 300], [176, 560], 300);
+	expect(drawer()).toBe("closed");
 	await swipe(element("plain"), [100, 300], [160, 420], 300);
 	expect(drawer()).toBe("closed");
 	await swipe(element("plain"), [250, 300], [100, 300], 300);

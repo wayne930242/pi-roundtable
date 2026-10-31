@@ -8,8 +8,9 @@ import {
 import type { HostActionView } from "../../src/api-types.ts";
 import type { HostHeaderView } from "../../src/host/views.ts";
 import { Composer } from "../components/composer.tsx";
+import { HeaderPicture } from "../components/header-picture.tsx";
 import { HostActions, type RunAction } from "../components/host-actions.tsx";
-import { HostCard, isOpenCard } from "../components/host-card.tsx";
+import { HostCards } from "../components/host-cards.tsx";
 import { HostPicture } from "../components/host-picture.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeToggle } from "../components/mode-toggle.tsx";
@@ -17,14 +18,15 @@ import { ProgressStrip } from "../components/progress-strip.tsx";
 import ReadLog from "../components/read-log.tsx";
 import { useStickToEnd } from "../components/room-chat.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
+import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { ApiFailure, messageOf } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import { hostApi, splitRoomKey } from "../lib/host-api.ts";
-import { keepCards, keepReads, noCards, useHost } from "../lib/host-state.ts";
+import { keepCards, keepReads, useHost } from "../lib/host-state.ts";
 import { installHostStyle } from "../lib/host-style.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
-import { plural, translate as t } from "../lib/messages.ts";
+import { translate as t } from "../lib/messages.ts";
 import { ROOM_PAGE } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -135,66 +137,6 @@ function Header(props: { header: HostHeaderView; run: RunAction }) {
 }
 
 /**
- * The cards that still ask for something, open; the rest folded under them. On a phone the strip
- * starts folded to one line, so the conversation keeps the screen.
- */
-function Cards(props: { room: string; run: (card: string) => RunAction }) {
-	const cards = useHost((state) => state.cards[props.room] ?? noCards);
-	const wide = useMedia("(min-width: 720px) and (min-height: 760px)");
-	const [asked, setAsked] = useState<boolean>();
-	if (cards.length === 0) return null;
-	const live = cards.filter(
-		(card) => isOpenCard(card) || card.state === "working",
-	);
-	const earlier = cards.filter((card) => !live.includes(card));
-	const shown = asked ?? (wide && live.length > 0);
-	const first = live[0];
-	return (
-		<div className="host-cards" data-open={shown || undefined}>
-			<button
-				type="button"
-				className="host-cards-toggle"
-				aria-expanded={shown}
-				onClick={() => setAsked(!shown)}
-			>
-				<Icon name="chevron" size={14} />
-				{first ? (
-					<span>
-						<strong>
-							{plural(
-								live.length,
-								"{count} card waiting",
-								"{count} cards waiting",
-							)}
-						</strong>
-						{`: ${first.title}`}
-					</span>
-				) : (
-					<span>{t("Earlier cards ({count})", { count: earlier.length })}</span>
-				)}
-			</button>
-			{shown ? (
-				<div className="host-cards-body">
-					{live.map((card) => (
-						<HostCard key={card.id} card={card} run={props.run(card.id)} />
-					))}
-					{earlier.length ? (
-						<details className="host-cards-older">
-							<summary>
-								{t("Earlier cards ({count})", { count: earlier.length })}
-							</summary>
-							{earlier.map((card) => (
-								<HostCard key={card.id} card={card} run={props.run(card.id)} />
-							))}
-						</details>
-					) : null}
-				</div>
-			) : null}
-		</div>
-	);
-}
-
-/**
  * A room of the host: its header, the conversation with each author drawn by kind, the host's cards
  * above the box, and the box. The host decides who may read it, write in it as a note or as a turn
  * for its assistant, and press its buttons; this page only shows what the server gives this person.
@@ -221,6 +163,8 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 	const mountedLast = useRef<number | undefined>(undefined);
 	const prepend = useRef<number | undefined>(undefined);
 	const loaded = view !== undefined;
+	// Beside the room list (wide screens) the room needs no drawer; elsewhere a swipe right brings one.
+	const switcher = useSwitcher(!useMedia("(min-width: 1024px)"));
 
 	// The page follows the room's frames while it shows it, once the host let it in; a reconnect follows it again.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: a new connection must ask again
@@ -360,6 +304,7 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 		// biome-ignore lint/a11y/noStaticElementInteractions: dropping files on the room attaches them; the paperclip is the keyboard path
 		<section
 			className="room"
+			{...switcher.surface}
 			onDragOver={(event) => {
 				if (sends.length && event.dataTransfer.types.includes("Files"))
 					event.preventDefault();
@@ -378,7 +323,9 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 				>
 					<Icon name="back" />
 				</a>
-				<HostPicture name={title} size={40} />
+				<HeaderPicture open={switcher.enabled ? switcher.show : undefined}>
+					<HostPicture name={title} size={40} />
+				</HeaderPicture>
 				<div className="room-title">
 					<h1>{title}</h1>
 					<span
@@ -443,7 +390,7 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 					{t("Latest")}
 				</button>
 			) : null}
-			{view ? <Cards room={roomKey} run={runCard} /> : null}
+			{view ? <HostCards room={roomKey} run={runCard} /> : null}
 			{view && sends.length === 0 ? (
 				<p className="room-note">
 					{t("You can read this room but not write in it.")}
@@ -504,6 +451,7 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 					/>
 				</>
 			) : null}
+			<RoomSwitcher {...switcher.drawer} current={roomKey} />
 		</section>
 	);
 }
