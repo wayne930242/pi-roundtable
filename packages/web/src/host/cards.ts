@@ -1,7 +1,7 @@
 import type { SQL } from "bun";
 import type { Migration } from "pi-roundtable";
 import type { HostCard, StoredHostCard } from "../web-app.ts";
-import { storedJson } from "./stored-json.ts";
+import { jsonValuesMigration, storedJson } from "./stored-json.ts";
 
 interface Row {
 	id: string;
@@ -33,6 +33,13 @@ export class HostCardLog {
 		this.#sql = sql;
 	}
 
+	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
+	static readonly jsonValuesMigration: Migration = jsonValuesMigration(
+		"web-host-cards-json-values",
+		"web_host_cards",
+		["card"],
+	);
+
 	static readonly migration: Migration = {
 		name: "web-host-cards",
 		up: async (sql) => {
@@ -62,7 +69,7 @@ export class HostCardLog {
 		const id = crypto.randomUUID();
 		const [row]: Row[] = await this.#sql`
 			INSERT INTO web_host_cards (id, room, card, state, keep)
-			VALUES (${id}, ${room}, ${JSON.stringify(card)}::jsonb, ${card.state ?? null}, ${card.keep === true})
+			VALUES (${id}, ${room}, ${JSON.stringify(card)}::text::jsonb, ${card.state ?? null}, ${card.keep === true})
 			RETURNING *`;
 		if (!row) throw new Error("the card log stored nothing");
 		return cardOf(row);
@@ -76,7 +83,7 @@ export class HostCardLog {
 	): Promise<StoredHostCard | undefined> {
 		const [row]: Row[] = await this.#sql`
 			UPDATE web_host_cards
-			SET card = ${JSON.stringify(card)}::jsonb, state = ${card.state ?? null}, keep = ${card.keep === true}, updated_at = now()
+			SET card = ${JSON.stringify(card)}::text::jsonb, state = ${card.state ?? null}, keep = ${card.keep === true}, updated_at = now()
 			WHERE id = ${id} AND room = ${room} RETURNING *`;
 		return row && cardOf(row);
 	}

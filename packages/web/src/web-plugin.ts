@@ -66,7 +66,9 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	const schedules = settings.panes.includes("schedules");
 	const migrations = [
 		...(rooms ? APP_MIGRATIONS : []),
-		...(auth.mode === "oidc" ? [WebSessions.migration] : []),
+		...(auth.mode === "oidc"
+			? [WebSessions.migration, WebSessions.jsonValuesMigration]
+			: []),
 	];
 	return definePlugin({
 		name: "web-console",

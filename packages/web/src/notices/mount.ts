@@ -37,6 +37,7 @@ import { NoticeStore } from "./store.ts";
 /** The tables of notices, push delivery, preferences and waivers. */
 export const NOTICE_MIGRATIONS: readonly Migration[] = [
 	NoticeStore.migration,
+	NoticeStore.jsonValuesMigration,
 	PushOutbox.migration,
 	PushPrefsStore.migration,
 	OnboardingWaivers.migration,

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { SQL } from "bun";
 import type { ActorFacts, Migration } from "pi-roundtable";
+import { jsonValuesMigration } from "../host/stored-json.ts";
 
 /** A session's idle limit slides at most this often, so a busy page costs no write per request. */
 const SLIDE_AFTER_MS = 3_600_000;
@@ -84,6 +85,13 @@ export class WebSessions {
 		this.#options = options;
 	}
 
+	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
+	static readonly jsonValuesMigration: Migration = jsonValuesMigration(
+		"web-sessions-json-values",
+		"web_sessions",
+		["actor"],
+	);
+
 	static readonly migration: Migration = {
 		name: "web-sessions",
 		up: async (sql) => {
@@ -120,7 +128,7 @@ export class WebSessions {
 		const expires = this.#limit(now);
 		await this.#sql`
 			INSERT INTO web_sessions (id_hash, principal_id, actor, created_at, last_seen_at, verified_at, expires_at)
-			VALUES (${hashOf(token)}, ${principalId}, ${JSON.stringify(actor)}::jsonb, ${now}, ${now}, ${now}, ${expires})`;
+			VALUES (${hashOf(token)}, ${principalId}, ${JSON.stringify(actor)}::text::jsonb, ${now}, ${now}, ${now}, ${expires})`;
 		return {
 			token,
 			session: {

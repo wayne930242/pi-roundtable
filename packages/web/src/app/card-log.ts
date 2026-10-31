@@ -6,6 +6,7 @@ import type {
 	PromptFrame,
 	PromptOutcome,
 } from "../api-types.ts";
+import { jsonValuesMigration } from "../host/stored-json.ts";
 
 interface Row {
 	room: string;
@@ -56,6 +57,13 @@ export class CardLog {
 		this.#sql = sql;
 	}
 
+	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
+	static readonly jsonValuesMigration: Migration = jsonValuesMigration(
+		"web-room-cards-json-values",
+		"web_room_cards",
+		["frame", "answer"],
+	);
+
 	/** The log's table. */
 	static readonly migration: Migration = {
 		name: "web-room-cards",
@@ -90,8 +98,8 @@ export class CardLog {
 				(prompt_id, room, opened_at, closed_at, outcome, note, answered_by, frame, answer)
 			VALUES (${card.frame.id}, ${card.room}, ${opened}::timestamptz, ${card.closedAt}::timestamptz,
 				${card.outcome}, ${card.note ?? null}, ${card.by ?? null},
-				${JSON.stringify(card.frame)}::jsonb,
-				${card.answer ? JSON.stringify(card.answer) : null}::jsonb)
+				${JSON.stringify(card.frame)}::text::jsonb,
+				${card.answer ? JSON.stringify(card.answer) : null}::text::jsonb)
 			ON CONFLICT (prompt_id) DO NOTHING`;
 	}
 

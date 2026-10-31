@@ -8,7 +8,7 @@ import {
 	type RoomMessage,
 	START_OVER_TEXT,
 } from "../api-types.ts";
-import { storedJson } from "../host/stored-json.ts";
+import { jsonValuesMigration, storedJson } from "../host/stored-json.ts";
 
 /** A message to store; the log numbers it and stamps its time. */
 export interface NewRoomMessage {
@@ -93,6 +93,13 @@ export class RoomLog {
 	constructor(sql: SQL) {
 		this.#sql = sql;
 	}
+
+	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
+	static readonly jsonValuesMigration: Migration = jsonValuesMigration(
+		"web-room-messages-json-values",
+		"web_room_messages",
+		["files", "picture", "intercom"],
+	);
 
 	/** The log's table. */
 	static readonly migration: Migration = {
@@ -184,18 +191,18 @@ export class RoomLog {
 				INSERT INTO web_room_messages (room, kind, principal_id, agent, author_name, text, files,
 					author_kind, author_label, picture, reference, created_at, note, intercom)
 				VALUES (${message.room}, ${message.kind}, ${message.principalId ?? null},
-					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::jsonb,
-					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::jsonb,
-					${message.reference ?? null}, ${at}, ${message.note === true}, ${intercom}::jsonb)
+					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::text::jsonb,
+					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::text::jsonb,
+					${message.reference ?? null}, ${at}, ${message.note === true}, ${intercom}::text::jsonb)
 				ON CONFLICT (room, reference) WHERE reference IS NOT NULL DO NOTHING
 				RETURNING *`
 			: await this.#sql`
 				INSERT INTO web_room_messages (room, kind, principal_id, agent, author_name, text, files,
 					author_kind, author_label, picture, reference, created_at, note, intercom)
 				VALUES (${message.room}, ${message.kind}, ${message.principalId ?? null},
-					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::jsonb,
-					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::jsonb,
-					${message.reference ?? null}, ${at}, ${message.note === true}, ${intercom}::jsonb)
+					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::text::jsonb,
+					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::text::jsonb,
+					${message.reference ?? null}, ${at}, ${message.note === true}, ${intercom}::text::jsonb)
 				RETURNING *`;
 	}
 

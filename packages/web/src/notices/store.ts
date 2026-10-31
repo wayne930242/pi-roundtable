@@ -1,5 +1,6 @@
 import type { SQL } from "bun";
 import type { Migration } from "pi-roundtable";
+import { jsonValuesMigration } from "../host/stored-json.ts";
 import type { OpenTarget } from "../web-app.ts";
 
 /** Where a tap on a notice goes. */
@@ -85,6 +86,13 @@ export class NoticeStore {
 		this.#sql = sql;
 	}
 
+	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
+	static readonly jsonValuesMigration: Migration = jsonValuesMigration(
+		"web-notices-json-values",
+		"web_notices",
+		["open"],
+	);
+
 	static readonly migration: Migration = {
 		name: "web-notices",
 		up: async (sql) => {
@@ -130,7 +138,7 @@ export class NoticeStore {
 			await tx`
 				INSERT INTO web_notices (tag, title, body, open, urgency, ackable)
 				VALUES (${notice.tag}, ${notice.title}, ${notice.body ?? null},
-					${notice.open ? JSON.stringify(notice.open) : null}::jsonb,
+					${notice.open ? JSON.stringify(notice.open) : null}::text::jsonb,
 					${notice.urgency}, ${notice.ackable})
 				ON CONFLICT (tag) DO UPDATE SET
 					title = EXCLUDED.title, body = EXCLUDED.body, open = EXCLUDED.open,
