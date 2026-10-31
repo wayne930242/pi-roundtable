@@ -123,16 +123,29 @@ describe("intercom cards on Discord", () => {
 	});
 
 	test("the headings read in Traditional Chinese on a host in that language", async () => {
+		const english = {
+			line: messages().intercomLine(
+				messages().intercomSent("Infrastructure"),
+				"check the disk",
+			),
+			expand: messages().intercomExpand,
+		};
 		useTestLocale({ locale: "zh-TW" });
 		const { channels, sent } = channelsWithTexts();
 		await channels.post("1000", {
 			name: "Coordinator",
 			avatarUrl: "https://x/a.png",
 			chunks: [],
-			intercom: { kind: "sent", peer, text: "看一下磁碟\n還有日誌" },
+			intercom: { kind: "sent", peer, text: "check the disk\nand the logs" },
 		});
-		expect(sent[0]?.content).toBe("-# → 給 **Infrastructure**：看一下磁碟");
-		expect(buttonOf(sent[0])?.label).toBe("展開全文");
+		const line = messages().intercomLine(
+			messages().intercomSent("Infrastructure"),
+			"check the disk",
+		);
+		expect(line).not.toBe(english.line);
+		expect(sent[0]?.content).toBe(`-# ${line}`);
+		expect(buttonOf(sent[0])?.label).toBe(messages().intercomExpand);
+		expect(messages().intercomExpand).not.toBe(english.expand);
 	});
 
 	test("without a place to keep texts a card posts as its plain chunks", async () => {

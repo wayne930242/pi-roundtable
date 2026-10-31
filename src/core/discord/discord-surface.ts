@@ -6,7 +6,6 @@ import {
 	Events,
 	GatewayIntentBits,
 	type Interaction,
-	type Message,
 	MessageFlags,
 	Partials,
 	type REST,
@@ -51,15 +50,13 @@ import type { IntercomTexts } from "./intercom-cards.ts";
 import { listenForMessages, reportChanges } from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
-import { stopPanel } from "./stop-button.ts";
+import { showStopPanel } from "./stop-button.ts";
 
 const PREFIX = "discord:";
 /** Discord's error code for a channel that does not exist or cannot be seen. */
 const UNKNOWN_CHANNEL = 10003;
 
 const TYPING_REFRESH_MS = 8_000;
-/** A turn shorter than this shows no stop button, so quick answers do not flicker one. */
-const STOP_PANEL_DELAY_MS = 5_000;
 
 export interface DiscordSurfaceOptions {
 	token: string;
@@ -372,33 +369,12 @@ export class DiscordSurface
 	}
 
 	showStop(channel: ChannelKey): () => void {
-		const { logger } = this.#options;
 		// An outside agent's conversation has no Discord channel to show a button in.
 		if (!channel.startsWith(PREFIX)) return () => undefined;
-		let hidden = false;
-		let panel: Message | undefined;
-		const remove = (message: Message) =>
-			message
-				.delete()
-				.catch((error: unknown) =>
-					logger.warn({ channel, err: error }, "stop panel not removed"),
-				);
-		const timer = setTimeout(() => {
-			this.#sendable(channel)
-				.then((target): Promise<Message> => target.send(stopPanel()))
-				.then((message) => {
-					if (hidden) void remove(message);
-					else panel = message;
-				})
-				.catch((error: unknown) =>
-					logger.warn({ channel, err: error }, "stop panel not shown"),
-				);
-		}, STOP_PANEL_DELAY_MS);
-		return () => {
-			hidden = true;
-			clearTimeout(timer);
-			if (panel) void remove(panel);
-		};
+		return showStopPanel(
+			() => this.#sendable(channel),
+			(error, what) => this.#options.logger.warn({ channel, err: error }, what),
+		);
 	}
 
 	async react(

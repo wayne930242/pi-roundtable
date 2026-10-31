@@ -187,6 +187,7 @@
 			"IdentityService",
 			"ImageDrawer",
 			"InboundMessage",
+			"IntercomCard",
 			"InterimMessage",
 			"InterimPosts",
 			"InterimTextMode",

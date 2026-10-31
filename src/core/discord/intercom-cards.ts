@@ -8,7 +8,11 @@ import {
 } from "discord.js";
 import type { IntercomCard } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
-import { intercomHeading, intercomSummary } from "../presentation/intercom.ts";
+import {
+	intercomFolds,
+	intercomHeading,
+	intercomSummary,
+} from "../presentation/intercom.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 
@@ -49,6 +53,14 @@ export function intercomMessage(card: IntercomCard, id: string | undefined) {
 					withComponents: true,
 				}),
 	};
+}
+
+/** A card's message, its whole text kept in `texts` for the open button when the summary leaves part out. */
+export function intercomPost(card: IntercomCard, texts: IntercomTexts) {
+	if (!intercomFolds(card)) return intercomMessage(card, undefined);
+	const id = crypto.randomUUID();
+	texts.remember(id, card.text);
+	return intercomMessage(card, id);
 }
 
 /**

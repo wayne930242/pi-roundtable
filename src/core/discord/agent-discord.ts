@@ -24,13 +24,11 @@ import type {
 	ChannelMessage,
 	DashboardBoard,
 } from "../agents/agent-ports.ts";
-import type { IntercomCard } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
-import { intercomFolds } from "../presentation/intercom.ts";
-import { type IntercomTexts, intercomMessage } from "./intercom-cards.ts";
+import { type IntercomTexts, intercomPost } from "./intercom-cards.ts";
 
 const DASHBOARD_NAME = "dashboard";
 
@@ -84,7 +82,10 @@ export class DiscordAgentChannels implements AgentChannels {
 		};
 		try {
 			if (post.intercom && this.#texts) {
-				await webhook.send({ ...as, ...this.#card(post.intercom) });
+				await webhook.send({
+					...as,
+					...intercomPost(post.intercom, this.#texts),
+				});
 				return;
 			}
 			if (post.thinking) await webhook.send({ ...as, content: post.thinking });
@@ -102,15 +103,6 @@ export class DiscordAgentChannels implements AgentChannels {
 			this.#webhooks.delete(route.hook);
 			throw error;
 		}
-	}
-
-	/** A card's message, its whole text kept for the open button when the summary leaves part out. */
-	#card(card: IntercomCard) {
-		if (!this.#texts || !intercomFolds(card))
-			return intercomMessage(card, undefined);
-		const id = crypto.randomUUID();
-		this.#texts.remember(id, card.text);
-		return intercomMessage(card, id);
 	}
 
 	interim(
