@@ -36,7 +36,7 @@ export function ConnectorsPage() {
 	);
 }
 
-/** What ContextForge holds: upstream gateways and virtual servers, read only. */
+/** What the MCP gateway holds: upstream gateways and virtual servers, read only. */
 function Gateways() {
 	const { data: view, error } = useFetched(
 		() => api.connectors(),

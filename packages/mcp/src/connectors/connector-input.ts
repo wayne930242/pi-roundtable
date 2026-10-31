@@ -1,6 +1,7 @@
-import { ConnectorError } from "./connector-registry.ts";
-import type { UpstreamAuth } from "./contextforge.ts";
+import { ConnectorError, type NewConnector } from "./connector-registry.ts";
 import type { ConnectorMessages } from "./messages.ts";
+
+type UpstreamAuth = NewConnector["auth"];
 
 const HEADER_NAME = /^[A-Za-z0-9-]{1,100}$/;
 

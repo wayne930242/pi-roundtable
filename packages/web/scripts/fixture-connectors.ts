@@ -1,5 +1,5 @@
 // In-memory connector and MCP authorization ports for the fixture hosts, so the Connectors page's
-// management can be tried with no ContextForge and no Discord. A connector named `taken`, a URL
+// management can be tried with no MCP gateway and no Discord. A connector named `taken`, a URL
 // that is not http(s), or a header without a token is refused the way pi-roundtable-mcp refuses it.
 import type { ConsoleFeatures, ManagedConnector } from "../src/features.ts";
 
