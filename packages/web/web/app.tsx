@@ -38,7 +38,6 @@ import { setTheme, useTheme } from "./lib/theme.ts";
 import { MorePage, PANE_ICONS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
-import { SettingsPage } from "./pages/settings.tsx";
 
 // The older panes are read less often than the rooms, so they load when first opened.
 // The menus' drawing loads once the page has: a long press is never the first thing a person does.
@@ -101,6 +100,10 @@ const ConnectorsPage = lazy(() =>
 // The files pane is light too; its editor is a chunk of its own that waits for the first file to open.
 const WorkspacePage = lazy(() =>
 	import("./pages/workspace.tsx").then((m) => ({ default: m.WorkspacePage })),
+);
+// Settings is not where a visit starts, so its page loads when it first opens.
+const SettingsPage = lazy(() =>
+	import("./pages/settings.tsx").then((m) => ({ default: m.SettingsPage })),
 );
 // The table's page is light, and the scene it mounts is a chunk of its own that waits for the view to open.
 const TablePage = lazy(() =>
