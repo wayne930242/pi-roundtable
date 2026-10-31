@@ -5,7 +5,8 @@ import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { store } from "./lib/app-store.ts";
 import { loadKit } from "./lib/kit.ts";
 
-const CREW = "app:group.crew";
+// A room of this file's own: the store is shared by the files of a run, and a round another left on its room would show here.
+const CREW = "app:group.order-crew";
 
 const agent = (name: string): RoomView => ({
 	key: `app:agent.${name}`,

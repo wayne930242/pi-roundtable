@@ -1214,6 +1214,10 @@ button.room-picture:hover:not(:disabled) {
 	font-weight: var(--weight-bold);
 }
 
+.waiting-button:hover:not(:disabled) {
+	background: var(--warn);
+}
+
 /* Beside the rail, which shows it, a room's header does not repeat it. */
 @media (min-width: 720px) {
 	.room-head .waiting-button {
