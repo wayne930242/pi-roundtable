@@ -4568,6 +4568,11 @@ Import from the entries listed below; source area files are internal.
 | `Provisioning` | `pi-roundtable` | type |
 | `ProvisioningRule` | `pi-roundtable` | type |
 | `QueuePort` | `pi-roundtable` | type |
+| `QueuedBy` | `pi-roundtable` | type |
+| `QueuedChange` | `pi-roundtable` | type |
+| `QueuedMessage` | `pi-roundtable` | type |
+| `QUEUED_MARK` | `pi-roundtable` | value |
+| `STEERED_MARK` | `pi-roundtable` | value |
 | `QUESTIONNAIRE_LIMITS` | `pi-roundtable` | value |
 | `Questionnaire` | `pi-roundtable` | type |
 | `QuestionnaireAnswer` | `pi-roundtable` | type |
