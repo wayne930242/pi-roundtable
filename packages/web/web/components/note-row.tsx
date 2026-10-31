@@ -6,6 +6,7 @@ import { translate as t } from "../lib/messages.ts";
 import { installNoteStyle } from "../lib/note-style.ts";
 import { HelpersEndedLine } from "./helpers-ended-line.tsx";
 import { HostPicture } from "./host-picture.tsx";
+import { IntercomRow } from "./intercom-row.tsx";
 import { MessageMarkdown } from "./message-markdown.tsx";
 import { Files } from "./message-row.tsx";
 
@@ -60,12 +61,23 @@ const NoteRow = memo(function NoteRow(props: {
 	);
 });
 
-/** What the first note, or the first line of a knight's archived temp knights, loads: a note's row, or that line. */
+/**
+ * What the first note, the first line of a knight's archived temp knights, or the first message
+ * between agents loads: a note's row, that line, or the message's card.
+ */
 export default function ExtraRow(props: {
 	message: RoomMessage;
 	enter: boolean;
 	timeZone: string;
 }) {
+	const { intercom } = props.message;
+	if (intercom)
+		return (
+			<IntercomRow
+				message={{ ...props.message, intercom }}
+				enter={props.enter}
+			/>
+		);
 	return props.message.kind === "system" ? (
 		<HelpersEndedLine message={props.message} enter={props.enter} />
 	) : (

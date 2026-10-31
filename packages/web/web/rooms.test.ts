@@ -350,6 +350,37 @@ describe("messages", () => {
 		expect(state.rooms[GUIDE]?.more).toBe(false);
 	});
 
+	test("a message between agents joins the room's messages but leaves its live text and progress, which are no reply", () => {
+		let state = run([
+			READY,
+			{ type: "focused", room: GUIDE },
+			{
+				type: "message",
+				room: GUIDE,
+				message: message(0, GUIDE, { live: "tok", text: "working" }),
+			},
+			{
+				type: "progress",
+				room: GUIDE,
+				event: { type: "text", delta: "thinking" },
+			},
+		]);
+		state = reduce(state, {
+			type: "message",
+			room: GUIDE,
+			message: message(8, GUIDE, {
+				text: "check the disk",
+				intercom: {
+					kind: "sent",
+					peer: { name: "scout", displayName: "Scout" },
+				},
+			}),
+		});
+		expect(state.rooms[GUIDE]?.live.map((m) => m.text)).toEqual(["working"]);
+		expect(state.rooms[GUIDE]?.progress.text).toBe("thinking");
+		expect(state.rooms[GUIDE]?.messages.map((m) => m.id)).toEqual([8]);
+	});
+
 	test("an interim message is replaced by its token and dropped when the agent's reply arrives", () => {
 		const live = (text: string): ServerFrame => ({
 			type: "message",

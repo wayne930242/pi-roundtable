@@ -470,6 +470,19 @@ export interface RoomMessage {
 	note?: true;
 	/** Files of the message that were deleted by retention. */
 	expiredFiles?: number;
+	/**
+	 * A message between two agents of the team, drawn as a small card that opens to `text`, the
+	 * whole request or answer, or why no answer came.
+	 */
+	intercom?: RoomIntercom;
+}
+
+/** What an agents' message card shows besides its text: which way it went and the other agent. */
+export interface RoomIntercom {
+	/** `sent`: the author's request; `answered`: the answer that came back; `failed`: none came. */
+	kind: "sent" | "answered" | "failed";
+	/** The agent the request went to, which also gives the answer. */
+	peer: { name: string; displayName: string };
 }
 
 /** The kinds of author a host room's messages come from. */

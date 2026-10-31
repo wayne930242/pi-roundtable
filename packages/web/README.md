@@ -145,7 +145,9 @@ The classes, the rule behind each and the guardrails are in the core guide: [hol
 
 ### Dispatch threads
 
-The app hosts the core's dispatch threads (`ChatSurface.threads`). A background dispatch started from a room (a coding task, a delegated task, `message_agent` between agents) puts one start line in that room and opens a thread, `<surface>:thread.<uuid>`, whose room holds the dispatch's progress and report. The start line links the thread, and the room list nests each thread under the room that started it, with the finished ones folded away. Only an agent's or group's room can host a thread, never a thread itself.
+The app hosts the core's dispatch threads (`ChatSurface.threads`). A background dispatch started from a room (a coding task, a delegated task) puts one start line in that room and opens a thread, `<surface>:thread.<uuid>`, whose room holds the dispatch's progress and report. The start line links the thread, and the room list nests each thread under the room that started it, with the finished ones folded away. Only an agent's or group's room can host a thread, never a thread itself.
+
+A `message_agent` exchange opens no thread: the sender's room shows it as small cards, the request under the sender's name and then the answer, or why none came, under the target's, each one line that opens to the whole text. The cards are stored with the room's messages (`RoomMessage.intercom`), so they come back with its history.
 
 A thread's room is read only: a `send` to it is refused with `read_only`, and it has no modes. Its cards are the dispatch's own, such as a coding job's approvals, and any owner answers them there as in any room. Agents post in it under their own names. A closed thread stays readable (the list keeps the 30 newest closed ones), and the host closes the threads a restart left open, with a restart notice. `GET api/rooms` lists a thread with `parent` and, once closed, `closed: true`; opening and closing one sends `changed`.
 

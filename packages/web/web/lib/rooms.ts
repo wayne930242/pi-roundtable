@@ -407,7 +407,8 @@ function onMessage(
 				: [...room.live, message];
 			return { ...room, live, pending };
 		}
-		const replies = message.kind === "agent";
+		// A message between agents is a card beside the turn, never its reply.
+		const replies = message.kind === "agent" && !message.intercom;
 		const next = {
 			...room,
 			messages: merged(room.messages, [message]),

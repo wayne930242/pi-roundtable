@@ -314,6 +314,23 @@ export class AppSurface implements ChatSurface {
 	}
 
 	async sendReply(channel: ChannelKey, reply: OutboundReply): Promise<void> {
+		// A message between agents is a card beside the room's turn: it neither ends the turn nor
+		// names who speaks in it, and it notifies nobody.
+		if (reply.intercom) {
+			const { kind, peer, text } = reply.intercom;
+			await this.publish({
+				room: channel,
+				kind: "agent",
+				...(reply.author?.agent ? { agent: reply.author.agent } : {}),
+				author: reply.author?.name ?? ASSISTANT,
+				text,
+				intercom: {
+					kind,
+					peer: { name: peer.name, displayName: peer.displayName },
+				},
+			});
+			return;
+		}
 		this.#speaks(channel, reply.author?.agent);
 		const entry = this.#activity.get(channel);
 		if (entry) entry.outcome = reply.failed ? "failed" : "done";

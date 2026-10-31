@@ -18,7 +18,8 @@ import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
 import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 
-// An internal note's row and its styles, and a knight's line that it archived its temp knights, are read when the first is shown.
+// An internal note's row and its styles, a knight's line that it archived its temp knights, and a
+// message between agents, are read when the first is shown.
 const NoteRow = lazy(() => import("./note-row.tsx"));
 
 // Another owner's picture, and the styles it brings, are read when a room shows one.
@@ -136,6 +137,7 @@ export const MessageRow = memo(function MessageRow(props: {
 	);
 	if (
 		message.note ||
+		message.intercom ||
 		(message.kind === "system" && message.text.startsWith(HELPERS_ENDED))
 	)
 		return (
