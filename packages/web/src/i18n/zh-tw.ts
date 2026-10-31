@@ -1164,6 +1164,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"{name} 會被刪除，目前沒有騎士攜帶它。",
 	"It also leaves the skill groups {groups}.": "它也會離開技能群組 {groups}。",
 	"This cannot be undone.": "這個動作無法復原。",
+	"Skills ({count})": "技能（{count}）",
+	"Choose the skills this knight carries.": "選擇這位騎士攜帶的技能。",
 	// 主要提示詞與技能內容的編輯：伺服器的拒絕訊息
 	"This host has no prompts to edit.": "這個主機沒有可編輯的提示詞。",
 	"There is no such prompt.": "沒有這份提示詞。",

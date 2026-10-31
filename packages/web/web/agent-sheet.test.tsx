@@ -190,10 +190,15 @@ const Host = () => (
 	</ConfigContext.Provider>
 );
 
-async function open(options: { look?: boolean; creator?: boolean } = {}) {
+async function open(
+	options: { look?: boolean; skills?: boolean; creator?: boolean } = {},
+) {
 	await page.render(<Host />);
 	await page.act(() =>
-		openAgentSheet("scout", { look: options.look === true }),
+		openAgentSheet("scout", {
+			look: options.look === true,
+			skills: options.skills === true,
+		}),
 	);
 	// The profile arrives, then the creator's chunk; each wait ends in an `act`, which draws what came.
 	for (let waited = 0; waited < 5000; waited += 40) {
@@ -741,6 +746,67 @@ test("the sheet lists the host's skills; the built-in one is on and cannot be tu
 		expect(set).toHaveBeenLastCalledWith("scout", { remove: ["kit-do"] });
 	} finally {
 		set.mockRestore();
+	}
+});
+
+/** Opens the sheet without waiting for the creator's chunk, until the skills have come. */
+async function openAtSkills(skills: boolean) {
+	await open({ skills, creator: false });
+	for (
+		let waited = 0;
+		waited < 3000 && !q('section[aria-label="Skills"]');
+		waited += 40
+	)
+		await page.act(() => settle(40));
+}
+
+test("Skills opens the sheet scrolled to the skills, titled with how many the knight carries", async () => {
+	const scrolled: Element[] = [];
+	const original = Element.prototype.scrollIntoView;
+	Element.prototype.scrollIntoView = function (this: Element) {
+		scrolled.push(this);
+	};
+	const set = spyOn(teamApi, "setSkills").mockResolvedValue(
+		skillList(["kit-do"]),
+	);
+	try {
+		await openAtSkills(true);
+		const section = q('section[aria-label="Skills"]');
+		expect(section).not.toBeNull();
+		expect(scrolled).toEqual([section as Element]);
+		expect(document.activeElement).toBe(section);
+		// The built-in one counts: it is carried.
+		expect(section?.querySelector("h3")?.textContent).toBe("Skills (1)");
+		await page.click(
+			q('section[aria-label="Skills"] button[aria-label="kit-do"]'),
+		);
+		await page.act(() => settle(40));
+		expect(q('section[aria-label="Skills"] h3')?.textContent).toBe(
+			"Skills (2)",
+		);
+	} finally {
+		Element.prototype.scrollIntoView = original;
+		set.mockRestore();
+	}
+});
+
+test("Edit knight does not scroll to the skills; Skills after it for the same knight does", async () => {
+	const scrolled: Element[] = [];
+	const original = Element.prototype.scrollIntoView;
+	Element.prototype.scrollIntoView = function (this: Element) {
+		scrolled.push(this);
+	};
+	try {
+		await openAtSkills(false);
+		expect(q('section[aria-label="Skills"]')).not.toBeNull();
+		expect(scrolled).toHaveLength(0);
+		await page.act(() => openAgentSheet("scout", { skills: true }));
+		await page.act(() => settle(80));
+		expect(scrolled.map((one) => one.getAttribute("aria-label"))).toEqual([
+			"Skills",
+		]);
+	} finally {
+		Element.prototype.scrollIntoView = original;
 	}
 });
 

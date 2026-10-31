@@ -464,6 +464,15 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 	const [busy, setBusy] = useState<string>();
 	const [error, setError] = useState<string>();
 	const prefix = useId();
+	const section = useRef<HTMLElement>(null);
+	const loaded = view !== undefined;
+	// "Skills" in a menu lands here once the list has come.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
+	useEffect(() => {
+		if (!loaded || !currentAgentSheet()?.skills) return;
+		section.current?.scrollIntoView({ block: "start" });
+		section.current?.focus({ preventScroll: true });
+	}, [loaded, opened]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
 	useEffect(() => {
 		let current = true;
@@ -500,8 +509,17 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 		}
 	};
 	return (
-		<section className="card stack" aria-label={t("Skills")}>
-			<h3>{t("Skills")}</h3>
+		<section
+			className="card stack"
+			aria-label={t("Skills")}
+			ref={section}
+			tabIndex={-1}
+		>
+			<h3>
+				{t("Skills ({count})", {
+					count: view.skills.filter((skill) => skill.carried).length,
+				})}
+			</h3>
 			<p className="meta">
 				{t(
 					"What the knight can load when a task calls for it. It applies from its next turn.",

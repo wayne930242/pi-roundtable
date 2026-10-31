@@ -20,6 +20,7 @@ import { PromptCard } from "./components/cards.tsx";
 import { Composer } from "./components/composer.tsx";
 import { MessageRow } from "./components/message-row.tsx";
 import { RoomConfirmHost } from "./components/room-confirms.tsx";
+import { RoomMenu } from "./components/room-menu.tsx";
 import { RoomSwitcher, useSwitcher } from "./components/switcher.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
@@ -193,6 +194,7 @@ test("an agent row's menu has the edit, look, notifications, mode and restart ac
 		"Move to folder…",
 		"Edit knight",
 		"Change look",
+		"Skills",
 		"Notifications",
 		"Yolo mode",
 		"Long-running mode",
@@ -221,7 +223,7 @@ test("a group row has the modes and restart but no agent edit; a thread row has 
 	expect(labels()).toEqual([]);
 });
 
-test("Edit knight opens the knight sheet; Change look opens it at the character creator", async () => {
+test("Edit knight opens the knight sheet; Change look opens it at the character creator; Skills at the skills", async () => {
 	await page.render(<List />);
 	await rightClick(rowOf("scout"));
 	await choose("Edit knight");
@@ -234,6 +236,46 @@ test("Edit knight opens the knight sheet; Change look opens it at the character 
 	await choose("Change look");
 	expect(currentAgentSheet()).toMatchObject({ name: "scout", look: true });
 	expect(window.location.hash).toBe("#/rooms");
+
+	closeAgentSheet();
+	await rightClick(rowOf("scout"));
+	await choose("Skills");
+	expect(currentAgentSheet()).toMatchObject({
+		name: "scout",
+		look: false,
+		skills: true,
+	});
+	expect(window.location.hash).toBe("#/rooms");
+});
+
+test("the room menu's Skills closes the menu and opens the knight sheet at the skills; a group's menu has none", async () => {
+	let closed = 0;
+	const menu = (agent?: string) => (
+		<ConfigContext.Provider value={config}>
+			<RoomMenu
+				open
+				room={SCOUT}
+				mode={{ yolo: false, longRunning: false }}
+				agent={agent}
+				onClose={() => {
+					closed += 1;
+				}}
+				onAskYolo={() => undefined}
+				onAskStartOver={() => undefined}
+			/>
+		</ConfigContext.Provider>
+	);
+	const skillsItem = () =>
+		[...document.querySelectorAll<HTMLButtonElement>(".menu-link")].find(
+			(one) => one.querySelector("strong")?.textContent === "Skills",
+		) ?? null;
+	await page.render(menu("scout"));
+	await page.click(skillsItem());
+	expect(closed).toBe(1);
+	expect(currentAgentSheet()).toMatchObject({ name: "scout", skills: true });
+	closeAgentSheet();
+	await page.render(menu());
+	expect(skillsItem()).toBeNull();
 });
 
 test("the notifications item shows whether the room is pushed and flips it through the server", async () => {
