@@ -41,6 +41,8 @@ export interface SkillRegistry {
 	): Promise<SkillDocument>;
 	/** Makes a skill from a whole SKILL.md, as `skill_create` does; it is attached to no one. Throws AgentError for a taken or refused name or text. */
 	createDocument(text: string, by: string): Promise<SkillDocument>;
+	/** Deletes an agent-written skill and detaches it from every agent and group, as `skill_delete` does; returns what it was detached from. Throws AgentError for any other skill. */
+	delete(name: string): Promise<string>;
 	/** The saved versions of an agent-written skill, newest first; none for any other skill. */
 	documentHistory(name: string): Promise<SkillVersion[]>;
 	/** Adds and removes an agent's registered skills together, or changes nothing; returns what it carries after. */

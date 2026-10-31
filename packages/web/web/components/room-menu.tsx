@@ -195,6 +195,30 @@ export function RoomMenu(props: {
 						</button>
 					</li>
 				) : null}
+				{props.agent ? (
+					<li>
+						<button
+							type="button"
+							className="menu-item menu-link"
+							aria-haspopup="dialog"
+							onClick={() => {
+								props.onClose();
+								openAgentSheet(props.agent as string, { skills: true });
+							}}
+						>
+							<span className="menu-icon">
+								<Icon name="skills" />
+							</span>
+							<span className="menu-text">
+								<strong>{t("Skills")}</strong>
+								<span className="meta">
+									{t("Choose the skills this knight carries.")}
+								</span>
+							</span>
+							<Icon name="chevron" size={16} />
+						</button>
+					</li>
+				) : null}
 				{props.group ? (
 					<li>
 						<button

@@ -17,6 +17,7 @@ import type {
 	PromptView,
 	SessionView,
 	SkillConflict,
+	SkillDeleted,
 	SkillDocView,
 	SkillHistoryView,
 	SkillView,
@@ -176,6 +177,15 @@ function setup(
 			return made;
 		},
 		documentHistory: async () => skillVersions,
+		delete: async (name: string) => {
+			const found = skillDocs.get(name);
+			if (!found) throw new AgentError(`There is no skill "${name}".`);
+			if (!found.writable)
+				throw new AgentError(`${name} is linked and is read-only here.`);
+			calls.push(`delete ${name}`);
+			skillDocs.delete(name);
+			return `Removed skill ${name}; detached from agents scout.`;
+		},
 	};
 	const team = {
 		update: async (name: string, _change: unknown, by?: string) => {
@@ -694,6 +704,26 @@ describe("api/skill-docs", () => {
 		]);
 	});
 
+	test("deletes an agent-written skill and answers with the registry's words", async () => {
+		const server = setup();
+		const response = await call(server, "DELETE", "skill-docs/daily-notes");
+		expect(response.status).toBe(200);
+		expect(((await response.json()) as SkillDeleted).message).toBe(
+			"Removed skill daily-notes; detached from agents scout.",
+		);
+		expect(calls).toEqual(["delete daily-notes"]);
+	});
+
+	test("a skill an agent did not write is not deleted, and the refusal is a 400 in the registry's words", async () => {
+		const server = setup();
+		const response = await call(server, "DELETE", "skill-docs/kit-do");
+		expect(response.status).toBe(400);
+		expect(((await response.json()) as ApiError).error).toBe(
+			"kit-do is linked and is read-only here.",
+		);
+		expect(calls).toEqual([]);
+	});
+
 	test("a skill the catalog does not list is a 404", async () => {
 		const server = setup();
 		expect((await call(server, "GET", "skill-docs/ghost")).status).toBe(404);
@@ -725,6 +755,11 @@ describe("api/skill-docs", () => {
 	});
 	ownerOnly("a read", {
 		method: "GET",
+		path: "skill-docs/daily-notes",
+		unknown: "skill-docs/ghost",
+	});
+	ownerOnly("a delete", {
+		method: "DELETE",
 		path: "skill-docs/daily-notes",
 		unknown: "skill-docs/ghost",
 	});

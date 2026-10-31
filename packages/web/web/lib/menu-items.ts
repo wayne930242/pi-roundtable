@@ -91,6 +91,12 @@ export function roomMenu(
 				icon: "sparkle",
 				run: () => leave(() => openAgentSheet(name, { look: true })),
 			},
+			{
+				id: "skills",
+				label: t("Skills"),
+				icon: "skills",
+				run: () => leave(() => openAgentSheet(name, { skills: true })),
+			},
 		);
 	}
 	if (view.kind === "group") {

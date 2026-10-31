@@ -91,6 +91,7 @@ const skills: SkillRegistry = {
 		throw new Error("unused");
 	},
 	documentHistory: async () => [],
+	delete: async () => "deleted",
 	attach: async () => [],
 };
 

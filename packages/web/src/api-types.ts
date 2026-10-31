@@ -998,6 +998,11 @@ export interface SkillDocCreate {
 	text: string;
 }
 
+/** The answer of `DELETE api/skill-docs/<name>`: the registry's words, naming the agents it was detached from. */
+export interface SkillDeleted {
+	message: string;
+}
+
 /** A 409: the skill is not as the writer saw it. */
 export interface SkillConflict extends ApiError {
 	conflict: "changed";
