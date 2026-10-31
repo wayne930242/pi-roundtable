@@ -4,12 +4,15 @@ import type {
 	SkillDetailView,
 	SkillView,
 } from "../../src/api-types.ts";
+import { Confirm } from "../components/confirm.tsx";
 import { Dialog } from "../components/dialog.tsx";
 import { Icon } from "../components/icons.tsx";
 import { MarkdownDocument } from "../components/markdown.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
+import { editApi } from "../lib/edit-api.ts";
 import { translate as t } from "../lib/messages.ts";
+import { toast } from "../lib/toast.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
 // The editor is a full-screen text and its history; it loads when a skill is opened for editing.
@@ -30,6 +33,7 @@ export function SkillsPage() {
 	);
 	const [session, setSession] = useState<SessionView>();
 	const [editing, setEditing] = useState<Editing>();
+	const [deleting, setDeleting] = useState<SkillView>();
 	useEffect(() => {
 		// Without the owner app there is no session, and the skills stay as they were: read-only.
 		api.session().then(setSession, () => undefined);
@@ -72,6 +76,11 @@ export function SkillsPage() {
 							? () => setEditing({ name: skill.name })
 							: undefined
 					}
+					onDelete={
+						canEdit && skill.source.kind === "written"
+							? () => setDeleting(skill)
+							: undefined
+					}
 				/>
 			))}
 			{editing ? (
@@ -84,7 +93,48 @@ export function SkillsPage() {
 					/>
 				</Suspense>
 			) : null}
+			<Confirm
+				open={deleting !== undefined}
+				title={t("Delete this skill?")}
+				confirmLabel={t("Delete skill")}
+				tone="danger"
+				onClose={() => setDeleting(undefined)}
+				onConfirm={async () => {
+					if (!deleting) return;
+					await editApi.deleteSkillDocument(deleting.name);
+					setVersion((n) => n + 1);
+					toast(t("Deleted {name}.", { name: deleting.name }));
+				}}
+			>
+				{deleting ? <DeleteNotice skill={deleting} /> : null}
+			</Confirm>
 		</section>
+	);
+}
+
+/** What deleting a skill takes with it: it is detached from every knight and group that carries it. */
+function DeleteNotice({ skill }: { skill: SkillView }) {
+	return (
+		<>
+			<p>
+				{skill.carriers.length
+					? t(
+							"{name} will be deleted and taken from the knights that carry it: {carriers}.",
+							{ name: skill.name, carriers: skill.carriers.join(", ") },
+						)
+					: t("{name} will be deleted. No knight carries it.", {
+							name: skill.name,
+						})}
+			</p>
+			{skill.groups.length ? (
+				<p>
+					{t("It also leaves the skill groups {groups}.", {
+						groups: skill.groups.join(", "),
+					})}
+				</p>
+			) : null}
+			<p>{t("This cannot be undone.")}</p>
+		</>
 	);
 }
 
@@ -112,10 +162,13 @@ function readOnlyReason(source: SkillView["source"]): string | undefined {
 function SkillCard({
 	skill,
 	onEdit,
+	onDelete,
 }: {
 	skill: SkillView;
 	/** Present when the skill can be edited here: an agent-written one on a host that allows it. */
 	onEdit?: (() => void) | undefined;
+	/** Present when the skill can be deleted here, as it can be edited. */
+	onDelete?: (() => void) | undefined;
 }) {
 	const [open, setOpen] = useState(false);
 	const [detail, setDetail] = useState<SkillDetailView>();
@@ -160,6 +213,11 @@ function SkillCard({
 						</button>
 					</>
 				)}
+				{onDelete ? (
+					<button type="button" className="secondary" onClick={onDelete}>
+						{t("Delete")}
+					</button>
+				) : null}
 			</div>
 			<p>{skill.missing ?? skill.description}</p>
 			{skill.source.kind !== "written" ? (

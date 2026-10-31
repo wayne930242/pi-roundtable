@@ -116,6 +116,8 @@ let read: ReturnType<typeof spyOn>;
 let save: ReturnType<typeof spyOn>;
 let create: ReturnType<typeof spyOn>;
 let history: ReturnType<typeof spyOn>;
+let remove: ReturnType<typeof spyOn>;
+let deleted: string[];
 let canEdit = true;
 
 beforeEach(() => {
@@ -131,8 +133,9 @@ beforeEach(() => {
 		{ id: 2, text: text("One."), hash: hash(1), by: "Sam", at: AT },
 		{ id: 1, text: text("Zero."), hash: hash(0), by: "Riley", at: AT },
 	];
+	deleted = [];
 	skills = spyOn(api, "skills").mockImplementation(async () =>
-		CATALOG.map((entry) =>
+		CATALOG.filter((entry) => !deleted.includes(entry.name)).map((entry) =>
 			entry.name === "daily-notes" ? { ...entry } : entry,
 		),
 	);
@@ -170,10 +173,16 @@ beforeEach(() => {
 	history = spyOn(editApi, "skillHistory").mockImplementation(async () => ({
 		versions,
 	}));
+	remove = spyOn(editApi, "deleteSkillDocument").mockImplementation(
+		async (name) => {
+			deleted.push(name);
+			return { message: `Removed skill ${name}.` };
+		},
+	);
 });
 afterEach(async () => {
 	await page.render(null);
-	for (const spy of [skills, session, read, save, create, history])
+	for (const spy of [skills, session, read, save, create, history, remove])
 		spy.mockRestore();
 });
 
@@ -447,4 +456,55 @@ test("saving an edit refreshes the list", async () => {
 	await page.click(button("Save"));
 	await page.act(() => settle(80));
 	expect(skills.mock.calls.length).toBeGreaterThan(before);
+});
+
+test("only a skill an agent wrote has Delete, and only for an owner who can edit", async () => {
+	await show();
+	expect(inCard("daily-notes", "Delete")).not.toBeNull();
+	for (const name of ["writing-skills", "from-package", "kit-do"])
+		expect(inCard(name, "Delete")).toBeNull();
+	await page.render(null);
+	canEdit = false;
+	await show();
+	expect(inCard("daily-notes", "Delete")).toBeNull();
+});
+
+test("Delete asks first, naming the knights that carry the skill, then deletes it and reads the list again", async () => {
+	await show();
+	await page.click(inCard("daily-notes", "Delete"));
+	const confirm = q<HTMLDialogElement>(
+		'dialog[aria-label="Delete this skill?"]',
+	);
+	expect(confirm?.open).toBe(true);
+	expect(confirm?.textContent).toContain(
+		"daily-notes will be deleted and taken from the knights that carry it: scout.",
+	);
+	expect(confirm?.textContent).toContain("This cannot be undone.");
+	expect(remove).not.toHaveBeenCalled();
+	await page.click(button("Delete skill"));
+	await page.act(() => settle(80));
+	expect(remove).toHaveBeenCalledWith("daily-notes");
+	expect(document.body.textContent).toContain("Deleted daily-notes.");
+	expect(card("daily-notes")).toBeUndefined();
+});
+
+test("Cancel deletes nothing, and a refusal stays in the question in the server's words", async () => {
+	await show();
+	await page.click(inCard("daily-notes", "Delete"));
+	await page.click(button("Cancel"));
+	expect(remove).not.toHaveBeenCalled();
+	await page.act(() => settle(300));
+	await page.click(inCard("daily-notes", "Delete"));
+	remove.mockRejectedValueOnce(
+		new ApiFailure(
+			'There is no skill "daily-notes"; see skill_list.',
+			undefined,
+			400,
+		),
+	);
+	await page.click(button("Delete skill"));
+	expect(
+		q('dialog[aria-label="Delete this skill?"] .failure')?.textContent,
+	).toBe('There is no skill "daily-notes"; see skill_list.');
+	expect(card("daily-notes")).not.toBeUndefined();
 });

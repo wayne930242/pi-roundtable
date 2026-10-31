@@ -7,6 +7,7 @@ import type {
 	PromptSave,
 	PromptsView,
 	PromptView,
+	SkillDeleted,
 	SkillDocCreate,
 	SkillDocSave,
 	SkillDocView,
@@ -40,6 +41,9 @@ export const editApi = {
 		send<SkillDocView>(`skill-docs/${named(name)}`, "PUT", save),
 	createSkillDocument: (made: SkillDocCreate) =>
 		send<SkillDocView>("skill-docs", "POST", made),
+	/** Deletes an agent-written skill and detaches it from every knight and group that carries it. */
+	deleteSkillDocument: (name: string) =>
+		send<SkillDeleted>(`skill-docs/${named(name)}`, "DELETE"),
 	skillHistory: (name: string) =>
 		request<SkillHistoryView>(`skill-docs/${named(name)}/history`),
 };

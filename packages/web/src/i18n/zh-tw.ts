@@ -1156,6 +1156,14 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"來自套件 {package}；套件升級時才會改變。",
 	"Linked from {repo}; change it in its repository.":
 		"連結自 {repo}；請到它的儲存庫修改。",
+	"Delete this skill?": "要刪除這個技能嗎？",
+	"Delete skill": "刪除技能",
+	"{name} will be deleted and taken from the knights that carry it: {carriers}.":
+		"{name} 會被刪除，並從攜帶它的騎士身上拿掉：{carriers}。",
+	"{name} will be deleted. No knight carries it.":
+		"{name} 會被刪除，目前沒有騎士攜帶它。",
+	"It also leaves the skill groups {groups}.": "它也會離開技能群組 {groups}。",
+	"This cannot be undone.": "這個動作無法復原。",
 	// 主要提示詞與技能內容的編輯：伺服器的拒絕訊息
 	"This host has no prompts to edit.": "這個主機沒有可編輯的提示詞。",
 	"There is no such prompt.": "沒有這份提示詞。",
