@@ -2,6 +2,7 @@
 // of the room list, the owners' layout and what the person folded or opened, so a test needs no browser
 // and the order holds on a page that draws no list (a phone with a room open).
 
+import { sectionFold } from "./folds.ts";
 import { type SectionsInput, sections } from "./sections.ts";
 
 /** One room the list can hold, and whether the list shows it now. */
@@ -13,19 +14,21 @@ export interface Stop {
 export interface OrderOptions {
 	/** A room's newest activity, as the list sorts by it. */
 	at(key: string): number;
-	/** The folders folded on this device. */
+	/** The groups folded on this device: folders by id, sections by `sectionFold`. */
 	collapsed: ReadonlySet<string>;
+	/** Whether a folded group still shows the room: a card waits there or messages are unread. */
+	stays?(key: string): boolean;
 	/** The finished threads whose fold is open. */
 	expanded: ReadonlySet<string>;
-	/** The room open now; its folder and its fold show open, whatever was kept. */
+	/** The room open now; a folded group still shows it, whatever was kept. */
 	current: string | undefined;
 }
 
 /**
  * Every room of the list in the order it is drawn: Home, the pinned rooms, the folders, the rest (agents
  * then groups while there are no folders), and the threads whose room is gone; a room's threads follow
- * it, the open ones first. `shown` is false for the rooms in a folded folder and the finished threads
- * under a closed fold.
+ * it, the open ones first. `shown` is false for the rooms in a folded group (but the open room and the
+ * ones that `stays`) and the finished threads under a closed fold.
  */
 export function roomStops(state: SectionsInput, options: OrderOptions): Stop[] {
 	const { collapsed, expanded, current } = options;
@@ -43,18 +46,20 @@ export function roomStops(state: SectionsInput, options: OrderOptions): Stop[] {
 			});
 	};
 	for (const key of arrangement.home) room(key, true);
-	for (const key of arrangement.pinned) room(key, true);
-	for (const folder of arrangement.folders) {
-		const open =
-			!collapsed.has(folder.id) ||
-			(current !== undefined && folder.rooms.includes(current));
-		for (const key of folder.rooms) room(key, open);
+	/** The rooms of one group: all while it is open, else those a fold leaves showing. */
+	const group = (id: string, keys: readonly string[]) => {
+		const folded = collapsed.has(id);
+		for (const key of keys)
+			room(key, !folded || key === current || options.stays?.(key) === true);
+	};
+	group(sectionFold("pinned"), arrangement.pinned);
+	for (const folder of arrangement.folders) group(folder.id, folder.rooms);
+	if (arrangement.folders.length > 0)
+		group(sectionFold("rest"), arrangement.rest);
+	else {
+		group(sectionFold("agents"), arrangement.restAgents);
+		group(sectionFold("groups"), arrangement.restGroups);
 	}
-	const rest =
-		arrangement.folders.length > 0
-			? arrangement.rest
-			: [...arrangement.restAgents, ...arrangement.restGroups];
-	for (const key of rest) room(key, true);
 	const { orphans } = arrangement;
 	for (const key of orphans.open) stops.push({ key, shown: true });
 	for (const key of orphans.closed)

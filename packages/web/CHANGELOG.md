@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The groups you pick a room from fold like Discord's categories: the owners' folders, and the headings Pinned, Ungrouped, Knights and Groups in the room list, and the same headings and folders in a phone's room drawer. Tap the heading (a chevron, `aria-expanded`) to fold it; a folded group shows how many rooms it holds. The fold is kept per device in `localStorage`, shared by the list and the drawer for the same folder, Pinned and Ungrouped. Home and the drawer's "Waiting for you" never fold.
+
+### Changed
+
+- A folded group keeps its open room under the heading, plus any room with a card waiting for an answer or messages unread, as a Discord category keeps the selected and the unread channels. A folded folder used to open in full while it held the open room; now only that room stays and the others fold away behind the folder's picture stack. Alt+↑/↓ step over the rooms a fold hides. A search (the drawer's field, the room palette) still finds rooms in a folded group.
+
 ## [0.29.1] - 2026-10-31
 
 ### Added

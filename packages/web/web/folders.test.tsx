@@ -346,19 +346,29 @@ test("an ordinary folder's header is a light label, not the boxed card, and its 
 	);
 });
 
-test("the folder that holds the open room shows open while its stored fold stays", async () => {
-	load({ folders: [WORK] });
+test("a folded folder keeps the open room under its heading and folds the others away, while its stored fold stays", async () => {
+	load({ folders: [{ id: F1, name: "Work", rooms: [SCOUT, BUILD] }] });
 	stored.set(COLLAPSED_KEY, JSON.stringify([F1]));
 	reloadCollapsed();
 	await show(<List active={SCOUT} />);
-	expect(q(".folder-toggle")?.getAttribute("aria-expanded")).toBe("true");
+	expect(q(".folder-toggle")?.getAttribute("aria-expanded")).toBe("false");
+	expect(all(".folder-body .room-row").map((row) => row.textContent)).toEqual([
+		rowOf("scout")?.textContent,
+	]);
+	expect(q(".folder-body")?.hasAttribute("hidden")).toBe(false);
+	// The stack speaks for the one room that is hidden.
+	expect(all(".folder-stack .folder-stack-item").length).toBe(1);
 	expect(JSON.parse(stored.get(COLLAPSED_KEY) ?? "[]")).toEqual([F1]);
 	await show(<List active={BUILD} />);
-	expect(q(".folder-toggle")?.getAttribute("aria-expanded")).toBe("false");
+	expect(rowOf("build")).not.toBeNull();
+	expect(rowOf("scout")).toBeNull();
+	await show(<List />);
+	expect(all(".folder-body .room-row")).toEqual([]);
+	expect(q(".folder-body")?.hasAttribute("hidden")).toBe(true);
 });
 
-test("a folded folder still shows a waiting card and the working dots of its rooms", async () => {
-	load({ folders: [WORK] });
+test("a folded folder keeps a room with a waiting card visible and shows the working dots of the rooms it hides", async () => {
+	load({ folders: [{ id: F1, name: "Work", rooms: [SCOUT, BUILD] }] });
 	stored.set(COLLAPSED_KEY, JSON.stringify([F1]));
 	reloadCollapsed();
 	const card: PromptFrame = {
@@ -371,18 +381,26 @@ test("a folded folder still shows a waiting card and the working dots of its roo
 	store.dispatch({ type: "prompt", room: SCOUT, prompt: card });
 	store.dispatch({
 		type: "activity",
-		room: SCOUT,
+		room: BUILD,
 		typing: true,
 		stoppable: true,
 	});
 	await show(<List />);
-	const head = q(".folder-head")?.textContent ?? "";
-	expect(head).toContain("1 card waiting");
+	// The room that needs the owner stays; the one that only works folds away behind a dots mark.
+	expect(rowOf("scout")?.textContent).toContain("1 card waiting");
+	expect(rowOf("build")).toBeNull();
 	expect(q(".folder-head .typing")).not.toBeNull();
+	expect(q(".folder-head")?.textContent).not.toContain("card waiting");
 	// Open, the rooms say it themselves.
 	await page.click(q(".folder-toggle"));
 	expect(q(".folder-head .typing")).toBeNull();
 	store.dispatch({ type: "prompt_closed", prompt: "p1", outcome: "approved" });
+	store.dispatch({
+		type: "activity",
+		room: BUILD,
+		typing: false,
+		stoppable: false,
+	});
 });
 
 test("a folder shows a bell-slash when all its rooms are muted and a fainter one when some are", async () => {

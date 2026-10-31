@@ -2,7 +2,9 @@ import { useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { installArrangedStyle } from "../lib/arranged-style.ts";
 import { useAccentStyle } from "../lib/characters.ts";
+import { sectionFold, useCollapsed } from "../lib/folds.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
+import { useHost } from "../lib/host-state.ts";
 import { composingKey } from "../lib/ime.ts";
 import { roomLifting } from "../lib/layout.ts";
 import { useLifting } from "../lib/lifting.ts";
@@ -14,6 +16,7 @@ import { useRowPress } from "../lib/row-press.ts";
 import { drawerGroups } from "../lib/sections.ts";
 import { Icon } from "./icons.tsx";
 import { RoomPicture } from "./room-picture.tsx";
+import { FoldToggle } from "./section-fold.tsx";
 import { Unread } from "./unread.tsx";
 
 installArrangedStyle();
@@ -24,6 +27,14 @@ interface Entry {
 	name: string;
 	waiting: boolean;
 }
+
+/** The fold that keeps a group's heading folded on this device; the waiting rooms and Home never fold. */
+const foldOf = (id: string): string | undefined =>
+	id === "pinned" || id === "rest"
+		? sectionFold(id)
+		: id === "waiting" || id === "home"
+			? undefined
+			: id;
 
 /** A run of rows under one heading: the waiting rooms, the pinned ones, a folder, or the rest. */
 interface Group {
@@ -168,7 +179,9 @@ export function SwitcherList(props: {
 }) {
 	const [query, setQuery] = useState("");
 	const groups = useGroups();
-	const shown = groups
+	const collapsed = useCollapsed();
+	const unread = useHost((state) => state.unread);
+	const matching = groups
 		.map((group) => ({
 			...group,
 			entries: group.entries.filter(
@@ -177,6 +190,33 @@ export function SwitcherList(props: {
 		}))
 		// Empty groups wait, hidden, for a row to be lifted over them; a search shows only what matches.
 		.filter((group) => group.entries.length > 0 || query === "");
+	const headed =
+		matching.filter((group) => group.entries.length > 0).length > 1;
+	// A heading folds its group, as a Discord category folds: the open room and the rooms with a card
+	// waiting or messages unread stay. A search looks through the folds.
+	const shown = matching.map((group) => {
+		const fold = foldOf(group.id);
+		const folded =
+			headed &&
+			query === "" &&
+			fold !== undefined &&
+			group.entries.length > 0 &&
+			collapsed.has(fold);
+		return {
+			...group,
+			fold,
+			folded,
+			total: group.entries.length,
+			entries: folded
+				? group.entries.filter(
+						(entry) =>
+							entry.key === props.current ||
+							entry.waiting ||
+							(unread[entry.key] ?? 0) > 0,
+					)
+				: group.entries,
+		};
+	});
 	const pick = (key: string) =>
 		props.close(
 			key === props.current ? undefined : () => navigate("room", key),
@@ -192,7 +232,14 @@ export function SwitcherList(props: {
 	)
 		? t("Ungrouped")
 		: t("Rooms");
-	const headed = shown.filter((group) => group.entries.length > 0).length > 1;
+	const headingOf = (group: { id: string; title?: string | undefined }) =>
+		group.id === "home"
+			? t("Home")
+			: group.id === "pinned"
+				? t("Pinned")
+				: group.id === "rest"
+					? restTitle
+					: (group.title ?? t("Rooms"));
 	return (
 		<>
 			<div className="switcher-search">
@@ -239,18 +286,8 @@ export function SwitcherList(props: {
 					return (
 						<section
 							key={group.id}
-							aria-label={
-								waiting
-									? t("Waiting for you")
-									: group.id === "home"
-										? t("Home")
-										: group.id === "pinned"
-											? t("Pinned")
-											: group.id === "rest"
-												? restTitle
-												: (group.title ?? t("Rooms"))
-							}
-							{...(group.entries.length === 0 ? { "data-empty": "" } : {})}
+							aria-label={waiting ? t("Waiting for you") : headingOf(group)}
+							{...(group.total === 0 ? { "data-empty": "" } : {})}
 							{...(zone
 								? {
 										"data-drop-zone": zone,
@@ -263,18 +300,22 @@ export function SwitcherList(props: {
 								<h2 className="switcher-heading" data-waiting="">
 									{t("Waiting for you")}
 								</h2>
-							) : headed || group.entries.length === 0 ? (
+							) : headed || group.total === 0 ? (
 								<h2 className="switcher-heading">
-									{group.id === "home"
-										? t("Home")
-										: group.id === "pinned"
-											? t("Pinned")
-											: group.id === "rest"
-												? restTitle
-												: group.title}
+									{group.fold && group.total > 0 ? (
+										<FoldToggle
+											id={group.fold}
+											name={headingOf(group)}
+											open={!group.folded}
+											controls={`switcher-body-${group.id}`}
+											count={group.folded ? group.total : undefined}
+										/>
+									) : (
+										headingOf(group)
+									)}
 								</h2>
 							) : null}
-							<ul className="switcher-list">
+							<ul className="switcher-list" id={`switcher-body-${group.id}`}>
 								{group.entries.map((entry) => (
 									<Row
 										key={entry.key}
