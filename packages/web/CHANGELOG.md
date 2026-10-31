@@ -18,6 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The group room's "Table" toggle button and the table page's own header, mode switch and chat wrapper.
 
+### Fixed
+
+- A swipe in a round table close-up steps the way the finger moves: a swipe to the left brings in the podium on the right. It went the other way.
+
 ## [0.28.0] - 2026-10-31
 
 ### Added

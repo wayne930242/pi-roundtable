@@ -32,6 +32,7 @@ import {
 	slotsFor,
 	snapAngle,
 	startsAtEdge,
+	swipeStep,
 	zoomIntent,
 } from "./camera";
 import { Effects } from "./fx3d";
@@ -890,7 +891,7 @@ export function createTable3D(
 			Math.abs(dx) >= SWIPE_PX &&
 			Math.abs(dx) > Math.abs(dy)
 		)
-			step(dx < 0 ? 1 : -1);
+			step(swipeStep(dx));
 	};
 	const onCancel = (event: PointerEvent) => {
 		touches.delete(event.pointerId);

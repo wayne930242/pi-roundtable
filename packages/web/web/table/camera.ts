@@ -422,6 +422,12 @@ export function podiumPlace(
 export const dragAngle = (dx: number, width: number): number =>
 	(-dx / Math.max(width, 1)) * (Math.PI / 2);
 
+/**
+ * Which way a close-up swipe of `dx` px steps along the podium order: the podiums follow the
+ * finger, so a swipe to the left brings in the neighbour standing on the right, as a carousel does.
+ */
+export const swipeStep = (dx: number): 1 | -1 => (dx < 0 ? -1 : 1);
+
 /** A swipe must not start this close to the screen's edge, where the system's own gestures live. */
 export const EDGE_PX = 32;
 

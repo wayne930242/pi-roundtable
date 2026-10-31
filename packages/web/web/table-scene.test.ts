@@ -32,6 +32,7 @@ import {
 	snapAngle,
 	spacingFor,
 	startsAtEdge,
+	swipeStep,
 	TAU,
 	zoomIntent,
 } from "./table/camera.ts";
@@ -276,6 +277,12 @@ describe("the camera planner", () => {
 		);
 		expect(arc).toBeLessThan(TAU / slots.count / 2 + 1e-9);
 		expect(seatAhead(0, slotsFor(0))).toBeUndefined();
+	});
+
+	test("a close-up swipe steps the way the finger moves", () => {
+		// a swipe to the left brings in the podium on the right, which comes earlier in the order
+		expect(swipeStep(-120)).toBe(-1);
+		expect(swipeStep(120)).toBe(1);
 	});
 
 	test("a swipe never starts within 32 px of the screen's edge", () => {
