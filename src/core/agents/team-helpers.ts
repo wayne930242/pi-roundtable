@@ -1,6 +1,7 @@
 import { helpersOf } from "../config/helpers.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import { surfaceOf } from "../presence/delivery-router.ts";
 import { answersTo, helperSurface, isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import type { HelpersEnded } from "./helper-ops.ts";
@@ -128,7 +129,10 @@ export class TeamHelpers {
 		return restored;
 	}
 
-	/** A `message_agent` call that names "discord" gives a web-born temp knight its thread first. */
+	/**
+	 * A `message_agent` call that names "discord", or names nothing from a Discord conversation, gives
+	 * a web-born temp knight its thread first.
+	 */
 	async reach(
 		caller: AgentTurnScope,
 		to: string,
@@ -138,8 +142,11 @@ export class TeamHelpers {
 		const { turns } = this.#ctx;
 		const target = store.agent(to);
 		const speaker = turns.speakerOf(caller);
-		if (conversation?.trim() !== "discord" || !target || !speaker) return;
-		if (answersTo(target, caller.name, turns.turnChannel(caller), speaker))
+		const from = turns.turnChannel(caller);
+		// Unnamed, a message stays on the sender's surface, so one sent from Discord goes there too.
+		const wanted = conversation?.trim() || surfaceOf(from);
+		if (wanted !== "discord" || !target || !speaker) return;
+		if (answersTo(target, caller.name, from, speaker))
 			await this.placeOnDiscord(to);
 	}
 

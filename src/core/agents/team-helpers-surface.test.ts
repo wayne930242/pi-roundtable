@@ -84,14 +84,35 @@ describeDb("temp knights live on the surface that made them", () => {
 		expect(ran?.channel).toBe(discordKey(channelId));
 	});
 
-	test("a message that does not name discord makes no thread", async () => {
+	test("a message from the web app that does not name discord makes no thread", async () => {
+		fx.surfaces.rooms = ["app"];
+		await webBorn();
+		await inRoomTurn(async (caller) => {
+			await fx.team.reach?.(caller, "coordinator-1", undefined);
+			await fx.team.reach?.(caller, "coordinator-1", "web");
+		});
+		await inTurn(
+			"coordinator",
+			(caller) =>
+				fx.team.reach?.(caller, "coordinator-1", "web") ?? Promise.resolve(),
+		);
+		expect(threadCount()).toBe(0);
+	});
+
+	test("a message from Discord that names no conversation makes its thread and lands there", async () => {
 		fx.surfaces.rooms = ["app"];
 		await webBorn();
 		await inTurn("coordinator", async (caller) => {
 			await fx.team.reach?.(caller, "coordinator-1", undefined);
-			await fx.team.reach?.(caller, "coordinator-1", "web");
+			fx.team.message(caller, "coordinator-1", "From Discord.");
 		});
-		expect(threadCount()).toBe(0);
+		await settle();
+		expect(threadCount()).toBe(1);
+		const channelId = fx.store.agent("coordinator-1")?.channelId ?? "";
+		const ran = turnsOf("coordinator-1").find((turn) =>
+			turn.text.includes("From Discord."),
+		);
+		expect(ran?.channel).toBe(discordKey(channelId));
 	});
 
 	test("a turn that may not message it makes no thread", async () => {
