@@ -31,7 +31,10 @@ const OWNER: Visitor = {
 	speakerId: "owner",
 	roles: [],
 };
-function fixture(change: Partial<ConsoleFeatures> = {}) {
+function fixture(
+	change: Partial<ConsoleFeatures> = {},
+	ports: Partial<ConstructorParameters<typeof ConsoleApi>[0]> = {},
+) {
 	const memory = fakeMemory();
 	const calls: string[] = [];
 	let changes = 0;
@@ -121,6 +124,7 @@ function fixture(change: Partial<ConsoleFeatures> = {}) {
 			},
 		},
 		mountPath: "/console",
+		...ports,
 	});
 	const call = async (path: string, method = "GET", body?: string) => {
 		const response = await api.handle(
@@ -188,6 +192,75 @@ describe("host feature ports", () => {
 		).toBe(200);
 		expect(calls).toHaveLength(6);
 		expect(changes()).toBe(6);
+	});
+	test("with the app's rooms, the overview names each room and its start-over resets the room, not the Discord channel", async () => {
+		const groupRoom = "app:group.council";
+		const { call, calls } = fixture(
+			{},
+			{
+				roomSurface: "app",
+				team: partial<Pick<AgentTeam, "owns" | "status" | "guildId">>({
+					guildId: "guild",
+					owns: (key) =>
+						key === groupRoom || key === `discord:${GROUP_CHANNEL}`
+							? "group"
+							: key === "app:agent.scout"
+								? "agent"
+								: undefined,
+					status: async () => ({
+						agents: [
+							{
+								name: "scout",
+								displayName: "Scout",
+								channelId: AGENT_CHANNEL,
+								model: "m",
+								thinking: "auto",
+								waiting: 0,
+								schedules: 0,
+							},
+						],
+						groups: [
+							{
+								name: "council",
+								displayName: "Council",
+								channelId: GROUP_CHANNEL,
+								members: ["Scout"],
+								host: "Scout",
+								busy: 0,
+							},
+						],
+					}),
+				}),
+			},
+		);
+		const view = (await call("overview")).body as OverviewView;
+		expect(view.groups[0]?.room).toBe(groupRoom);
+		expect(view.agents[0]?.room).toBe("app:agent.scout");
+		expect(
+			(
+				await call(
+					`channels/${encodeURIComponent(groupRoom)}/start-over`,
+					"POST",
+				)
+			).status,
+		).toBe(200);
+		expect(calls).toEqual([`fresh:${groupRoom}`]);
+		// A room is no stored conversation: it is never deleted, and a room nobody owns is no conversation.
+		for (const [key, action] of [
+			[groupRoom, "delete"],
+			["app:group.nobody", "start-over"],
+		] as const)
+			expect(
+				(await call(`channels/${encodeURIComponent(key)}/${action}`, "POST"))
+					.status,
+			).toBe(404);
+		expect(calls).toHaveLength(1);
+	});
+	test("without the app's rooms, the overview names none", async () => {
+		const { call } = fixture();
+		const view = (await call("overview")).body as OverviewView;
+		expect(view.groups).toEqual([]);
+		expect(JSON.stringify(view)).not.toContain('"room"');
 	});
 	test("a busy delete becomes conflict and emits no change", async () => {
 		const { call, changes } = fixture({

@@ -179,9 +179,9 @@ export function GroupCard(props: {
 			<p className="hint">
 				{t("Last active")} {ago(group.lastActive, now, timeZone)}
 			</p>
-			{group.channelId ? (
+			{group.room || group.channelId ? (
 				<Cleanup
-					channel={`discord:${group.channelId}`}
+					channel={group.room ?? `discord:${group.channelId}`}
 					title={group.displayName}
 					busy={group.busy > 0}
 					refresh={props.refresh}
@@ -268,20 +268,18 @@ function AgentRow(props: {
 					<dd>{ago(agent.lastActive, props.now, timeZone)}</dd>
 				</div>
 			</dl>
-			{agent.channelId ? (
-				<>
-					<Cleanup
-						channel={`discord:${agent.channelId}`}
-						title={agent.displayName}
-						busy={!!agent.workingIn || agent.waiting > 0}
-						refresh={props.refresh}
-					/>
-					{panes.includes("conversations") ? (
-						<a href={hrefFor("conversations", `discord:${agent.channelId}`)}>
-							{t("transcript")}
-						</a>
-					) : null}
-				</>
+			{agent.room || agent.channelId ? (
+				<Cleanup
+					channel={agent.room ?? `discord:${agent.channelId}`}
+					title={agent.displayName}
+					busy={!!agent.workingIn || agent.waiting > 0}
+					refresh={props.refresh}
+				/>
+			) : null}
+			{agent.channelId && panes.includes("conversations") ? (
+				<a href={hrefFor("conversations", `discord:${agent.channelId}`)}>
+					{t("transcript")}
+				</a>
 			) : null}
 		</article>
 	);

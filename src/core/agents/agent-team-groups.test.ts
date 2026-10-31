@@ -581,6 +581,30 @@ describeDb("PostgreSQL", () => {
 			);
 		});
 
+		test("starting a room over catches up its log: a member who never spoke there sees nothing older", async () => {
+			await inRoom("before the restart");
+			await fx.team.startFresh(groupRoom);
+			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.9 };
+			fx.runtime.turns = [];
+			await inRoom("after the restart");
+			const turn = fx.runtime.turns.find((t) => t.agent?.name === "doctor");
+			expect(turn?.agent?.session).toBe("agentgroup:app.group.g.doctor");
+			expect(turn?.text).toContain("after the restart");
+			expect(turn?.text).not.toContain("before the restart");
+		});
+
+		test("starting the Discord channel over resets its seats only, never the room's", async () => {
+			await inRoom("one");
+			await inDiscord("one");
+			fx.runtime.fresh = [];
+			await fx.team.startFresh(discordGroup);
+			expect(fx.runtime.fresh).toEqual([
+				groupSessionKey(group(), "coordinator"),
+				groupSessionKey(group(), "infra"),
+				groupSessionKey(group(), "doctor"),
+			]);
+		});
+
 		test("an agent's room is its own conversation beside its Discord channel", async () => {
 			await fx.team.answerOwner(
 				agentRoom("doctor"),

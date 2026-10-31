@@ -279,6 +279,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 		hosted,
 		sessionsDir: settings.sessionsDir,
 		...(team ? { team } : {}),
+		...(team && rooms ? { roomSurface: settings.surface } : {}),
 		queue,
 		...(connection
 			? { channelName: (id: string) => connection.channelInfo(id) }

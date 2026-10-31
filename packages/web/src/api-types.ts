@@ -153,6 +153,8 @@ export interface AgentView {
 	name: string;
 	displayName: string;
 	channelId?: string;
+	/** Its room in the web app, when the app hosts rooms: the conversation a start-over from the web resets. */
+	room?: string;
 	model: string;
 	thinking: string;
 	/** Channel id of its running turn. */
@@ -168,6 +170,8 @@ export interface GroupView {
 	displayName: string;
 	/** The group's Discord channel; a team without Discord has none. */
 	channelId?: string;
+	/** Its room in the web app, when the app hosts rooms: the conversation a start-over from the web resets. */
+	room?: string;
 	members: string[];
 	host: string;
 	busy: number;
