@@ -1,4 +1,5 @@
 import type { AgentRuntime, ContextUse } from "../contract/runtime.ts";
+import type { IntercomCard } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { ThinkingSetting } from "../models.ts";
 
@@ -24,6 +25,8 @@ export interface AgentPost {
 	files?: { name: string; data: Uint8Array }[];
 	/** A thread of the channel to post in instead, such as a dispatch's. */
 	threadId?: string;
+	/** A message between agents, shown as a small card in place of `chunks` where the channel can. */
+	intercom?: IntercomCard;
 }
 
 /**

@@ -44,6 +44,65 @@ test("a reply to a page's message is not unprompted; a turn long after one is", 
 	expect(heard).toEqual(["scheduled"]);
 });
 
+test("a message between agents is stored as its card with its whole text, ends no turn and notifies nobody", async () => {
+	const rows: Record<string, unknown>[] = [];
+	const frames: { type: string; outcome?: string }[] = [];
+	const surface = new AppSurface({
+		surface: "app",
+		sockets: {
+			deliver: (frame: { type: string; outcome?: string }) =>
+				void frames.push(frame),
+		},
+		audienceOf: () => ({ owners: true }),
+		isHostRoom: () => false,
+		log: {
+			append: async (row: Record<string, unknown>) => {
+				rows.push(row);
+				return { id: rows.length, ...row };
+			},
+		},
+		files: {},
+		uploads: { maxBytes: 1 },
+		threads: {},
+		canHost: async () => false,
+		changed: () => undefined,
+		unprompted: () => {
+			throw new Error("a card notifies nobody");
+		},
+		now: () => 1_000_000,
+		logger: { warn: () => undefined },
+	} as never);
+	await surface.start(() => undefined);
+	const stop = surface.startTyping(ROOM);
+	await surface.sendReply(ROOM, {
+		chunks: ["→ To **Scout**", "check the disk"],
+		author: { name: "Guide", agent: "guide" },
+		intercom: {
+			kind: "sent",
+			peer: { name: "scout", displayName: "Scout" },
+			text: "check the disk",
+		},
+	});
+	expect(rows).toEqual([
+		{
+			room: ROOM,
+			kind: "agent",
+			agent: "guide",
+			author: "Guide",
+			text: "check the disk",
+			intercom: { kind: "sent", peer: { name: "scout", displayName: "Scout" } },
+		},
+	]);
+	stop();
+	// The turn that was typing ends without a reply's outcome: the card was none.
+	expect(frames.some((frame) => frame.outcome !== undefined)).toBe(false);
+});
+
+test("a room's interim posts leave the tools to the progress pane", () => {
+	const { surface } = surfaceAt({ now: 0 });
+	expect(surface.interim(ROOM).tools).toBe(false);
+});
+
 test("a room's old page message is forgotten when another room is asked", async () => {
 	const clock = { now: 1_000_000 };
 	const { surface, heard } = surfaceAt(clock);

@@ -11,7 +11,6 @@ import { silentLogger } from "../log.ts";
 import { attachReplyFile } from "../reply-files.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
-import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
 import { toolTiers } from "../tool-tiers.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
@@ -60,8 +59,6 @@ const coordinator: AgentTurnScope = {
 
 function setup(
 	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
-	host = new FakeThreadHost(),
-	withThreads = true,
 	held?: PendingConfirmation,
 ) {
 	const posts: { channelId: string; post: AgentPost }[] = [];
@@ -70,7 +67,6 @@ function setup(
 	const turns: TurnRequest[] = [];
 	/** The replies the judge was asked to read as approvals. */
 	const judged: string[] = [];
-	const { threads } = fakeThreads(host);
 	const queue = new ChannelQueue();
 	// The agent tools' tiers are the agent server plugin's to declare; this table has the one the tests use.
 	const tiers = toolTiers();
@@ -118,14 +114,22 @@ function setup(
 		showStop: () => () => undefined,
 		logger: silentLogger(),
 		changed: () => undefined,
-		...(withThreads ? { threads } : {}),
 	});
-	/** Posts in a channel, or in one of its threads, as `name: text`. */
-	const texts = (channelId: string, threadId?: string) =>
+	/** Posts in a channel other than cards, as `name: text`. */
+	const texts = (channelId: string) =>
 		posts
-			.filter((p) => p.channelId === channelId && p.post.threadId === threadId)
+			.filter((p) => p.channelId === channelId && !p.post.intercom)
 			.map((p) => `${p.post.name}: ${p.post.chunks.join("")}`);
-	return { team, host, posts, interims, turns, texts, judged };
+	/** The cards of messages between agents in a channel, as `name kind peer: text`. */
+	const cards = (channelId: string) =>
+		posts.flatMap((p) =>
+			p.channelId === channelId && p.post.intercom
+				? [
+						`${p.post.name} ${p.post.intercom.kind} ${p.post.intercom.peer.name}: ${p.post.intercom.text}`,
+					]
+				: [],
+		);
+	return { team, posts, interims, turns, texts, cards, judged };
 }
 
 /** Runs a coordinator turn, whose model sends the message, and waits for the chain to settle. */
@@ -190,42 +194,38 @@ describe("interim posts", () => {
 	});
 });
 
-describe("message_agent threads", () => {
-	test("the exchange goes in a thread of the sender's channel, archived before the sender's follow-up", async () => {
-		let archivedAtFollowUp: string[] | undefined;
-		const host = new FakeThreadHost();
-		const { team, texts, turns } = setup((request) => {
+describe("message_agent cards", () => {
+	test("the request and the answer show as cards in the sender's channel, and no thread opens", async () => {
+		const { team, texts, cards, turns, posts } = setup((request) => {
 			if (request.agent?.name === "coordinator" && turns.length === 1)
-				team.message(coordinator, "infra", "check the disk");
-			if (request.agent?.name === "coordinator" && turns.length > 1)
-				archivedAtFollowUp = [...host.closed];
+				team.message(coordinator, "infra", "check the disk\nand the logs");
 			return {
 				ok: true,
 				text: request.agent?.name === "infra" ? "disk 80%" : "ok",
 			};
-		}, host);
+		});
 		await run(team);
-		expect(host.opened).toEqual([
-			{ parentId: "1000", name: "→ Infrastructure", id: "900" },
+		expect(cards("1000")).toEqual([
+			"Coordinator sent infra: check the disk\nand the logs",
+			"Infrastructure answered infra: disk 80%",
 		]);
-		expect(host.lines.get("1000")).toBe(
-			messages().threadStarted("→ Infrastructure", "<#900>"),
-		);
-		expect(texts("1000", "900")).toEqual([
-			`Coordinator: ${messages().messageDelivered("Infrastructure", "check the disk")}`,
-			`Infrastructure: ${messages().answerReturned("disk 80%")}`,
+		// A surface without cards reads the card's heading and its whole text.
+		const sent = posts.find((p) => p.post.intercom?.kind === "sent");
+		expect(sent?.post.chunks).toEqual([
+			`${messages().intercomSent("Infrastructure")}\ncheck the disk\nand the logs`,
 		]);
-		// The target's own channel is unchanged; the sender's channel holds only its own replies.
+		expect(posts.some((p) => p.post.threadId !== undefined)).toBe(false);
+		// The target's own channel is unchanged; the sender's channel holds its own replies besides.
 		expect(texts("2000")).toEqual([
-			`Coordinator: ${messages().messageDelivered("Infrastructure", "check the disk")}`,
+			`Coordinator: ${messages().messageDelivered("Infrastructure", "check the disk\nand the logs")}`,
 			"Infrastructure: disk 80%",
 		]);
 		expect(texts("1000")).toEqual(["Coordinator: ok", "Coordinator: ok"]);
-		expect(archivedAtFollowUp).toEqual(["900"]);
 		const followUp = turns.at(-1);
 		expect(followUp?.channel).toBe(discordKey("1000"));
-		expect(followUp?.text).toContain("in the thread <#900>");
-		expect(followUp?.text).toContain("disk 80%"); // Only the answer's follow-up is a report turn, which may ask the owner on cards.
+		expect(followUp?.text).toContain("disk 80%");
+		expect(followUp?.text).not.toContain("thread");
+		// Only the answer's follow-up is a report turn, which may ask the owner on cards.
 		expect(turns.map((t) => [t.agent?.name, t.interactive])).toEqual([
 			["coordinator", undefined],
 			["infra", undefined],
@@ -245,8 +245,8 @@ describe("message_agent threads", () => {
 		expect(turns.map((t) => t.interactive)).toEqual([undefined, true]);
 	});
 
-	test("a failed or stopped answer is reported in the thread, which is archived", async () => {
-		const { team, host, turns } = setup((request) => {
+	test("a failed or stopped answer shows as a failure card, and the sender hears why", async () => {
+		const { team, cards, turns } = setup((request) => {
 			if (request.agent?.name === "coordinator" && turns.length === 1)
 				team.message(coordinator, "infra", "x");
 			return request.agent?.name === "infra"
@@ -258,31 +258,17 @@ describe("message_agent threads", () => {
 				: { ok: true, text: "ok" };
 		});
 		await run(team);
-		expect(host.textsIn("900")).toEqual([
-			messages().agentNoReply("stopped by the owner"),
+		expect(cards("1000")).toEqual([
+			"Coordinator sent infra: x",
+			"Infrastructure failed infra: stopped by the owner",
 		]);
-		expect(host.closed).toEqual(["900"]);
 		expect(turns.at(-1)?.text).toContain("could not answer");
-		expect(turns.at(-1)?.text).toContain("<#900>");
-	});
-
-	test("without a thread the answer comes back in the sender's channel as before", async () => {
-		const host = new FakeThreadHost();
-		host.failOpen = true;
-		const { team, texts, turns } = setup((request) => {
-			if (request.agent?.name === "coordinator" && turns.length === 1)
-				team.message(coordinator, "infra", "x");
-			return { ok: true, text: `${request.agent?.name} ok` };
-		}, host);
-		await run(team);
-		expect(texts("1000")).toContain(
-			`Infrastructure: ${messages().answerReturned("infra ok")}`,
-		);
+		expect(turns.at(-1)?.text).toContain("stopped by the owner");
 		expect(turns.at(-1)?.text).not.toContain("thread");
 	});
 
-	test("a group round's dispatches open their threads in the group channel", () => {
-		const { team } = setup(() => ({ ok: true, text: "" }), undefined, false);
+	test("a group round's messages show their cards in the group channel", () => {
+		const { team } = setup(() => ({ ok: true, text: "" }));
 		expect(team.turnChannel({ ...coordinator, group: "ops" })).toBe(
 			discordKey("3000"),
 		);
@@ -319,24 +305,21 @@ describe("unattended turns", () => {
 	});
 
 	test("an agent that has nothing to answer a message sends nothing back and wakes nobody", async () => {
-		const host = new FakeThreadHost();
-		const { team, texts, turns } = setup((request) => {
+		const { team, texts, cards, turns } = setup((request) => {
 			if (request.agent?.name === "coordinator" && turns.length === 1)
 				team.message(coordinator, "infra", "anything new?");
 			return {
 				ok: true,
 				text: request.agent?.name === "infra" ? "" : "ok",
 			};
-		}, host);
+		});
 		await run(team);
 		expect(turns.map((t) => t.agent?.name)).toEqual(["coordinator", "infra"]);
-		expect(texts("1000", "900")).toEqual([
-			`Coordinator: ${messages().messageDelivered("Infrastructure", "anything new?")}`,
-		]);
+		// Only the request's card: a quiet answer posts none.
+		expect(cards("1000")).toEqual(["Coordinator sent infra: anything new?"]);
 		expect(texts("2000")).toEqual([
 			`Coordinator: ${messages().messageDelivered("Infrastructure", "anything new?")}`,
 		]);
-		expect(host.closed).toEqual(["900"]);
 	});
 });
 
@@ -383,14 +366,14 @@ describe("approvals", () => {
 		);
 
 	test("a speaker whose tier holds the held tool approves it", async () => {
-		const { team, turns, judged } = setup(answer, undefined, true, shell);
+		const { team, turns, judged } = setup(answer, shell);
 		await reply(team, "owner");
 		expect(judged).toEqual(["yes, run it"]);
 		expect(turns[0]?.confirmed).toBe(true);
 	});
 
 	test("a lower tier is not asked to approve, so the held action stays held", async () => {
-		const { team, turns, judged } = setup(answer, undefined, true, shell);
+		const { team, turns, judged } = setup(answer, shell);
 		await reply(team, "admin");
 		await reply(team, "member");
 		expect(judged).toEqual([]);
@@ -403,7 +386,7 @@ describe("approvals", () => {
 			speakerId: "2",
 			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
 		};
-		const { team, turns } = setup(answer, undefined, true, held);
+		const { team, turns } = setup(answer, held);
 		await reply(team, "admin");
 		expect(turns[0]?.confirmed).toBe(true);
 	});
@@ -414,7 +397,7 @@ describe("approvals", () => {
 			speakerId: "3",
 			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
 		};
-		const { team, turns, judged } = setup(answer, undefined, true, held);
+		const { team, turns, judged } = setup(answer, held);
 		await reply(team, "admin");
 		expect(judged).toEqual([]);
 		expect(turns[0]?.confirmed).toBeUndefined();
@@ -425,10 +408,10 @@ describe("approvals", () => {
 			...shell,
 			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
 		};
-		const admin = setup(answer, undefined, true, held);
+		const admin = setup(answer, held);
 		await reply(admin.team, "admin");
 		expect(admin.judged).toEqual([]);
-		const owner = setup(answer, undefined, true, { ...held, speakerId: "3" });
+		const owner = setup(answer, { ...held, speakerId: "3" });
 		await reply(owner.team, "owner");
 		expect(owner.turns[0]?.confirmed).toBe(true);
 	});
@@ -441,7 +424,7 @@ describe("approvals", () => {
 			principalId: "p_01JKAI",
 			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
 		};
-		const { team, turns } = setup(answer, undefined, true, held);
+		const { team, turns } = setup(answer, held);
 		await team.answerOwner(
 			discordKey("1000"),
 			{
@@ -463,7 +446,7 @@ describe("approvals", () => {
 			speakerId: "2",
 			calls: [{ tool: "agent_create", input: "{}", action: "create an agent" }],
 		};
-		const { team, judged } = setup(answer, undefined, true, held);
+		const { team, judged } = setup(answer, held);
 		await reply(team, "member");
 		expect(judged).toEqual([]);
 	});
@@ -480,10 +463,10 @@ describe("approvals", () => {
 				},
 			],
 		};
-		const admin = setup(answer, undefined, true, held);
+		const admin = setup(answer, held);
 		await reply(admin.team, "admin");
 		expect(admin.judged).toEqual([]);
-		const owner = setup(answer, undefined, true, held);
+		const owner = setup(answer, held);
 		await reply(owner.team, "owner");
 		expect(owner.turns[0]?.confirmed).toBe(true);
 	});
@@ -516,59 +499,39 @@ describe("approvals", () => {
 			);
 
 		test("a named approver confirms it by message", async () => {
-			const { team, turns, judged } = setup(
-				answer,
-				undefined,
-				true,
-				held(["p_ada"]),
-			);
+			const { team, turns, judged } = setup(answer, held(["p_ada"]));
 			await as(team, "p_ada", "admin");
 			expect(judged).toEqual(["yes, run it"]);
 			expect(turns[0]?.confirmed).toBe(true);
 		});
 
 		test("another principal at the same tier cannot, and is not asked to", async () => {
-			const { team, turns, judged } = setup(
-				answer,
-				undefined,
-				true,
-				held(["p_ada"]),
-			);
+			const { team, turns, judged } = setup(answer, held(["p_ada"]));
 			await as(team, "p_bob", "admin");
 			expect(judged).toEqual([]);
 			expect(turns[0]?.confirmed).toBeUndefined();
 		});
 
 		test("the speaker whose turn held it cannot unless named", async () => {
-			const { team, turns, judged } = setup(
-				answer,
-				undefined,
-				true,
-				held(["p_ada"]),
-			);
+			const { team, turns, judged } = setup(answer, held(["p_ada"]));
 			await as(team, "p_sam", "admin");
 			expect(judged).toEqual([]);
 			expect(turns[0]?.confirmed).toBeUndefined();
-			const named = setup(answer, undefined, true, held(["p_sam"]));
+			const named = setup(answer, held(["p_sam"]));
 			await as(named.team, "p_sam", "admin");
 			expect(named.turns[0]?.confirmed).toBe(true);
 		});
 
 		test("an owner still confirms it, also when no one is named", async () => {
 			for (const approverIds of [["p_ada"], []]) {
-				const { team, turns } = setup(
-					answer,
-					undefined,
-					true,
-					held(approverIds),
-				);
+				const { team, turns } = setup(answer, held(approverIds));
 				await as(team, "p_boss", "owner");
 				expect(turns[0]?.confirmed).toBe(true);
 			}
 		});
 
 		test("an empty set leaves it to the owners", async () => {
-			const { team, turns, judged } = setup(answer, undefined, true, held([]));
+			const { team, turns, judged } = setup(answer, held([]));
 			await as(team, "p_sam", "admin");
 			await as(team, "p_ada", "admin");
 			expect(judged).toEqual([]);
@@ -576,7 +539,7 @@ describe("approvals", () => {
 		});
 
 		test("a named approver whose tier no longer holds the tool cannot", async () => {
-			const { team, judged } = setup(answer, undefined, true, held(["p_ada"]));
+			const { team, judged } = setup(answer, held(["p_ada"]));
 			await as(team, "p_ada", "member");
 			expect(judged).toEqual([]);
 			const tier: PendingConfirmation = {
@@ -591,18 +554,18 @@ describe("approvals", () => {
 					},
 				],
 			};
-			const high = setup(answer, undefined, true, tier);
+			const high = setup(answer, tier);
 			await as(high.team, "p_ada", "admin");
 			expect(high.judged).toEqual([]);
 		});
 
 		test("a pending record with no calls is still the owners' and its speaker's alone", async () => {
 			const empty: PendingConfirmation = { ...held(["p_ada"]), calls: [] };
-			const named = setup(answer, undefined, true, empty);
+			const named = setup(answer, empty);
 			await as(named.team, "p_ada", "admin");
 			await as(named.team, "p_bob", "admin");
 			expect(named.judged).toEqual([]);
-			const speaker = setup(answer, undefined, true, empty);
+			const speaker = setup(answer, empty);
 			await as(speaker.team, "p_sam", "admin");
 			expect(speaker.judged).toEqual(["yes, run it"]);
 		});
@@ -623,7 +586,7 @@ describe("approvals", () => {
 				],
 			};
 			// Neither the speaker nor the named approver may release both calls alone.
-			const { team, judged } = setup(answer, undefined, true, mixed);
+			const { team, judged } = setup(answer, mixed);
 			await as(team, "p_sam", "admin");
 			await as(team, "p_ada", "admin");
 			expect(judged).toEqual([]);

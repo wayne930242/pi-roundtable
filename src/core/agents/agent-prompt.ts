@@ -134,16 +134,8 @@ export function agentReplyText(
 	who: OwnerIdentity,
 	from: Agent,
 	text: string,
-	thread?: string,
 ): string {
-	return `(The agent "${from.displayName}" (\`${from.name}\`) answered your message. Continue with it and tell ${who.name} what matters; your reply is posted in your channel.${threadNote(thread)})\n\n${text}`;
-}
-
-/** Where the exchange was posted, when it had a thread. */
-function threadNote(thread: string | undefined): string {
-	return thread
-		? ` The exchange is in the thread ${thread}, now archived; link it when useful.`
-		: "";
+	return `(The agent "${from.displayName}" (\`${from.name}\`) answered your message. Continue with it and tell ${who.name} what matters; your reply is posted in your channel.)\n\n${text}`;
 }
 
 /** What the sender receives when the target could not answer. */
@@ -151,9 +143,8 @@ export function agentFailureText(
 	who: OwnerIdentity,
 	from: Agent,
 	reason: string,
-	thread?: string,
 ): string {
-	return `(The agent "${from.displayName}" (\`${from.name}\`) could not answer your message: ${reason}. Tell ${who.name} briefly, or try again later.${threadNote(thread)})`;
+	return `(The agent "${from.displayName}" (\`${from.name}\`) could not answer your message: ${reason}. Tell ${who.name} briefly, or try again later.)`;
 }
 
 /** A new agent's first turn. */
@@ -190,11 +181,6 @@ export function groupTurnText(
 /** How a message_agent request appears in the target's channel. */
 export function deliveredMessagePost(to: Agent, text: string): string {
 	return messages().messageDelivered(to.displayName, text);
-}
-
-/** How the target's answer appears in the sender's channel. */
-export function returnedAnswerPost(text: string): string {
-	return messages().answerReturned(text);
 }
 
 /** Why a chain of agent messages stops without the owner in between. */

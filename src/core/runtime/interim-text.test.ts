@@ -48,6 +48,37 @@ test("a long or structured text is primary; a short line is not", () => {
 	expect(isPrimaryText("a bit longer", 5)).toBe(true);
 });
 
+test("posts that show the tools elsewhere get the narration without a tool line, and nothing for tools alone", async () => {
+	const { shown, posts } = recording();
+	const poster = new InterimPoster(
+		{ ...posts, tools: false },
+		{ logger: quiet, channel: "app:room", editMs: 0 },
+	);
+	poster.toolStart("bash");
+	poster.toolStart("bash");
+	poster.toolStart("ask_user");
+	await poster.flush();
+	expect(shown).toEqual([]);
+	poster.messageEnd(toolUse("checking the logs"));
+	poster.toolStart("bash");
+	await poster.flush();
+	expect(shown).toEqual(["-# checking the logs"]);
+});
+
+test("Discord's posts, which say nothing of tools, keep the tool line", async () => {
+	const { shown, posts } = recording();
+	const poster = new InterimPoster(posts, {
+		logger: quiet,
+		channel: "discord:1",
+		editMs: 0,
+	});
+	poster.toolStart("bash");
+	poster.toolStart("bash");
+	poster.toolStart("ask_user");
+	await poster.flush();
+	expect(shown).toEqual(["-# bash ×2 · ask_user"]);
+});
+
 test("consecutive short texts share one progress message with a merged tool line", async () => {
 	const { log, shown, posts } = recording();
 	const poster = new InterimPoster(posts, {

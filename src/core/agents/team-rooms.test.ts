@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { OutboundReply, TurnResult } from "../domain/conversation.ts";
@@ -11,11 +8,7 @@ import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../log.ts";
 import { attachReplyFile } from "../reply-files.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
-import { surfacePort } from "../routing/surface-port.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
-import { FakeSurfaceThreads } from "../testing/surface-threads.ts";
-import { FakeThreadHost, fakeThreads } from "../testing/thread-host.ts";
-import { DispatchThreads } from "../threads/dispatch-threads.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
@@ -93,13 +86,10 @@ function roomSurface(
 function setup(
 	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
 	surfaces: TeamTurnsOptions["surfaces"],
-	host = new FakeThreadHost(),
-	given?: DispatchThreads,
 ) {
 	const posts: { channelId: string; post: AgentPost }[] = [];
 	const discordInterims: string[] = [];
 	const turns: TurnRequest[] = [];
-	const threads = given ?? fakeThreads(host).threads;
 	const team = new TeamTurns({
 		owner: OWNER,
 		entryChannelId: "4000",
@@ -134,10 +124,9 @@ function setup(
 		showStop: () => () => undefined,
 		logger: silentLogger(),
 		changed: () => undefined,
-		threads,
 		...(surfaces ? { surfaces } : {}),
 	});
-	return { team, host, posts, discordInterims, turns };
+	return { team, posts, discordInterims, turns };
 }
 
 describe("agent rooms", () => {
@@ -223,6 +212,33 @@ describe("agent rooms", () => {
 		expect(discordInterims).toEqual([]);
 	});
 
+	test("a room surface that shows the tools elsewhere keeps them off the turn's interim posts", async () => {
+		const { port } = roomSurface();
+		let tools: unknown = "unset";
+		const { team } = setup(
+			(request) => {
+				tools = request.interim?.tools;
+				return { ok: true, text: "done" };
+			},
+			{
+				...port,
+				interim: (channel, as) => {
+					const posts = port.interim(channel, as);
+					return posts && { ...posts, tools: false };
+				},
+			},
+		);
+		await ask(team);
+		expect(tools).toBe(false);
+		// One that does not say so keeps them, as Discord does.
+		const plain = setup((request) => {
+			tools = request.interim?.tools;
+			return { ok: true, text: "done" };
+		}, port);
+		await ask(plain.team);
+		expect(tools).toBeUndefined();
+	});
+
 	test("a surface without interim posts leaves the room turn with none", async () => {
 		const { port } = roomSurface();
 		let seen: unknown = "unset";
@@ -296,22 +312,17 @@ describe("agent rooms", () => {
 		}
 	});
 
-	test("message_agent from a room whose surface hosts no threads stays among the surface's rooms: no Discord post, no thread, the answer returns to the sender's room", async () => {
+	test("message_agent from a room stays among the surface's rooms: no Discord post, the request and the answer show as cards in the sender's room", async () => {
 		const { port, replies } = roomSurface();
-		const host = new FakeThreadHost();
 		const sender: AgentTurnScope = { name: "coder", session: room, home: room };
-		const { team, turns, posts } = setup(
-			(request) => {
-				if (request.agent?.name === "coder" && turns.length === 1)
-					team.message(sender, "infra", "check the disk");
-				return {
-					ok: true,
-					text: request.agent?.name === "infra" ? "disk 80%" : "ok",
-				};
-			},
-			port,
-			host,
-		);
+		const { team, turns, posts } = setup((request) => {
+			if (request.agent?.name === "coder" && turns.length === 1)
+				team.message(sender, "infra", "check the disk");
+			return {
+				ok: true,
+				text: request.agent?.name === "infra" ? "disk 80%" : "ok",
+			};
+		}, port);
 		await ask(team);
 		for (let i = 0; i < 30; i++) await Bun.sleep(2);
 		const infraRoom = agentRoomKey("app", "infra");
@@ -323,11 +334,19 @@ describe("agent rooms", () => {
 			["coder", room, room],
 		]);
 		expect(posts).toEqual([]);
-		expect(host.opened).toEqual([]);
 		const said = (channel: string) =>
 			replies
 				.filter((r) => r.channel === channel)
-				.map((r) => [r.reply.author?.agent, r.reply.chunks.join("")]);
+				.map((r) =>
+					r.reply.intercom
+						? [
+								r.reply.author?.agent,
+								r.reply.intercom.kind,
+								r.reply.intercom.peer.displayName,
+								r.reply.intercom.text,
+							]
+						: [r.reply.author?.agent, r.reply.chunks.join("")],
+				);
 		expect(said(infraRoom)).toEqual([
 			[
 				"coder",
@@ -336,77 +355,15 @@ describe("agent rooms", () => {
 			["infra", "disk 80%"],
 		]);
 		expect(said(room)).toEqual([
+			["coder", "sent", "Infrastructure", "check the disk"],
 			["coder", "ok"],
-			["infra", messages().answerReturned("disk 80%")],
-			["coder", "ok"],
-		]);
-	});
-
-	test("message_agent from a room whose surface hosts threads opens the exchange's thread there and the answer goes into it", async () => {
-		const { port, replies } = roomSurface();
-		const appThreads = new FakeSurfaceThreads();
-		const app: ChatSurface = {
-			surface: "app",
-			agentRooms: true,
-			start: async () => undefined,
-			sendReply: async () => undefined,
-			threads: appThreads,
-		};
-		const threads = new DispatchThreads({
-			surfaces: surfacePort(() => [app]),
-			ledgerPath: join(
-				mkdtempSync(join(tmpdir(), "roundtable-room-threads-")),
-				"ledger.json",
-			),
-			logger: silentLogger(),
-		});
-		const sender: AgentTurnScope = { name: "coder", session: room, home: room };
-		const { team, turns, posts } = setup(
-			(request) => {
-				if (request.agent?.name === "coder" && turns.length === 1)
-					team.message(sender, "infra", "check the disk");
-				return {
-					ok: true,
-					text: request.agent?.name === "infra" ? "disk 80%" : "ok",
-				};
-			},
-			port,
-			undefined,
-			threads,
-		);
-		await ask(team);
-		for (let i = 0; i < 30; i++) await Bun.sleep(2);
-		const infraRoom = agentRoomKey("app", "infra");
-		const thread = "app:thread.1";
-		expect(appThreads.opened).toEqual([
-			{ parent: room, name: "→ Infrastructure", id: "thread.1" },
-		]);
-		expect(appThreads.closed).toEqual(["thread.1"]);
-		expect(posts).toEqual([]);
-		const said = (channel: string) =>
-			replies
-				.filter((r) => r.channel === channel)
-				.map((r) => [r.reply.author?.agent, r.reply.chunks.join("")]);
-		// The request and the answer are in the thread, each under its speaker's name.
-		expect(said(thread)).toEqual([
-			[
-				"coder",
-				messages().messageDelivered("Infrastructure", "check the disk"),
-			],
-			["infra", messages().answerReturned("disk 80%")],
-		]);
-		expect(said(infraRoom)).toEqual([
-			[
-				"coder",
-				messages().messageDelivered("Infrastructure", "check the disk"),
-			],
-			["infra", "disk 80%"],
-		]);
-		// The sender's room keeps its own replies; the answer woke its next turn with the thread named.
-		expect(said(room)).toEqual([
-			["coder", "ok"],
+			["infra", "answered", "Infrastructure", "disk 80%"],
 			["coder", "ok"],
 		]);
-		expect(turns[2]?.text).toContain("→ Infrastructure");
+		// No thread was opened: every reply went to a room of its own key.
+		expect(
+			replies.every((r) => r.channel === room || r.channel === infraRoom),
+		).toBe(true);
+		expect(turns[2]?.text).not.toContain("thread");
 	});
 });

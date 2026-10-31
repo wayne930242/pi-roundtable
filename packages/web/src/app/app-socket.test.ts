@@ -1521,7 +1521,7 @@ describeDb("dispatch threads of the app over a real host", () => {
 		await app.stop();
 	});
 
-	test("message_agent from a web room opens its exchange in a thread there, under each agent's name", async () => {
+	test("message_agent from a web room shows the exchange as cards in the sender's room, kept in its history, and opens no thread", async () => {
 		app.scripts.set("ask-the-scout", async (request) => {
 			// The team's `message_agent` entry is the host's own; the public type leaves it out.
 			const team = app.host.context.services.get(AGENTS).team as unknown as {
@@ -1535,50 +1535,57 @@ describeDb("dispatch threads of the app over a real host", () => {
 				team.message(
 					{ name: "guide", session: GUIDE, home: GUIDE },
 					"scout",
-					"check the disk",
+					"check the disk\nand the logs",
 				);
 			return { ok: true, text: "asked" };
 		});
 		const tab = await Client.open(app, { "x-actor": "owner" });
 		if (!tab) throw new Error("the owner was refused");
+		const threadsBefore = (await roomList(app)).filter(
+			(r) => r.kind === "thread" && r.parent === GUIDE,
+		).length;
 		tab.send({ type: "send", id: "t1", room: GUIDE, text: "ask-the-scout" });
-		// The start line lands in the sender's room, then is edited to link the thread.
-		const start = await tab.take(
-			(f): f is Extract<ServerFrame, { type: "message" }> =>
-				f.type === "message" &&
-				f.room === GUIDE &&
-				f.message.kind === "system" &&
-				f.message.text.startsWith("🧵"),
-		);
-		const linked = await tab.take(ofType("edited"));
-		expect(linked.message.id).toBe(start.message.id);
-		expect(linked.room).toBe(GUIDE);
-		const key = /\]\((app:thread\.[0-9a-f-]{36})\)/.exec(
-			linked.message.text,
-		)?.[1];
-		if (!key)
-			throw new Error(`the start line links no thread: ${linked.message.text}`);
-		await tab.take(ofType("changed"));
-		// The request and the answer are in the thread, under each agent's name.
-		const rows = await until(async () => {
-			const found = await messagesOf(app, key);
-			return found.length >= 2 ? found : undefined;
+		const card = (kind: string) =>
+			tab.take(
+				(f): f is Extract<ServerFrame, { type: "message" }> =>
+					f.type === "message" &&
+					f.room === GUIDE &&
+					f.message.intercom?.kind === kind,
+			);
+		// The request, under the sender's name, then the answer under the target's.
+		const sent = await card("sent");
+		expect(sent.message).toMatchObject({
+			kind: "agent",
+			agent: "guide",
+			author: "Guide",
+			text: "check the disk\nand the logs",
+			intercom: { kind: "sent", peer: { name: "scout", displayName: "Scout" } },
 		});
-		expect(rows.map((m) => [m.kind, m.agent, m.author])).toEqual([
-			["agent", "guide", "Guide"],
-			["agent", "scout", "Scout"],
+		const answered = await card("answered");
+		expect(answered.message).toMatchObject({
+			kind: "agent",
+			agent: "scout",
+			author: "Scout",
+			intercom: {
+				kind: "answered",
+				peer: { name: "scout", displayName: "Scout" },
+			},
+		});
+		expect(answered.message.text).toContain("check the disk");
+		// The cards come back with the room's history, as a reload reads it.
+		const stored = (await messagesOf(app, GUIDE)).filter(
+			(m) => m.id >= sent.message.id && m.intercom,
+		);
+		expect(stored.map((m) => [m.id, m.intercom?.kind])).toEqual([
+			[sent.message.id, "sent"],
+			[answered.message.id, "answered"],
 		]);
-		expect(rows[0]?.text).toContain("check the disk");
-		expect(rows[1]?.text).toContain("check the disk");
-		// Once the exchange ends the thread is closed, nested under its parent, and still readable.
-		const closed = await until(async () =>
-			(await roomList(app)).find((r) => r.key === key && r.closed),
-		);
-		expect(closed).toMatchObject({
-			kind: "thread",
-			parent: GUIDE,
-			readOnly: true,
-		});
+		// No thread was opened for the exchange.
+		expect(
+			(await roomList(app)).filter(
+				(r) => r.kind === "thread" && r.parent === GUIDE,
+			),
+		).toHaveLength(threadsBefore);
 		tab.close();
 	});
 

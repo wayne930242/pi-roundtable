@@ -153,6 +153,7 @@ export type {
 } from "./core/domain/client.ts";
 export type {
 	HeldCall,
+	IntercomCard,
 	OutboundReply,
 	PendingConfirmation,
 	PostAuthor,

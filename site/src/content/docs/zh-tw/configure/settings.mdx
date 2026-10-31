@@ -85,7 +85,7 @@ export default {
 | `discord.freshMarker` | string，或 `false` | `─── new conversation ───` | 在伺服器頻道或討論串重新開始對話時，主騎士貼出的分隔線。`false` 不貼。 |
 | `discord.formatting` | string，或 `false` | Markdown 會轉成排版，表格除外 | 以英文告訴模型回覆在 Discord 裡怎麼呈現。`false` 不告訴模型任何事。 |
 | `discord.cardGraceSeconds` | 1 到 86400 的整數 | `120` | 一輪為了核准卡或 `ask_user` 卡片等多久，之後這一輪結束、卡片繼續開著。 |
-| `discord.cardCopies` | `{ keepDays?, keep? }`，或 `false` | 30 天、最新 100 張 | 核准卡「複製」按鈕背後的文字，在資料目錄的 `card-copies.json` 保留多久。`false` 只留在記憶體。 |
+| `discord.cardCopies` | `{ keepDays?, keep? }`，或 `false` | 30 天、最新 100 張 | 核准卡「複製」按鈕背後的文字，在資料目錄的 `card-copies.json` 保留多久。agent 對講卡片的全文也照這個設定，保留最新 300 張，存在 `intercom-texts.json`。`false` 只留在記憶體。 |
 | `discord.attachmentDownload` | `{ deadlineMs?, idleMs? }` | `60000` 與 `10000` | 一則訊息（連同它回覆的那則）的附件要在多久內下載完，以及單一檔案多久沒收到任何位元組就放棄。各為 1000 到 600000。 |
 | `agentServer` | `false` | agent server 照常執行 | `false` 讓有 `discord` 的 host 不跑 agent server：沒有 agent 團隊、沒有 `#dashboard` 頻道與置頂訊息、沒有 agent 頻道與路由、沒有協調者，也沒有技能 addon。Discord、存取、記憶、指令與外掛的 claim 照常運作。`discord.entryChannel` 與 `http.publicUrl` 變成選填（`discord.guild` 仍必填）。與 `agents`、`skills`、`ops.agent`、`discord.agentMemory`、`discord.agentSpeakers`、`discord.attachmentDownload` 同時設定會出現指名兩個鍵的 `ConfigError`；需要 agent server 的外掛（網頁主控台的 agents 與 rooms 面板、remote-mcp 的預設對話）會讓啟動中止。`doctor` 會回報 agent server 已關閉，並略過入口頻道檢查。沒有 `true`；要保留 agent server 就不要寫這個鍵。 |
 | `adapters` | adapter 的清單 | 無 | host 使用的聊天管道，各由自己的工廠函式產生。Discord adapter 接受上面這些 `discord` 設定。以外掛形式提供的聊天管道（例如網頁聊天）仍放在 `plugins`。 |

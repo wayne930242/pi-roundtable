@@ -338,11 +338,22 @@ describeDb("PostgreSQL", () => {
 				"Coordinator: 📨 To **Infra**:\ncheck the disk",
 				"Infra: disk 40%",
 			]);
+			// The request and the answer show as cards in the sender's channel, no thread between.
 			expect(fx.channels.texts(ENTRY)).toEqual([
+				"Coordinator: → To **Infra**\ncheck the disk",
 				"Coordinator: asked infra",
-				"Infra: ↩️ Reply:\ndisk 40%",
+				"Infra: ← From **Infra**\ndisk 40%",
 				"Coordinator: asked infra",
 			]);
+			expect(
+				fx.channels.posts.flatMap((p) =>
+					p.post.intercom ? [[p.post.intercom.kind, p.post.intercom.text]] : [],
+				),
+			).toEqual([
+				["sent", "check the disk"],
+				["answered", "disk 40%"],
+			]);
+			expect(fx.channels.posts.some((p) => p.post.threadId)).toBe(false);
 		});
 
 		test("refuses itself and unknown agents", async () => {

@@ -24,10 +24,17 @@ export function conversationEn(ctx: CatalogContext) {
 		delegationTask: (task: string) => `📋 Task:\n${task}`,
 		delegationDone: (report: string) => `✅ Done\n\n${report}`,
 		delegationFailed: (error: string) => `❌ Failed: ${error}`,
-		agentNoReply: (message: string) => `❌ No reply: ${message}`,
 		messageDelivered: (displayName: string, text: string) =>
 			`📨 To **${displayName}**:\n${text}`,
-		answerReturned: (text: string) => `↩️ Reply:\n${text}`,
+		intercomSent: (displayName: string) => `→ To **${displayName}**`,
+		intercomAnswered: (displayName: string) => `← From **${displayName}**`,
+		intercomFailed: (displayName: string) =>
+			`⚠️ No answer from **${displayName}**`,
+		intercomLine: (heading: string, summary: string) =>
+			summary ? `${heading}: ${summary}` : heading,
+		intercomExpand: "Show all",
+		intercomGone:
+			"The full text of this message is no longer kept; it is still in the agents' conversations.",
 		thinkingAuto: "auto",
 		confirmTitle: (asker: string) => `${asker} wants to run this action`,
 		holdGeneric: (tool: string) => `run ${tool}`,
@@ -57,10 +64,15 @@ export function conversationZhTW(
 		delegationTask: (task: string) => `📋 任務：\n${task}`,
 		delegationDone: (report: string) => `✅ 完成\n\n${report}`,
 		delegationFailed: (error: string) => `❌ 失敗：${error}`,
-		agentNoReply: (message: string) => `❌ 沒有回覆：${message}`,
 		messageDelivered: (displayName: string, text: string) =>
 			`📨 給 **${displayName}**：\n${text}`,
-		answerReturned: (text: string) => `↩️ 回覆：\n${text}`,
+		intercomSent: (displayName: string) => `→ 給 **${displayName}**`,
+		intercomAnswered: (displayName: string) => `← 來自 **${displayName}**`,
+		intercomFailed: (displayName: string) => `⚠️ **${displayName}** 沒有回覆`,
+		intercomLine: (heading: string, summary: string) =>
+			summary ? `${heading}：${summary}` : heading,
+		intercomExpand: "展開全文",
+		intercomGone: "這則對講的全文已經不在了；夥伴們的對話裡還找得到。",
 		thinkingAuto: "自動",
 		confirmTitle: (asker: string) => `${asker} 要執行這個動作`,
 		holdGeneric: (tool: string) => `執行 ${tool}`,

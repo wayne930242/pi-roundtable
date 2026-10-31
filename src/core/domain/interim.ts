@@ -10,6 +10,13 @@ export interface InterimMessage {
  */
 export interface InterimPosts {
 	post(text: string): Promise<InterimMessage>;
+	/**
+	 * Whether the turn's progress message names the tools it called, on a line of its own; true
+	 * unless false. A surface that shows the tools elsewhere, such as a progress pane, sets false:
+	 * the progress message then carries only the turn's narration, and a run that wrote none posts
+	 * nothing.
+	 */
+	tools?: boolean;
 }
 
 /** Whether a turn posts its intermediate text as it goes; "on" by default. */

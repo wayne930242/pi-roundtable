@@ -79,8 +79,9 @@ An optional `conversation` picks another: `discord`, `web`, or one of the conver
 1. The call returns at once, so the sender keeps going.
 2. The request appears in that conversation under the sender's name.
    The target works there, in its own conversation.
-3. Where a thread can be opened, the exchange also appears in a thread in the sender's channel, named `→` and the target's display name.
-   The target's answer is posted in that thread, and the thread is archived when the exchange ends.
+3. The sender's conversation shows the exchange as small cards: `→ To` the target with the request's first line when it is sent, then `← From` the target with the answer's first line, or a card saying no answer came.
+   Each card opens to its whole text: a click in the web app, the **Show all** button on Discord, which answers only whoever pressed it.
+   No thread is opened. An empty answer shows no card.
 4. The answer comes back to the sender as a new turn, in the conversation the sender wrote from, and the sender tells you what matters.
 
 A chain of agent messages stops at 8 messages without you in between.

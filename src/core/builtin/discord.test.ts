@@ -14,6 +14,7 @@ import type {
 import { fakeChannel } from "../discord/owner-cards-fixture.ts";
 import { STOP_BUTTON_ID } from "../discord/stop-button.ts";
 import { PluginError } from "../errors.ts";
+import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../log.ts";
 import type { PluginContext } from "../plugin.ts";
 import { IDENTITY, THREADS } from "../services.ts";
@@ -218,9 +219,9 @@ test("commands added during setup are composed under the root in the preflight, 
 		"roll",
 		"bot",
 	]);
-	// The owner's cards and the stop button answer first, as they always have.
-	expect(composed?.modules).toHaveLength(3);
-	expect(composed?.modules[2]).toBe(add.module);
+	// The owner's cards, the stop button and the agents' message cards answer first.
+	expect(composed?.modules).toHaveLength(4);
+	expect(composed?.modules[3]).toBe(add.module);
 });
 
 test("the preflight refuses a clash before any service starts, and a late add is refused", async () => {
@@ -319,6 +320,16 @@ test("another button is not the stop button's", async () => {
 	expect(other.replies).toEqual([]);
 });
 
+test("the open button of an agents' message card is answered by the Discord built-in", async () => {
+	const { modules: composedModules, preflight } = await setUp({
+		stop: () => true,
+	});
+	await preflight();
+	const card = press("2", "roundtable:intercom:unknown");
+	expect(await answered(composedModules(), card.interaction)).toBe(true);
+	expect(card.replies).toEqual([messages().intercomGone]);
+});
+
 test("the copy text of a card is on disk once the host has stopped the plugin's services", async () => {
 	const fake = fakeChannel();
 	const spy = spyOn(DiscordSurface.prototype, "cardChannel").mockImplementation(
@@ -354,16 +365,20 @@ test("the copy text of a card is on disk once the host has stopped the plugin's 
 
 test("cardCopies false removes the file an earlier run left, and its temporary file", async () => {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-discord-"));
-	for (const name of ["card-copies.json", "card-copies.json.tmp"])
-		writeFileSync(join(dataDir, name), "{}");
+	const files = [
+		"card-copies.json",
+		"card-copies.json.tmp",
+		"intercom-texts.json",
+		"intercom-texts.json.tmp",
+	];
+	for (const name of files) writeFileSync(join(dataDir, name), "{}");
 	await discordPlugin({ ...OPTIONS, dataDir, cardCopies: false }).setup({
 		logger: silentLogger(),
 		queue: {},
 		conversations: {},
 		services: hostServices(),
 	} as unknown as PluginContext);
-	expect(existsSync(join(dataDir, "card-copies.json"))).toBe(false);
-	expect(existsSync(join(dataDir, "card-copies.json.tmp"))).toBe(false);
+	for (const name of files) expect(existsSync(join(dataDir, name))).toBe(false);
 });
 
 test("DISCORD.poster is made over the surface's own REST queue, usable before the gateway is up, and sends nothing until called", async () => {

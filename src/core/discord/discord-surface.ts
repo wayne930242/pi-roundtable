@@ -6,7 +6,6 @@ import {
 	Events,
 	GatewayIntentBits,
 	type Interaction,
-	type Message,
 	MessageFlags,
 	Partials,
 	type REST,
@@ -47,18 +46,17 @@ import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
 import { lateAnswerMessage } from "./inbound-message.ts";
+import type { IntercomTexts } from "./intercom-cards.ts";
 import { listenForMessages, reportChanges } from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
-import { stopPanel } from "./stop-button.ts";
+import { showStopPanel } from "./stop-button.ts";
 
 const PREFIX = "discord:";
 /** Discord's error code for a channel that does not exist or cannot be seen. */
 const UNKNOWN_CHANNEL = 10003;
 
 const TYPING_REFRESH_MS = 8_000;
-/** A turn shorter than this shows no stop button, so quick answers do not flicker one. */
-const STOP_PANEL_DELAY_MS = 5_000;
 
 export interface DiscordSurfaceOptions {
 	token: string;
@@ -73,6 +71,8 @@ export interface DiscordSurfaceOptions {
 	freshMarker?: string | false;
 	/** What the model is told about how replies render here; `false` tells it nothing. Default: `DISCORD_FORMATTING`. */
 	formatting?: string | false;
+	/** Where the agents' message cards keep their whole texts for the open button; without it a card posts as text. */
+	intercomTexts?: IntercomTexts;
 	/** Reads the channel context of an addressed message; without it the surface has none. */
 	channelContext?: (
 		message: InboundMessage,
@@ -157,7 +157,11 @@ export class DiscordSurface
 
 	/** The agent server's channels and webhooks. */
 	agentChannels(guildId: string): AgentChannels {
-		return new DiscordAgentChannels(this.#client, guildId);
+		return new DiscordAgentChannels(
+			this.#client,
+			guildId,
+			this.#options.intercomTexts,
+		);
 	}
 
 	/** Threads for background dispatches, in the channel that started each. */
@@ -365,33 +369,12 @@ export class DiscordSurface
 	}
 
 	showStop(channel: ChannelKey): () => void {
-		const { logger } = this.#options;
 		// An outside agent's conversation has no Discord channel to show a button in.
 		if (!channel.startsWith(PREFIX)) return () => undefined;
-		let hidden = false;
-		let panel: Message | undefined;
-		const remove = (message: Message) =>
-			message
-				.delete()
-				.catch((error: unknown) =>
-					logger.warn({ channel, err: error }, "stop panel not removed"),
-				);
-		const timer = setTimeout(() => {
-			this.#sendable(channel)
-				.then((target): Promise<Message> => target.send(stopPanel()))
-				.then((message) => {
-					if (hidden) void remove(message);
-					else panel = message;
-				})
-				.catch((error: unknown) =>
-					logger.warn({ channel, err: error }, "stop panel not shown"),
-				);
-		}, STOP_PANEL_DELAY_MS);
-		return () => {
-			hidden = true;
-			clearTimeout(timer);
-			if (panel) void remove(panel);
-		};
+		return showStopPanel(
+			() => this.#sendable(channel),
+			(error, what) => this.#options.logger.warn({ channel, err: error }, what),
+		);
 	}
 
 	async react(

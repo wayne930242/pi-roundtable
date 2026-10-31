@@ -3,7 +3,9 @@ import {
 	ButtonBuilder,
 	ButtonStyle,
 	type Interaction,
+	type Message,
 	MessageFlags,
+	type SendableChannels,
 } from "discord.js";
 import type { ConversationPort } from "../contract/channels.ts";
 import { channelKey } from "../contract/surface.ts";
@@ -11,6 +13,8 @@ import { messages } from "../i18n/index.ts";
 import type { CommandGuard, InteractionModule } from "./interaction-module.ts";
 
 export const STOP_BUTTON_ID = "roundtable:stop";
+/** A turn shorter than this shows no stop button, so quick answers do not flicker one. */
+const STOP_PANEL_DELAY_MS = 5_000;
 
 /** The message a long turn shows: a stop button only an owner may press. */
 export function stopPanel() {
@@ -25,6 +29,37 @@ export function stopPanel() {
 					.setStyle(ButtonStyle.Danger),
 			),
 		],
+	};
+}
+
+/**
+ * Shows the stop panel in the channel `sendable` finds once the turn has run for
+ * `STOP_PANEL_DELAY_MS`; the returned function hides it, or keeps it from showing. A failure is
+ * handed to `warn` with what failed, never thrown.
+ */
+export function showStopPanel(
+	sendable: () => Promise<SendableChannels>,
+	warn: (error: unknown, what: string) => void,
+): () => void {
+	let hidden = false;
+	let panel: Message | undefined;
+	const remove = (message: Message) =>
+		message
+			.delete()
+			.catch((error: unknown) => warn(error, "stop panel not removed"));
+	const timer = setTimeout(() => {
+		sendable()
+			.then((target): Promise<Message> => target.send(stopPanel()))
+			.then((message) => {
+				if (hidden) void remove(message);
+				else panel = message;
+			})
+			.catch((error: unknown) => warn(error, "stop panel not shown"));
+	}, STOP_PANEL_DELAY_MS);
+	return () => {
+		hidden = true;
+		clearTimeout(timer);
+		if (panel) void remove(panel);
 	};
 }
 

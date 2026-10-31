@@ -99,6 +99,8 @@ interface Row {
 
 const headerOf = (message: RoomMessage, before: RoomMessage | undefined) =>
 	!before ||
+	// A message between agents names no author, so the message after it names its own.
+	before.intercom !== undefined ||
 	before.kind !== message.kind ||
 	before.author !== message.author ||
 	Date.parse(message.at) - Date.parse(before.at) > PAUSE_MS;

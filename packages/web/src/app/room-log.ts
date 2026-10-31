@@ -4,6 +4,7 @@ import type {
 	HostAuthorKind,
 	PictureRef,
 	RoomFile,
+	RoomIntercom,
 	RoomMessage,
 } from "../api-types.ts";
 import { storedJson } from "../host/stored-json.ts";
@@ -27,6 +28,8 @@ export interface NewRoomMessage {
 	at?: Date;
 	/** An internal note: shown to the room's readers, never handed to the agent. */
 	note?: true;
+	/** A message between agents, drawn as a small card. */
+	intercom?: RoomIntercom;
 }
 
 interface Row {
@@ -44,6 +47,7 @@ interface Row {
 	picture: PictureRef | string | null;
 	edited_at: Date | null;
 	note: boolean | null;
+	intercom?: RoomIntercom | string | null;
 }
 
 /** The most messages one page of history holds. */
@@ -70,6 +74,9 @@ function messageOf(row: Row): RoomMessage {
 				}),
 		...(row.edited_at === null ? {} : { edited: true as const }),
 		...(row.note ? { note: true as const } : {}),
+		...(row.intercom == null
+			? {}
+			: { intercom: storedJson(row.intercom, "intercom card") }),
 	};
 }
 
@@ -128,6 +135,14 @@ export class RoomLog {
 		},
 	};
 
+	/** The column that marks a message between agents, with which way it went and the other agent. */
+	static readonly intercomMigration: Migration = {
+		name: "web-room-messages-intercom",
+		up: async (sql) => {
+			await sql`ALTER TABLE web_room_messages ADD COLUMN IF NOT EXISTS intercom jsonb`;
+		},
+	};
+
 	async append(message: NewRoomMessage): Promise<RoomMessage> {
 		const [row] = await this.#insert(message, false);
 		if (!row) throw new Error("the room log stored nothing");
@@ -153,24 +168,25 @@ export class RoomLog {
 	async #insert(message: NewRoomMessage, once: boolean): Promise<Row[]> {
 		const files = JSON.stringify(message.files ?? []);
 		const picture = message.picture ? JSON.stringify(message.picture) : null;
+		const intercom = message.intercom ? JSON.stringify(message.intercom) : null;
 		const at = message.at ?? new Date();
 		return once
 			? await this.#sql`
 				INSERT INTO web_room_messages (room, kind, principal_id, agent, author_name, text, files,
-					author_kind, author_label, picture, reference, created_at, note)
+					author_kind, author_label, picture, reference, created_at, note, intercom)
 				VALUES (${message.room}, ${message.kind}, ${message.principalId ?? null},
 					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::jsonb,
 					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::jsonb,
-					${message.reference ?? null}, ${at}, ${message.note === true})
+					${message.reference ?? null}, ${at}, ${message.note === true}, ${intercom}::jsonb)
 				ON CONFLICT (room, reference) WHERE reference IS NOT NULL DO NOTHING
 				RETURNING *`
 			: await this.#sql`
 				INSERT INTO web_room_messages (room, kind, principal_id, agent, author_name, text, files,
-					author_kind, author_label, picture, reference, created_at, note)
+					author_kind, author_label, picture, reference, created_at, note, intercom)
 				VALUES (${message.room}, ${message.kind}, ${message.principalId ?? null},
 					${message.agent ?? null}, ${message.author}, ${message.text}, ${files}::jsonb,
 					${message.authorKind ?? null}, ${message.authorLabel ?? null}, ${picture}::jsonb,
-					${message.reference ?? null}, ${at}, ${message.note === true})
+					${message.reference ?? null}, ${at}, ${message.note === true}, ${intercom}::jsonb)
 				RETURNING *`;
 	}
 

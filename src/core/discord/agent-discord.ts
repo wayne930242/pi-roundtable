@@ -28,6 +28,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../log.ts";
+import { type IntercomTexts, intercomPost } from "./intercom-cards.ts";
 
 const DASHBOARD_NAME = "dashboard";
 
@@ -42,10 +43,13 @@ export class DiscordAgentChannels implements AgentChannels {
 	readonly #webhooks = new Map<string, Promise<Webhook>>();
 	/** The parent channel of each thread the agents live in, and null for a channel that is none. */
 	readonly #parents = new Map<string, string | null>();
+	/** Where the cards' whole texts are kept for their open buttons; without it a card posts as text. */
+	readonly #texts: IntercomTexts | undefined;
 
-	constructor(client: Client, guildId: string) {
+	constructor(client: Client, guildId: string, texts?: IntercomTexts) {
 		this.#client = client;
 		this.#guildId = guildId;
+		this.#texts = texts;
 	}
 
 	/**
@@ -77,6 +81,13 @@ export class DiscordAgentChannels implements AgentChannels {
 			...(route.threadId ? { threadId: route.threadId } : {}),
 		};
 		try {
+			if (post.intercom && this.#texts) {
+				await webhook.send({
+					...as,
+					...intercomPost(post.intercom, this.#texts),
+				});
+				return;
+			}
 			if (post.thinking) await webhook.send({ ...as, content: post.thinking });
 			for (const chunk of post.chunks)
 				await webhook.send({ ...as, content: chunk });

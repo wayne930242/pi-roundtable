@@ -72,6 +72,19 @@ export interface PostAuthor {
 	agent?: string;
 }
 
+/**
+ * A message between two agents of the team, which a surface that shows cards draws as a small card
+ * that opens to the whole text.
+ */
+export interface IntercomCard {
+	/** `sent`: a request the author sent; `answered`: the answer that came back; `failed`: none came. */
+	kind: "sent" | "answered" | "failed";
+	/** The agent the request went to, which also gives the answer: its stable name and the name it shows. */
+	peer: { name: string; displayName: string };
+	/** The whole text: the request, the answer, or why no answer came. */
+	text: string;
+}
+
 export interface OutboundReply {
 	/** The assistant's thinking for this turn, posted as a quiet line before the card. */
 	thinking?: string;
@@ -88,4 +101,9 @@ export interface OutboundReply {
 	author?: PostAuthor;
 	/** Set only on the reply for a turn that ended in an error. A surface may show it; Discord ignores it. */
 	failed?: true;
+	/**
+	 * Set on a message between agents: a surface that shows cards draws it in place of `chunks`,
+	 * which carry the same as a short line and the text for a surface that shows none.
+	 */
+	intercom?: IntercomCard;
 }
