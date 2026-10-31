@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - jsonb columns are stored as JSON values: a room message's `files`, `picture` and `intercom`, an ended card's `frame` and `answer`, a host card, a notice's `open` and a session's actor were stored as JSON strings. Migrations (`web-room-messages-json-values`, `web-room-cards-json-values`, `web-host-cards-json-values`, `web-notices-json-values`, `web-sessions-json-values`) convert the rows stored that way; reads still take either.
+### Fixed
+
+- Buttons with a quiet look of their own no longer turn into unreadable text on the accent fill when hovered or, on a phone, after a tap: the "N earlier tools" chip, the character creator's tiles, the files pane's folder twist and image toggle, the host room's cards toggle and seen faces, and a knight's temp knights header now say what hover does to them. A test fails for any new button that sets its own fill or text colour without a hover rule.
+- The character creator's styles load with the creator instead of with the page, which leaves room in what the page loads first.
 
 ## [0.29.0] - 2026-10-31
 

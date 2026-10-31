@@ -23,6 +23,11 @@ export const HELPER_CSS = `
 	text-align: left;
 }
 
+.helper-head:hover:not(:disabled) {
+	background: var(--surface-2);
+	color: var(--text);
+}
+
 .helper-head::before {
 	content: "";
 	flex: none;

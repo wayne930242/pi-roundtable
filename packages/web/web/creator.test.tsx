@@ -1,4 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	CATALOG,
 	type CharacterSpec,
@@ -105,6 +107,22 @@ test("it offers all 24 classes and 8 palettes, with the saved ones chosen", asyn
 	expect(pressed('[data-palette="gules"]')).toBe(true);
 	// Nothing changed yet: nothing to save.
 	expect(query<HTMLButtonElement>('[data-action="save"]')?.disabled).toBe(true);
+});
+
+test("the creator brings its own styles: they are not in the page's first stylesheet", async () => {
+	await open();
+	const sheets = [
+		...(document.adoptedStyleSheets ?? []).flatMap((sheet) =>
+			[...sheet.cssRules].map((rule) => rule.cssText),
+		),
+		...[...document.querySelectorAll("style")].map(
+			(one) => one.textContent ?? "",
+		),
+	].join("\n");
+	expect(sheets).toContain(".creator-tile");
+	expect(readFileSync(join(import.meta.dir, "app.css"), "utf8")).not.toContain(
+		".creator-tile",
+	);
 });
 
 test("picking a class then Save sends PUT …/character with that class", async () => {

@@ -28,6 +28,8 @@ import {
 	type LabelKind,
 } from "../lib/character-labels.ts";
 import { useAccentStyle } from "../lib/characters.ts";
+import { CREATOR_CSS } from "../lib/creator-style.ts";
+import { installStyle } from "../lib/lazy-style.ts";
 import { useMedia } from "../lib/media.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import { blockNavigation } from "../lib/router.ts";
@@ -293,6 +295,7 @@ export function CharacterCreator(props: {
 	onPick?(look: CharacterInput, spec: CharacterSpec): void;
 	onCancel?(): void;
 }) {
+	installStyle("creator", CREATOR_CSS);
 	const [draft, setDraft] = useState(props.character);
 	const shown = useDeferredValue(draft);
 	const [errors, setErrors] = useState<Record<string, string>>({});

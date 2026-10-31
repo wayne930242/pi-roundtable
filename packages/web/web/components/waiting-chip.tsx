@@ -36,6 +36,10 @@ const WAITING_CSS = `
 	animation: toast-in var(--dur-slow) var(--ease-spring) both;
 }
 
+.waiting-chip:hover:not(:disabled) {
+	background: var(--warn);
+}
+
 .slot[data-lit] > .prompt {
 	outline: 3px solid var(--warn);
 	outline-offset: 3px;
