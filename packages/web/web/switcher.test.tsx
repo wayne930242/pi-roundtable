@@ -18,15 +18,19 @@ import { loadKit } from "./lib/kit.ts";
 import { setRouting } from "./lib/router.ts";
 import { closeTeamSheet, currentTeamSheet } from "./lib/team-sheet.ts";
 
-const GUIDE = "app:agent.guide";
-const SCOUT = "app:agent.scout";
-const BUILD = "app:agent.build";
+// Rooms of this file's own: the store is shared by the files of a run, and a room another file left
+// with newer activity would move in this drawer.
+const GUIDE = "app:agent.sw-guide";
+const SCOUT = "app:agent.sw-scout";
+const BUILD = "app:agent.sw-build";
 
+const short = (key: string) =>
+	key.slice(key.indexOf(".") + 1).replace(/^sw-/, "");
 const view = (key: string, over: Partial<RoomView> = {}): RoomView => ({
 	key,
 	kind: "agent",
-	name: key.slice(key.indexOf(".") + 1),
-	displayName: key.slice(key.indexOf(".") + 1),
+	name: short(key),
+	displayName: short(key),
 	home: key === GUIDE,
 	readOnly: false,
 	mode: { yolo: false, longRunning: false },
@@ -91,7 +95,7 @@ afterAll(async () => {
 
 beforeEach(() => {
 	window.innerWidth = 390;
-	window.location.hash = "#/room/app%3Aagent.guide";
+	window.location.hash = "#/room/app%3Aagent.sw-guide";
 	store.dispatch({
 		type: "rooms_loaded",
 		rooms: [
@@ -507,7 +511,7 @@ test("pinned rooms and the owners' folders lead the drawer, each under its headi
 	expect(zones).toEqual(["pinned", "folder", "rest"]);
 	expect(
 		page.container.querySelector(
-			'[data-drop-item][data-key="app:agent.guide"]',
+			'[data-drop-item][data-key="app:agent.sw-guide"]',
 		),
 	).toBeNull();
 	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
