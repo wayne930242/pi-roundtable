@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { followFocus, sceneSpeaker } from "../lib/dialogue.ts";
+import { mentionInto } from "../lib/drafts.ts";
 import { useDialogueFolded } from "../lib/table-view.ts";
 import { useVoices } from "../lib/voices.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
 import { DialogueBox, useRoomLine } from "./dialogue-box.tsx";
 import { OrderStrip } from "./order-strip.tsx";
-import { RoundTable } from "./round-table.tsx";
+import { RoundTable, useRoster } from "./round-table.tsx";
 
 /**
  * Where the camera of a group scene is: on the member whose words the dialogue box is typing out,
@@ -30,7 +31,7 @@ export function useGroupFocus(roomKey: string, members: readonly string[]) {
 
 /**
  * A group's members at their podiums with the group room's dialogue box over the scene. A seat the
- * person taps turns the camera to that member; nothing here ever takes the focus of the message box.
+ * person taps turns the camera to that member and mentions them in the message box.
  * The room's own page keeps streaming its progress here, so the box does not ask for it, unless
  * `streams` says the page does not.
  */
@@ -46,6 +47,7 @@ export function GroupStage(props: {
 	onSeatMenu?(request: SeatMenuRequest): void;
 }) {
 	const { roomKey, members } = props;
+	const roster = useRoster(members);
 	// A folded box is a bar: the scene takes the height it gave back.
 	const [folded] = useDialogueFolded();
 	return (
@@ -60,7 +62,11 @@ export function GroupStage(props: {
 				variant="full"
 				focus={props.focus}
 				onFocus={props.onLook}
-				onSeat={props.onLook}
+				onSeat={(member) => {
+					props.onLook(member);
+					const one = roster.find((seat) => seat.name === member);
+					if (one) mentionInto(roomKey, one.displayName);
+				}}
 				{...(props.onHandle ? { onHandle: props.onHandle } : {})}
 				{...(props.onSeatMenu ? { onSeatMenu: props.onSeatMenu } : {})}
 			/>
@@ -69,6 +75,7 @@ export function GroupStage(props: {
 				open
 				streams={props.streams ?? false}
 				blurAfterSend={props.blurAfterSend === true}
+				mentionable={roster}
 				strip={<OrderStrip roomKey={roomKey} />}
 			/>
 		</div>

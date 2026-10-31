@@ -22,6 +22,7 @@ import {
 	voiceOf,
 } from "../lib/dialogue.ts";
 import { useFollowEnd } from "../lib/follow-end.ts";
+import type { Mentionable } from "../lib/mention-pick.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
 import type { RoomState } from "../lib/rooms.ts";
@@ -181,6 +182,8 @@ export interface DialogueBoxProps {
 	strip?: ReactNode;
 	/** A message sent from the box closes a phone's keyboard (the table page's box); the room's own keeps the focus. */
 	blurAfterSend?: boolean;
+	/** The members an `@` in the box offers (a group's); none when absent. */
+	mentionable?: readonly Mentionable[];
 }
 
 /**
@@ -416,6 +419,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 					<Composer
 						key={roomKey}
 						draftKey={roomKey}
+						{...(props.mentionable ? { mentionable: props.mentionable } : {})}
 						name={view?.displayName ?? roomKey}
 						limits={limits}
 						stoppable={Boolean(room?.stoppable)}

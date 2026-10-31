@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Typing `@` at the start of a word in a council's message box (chat mode and the animated scene) opens a list of the council's members over the box, filtered as you type. The arrows move, Enter or Tab pick, Escape closes it, and a tap picks on a phone; it never acts while an input method is composing. A picked member goes in as `@<display name> `. A leading `@AI` still only toggles the agent and never opens the list. The list is a lazy chunk.
+
+### Changed
+
+- A tap or click on a knight in the animated scene now also puts `@<display name> ` into the room's message box, at the caret or after the text, and focuses the box, as a tap on a podium in the chat-mode strip does. The camera still turns to that knight and the page does not navigate. The camera still follows only a member's own lines.
+
 ## [0.29.2] - 2026-10-31
 
 ### Added
