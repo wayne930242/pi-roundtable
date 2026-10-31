@@ -5,7 +5,7 @@ import { plural, translate as t } from "../lib/messages.ts";
 import { HostMarkdown } from "./host-markdown.tsx";
 import { HostPicture } from "./host-picture.tsx";
 import { Icon } from "./icons.tsx";
-import { Files } from "./message-row.tsx";
+import { Files, FilesJump } from "./message-row.tsx";
 import { PlainText } from "./plain-text.tsx";
 
 /**
@@ -75,6 +75,7 @@ export const HostMessageRow = memo(function HostMessageRow(props: {
 					</div>
 				) : null}
 				<div className="bubble">
+					<FilesJump files={message.files} />
 					{message.text ? (
 						kind === "assistant" ? (
 							<HostMarkdown source={message.text} />
@@ -82,7 +83,7 @@ export const HostMessageRow = memo(function HostMessageRow(props: {
 							<PlainText text={message.text} />
 						)
 					) : null}
-					<Files files={message.files} />
+					<Files files={message.files} message={message} />
 					{message.expiredFiles ? (
 						<p className="message-expired">
 							{plural(

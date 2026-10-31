@@ -835,6 +835,10 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	// 伺服器回應
 	"There is no such room, knight or file.": "找不到這個聊天室、騎士或檔案。",
 	"The body is too large.": "內容太大。",
+	"None of this message's files are kept any more.":
+		"這則訊息的檔案都已不再保留。",
+	"These files are too large to download together; download them one by one.":
+		"這些檔案太大，無法一起下載；請逐一下載。",
 	"The body is not JSON.": "內容不是 JSON。",
 	"The body is not an object.": "內容不是物件。",
 	"Only an owner may do this.": "只有擁有者可以這麼做。",
@@ -1265,6 +1269,10 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	edited: "已編輯",
 	"{count} file was removed": "已移除 {count} 個檔案",
 	"{count} files were removed": "已移除 {count} 個檔案",
+	"Attachments ({count})": "附件（{count}）",
+	"Download all": "全部下載",
+	"📎 {count} attachment": "📎 {count} 個附件",
+	"📎 {count} attachments": "📎 {count} 個附件",
 	"{count} unread message": "{count} 則未讀訊息",
 	"{count} unread messages": "{count} 則未讀訊息",
 	"New messages": "新訊息",

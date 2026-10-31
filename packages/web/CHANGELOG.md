@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A message's files are one attachment block: a heading "Attachments (N)" (「附件（N）」) in a bordered box unlike inline code, each file a full-width chip with its icon, name and size, on phones and desktops. Agent rooms, host rooms, notes and the round table's dialogue box all show it; a host room still says how many files were removed.
+- "Download all" (「全部下載」) in the heading of a message with two or more files downloads them as one zip, from `GET api/files/zip?room=<room>&message=<id>`. The route answers the room and each file as the single file route does, so someone who may not read the room gets the same refusal. It packs only the files still kept, each under its own name (a repeated name becomes `name-2`, `name-3`), in `attachments-<YYYYMMDD-HHMM>.zip` (the message's UTC time), stored without compression, and refuses past 200 MB with a message to download the files one by one.
+- A bubble with files that is taller than about one screen opens with "📎 N attachments" (「📎 N 個附件」), which scrolls to the block, smoothly unless the person asked for less motion.
+
+### Fixed
+
+- jsonb columns are stored as JSON values: a room message's `files`, `picture` and `intercom`, an ended card's `frame` and `answer`, a host card, a notice's `open` and a session's actor were stored as JSON strings. Migrations (`web-room-messages-json-values`, `web-room-cards-json-values`, `web-host-cards-json-values`, `web-notices-json-values`, `web-sessions-json-values`) convert the rows stored that way; reads still take either.
+
 ## [0.29.0] - 2026-10-31
 
 ### Added

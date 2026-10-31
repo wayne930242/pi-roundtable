@@ -627,6 +627,27 @@ describeDb("the host rooms over a real host", () => {
 		expect((await rest(app, `files/${file}`, { who: "ada" })).status).toBe(200);
 	});
 
+	test("a message's files zip for a reader of its room; someone the kind gives nothing gets the file's 404", async () => {
+		const files = await Promise.all(
+			["a.png", "b.png"].map((name) =>
+				web.rooms.saveFile(ROOM_A, { name, type: "image/png", bytes: PNG }),
+			),
+		);
+		const { id } = await web.rooms.post(
+			ROOM_A,
+			external("two pictures", { files, reference: "<zip@mail>" }),
+		);
+		const path = `files/zip?room=${encodeURIComponent(ROOM_A)}&message=${id}`;
+		const served = await rest(app, path, { who: "mel" });
+		expect(served.status).toBe(200);
+		expect(served.headers.get("content-type")).toBe("application/zip");
+		const zed = await rest(app, path, { who: "zed" });
+		expect(zed.status).toBe(404);
+		expect(await zed.json()).toEqual(
+			await (await rest(app, `files/${files[0]}`, { who: "zed" })).json(),
+		);
+	});
+
 	test("a post reaches the readers who follow the room and nobody else, as its author kind says", async () => {
 		const mel = await Client.open(app, "mel");
 		const kim = await Client.open(app, "kim");

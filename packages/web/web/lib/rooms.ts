@@ -908,3 +908,9 @@ export function timeline(
 /** A file's address under the mount, for a link or an image. */
 export const fileUrl = (file: Pick<RoomFile, "id">): string =>
 	`api/files/${encodeURIComponent(file.id)}`;
+
+/** Where a stored message's files download as one zip. */
+export const messageZipUrl = (
+	message: Pick<RoomMessage, "room" | "id">,
+): string =>
+	`api/files/zip?room=${encodeURIComponent(message.room)}&message=${message.id}`;

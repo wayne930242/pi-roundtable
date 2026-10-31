@@ -10,10 +10,9 @@ import { store, useSelector } from "../lib/app-store.ts";
 import { ConfigContext } from "../lib/config.ts";
 import { clock } from "../lib/format.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
-import { avatarMenuOf, fileMenuOf, messageMenuOf } from "../lib/menus.ts";
+import { avatarMenuOf, messageMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { PendingSend } from "../lib/rooms.ts";
-import { fileUrl } from "../lib/rooms.ts";
 import { useConnection } from "../lib/socket.ts";
 import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
@@ -64,49 +63,34 @@ function isMine(
 	return message.principalId === me;
 }
 
-/** A file of a message: a picture that opens, or a chip that downloads; a long press offers both ways to keep it. */
-function FileItem({ file }: { file: RoomFile }) {
-	const press = useMenuPress(() => fileMenuOf(file));
-	return file.type.startsWith("image/") ? (
-		<li>
-			<a
-				{...press}
-				href={fileUrl(file)}
-				target="_blank"
-				rel="noreferrer noopener"
-			>
-				<img
-					src={fileUrl(file)}
-					alt={file.name}
-					loading="lazy"
-					decoding="async"
-					className="file-image"
-				/>
-			</a>
-		</li>
-	) : (
-		<li>
-			<a
-				{...press}
-				className="file-chip"
-				href={fileUrl(file)}
-				download={file.name}
-			>
-				<Icon name="file" size={16} />
-				<span>{file.name}</span>
-			</a>
-		</li>
+// A message's attachments, their block and the jump to it, with their styles, are read when a
+// message with files is shown.
+const Attachments = lazy(() => import("./attachments.tsx"));
+const AttachmentsJump = lazy(() =>
+	import("./attachments.tsx").then((m) => ({ default: m.AttachmentsJump })),
+);
+
+/** A message's files, as the one block every message shows them in. */
+export function Files(props: {
+	files: readonly RoomFile[];
+	/** The stored message they belong to, for downloading them all together. */
+	message?: Pick<RoomMessage, "room" | "id">;
+}) {
+	if (props.files.length === 0) return null;
+	return (
+		<Suspense fallback={<section className="attachments" />}>
+			<Attachments {...props} />
+		</Suspense>
 	);
 }
 
-export function Files({ files }: { files: readonly RoomFile[] }) {
+/** The line at the top of a long bubble that jumps to its files; nothing without files. */
+export function FilesJump({ files }: { files: readonly RoomFile[] }) {
 	if (files.length === 0) return null;
 	return (
-		<ul className="files">
-			{files.map((file) => (
-				<FileItem key={file.id} file={file} />
-			))}
-		</ul>
+		<Suspense fallback={null}>
+			<AttachmentsJump count={files.length} />
+		</Suspense>
 	);
 }
 
@@ -226,8 +210,9 @@ export const MessageRow = memo(function MessageRow(props: {
 					</div>
 				) : null}
 				<div className="bubble">
+					<FilesJump files={message.files} />
 					{message.text ? <MessageMarkdown source={message.text} /> : null}
-					<Files files={message.files} />
+					<Files files={message.files} message={message} />
 				</div>
 			</div>
 		</li>

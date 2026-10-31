@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -1223,6 +1223,69 @@ describeDb("the owner app over a real host", () => {
 		expect(served.headers.get("content-security-policy")).toBe("sandbox");
 		expect((await rest(app, "files/not-an-id")).status).toBe(404);
 		tab.close();
+	});
+
+	test("a reply's files download as one zip: each under its own name, the swept ones left out, for the owner only", async () => {
+		const bytes = (text: string) => new TextEncoder().encode(text);
+		app.scripts.set("zip-these", async () => ({
+			ok: true,
+			text: "three files",
+			files: [
+				{ name: "notes.md", data: bytes("# one") },
+				{ name: "notes.md", data: bytes("# two") },
+				{ name: "gone.pdf", data: bytes("%PDF") },
+			],
+		}));
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		tab.send({ type: "send", id: "z1", room: SCOUT, text: "zip-these" });
+		const reply = await tab.take(agentReply("scout"));
+		tab.close();
+		if (reply.type !== "message") throw new Error("expected a message");
+		const { id, files } = reply.message;
+		expect(files.map((f) => f.name)).toEqual([
+			"notes.md",
+			"notes.md",
+			"gone.pdf",
+		]);
+		rmSync(join(app.dataDir, "web", "files", files[2]?.id ?? "missing"));
+		const path = `files/zip?room=${encodeURIComponent(SCOUT)}&message=${id}`;
+		const served = await rest(app, path);
+		expect(served.status).toBe(200);
+		expect(served.headers.get("content-type")).toBe("application/zip");
+		expect(served.headers.get("content-disposition")).toMatch(
+			/^attachment; filename="attachments-\d{8}-\d{4}\.zip"$/,
+		);
+		const zip = join(app.dataDir, "reply.zip");
+		writeFileSync(zip, new Uint8Array(await served.arrayBuffer()));
+		if (Bun.which("unzip")) {
+			const listed = Bun.spawnSync(["unzip", "-Z1", zip]).stdout.toString();
+			expect(listed.trim().split("\n")).toEqual(["notes.md", "notes-2.md"]);
+			const second = Bun.spawnSync(["unzip", "-p", zip, "notes-2.md"]);
+			expect(second.stdout.toString()).toBe("# two");
+		}
+		// A member may not read the agent room: the same refusal as for a file of it.
+		const member = await rest(app, path, { who: "member" });
+		expect(member.status).toBe(
+			(await rest(app, `files/${files[0]?.id}`, { who: "member" })).status,
+		);
+		expect(member.status).toBe(403);
+		expect(
+			(
+				await rest(
+					app,
+					`files/zip?room=${encodeURIComponent(SCOUT)}&message=99999999`,
+				)
+			).status,
+		).toBe(404);
+		expect(
+			(
+				await rest(
+					app,
+					`files/zip?room=${encodeURIComponent(GUIDE)}&message=${id}`,
+				)
+			).status,
+		).toBe(404);
 	});
 
 	test("schedules are listed by room and cancelled", async () => {

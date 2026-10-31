@@ -54,7 +54,7 @@ const NoteRow = memo(function NoteRow(props: {
 				</div>
 				<div className="bubble">
 					{message.text ? <MessageMarkdown source={message.text} /> : null}
-					<Files files={message.files} />
+					<Files files={message.files} message={message} />
 				</div>
 			</div>
 		</li>
