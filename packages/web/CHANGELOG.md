@@ -5,7 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.27.2] - 2026-10-31
+## [0.28.0] - 2026-10-31
+
+### Added
+
+- Connector management on the Connectors page, behind the optional `connectors.manage` port: a list with each connector's name, purpose, tool count and only the scheme and host of its URL, so a credential in the path or query never shows; an add form whose token is write-only (never returned or shown again); a purpose editor; and removal behind a confirmation. pi-roundtable-mcp's `CONNECTORS` fits the port.
+- An "MCP authorizations" section behind the optional `mcpGrants` port: each bundle with its channels, allowed operations and recent audit entries; authorize a channel (an existing or new bundle, a channel from the host's list, the operations), rename and re-purpose, revoke behind a confirmation, and replace a bundle's URL. A new URL is shown once with a copy button. The host supplies the channels and the acting owner's Discord ID; pi-roundtable-mcp's `REMOTE_MCP` provides the rest.
+- The routes are under `api/connectors/` and answer owners only. A port's rejection carrying `refusal: true` answers 400 with its message; any other is logged and answered 502 with a fixed message. The config's `connectorParts` names the sections served, and a section whose port is absent is hidden. The `connectors` pane may be served with `mcpGrants` alone.
+- The fixture hosts serve in-memory connector and authorization ports.
 
 ### Fixed
 

@@ -5,9 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.27.2] - 2026-10-31
+## [0.28.0] - 2026-10-31
 
-- Release in lockstep with pi-roundtable 0.27.2; no package-specific behavior changes. The core peer range stays `>=0.27.0 <0.28.0`.
+### Added
+
+- `CONNECTORS` adds, re-describes and removes connectors (`add`, `describe`, `remove`) with the rules of `/<root> connector add`: no token is no authentication, a token alone is a bearer token, a header name sends the token in that header. Refusals are `ConnectorError`s in the configured wording, now marked `refusal: true`. `ConnectorInput`, `ConnectorError` and `displayUrl` are exported.
+- `REMOTE_MCP` manages channel grants as `/<root> mcp` does: `operations`, `bundles(client)` with each channel's names, operations and recent audit, `revoke`, `describe`, `rotate` (the new URL returned once) and `authorize(client, input)` under the same channel checks: a server text or announcement channel the acting owner may manage, with the permissions behind each operation held by them and the bot. Refusals are `RemoteMcpError`s (`refusal: true`) in the configured wording; the new `operationsRequired` message refuses an empty or unknown operation choice.
+- The Discord commands and the services share one implementation of these operations.
 
 ## [0.27.1] - 2026-10-31
 

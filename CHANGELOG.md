@@ -5,7 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.27.2] - 2026-10-31
+## [0.28.0] - 2026-10-31
+
+### Added
+
+- The web console's Connectors page manages the owner's MCP connectors (list, add with a write-only token, change a purpose, remove) and the MCP channel authorizations (bundles with their channels, operations and recent audit; authorize, rename, revoke, and a new bundle URL shown once). See pi-roundtable-web and pi-roundtable-mcp.
 
 ### Fixed
 
