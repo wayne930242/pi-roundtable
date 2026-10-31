@@ -83,6 +83,8 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 export interface OwnerAppOptions {
 	/** The host's wording, for the refusals the API answers with. */
 	presentation?: ConsolePresentation;
+	/** The host's IANA time zone, for the dates in names it gives files; absent = UTC. */
+	timeZone?: string;
 	/** The key prefix of the rooms, such as `app`. */
 	surface: string;
 	/** The path the console is served under, without a trailing slash. */
@@ -439,6 +441,7 @@ export class OwnerApp {
 		});
 		this.#api = new AppApi({
 			...(options.presentation ? { presentation: options.presentation } : {}),
+			...(options.timeZone ? { timeZone: options.timeZone } : {}),
 			surface,
 			rooms,
 			log,

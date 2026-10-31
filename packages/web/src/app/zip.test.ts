@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { zipName } from "./routes.ts";
 import { uniqueNames, zipStore } from "./zip.ts";
 
 const text = (value: string) => new TextEncoder().encode(value);
@@ -76,4 +77,14 @@ test("repeated names get -2, -3 before the extension", () => {
 	expect(
 		uniqueNames(["a.pdf", "a.pdf", "b", "a.pdf", "B", ".env", ".env"]),
 	).toEqual(["a.pdf", "a-2.pdf", "b", "a-3.pdf", "B-2", ".env", ".env-2"]);
+});
+
+test("a message's zip is named after when it was sent, on the host's clock", () => {
+	const at = new Date("2026-10-31T12:28:40Z");
+	expect(zipName(at, "Asia/Taipei")).toBe("attachments-20261031-2028.zip");
+	expect(zipName(at)).toBe("attachments-20261031-1228.zip");
+	expect(zipName(new Date("2026-10-31T16:05:00Z"), "Asia/Taipei")).toBe(
+		"attachments-20261101-0005.zip",
+	);
+	expect(zipName(new Date(Number.NaN))).toBe("attachments.zip");
 });

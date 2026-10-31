@@ -98,6 +98,7 @@ const ATTACHMENTS_CSS = `
 .attachments-jump {
 	display: inline-flex;
 	align-items: center;
+	gap: var(--space-1);
 	margin: 0 0 var(--space-2);
 	font-size: var(--text-sm);
 }
@@ -139,6 +140,7 @@ function FileItem({ file }: { file: RoomFile }) {
 				className="file-chip"
 				href={fileUrl(file)}
 				download={file.name}
+				title={file.name}
 			>
 				<Icon name="file" size={16} />
 				<span className="file-name">{file.name}</span>
@@ -230,7 +232,8 @@ export function AttachmentsJump({ count }: { count: number }) {
 					});
 			}}
 		>
-			{plural(count, "📎 {count} attachment", "📎 {count} attachments")}
+			<Icon name="attach" size={14} />
+			{plural(count, "{count} attachment", "{count} attachments")}
 		</button>
 	);
 }

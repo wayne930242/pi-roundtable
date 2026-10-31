@@ -78,12 +78,23 @@ const MAX_RESTORED = 100;
 /** The most bytes a message's files may add up to and still be zipped together: 200 MB. */
 const MAX_ZIP_BYTES = 200 * 1024 * 1024;
 
-/** A message's zip, named after when it was sent (UTC): `attachments-20261031-0930.zip`. */
-const zipName = (at: Date): string => {
-	const stamp = Number.isNaN(at.getTime())
-		? ""
-		: `-${at.toISOString().slice(0, 16).replaceAll("-", "").replace(":", "").replace("T", "-")}`;
-	return `attachments${stamp}.zip`;
+/** A message's zip, named after when it was sent on the host's clock: `attachments-20261031-2030.zip`. */
+export const zipName = (at: Date, timeZone = "UTC"): string => {
+	if (Number.isNaN(at.getTime())) return "attachments.zip";
+	const part = Object.fromEntries(
+		new Intl.DateTimeFormat("en-CA", {
+			timeZone,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			hourCycle: "h23",
+		})
+			.formatToParts(at)
+			.map(({ type, value }) => [type, value]),
+	);
+	return `attachments-${part.year}${part.month}${part.day}-${part.hour}${part.minute}.zip`;
 };
 
 /** The most rooms one bulk request names. */
@@ -92,6 +103,8 @@ const MAX_BULK_ROOMS = MAX_READ_ALL;
 export interface AppApiOptions {
 	/** The host's wording: a refusal reaches a client of the API in this locale when the catalog has it. */
 	presentation?: ConsolePresentation;
+	/** The host's IANA time zone, for the date in a zip's name; absent = UTC. */
+	timeZone?: string;
 	surface: AppSurface;
 	rooms: Rooms;
 	log: Pick<RoomLog, "page" | "lastOf" | "removeRoom" | "get" | "startOver">;
@@ -952,7 +965,7 @@ export class AppApi {
 		return new Response(zipStore(entries, at), {
 			headers: {
 				"content-type": "application/zip",
-				"content-disposition": `attachment; filename="${zipName(at)}"`,
+				"content-disposition": `attachment; filename="${zipName(at, this.#options.timeZone)}"`,
 				"cache-control": "private, no-store",
 				"x-content-type-options": "nosniff",
 			},

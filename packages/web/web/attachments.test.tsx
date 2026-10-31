@@ -145,7 +145,7 @@ test("a bubble taller than the screen opens with a jump to its attachments; a sh
 	const tall = await draw(message(6, SEVEN, "a long reply"));
 	const jump = tall.querySelector<HTMLButtonElement>(".attachments-jump");
 	expect(jump?.hidden).toBe(false);
-	expect(jump?.textContent).toBe("📎 7 attachments");
+	expect(jump?.textContent).toBe("7 attachments");
 	// It is the bubble's first line, before the text.
 	expect(tall.querySelector(".bubble")?.firstElementChild).toBe(jump ?? null);
 	let target: Element | undefined;
@@ -204,7 +204,5 @@ test("the block and the jump read in Traditional Chinese on a zh-TW page", async
 	expect(row.querySelector(".attachments-head a")?.textContent).toBe(
 		"全部下載",
 	);
-	expect(row.querySelector(".attachments-jump")?.textContent).toBe(
-		"📎 7 個附件",
-	);
+	expect(row.querySelector(".attachments-jump")?.textContent).toBe("7 個附件");
 });

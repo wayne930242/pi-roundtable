@@ -370,6 +370,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 	const app =
 		rooms && (vapid || external)
 			? new OwnerApp({
+					timeZone: env.timeZone,
 					...(settings.presentation
 						? { presentation: settings.presentation }
 						: {}),

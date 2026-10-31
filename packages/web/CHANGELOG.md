@@ -8,8 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - A message's files are one attachment block: a heading "Attachments (N)" (「附件（N）」) in a bordered box unlike inline code, each file a full-width chip with its icon, name and size, on phones and desktops. Agent rooms, host rooms, notes and the round table's dialogue box all show it; a host room still says how many files were removed.
-- "Download all" (「全部下載」) in the heading of a message with two or more files downloads them as one zip, from `GET api/files/zip?room=<room>&message=<id>`. The route answers the room and each file as the single file route does, so someone who may not read the room gets the same refusal. It packs only the files still kept, each under its own name (a repeated name becomes `name-2`, `name-3`), in `attachments-<YYYYMMDD-HHMM>.zip` (the message's UTC time), stored without compression, and refuses past 200 MB with a message to download the files one by one.
-- A bubble with files that is taller than about one screen opens with "📎 N attachments" (「📎 N 個附件」), which scrolls to the block, smoothly unless the person asked for less motion.
+- "Download all" (「全部下載」) in the heading of a message with two or more files downloads them as one zip, from `GET api/files/zip?room=<room>&message=<id>`. The route answers the room and each file as the single file route does, so someone who may not read the room gets the same refusal. It packs only the files still kept, each under its own name (a repeated name becomes `name-2`, `name-3`), in `attachments-<YYYYMMDD-HHMM>.zip` (the message's UTC time), stored without compression, and refuses past 200 MB with a message to download the files one by one. The zip is named after when the message was sent on the host's clock (`attachments-20261031-2028.zip`); `OwnerAppOptions.timeZone` and `AppApiOptions.timeZone` carry the host's zone, UTC when absent.
+- A bubble with files that is taller than about one screen opens with a paperclip line "N attachments" (「N 個附件」), which scrolls to the block, smoothly unless the person asked for less motion.
 
 ### Fixed
 
