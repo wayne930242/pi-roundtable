@@ -348,7 +348,7 @@ test("a tap on a podium in the strip mentions the knight in the box, takes the f
 	await tap("scout");
 	await settle(30);
 	expect(box()?.value).toBe("@Blog Editor ");
-	expect(document.activeElement).toBe(box() ?? undefined);
+	expect(document.activeElement).toBe(box() ?? null);
 	expect(box()?.selectionStart).toBe("@Blog Editor ".length);
 	// It did not navigate away: the page is where it was and the strip still stands.
 	expect(window.location.hash).toBe("#/table/strip-a");
@@ -371,7 +371,7 @@ test("a tap puts the mention at the caret when the box is the one being typed in
 	await tap("guide");
 	await settle(30);
 	expect(box()?.value).toBe("hi @scout there @guide ");
-	expect(document.activeElement).toBe(box() ?? undefined);
+	expect(document.activeElement).toBe(box() ?? null);
 });
 
 test("a right click on a podium in the strip opens the knight's menu, which has its room", async () => {

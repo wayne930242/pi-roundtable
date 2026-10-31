@@ -146,7 +146,9 @@ test("an owner message waiting for the next round is said while the round runs",
 });
 
 test("a screen reader hears each face's place, and the list is named", async () => {
-	await show(round({ spoken: ["osguide"], current: "osscout", next: ["osmason"] }));
+	await show(
+		round({ spoken: ["osguide"], current: "osscout", next: ["osmason"] }),
+	);
 	expect(
 		page.container.querySelector(".order-faces")?.getAttribute("aria-label"),
 	).toBe("Speaking order");
