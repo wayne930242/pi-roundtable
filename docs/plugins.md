@@ -183,9 +183,9 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 | `observe(filter, observer)` | Hears inbound messages without owning or admitting them: [`observe`](#observe-hearing-messages-without-owning-them). Returns a function that stops it; may be called during `setup` |
 | `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(origin, principalId)`, `known(origin, principalId)`, and `notify(origin, principalId, text)`, each through the [delivery router](#where-things-are-delivered) |
-| `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
+| `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()`, `chatCommands()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
-`sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, and `dashboard()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
+`sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()`, and `chatCommands()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
 
 Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue` is also type-only.
 
@@ -2333,6 +2333,28 @@ The operator's `toolTiers` setting wins, and tools with no tier assigned require
 If two plugins name the same tool, the host throws a `PluginError` naming both.
 The built-in addons use it: each declares the tiers of its own tools.
 
+### `chatCommands`: Pi extension commands the owner may run from chat
+
+A Pi extension that a package in [`piPackages`](#pipackages-pi-extensions-every-session-loads) or a [`sessionTools`](#sessiontools-the-raw-form-of-tools) extension carries can register a command with `pi.registerCommand(name, { description, handler })`. Pi runs a message that starts with `/` and names a registered command instead of sending it to the model, so an owner's message `/name args` already reaches the handler. Most commands are written for Pi's terminal screen: they open a dialog or replace the session, and do nothing or fail in a chat room.
+
+The web app's command menu (typing `/` in a room's message box) therefore lists none of them. A plugin opts a command in by declaring it, once it has checked that the handler needs no screen and does not control the session:
+
+```ts
+export default {
+	name: "stats",
+	setup: () => ({
+		piPackages: ["pi-stats"],
+		chatCommands: [{ name: "stats", description: "Show this week's usage" }],
+	}),
+} satisfies RoundtablePlugin;
+```
+
+- `name` is lowercase letters, digits, dashes and underscores, starting with a letter, written without the slash. `clear`, `new` and `skill` are the app's own (`/clear` and `/new` start a room over, `/skill:<name>` runs a skill the agent carries) and a plugin cannot take them; a name declared twice, by one plugin or two, is a `PluginError`.
+- `description` is one line for the menu.
+- Only an owner sees the entry, and only an owner's message can run the command: the text of any other speaker is prefixed with who wrote it (`(Message from …, at the member tier.)`), so Pi never reads it as a command. A schedule or a delegated task runs the text its creator wrote, so a command is reachable there too, by whoever may create one. The handler runs in the host process with the owner's authority, so declare only what you would let any owner trigger from a phone.
+- A command is sent as a normal message. While a turn runs it is not steered into the turn (Pi refuses to queue a command): it waits for its own turn, as a message from another speaker does, and Pi runs the handler then.
+- `context.chatCommands()` returns every plugin's declarations in contribution order, once linked; during `setup` it throws `NotLinkedError`. The web app reads it for `GET api/rooms/<room>/commands`.
+
 ### `sessionTools`: the raw form of `tools`
 
 A session tool is a Pi extension placed in every conversation session by its phase: `tools`, `compaction`, or `mcp`.
@@ -3945,7 +3967,7 @@ It returns:
 The harness applies the same checks as the host (a plugin that adds nothing, an unknown part, a clash of names, a tool with no tier), so a mistake fails your test with the message the start would print.
 Run migrations yourself (see the [`migrations`](#migrations-and-contextdatabase-tables-of-your-own) test), call event handlers with their payloads (see [`events`](#events-hear-what-the-core-does)), and call `contribution.prompt`'s `build` to test prompt text (see [`prompt`](#prompt-text-added-to-every-agent-turn)).
 The harness leaves these calls to the test.
-`sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` throw `NotLinkedError` during `setup`, as they do in the host.
+`sessions()`, `conversations`, `surfaces`, `turns`, `dashboard()`, and `chatCommands()` throw `NotLinkedError` during `setup`, as they do in the host.
 After setup, `conversations` routes to the plugin's claims, `surfaces` contains its surfaces, which start with its services, and `turns` runs over the runtime and surfaces.
 
 #### Options
@@ -4203,7 +4225,7 @@ These are the messages as the code writes them, with `<...>` where your names go
 | `plugin <name>: setup is missing. Give the function that returns what the plugin adds.` | Add `setup` |
 | `plugin <name> adds nothing. Give it a part (tools, services, channels, and so on), a migration, or a provider, or remove it.` | Return a part from `setup`, or remove the plugin from `roundtable.config.ts` |
 | `plugin <name>: setup must return an object of the parts it adds; return {} to add none.` | Return an object, not `undefined` |
-| `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are services, events, http, holdRules, piPackages, sessionTools, channels, surfaces, personas, backgroundTargets, directChannels, dashboard, tools, seeds, prompt, agentSelection, requiredTools.` | Fix the key; `migrations`, `providers`, and `preflight` belong on the plugin, not in what `setup` returns |
+| `plugin <name>: setup returned an unknown part "<key>". Did you mean "<closest>"? The parts are services, events, http, holdRules, piPackages, chatCommands, sessionTools, channels, surfaces, personas, backgroundTargets, directChannels, dashboard, tools, seeds, prompt, agentSelection, requiredTools.` | Fix the key; `migrations`, `providers`, and `preflight` belong on the plugin, not in what `setup` returns |
 
 ### Tools
 
@@ -4246,14 +4268,14 @@ These are the messages as the code writes them, with `<...>` where your names go
 
 ### Things used before they are ready
 
-`sessions()`, `conversations`, `surfaces`, `turns`, and `dashboard()` are linked after every plugin is set up.
+`sessions()`, `conversations`, `surfaces`, `turns`, `dashboard()`, and `chatCommands()` are linked after every plugin is set up.
 Calling one from `setup` fails, and the message says when it becomes ready:
 
 ```text
 plugin <name>: setup failed: session parts are linked once every plugin is set up. Call sessions() from a service's start or from a handler, not during setup. Fix the error, or remove the plugin.
 ```
 
-The same message exists for `conversations` (`Use them from a service's start or from a handler, not during setup.`), for `surfaces` (`chat surfaces are linked once every plugin is set up.`), for `turns` (`conversation turns are linked once every plugin is set up.`), and for `dashboard()`.
+The same message exists for `conversations` (`Use them from a service's start or from a handler, not during setup.`), for `surfaces` (`chat surfaces are linked once every plugin is set up.`), for `turns` (`conversation turns are linked once every plugin is set up.`), for `dashboard()`, and for `chatCommands()` (`chat commands are linked once every plugin is set up.`).
 Move the call into a service's `start` or an event handler.
 
 `context.services.get(KEY)` before the plugin that provides it has run throws `service <id> is not provided yet; plugin <name> provides it. Register plugin <name> before plugin <yours>.`
@@ -4430,6 +4452,7 @@ Import from the entries listed below; source area files are internal.
 | `BackgroundTurns` | `pi-roundtable` | type |
 | `ChannelClaim` | `pi-roundtable` | type |
 | `ChannelKey` | `pi-roundtable` | type |
+| `ChatCommand` | `pi-roundtable` | type |
 | `ChatSurface` | `pi-roundtable` | type |
 | `ClassedHold` | `pi-roundtable` | type |
 | `ClientCallError` | `pi-roundtable` | type |

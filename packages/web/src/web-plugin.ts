@@ -194,6 +194,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 					features?.skills
 						? features.skills.catalog()
 						: skillRegistry.catalog(),
+				carried: (agent: string) => skillRegistry.carried(agent).skills,
 				attach: (
 					agent: string,
 					add: readonly string[],
@@ -423,6 +424,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 					database: context.database(),
 					agents: services.get(AGENTS),
 					...(skills ? { skills } : {}),
+					chatCommands: context.chatCommands,
 					...(prompts ? { prompts } : {}),
 					...(workspace ? { workspace } : {}),
 					modes: services.get(MODES),

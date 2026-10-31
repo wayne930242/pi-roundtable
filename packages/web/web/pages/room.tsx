@@ -19,6 +19,7 @@ import {
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
+import { useRoomCommands } from "../lib/room-commands.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -53,6 +54,11 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 	const characters = useCharacters();
 	const state = useRoomState(roomKey);
 	const view = room?.view;
+	const commands = useRoomCommands(
+		roomKey,
+		view?.displayName ?? roomKey,
+		view?.kind === "agent" && !view.readOnly,
+	);
 	// A dispatch thread has no character of its own; it wears its parent room's.
 	const parentView = view?.parent ? rooms[view.parent]?.view : undefined;
 	const character = view?.character ?? parentView?.character;
@@ -293,6 +299,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 									key={roomKey}
 									draftKey={roomKey}
 									name={name}
+									commands={commands}
 									onAddressed={setAddressed}
 									{...(toggled
 										? {

@@ -78,6 +78,7 @@ const EXPECTED: [string, string, Record<string, Outcome>][] = [
 	["GET", "api/rooms/app%3Aagent.guide/messages", HIDDEN],
 	["PUT", "api/rooms/app%3Aagent.guide/mode", HIDDEN],
 	["POST", "api/rooms/app%3Aagent.guide/start-over", HIDDEN],
+	["GET", "api/rooms/app%3Aagent.guide/commands", HIDDEN],
 	["PUT", "api/rooms/app%3Aagent.guide/pin", HIDDEN],
 	["PUT", "api/rooms/app%3Aagent.guide/folder", HIDDEN],
 	["PUT", "api/rooms/app%3Aagent.guide/mute", HIDDEN],

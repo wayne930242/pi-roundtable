@@ -2,7 +2,10 @@ import {
 	type ChangeEvent,
 	type ClipboardEvent,
 	type KeyboardEvent,
+	lazy,
 	type ReactNode,
+	Suspense,
+	useCallback,
 	useEffect,
 	useId,
 	useRef,
@@ -11,7 +14,6 @@ import {
 import type { UploadView } from "../../src/api-types.ts";
 import { api, messageOf } from "../lib/api.ts";
 import {
-	firstLine,
 	fitsBack,
 	joinBack,
 	pastedTextName,
@@ -33,22 +35,21 @@ import { composingKey } from "../lib/ime.ts";
 import { hasLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { RoomsState } from "../lib/rooms.ts";
+import {
+	commandFor,
+	commandQuery,
+	type SlashCommand,
+} from "../lib/slash-commands.ts";
 import { toast } from "../lib/toast.ts";
+import { type Attached, AttachedChips } from "./attached-chips.tsx";
 import { Icon } from "./icons.tsx";
+
+// The menu of commands, and its styles, load when the text first starts with a slash.
+const CommandMenu = lazy(() => import("./command-menu.tsx"));
 
 /** A touch screen's keyboard has no Shift, so Enter there starts a new line and the button sends. */
 const touchPrimary = () =>
 	typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-
-interface Attached {
-	key: number;
-	name: string;
-	size: number;
-	upload?: UploadView;
-	failed?: string;
-	/** A long text that waits here as a file and is uploaded when the message is sent; it can be taken back into the box. */
-	text?: string;
-}
 
 /**
  * The box at the foot of a room: text that grows with what is typed, files to attach, Send, and
@@ -67,6 +68,8 @@ export function Composer(props: {
 	/** `addressed`: the person typed `@AI` at the start of the text (see `Composer`'s note on what counts). */
 	onSend(text: string, files: UploadView[], addressed: boolean): void;
 	onStop(): void;
+	/** The slash commands the box runs instead of sending, such as `/clear`; a slash and the start of a name opens their menu. */
+	commands?: readonly SlashCommand[];
 	/** What the stop button is called; "Stop" when absent. A group's reads "Stop the round", since it ends the whole round. */
 	stopLabel?: string;
 	/** Hears whether the person is addressing the agent with a leading `@AI`, as it starts and stops. */
@@ -244,8 +247,32 @@ export function Composer(props: {
 		!waiting &&
 		(text.trim() !== "" || ready.length > 0 || held.length > 0);
 
+	/** The menu's keys; the menu sets them while it is open. */
+	const menuKeys = useRef<(event: KeyboardEvent) => boolean>(undefined);
+	const runCommand = useCallback((command: SlashCommand) => {
+		if (!command.run) {
+			// Text for the agent: its name goes in with a space, and the caret waits after it.
+			caretToEnd.current = true;
+			typed.current = `/${command.name} `;
+			setText(typed.current);
+			area.current?.focus();
+			return;
+		}
+		setText("");
+		command.run({ focus: () => area.current });
+	}, []);
+	const completeCommand = useCallback((command: SlashCommand) => {
+		caretToEnd.current = true;
+		typed.current = `/${command.name}${command.run ? "" : " "}`;
+		setText(typed.current);
+	}, []);
+	// A command is the whole text and nothing else; with files waiting it is a message like any other.
+	const command =
+		files.length === 0 ? commandFor(text, props.commands) : undefined;
+
 	const send = async () => {
 		if (!canSend || sendingNow.current) return;
+		if (command) return runCommand(command);
 		const plan = planSend(text, usedSlots(files), limits);
 		if (!plan.ok) {
 			toast(
@@ -290,6 +317,8 @@ export function Composer(props: {
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (composingKey(event.nativeEvent)) return;
+		if (menuKeys.current?.(event)) return;
 		if (
 			event.key === "Enter" &&
 			!event.shiftKey &&
@@ -375,61 +404,26 @@ export function Composer(props: {
 			}}
 		>
 			{props.above}
-			{files.length ? (
-				<ul className="attached">
-					{files.map((one) => (
-						<li
-							key={one.key}
-							className="attached-chip"
-							data-kind={one.text === undefined ? "file" : "text"}
-							data-state={
-								one.failed
-									? "failed"
-									: one.upload || one.text !== undefined
-										? "ready"
-										: "uploading"
-							}
-							title={one.failed}
-						>
-							{one.text === undefined ? (
-								<>
-									<Icon name="file" size={14} />
-									<span className="chip-body">
-										<span className="chip-name">{one.name}</span>
-										<span className="meta">{bytes(one.size)}</span>
-									</span>
-								</>
-							) : (
-								<button
-									type="button"
-									className="chip-take"
-									disabled={sending}
-									aria-label={t("Put {name} back into the message", {
-										name: one.name,
-									})}
-									onClick={() => takeBack(one)}
-								>
-									<Icon name="file" size={14} />
-									<span className="chip-body">
-										<span className="chip-name">
-											{one.name} · {bytes(one.size)}
-										</span>
-										<span className="meta">{firstLine(one.text)}</span>
-									</span>
-								</button>
-							)}
-							<button
-								type="button"
-								className="icon-button"
-								aria-label={t("Remove {name}", { name: one.name })}
-								disabled={sending}
-								onClick={() => removeChip(one)}
-							>
-								<Icon name="close" size={14} />
-							</button>
-						</li>
-					))}
-				</ul>
+			<AttachedChips
+				files={files}
+				sending={sending}
+				onTakeBack={takeBack}
+				onRemove={removeChip}
+			/>
+			{props.commands?.length &&
+			!sending &&
+			files.length === 0 &&
+			commandQuery(text) !== undefined ? (
+				<Suspense fallback={null}>
+					<CommandMenu
+						text={text}
+						commands={props.commands}
+						keys={menuKeys}
+						area={area}
+						onRun={runCommand}
+						onComplete={completeCommand}
+					/>
+				</Suspense>
 			) : null}
 			<div className="composer-row">
 				<input

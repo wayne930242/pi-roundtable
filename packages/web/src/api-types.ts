@@ -673,6 +673,23 @@ export interface RoomOneView {
 	room: RoomView;
 }
 
+/**
+ * One thing the owner may run by typing `/` in a room's message box besides the page's own `/clear`:
+ * a skill the agent carries (`name` is `skill:<skill>`) or an extension command a plugin declared.
+ * The page sends it as a normal message, `/<name> <arguments>`.
+ */
+export interface RoomCommandView {
+	name: string;
+	/** One line for the menu. */
+	description: string;
+	source: "skill" | "extension";
+}
+
+/** `GET api/rooms/<room>/commands`: the room's commands; none for a group, a thread and a room that is read only. */
+export interface RoomCommandsView {
+	commands: RoomCommandView[];
+}
+
 /** What a dismissal removed from the room list: the finished threads that were listed. */
 export interface ThreadsDismissed {
 	dismissed: number;

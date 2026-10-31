@@ -16,6 +16,7 @@ import type {
 	PrincipalsView,
 	PushDevicesView,
 	PushKeyView,
+	RoomCommandsView,
 	RoomMode,
 	RoomOneView,
 	RoomsView,
@@ -226,6 +227,9 @@ export const api = {
 			`rooms/${encodeURIComponent(room)}/undismiss-threads`,
 			{ method: "POST", body: JSON.stringify({ threads }) },
 		),
+	/** What the owner may run by typing `/` in the room besides the page's own commands. */
+	roomCommands: (room: string) =>
+		request<RoomCommandsView>(`rooms/${encodeURIComponent(room)}/commands`),
 	startRoomOver: (room: string) =>
 		request<{ ok: true }>(`rooms/${encodeURIComponent(room)}/start-over`, {
 			method: "POST",

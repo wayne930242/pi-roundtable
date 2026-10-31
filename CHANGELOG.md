@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `ChatCommand`, `Contribution.chatCommands` and `PluginContext.chatCommands()`: a plugin declares the Pi extension commands (`pi.registerCommand`) of its `piPackages` or `sessionTools` that are safe to run from an owner's chat message, as `{ name, description }`. None is listed until a plugin declares it. `clear`, `new` and `skill` are the web app's own and refused, as is a repeated name; `context.chatCommands()` returns every declaration once linked (`NotLinkedError` during setup, also in `testing`). The web app lists them in a room's command menu. See "chatCommands" in docs/plugins.md.
+
+### Fixed
+
+- A message that names an extension command or a skill (`/name args`, `/skill:name args`) sent while a turn runs is no longer steered into the turn: Pi refuses to queue an extension command, and the queued expansion of a skill is not the text the run looks for among its leftovers. It waits for its own turn like a message from another speaker, and Pi runs or expands it then.
+
 ## [0.29.2] - 2026-10-31
 
 - Release for the web package's changes (see its changelog); no core behavior changes.

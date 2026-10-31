@@ -13,6 +13,7 @@ import {
 	type AgentSession,
 	createAgentSession,
 	DefaultResourceLoader,
+	type ExtensionFactory,
 	ModelRuntime,
 	SessionManager,
 	SettingsManager,
@@ -20,7 +21,10 @@ import {
 import { SteerableRun, type SteeringSession } from "./steerable-run.ts";
 
 /** A real Pi session on the faux provider, whose scripted answers may wait on the test. */
-async function fauxSession(steps: FauxResponseStep[]) {
+async function fauxSession(
+	steps: FauxResponseStep[],
+	extensionFactories: ExtensionFactory[] = [],
+) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-steer-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	core.setResponses(steps);
@@ -53,6 +57,7 @@ async function fauxSession(steps: FauxResponseStep[]) {
 		cwd: dir,
 		agentDir: dir,
 		noExtensions: true,
+		extensionFactories,
 		noSkills: true,
 		noPromptTemplates: true,
 		noThemes: true,
@@ -196,6 +201,50 @@ describe("SteerableRun on a Pi session", () => {
 		await done;
 		expect(await run.steer("too late", [])).toBe(false);
 		expect(session.getSteeringMessages()).toEqual([]);
+	});
+
+	test("a message that names an extension command (or a skill) waits for its own turn instead of throwing, and Pi runs it then", async () => {
+		const started = gate();
+		const finish = gate();
+		const ran: string[] = [];
+		const { session } = await fauxSession(
+			[
+				async () => {
+					started.open();
+					await finish.opened;
+					return fauxAssistantMessage("done");
+				},
+			],
+			[
+				(pi) =>
+					pi.registerCommand("ping", {
+						description: "A command that runs without the model",
+						handler: async (args) => {
+							ran.push(args);
+						},
+					}),
+			],
+		);
+		const run = new SteerableRun(session, () => true);
+		const done = run.run(() => session.prompt("a long job"));
+		await started.opened;
+		// Pi itself refuses to queue it, so the run never offers it.
+		await expect(session.steer("/ping now")).rejects.toThrow(
+			"cannot be queued",
+		);
+		expect(await run.steer("/ping now", [])).toBe(false);
+		expect(run.steered).toBe(false);
+		expect(session.getSteeringMessages()).toEqual([]);
+		// A skill is expanded by Pi when it prompts, so it waits as well.
+		expect(await run.steer("/skill:review the diff", [])).toBe(false);
+		// Text that only starts with a slash is steered like any message.
+		expect(await run.steer("/not-a-command, but a path", [])).toBe(true);
+		finish.open();
+		await done;
+		expect(ran).toEqual([]);
+		// Its own turn: Pi runs the command.
+		await session.prompt("/ping now");
+		expect(ran).toEqual(["now"]);
 	});
 });
 

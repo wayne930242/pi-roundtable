@@ -319,6 +319,8 @@ const NOT_LINKED = {
 		"conversation turns are linked once every plugin is set up. Use turns from a service's start or from a handler, not during setup.",
 	dashboard:
 		"dashboard lines are linked once every plugin is set up. Call dashboard() from a service's start or from a handler, not during setup.",
+	chatCommands:
+		"chat commands are linked once every plugin is set up. Call chatCommands() from a service's start or from a handler, not during setup.",
 };
 
 function unlinked(part: keyof typeof NOT_LINKED): never {
@@ -554,6 +556,8 @@ export async function testPlugin(
 		},
 		providers,
 		dashboard: () => (linked ? registry.dashboard : unlinked("dashboard")),
+		chatCommands: () =>
+			linked ? registry.chatCommands : unlinked("chatCommands"),
 		apiKey: async (provider) =>
 			Object.hasOwn(options.apiKeys ?? {}, provider)
 				? options.apiKeys?.[provider]
@@ -630,6 +634,7 @@ export async function testPlugin(
 		personas: registry.personas,
 		backgroundTargets: registry.backgroundTargets,
 		dashboard: registry.dashboard,
+		chatCommands: registry.chatCommands,
 		tools: registry.tools,
 		seeds: registry.seeds,
 		prompt: registry.prompt,

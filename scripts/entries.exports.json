@@ -135,6 +135,7 @@
 			"ChannelContextVerdict",
 			"ChannelContexts",
 			"ChannelKey",
+			"ChatCommand",
 			"ChatSurface",
 			"ClassedHold",
 			"ClientCallError",

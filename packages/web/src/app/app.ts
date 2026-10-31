@@ -148,6 +148,8 @@ export interface OwnerAppOptions {
 	 * how they change, and the registry's documents.
 	 */
 	skills?: AppApiOptions["skills"];
+	/** The extension commands plugins declared safe to run from chat. */
+	chatCommands?: AppApiOptions["chatCommands"];
 	/** Present when the host has prompt documents: the main prompts the owner edits. */
 	prompts?: AppApiOptions["prompts"];
 	/** Present when the workspace pane is served. */
@@ -460,6 +462,7 @@ export class OwnerApp {
 			directory: agents.directory,
 			team: agents.team,
 			...(options.skills ? { skills: options.skills } : {}),
+			...(options.chatCommands ? { chatCommands: options.chatCommands } : {}),
 			...(options.prompts ? { prompts: options.prompts } : {}),
 			avatars: agents.avatars,
 			reads,

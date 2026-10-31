@@ -100,6 +100,7 @@ export type {
 	ScheduledOutcome,
 } from "./core/contract/channels.ts";
 export { QUEUED_MARK, STEERED_MARK } from "./core/contract/channels.ts";
+export type { ChatCommand } from "./core/contract/chat-command.ts";
 export type {
 	ImageDrawer,
 	Judge,
