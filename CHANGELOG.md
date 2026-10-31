@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Temp knights follow the yolo and long-running modes of the conversation that made them, live: their own modes cannot be switched, an origin that is gone reads off, and only an owner's turn makes a temp knight follow (`ConversationModes.follow`, `forget`, `trackOrigins`, `ConversationMode.inheritedFrom`, migration `conversation-modes-follows`).
 - Discord keeps intercom cards' full texts in `intercom-texts.json` (newest 300, following `discord.cardCopies`), opened ephemerally with **Show all**.
 - The character kit's `composeSvg` takes `mouth: "open" | "closed"` for the frames of a talking figure.
+- `SkillRegistry.delete(name)` is part of the skill registry interface, so a host surface can remove an agent-written skill as `skill_delete` does.
 
 ### Changed
 

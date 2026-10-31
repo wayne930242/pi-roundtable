@@ -19,6 +19,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Starting over clears the room on every page; the old messages open read-only as the archived conversation from the start-over line (`?archive=`, migration `web-room-messages-start-over`).
 - "Select text" opens the message alone in a sheet where the phone's own partial selection works, with Copy all; a room's interface text is no longer selectable.
 - A temp knight's mode banner says whose modes it follows and hides its switches.
+- The Skills page deletes an agent-written skill after a confirm naming the knights that carry it (`DELETE api/skill-docs/<name>`, owner-only; built-in, linked and package skills are refused).
+- A knight's menus have a Skills entry that opens the Edit knight sheet at its Skills section, whose title shows how many skills it carries.
 
 ### Changed
 
