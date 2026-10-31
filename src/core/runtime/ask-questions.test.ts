@@ -119,6 +119,72 @@ describe("askQuestions", () => {
 		expect(await run(v2(undefined).prompts, two)).toStartWith("No answer");
 	});
 
+	test("while the host stops, no card is posted and a waiting one is reported lost", async () => {
+		const stopped = v2({ answers: [{ choices: ["Bug"] }] });
+		const refused = await askQuestions(
+			stopped.prompts,
+			"infra",
+			two,
+			OWNER,
+			undefined,
+			() => true,
+		);
+		expect(refused).toStartWith(
+			"The server is restarting, so no card was posted",
+		);
+		expect(stopped.sent).toHaveLength(0);
+
+		// The drain begins while the card waits: its "stays open" would not hold.
+		let stopping = false;
+		const waiting: Prompts = {
+			...v2("pending").prompts,
+			questionnaire: async () => {
+				stopping = true;
+				return "pending";
+			},
+		};
+		const lost = await askQuestions(
+			waiting,
+			"infra",
+			two,
+			OWNER,
+			undefined,
+			() => stopping,
+		);
+		expect(lost).toContain("the server is restarting");
+		expect(lost).not.toContain("The card stays open");
+
+		const one = v1(["pending"]);
+		let asked = false;
+		const single: Prompts = {
+			...one.prompts,
+			ask: async (...args) => {
+				asked = true;
+				return one.prompts.ask(...args);
+			},
+		};
+		const singleLost = await askQuestions(
+			single,
+			"infra",
+			{ questions: [two.questions[0] as Questionnaire["questions"][number]] },
+			OWNER,
+			undefined,
+			() => asked,
+		);
+		expect(singleLost).toContain("the server is restarting");
+		// Answered before the drain, the answer stands.
+		expect(
+			await askQuestions(
+				v2({ answers: [{ choices: ["Bug"] }, undefined, undefined] }).prompts,
+				"infra",
+				two,
+				OWNER,
+				undefined,
+				() => false,
+			),
+		).toContain("1. Type: chose Bug");
+	});
+
 	test("a single question with previews uses the card only where previews show", async () => {
 		const one: Questionnaire = {
 			questions: [

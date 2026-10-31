@@ -12,6 +12,7 @@ import {
 	lateAnswerText,
 	lateQuestionnaireText,
 	questionnaireText,
+	restartingText,
 	sequentialText,
 } from "./extensions/ask-user-text.ts";
 
@@ -19,7 +20,9 @@ import {
  * Asks a questionnaire on `prompts` and returns the tool's result text. A set the core refuses
  * posts no card. One question without previews, and a surface without `questionnaire` or with
  * room for fewer questions, go through `ask`: one question exactly as before 0.20, several one
- * at a time, stopping at the first that does not come back answered.
+ * at a time, stopping at the first that does not come back answered. While the host stops
+ * (`stopping`), no card is posted, and one left waiting is reported lost: open cards do not
+ * survive the restart.
  */
 export async function askQuestions(
 	prompts: Prompts,
@@ -27,9 +30,13 @@ export async function askQuestions(
 	questionnaire: Questionnaire,
 	owner: OwnerIdentity,
 	signal: AbortSignal | undefined,
+	stopping?: () => boolean,
 ): Promise<string> {
 	const refused = validateQuestionnaire(questionnaire);
 	if (refused !== undefined) return refused;
+	if (stopping?.()) return restartingText(owner, false);
+	const lost = (answer: unknown) =>
+		answer === "pending" && stopping?.() === true;
 	const title = messages().askTitle(asker);
 	const n = questionnaire.questions.length;
 	const support = prompts.asks;
@@ -59,6 +66,7 @@ export async function askQuestions(
 						: undefined,
 			},
 		);
+		if (lost(answer)) return restartingText(owner, true);
 		if (n === 1)
 			return answerText(
 				answer === "pending" || answer === "declined" || answer === undefined
@@ -78,6 +86,7 @@ export async function askQuestions(
 					? lateAnswerText(text, late.answer, late.by)
 					: undefined,
 		});
+		if (lost(answer)) return restartingText(owner, true);
 		if (n === 1) return answerText(answer, owner);
 		if (answer === "pending" || answer === "declined" || answer === undefined)
 			return sequentialText(

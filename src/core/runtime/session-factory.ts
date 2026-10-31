@@ -425,12 +425,16 @@ export class SessionFactory {
 					confirmationGate: confirmationGateExtension(gate, slot, (signal) =>
 						toolTurn(context, signal),
 					),
-					askUser: askUserExtension(slot, addressee, () =>
-						turnAddressee(
-							this.#deps.speaker(turnKey),
-							state,
-							this.#options.owner,
-						),
+					askUser: askUserExtension(
+						slot,
+						addressee,
+						() =>
+							turnAddressee(
+								this.#deps.speaker(turnKey),
+								state,
+								this.#options.owner,
+							),
+						this.#options.stopping,
 					),
 					selfCompactGuard: selfCompactGuardExtension(),
 					// Each request carries no one's memory but the running turn's reader's.

@@ -30,6 +30,15 @@ export function answerText(
 	return lines.length > 0 ? lines.join("\n") : `${o.name} chose nothing.`;
 }
 
+/**
+ * The tool's result while the server restarts: open cards live in its memory and are gone after
+ * the restart, so a new card is not posted (`opened` false) and one still waiting will be lost.
+ */
+export function restartingText(owner: OwnerIdentity, opened: boolean): string {
+	const o = ownerWords(owner);
+	return `${opened ? `${o.name} has not answered yet, and the server is restarting: the card closes with it, so ${o.his} answer cannot reach you through it.` : `The server is restarting, so no card was posted: a card would not survive the restart.`} Do not call ask_user again in this turn. Write the question as your final answer instead; it is posted to this channel for ${o.him} to read, and ${o.his} answer comes in a new turn.`;
+}
+
 /** The turn a late answer starts: the question it answers and what was chosen and written. */
 export function lateAnswerText(
 	question: string,

@@ -18,6 +18,8 @@ export function askUserExtension(
 	owner: OwnerIdentity,
 	/** Whom the running turn is for, when not the owner; the answer's words name them. */
 	addressee?: () => OwnerIdentity,
+	/** Whether the host is shutting down: no card is posted then, as none survives the restart. */
+	stopping?: () => boolean,
 ): ExtensionFactory {
 	const o = ownerWords(owner);
 	return (pi) => {
@@ -113,6 +115,7 @@ export function askUserExtension(
 						},
 						addressee?.() ?? owner,
 						signal,
+						stopping,
 					),
 				);
 			},
