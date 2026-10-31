@@ -151,8 +151,6 @@ export function CouncilView(props: {
 	go?: CouncilGo;
 	/** What stands in the body when no member is left to seat; without it the room still shows. */
 	empty?: ReactNode;
-	/** Handlers the chat's list carries, such as the room drawer's swipe. */
-	surface?: React.HTMLAttributes<HTMLDivElement>;
 	/** Files dropped on the page, for the chat's composer to take. */
 	incoming?: File[] | undefined;
 	onIncomingTaken?(): void;
@@ -271,7 +269,6 @@ export function CouncilView(props: {
 					<RoomChat
 						roomKey={roomKey}
 						name={name}
-						{...(props.surface ? { surface: props.surface } : {})}
 						composer={(toEnd) =>
 							view?.readOnly ? null : (
 								<Composer
