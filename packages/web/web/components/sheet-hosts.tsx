@@ -2,6 +2,7 @@ import { lazy, Suspense, useRef } from "react";
 import { useShortcutHelp } from "../lib/shortcut-help.ts";
 import { AgentSheetHost } from "./agent-sheet.tsx";
 import { ArchivedSheetHost } from "./archived-sheet.tsx";
+import { QueuedEditHost } from "./queued-edit.tsx";
 import { RoomConfirmHost } from "./room-confirms.tsx";
 import { SelectTextSheetHost } from "./select-text-sheet.tsx";
 import { TeamSheetHost } from "./team-sheets.tsx";
@@ -28,6 +29,7 @@ export function SheetHosts() {
 	return (
 		<>
 			<RoomConfirmHost />
+			<QueuedEditHost />
 			<AgentSheetHost />
 			<TeamSheetHost />
 			<ArchivedSheetHost />

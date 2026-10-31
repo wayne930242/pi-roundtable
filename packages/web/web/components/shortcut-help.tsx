@@ -48,6 +48,12 @@ function rows(): { keys: string[]; label: string }[] {
 			keys: ["Esc"],
 			label: t("Close the open menu or sheet, or leave the message box"),
 		},
+		{
+			keys: ["↑"],
+			label: t(
+				"Edit your latest message that is still waiting, from an empty message box",
+			),
+		},
 		{ keys: ["?"], label: t("Show these shortcuts") },
 	];
 }

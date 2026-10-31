@@ -49,6 +49,22 @@ describe("client frames", () => {
 			type: "stop",
 			room: "r",
 		});
+		expect(
+			parse({ type: "edit_queued", room: "r", message: 4, text: "new" }),
+		).toEqual({ type: "edit_queued", room: "r", message: 4, text: "new" });
+		expect(parse({ type: "cancel_queued", room: "r", message: 4 })).toEqual({
+			type: "cancel_queued",
+			room: "r",
+			message: 4,
+		});
+		for (const bad of [
+			{ type: "cancel_queued", room: "r", message: 0 },
+			{ type: "cancel_queued", room: "r", message: 1.5 },
+			{ type: "cancel_queued", room: "r", message: "4" },
+			{ type: "edit_queued", room: "r", message: 4 },
+			{ type: "edit_queued", room: "", message: 4, text: "x" },
+		])
+			expect(parse(bad)).toBeUndefined();
 		expect(parse({ type: "approval", prompt: "p", approved: false })).toEqual({
 			type: "approval",
 			prompt: "p",

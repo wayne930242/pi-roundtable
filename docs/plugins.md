@@ -2436,6 +2436,8 @@ When that record finds the author someone else than the claim admitted, such as 
 
 A claim may also hear that a message it owns changed, through `onMessageDeleted(channel, messageId)` and `onMessageEdited(message)`, which a surface reports with the second argument of its `start` (`{ deleted, edited }`, a `SurfaceMessageEvents`). Discord reports both, including for a message the bot had not cached; a surface that cannot tell never calls them. The router delivers each as it comes, to the claim that owns the channel and no other, outside the channel's queue, so a running turn does not hold it up; a throw or rejection is logged and never fails the router. A delete carries only ids, and Discord's delete event does not say who wrote the message, so the claim hears the deletion of the bot's own messages too and ignores an id it does not know. An edit carries the message as it reads now, as an `InboundMessage`, without `speaker` or `peerBot` because nobody is resolved or admitted for it; the bot's own edits are not reported, nor is a change that leaves the text, the embeds and the attachments as they were, such as a pin. A bulk delete is reported as one delete per message.
 
+A message sent while a turn runs is first offered to that turn (`busy.steer`); one the turn does not take waits in the channel's queue with `QUEUED_MARK`, and until its own turn starts the conversation port can list, cancel and edit it: `queued(channel)` returns its waiting messages oldest first (`messageId`, the author's `principalId`, the `text` its turn will use, `queuedAt`); `cancelQueued(channel, messageId, { principalId })` makes its turn never run, calling the admission's `dropped` and removing the mark; `editQueued(channel, messageId, { principalId }, text)` admits the message again with the new text through the claim's `admit`, drops the old admission, and the turn runs on the new one. Only the message's author may (a different principal gets `forbidden`, and a message with no resolved author can be changed by no one). A message whose turn has started, was steered into the running turn, or was cancelled is `unknown`; an edit the claim would no longer admit is `refused` and the old text stays. The decision is made in one synchronous step, so a cancel or an edit and the start of the turn never both win. The surface's own copy of the message is the caller's to change. When a surface reports a queued message deleted or edited (`onMessageDeleted`, `onMessageEdited` above), the router cancels it or changes its text itself, without the author check since the surface says it happened: that is how deleting a queued Discord message cancels it. The three methods are optional on `ConversationPort`, as `messageDeleted` is.
+
 A claim may have `stop(channel)`, which stops the channel's running turn and returns whether one was running; the Stop button, `conversations.stop`, and every other stop go through it.
 The router calls only the owning claim's `stop`, returning `false` when that method is absent.
 Give `stop` to a claim whose conversations run turns that can be interrupted.
@@ -4566,6 +4568,11 @@ Import from the entries listed below; source area files are internal.
 | `Provisioning` | `pi-roundtable` | type |
 | `ProvisioningRule` | `pi-roundtable` | type |
 | `QueuePort` | `pi-roundtable` | type |
+| `QueuedBy` | `pi-roundtable` | type |
+| `QueuedChange` | `pi-roundtable` | type |
+| `QueuedMessage` | `pi-roundtable` | type |
+| `QUEUED_MARK` | `pi-roundtable` | value |
+| `STEERED_MARK` | `pi-roundtable` | value |
 | `QUESTIONNAIRE_LIMITS` | `pi-roundtable` | value |
 | `Questionnaire` | `pi-roundtable` | type |
 | `QuestionnaireAnswer` | `pi-roundtable` | type |

@@ -660,7 +660,10 @@ export class AppApi {
 			const cursor = await reads?.cursorOf(room.key, self);
 			return json({
 				...page,
-				messages: withExpiredFiles(page.messages, this.#options.files),
+				messages: withExpiredFiles(
+					page.messages.map((one) => this.#options.surface.delivery.shown(one)),
+					this.#options.files,
+				),
 				cards: await cards.during(room.key, {
 					...(first && (page.more || isStartOver(first))
 						? { from: first.at }

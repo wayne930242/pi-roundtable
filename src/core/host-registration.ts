@@ -274,6 +274,10 @@ export class Linkage {
 			messageDeleted: (channel, id, space) =>
 				router().messageDeleted(channel, id, space),
 			messageEdited: (message) => router().messageEdited(message),
+			queued: (channel) => router().queued(channel),
+			cancelQueued: (channel, id, by) => router().cancelQueued(channel, id, by),
+			editQueued: (channel, id, by, text) =>
+				router().editQueued(channel, id, by, text),
 			background: (turn) => router().background(turn),
 			runsAs: (turn) => router().runsAs(turn),
 			target: (name) => router().target(name),

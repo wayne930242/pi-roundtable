@@ -49,6 +49,7 @@ interface Row {
 	edited_at: Date | null;
 	note: boolean | null;
 	intercom?: RoomIntercom | string | null;
+	delivery: "steered" | "cancelled" | null;
 }
 
 /** The most messages one page of history holds. */
@@ -78,6 +79,7 @@ function messageOf(row: Row): RoomMessage {
 		...(row.intercom == null
 			? {}
 			: { intercom: storedJson(row.intercom, "intercom card") }),
+		...(row.delivery === null ? {} : { delivery: row.delivery }),
 	};
 }
 
@@ -159,6 +161,14 @@ export class RoomLog {
 		},
 	};
 
+	/** The column that records how an owner message sent during a turn went: steered into it, or cancelled while it waited. */
+	static readonly deliveryMigration: Migration = {
+		name: "web-room-messages-delivery",
+		up: async (sql) => {
+			await sql`ALTER TABLE web_room_messages ADD COLUMN IF NOT EXISTS delivery text`;
+		},
+	};
+
 	async append(message: NewRoomMessage): Promise<RoomMessage> {
 		const [row] = await this.#insert(message, false);
 		if (!row) throw new Error("the room log stored nothing");
@@ -223,6 +233,21 @@ export class RoomLog {
 			: await this.#sql`
 				UPDATE web_room_messages SET text = ${text}
 				WHERE id = ${id} AND room = ${room} RETURNING *`;
+		return row && messageOf(row);
+	}
+
+	/**
+	 * Records how a message sent during a turn went (`steered`, `cancelled`), or clears it; the
+	 * message as it is now, or undefined when the room holds none.
+	 */
+	async setDelivery(
+		room: string,
+		id: number,
+		delivery: "steered" | "cancelled" | null,
+	): Promise<RoomMessage | undefined> {
+		const [row]: Row[] = await this.#sql`
+			UPDATE web_room_messages SET delivery = ${delivery}
+			WHERE id = ${id} AND room = ${room} RETURNING *`;
 		return row && messageOf(row);
 	}
 
