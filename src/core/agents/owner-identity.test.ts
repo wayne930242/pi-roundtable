@@ -157,6 +157,7 @@ test("a tool description in a shared session names the speaker, not the owner", 
 		registerTool: (tool: { description: string }) => {
 			description = tool.description;
 		},
+		on: () => undefined,
 	} as unknown as ExtensionAPI);
 	expect(description).toContain("Ask the speaker a question");
 	expect(description).toContain("wait for the speaker's answer");

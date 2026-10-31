@@ -42,6 +42,22 @@ function setup(graceMs = 10) {
 }
 
 describe("OwnerCards after the grace period", () => {
+	test("a turn's own grace period replaces the cards' one, for a question and a questionnaire alike", async () => {
+		const { prompts, wait } = setup(60_000);
+		const short = { ...wait, graceMs: 10 };
+		const started = Date.now();
+		expect(await prompts.ask("t", question, undefined, short)).toBe("pending");
+		expect(
+			await prompts.questionnaire?.(
+				"t",
+				{ questions: [question, { ...question, question: "Which time?" }] },
+				undefined,
+				short,
+			),
+		).toBe("pending");
+		expect(Date.now() - started).toBeLessThan(5_000);
+	});
+
 	test("an answer within the grace period continues the turn and starts none", async () => {
 		const { fake, cards, prompts, resumed, wait } = setup(1_000);
 		const answer = prompts.confirm("t", "m", undefined, undefined, wait);

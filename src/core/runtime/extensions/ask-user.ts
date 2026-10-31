@@ -3,16 +3,22 @@ import { type Static, Type } from "typebox";
 import { type OwnerIdentity, ownerWords } from "../../identity.ts";
 import type { OwnerQuestion } from "../../interactions/prompts.ts";
 import { QUESTIONNAIRE_LIMITS as L } from "../../interactions/questionnaire.ts";
+import { DEFAULT_YOLO_QUESTION_GRACE_MS } from "../../modes/autonomy.ts";
 import { toolText } from "../../shared/tool-result.ts";
 import { askQuestions } from "../ask-questions.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
 import { foldAskArguments } from "./ask-user-arguments.ts";
+import { yoloAskNote } from "./ask-user-text.ts";
 
 export { answerText, lateAnswerText } from "./ask-user-text.ts";
 
 export const ASK_USER_TOOL = "ask_user";
 
-/** Registers ask_user, which asks the owner on a card in the turn's channel and waits. */
+/**
+ * Registers ask_user, which asks the owner on a card in the turn's channel and waits. In a turn
+ * whose conversation is in yolo mode (`slot.yolo`), a card holds the turn `yoloGraceMs` at most and
+ * an unanswered one does not end it, and the system prompt carries the yolo note.
+ */
 export function askUserExtension(
 	slot: PromptSlot,
 	owner: OwnerIdentity,
@@ -20,9 +26,19 @@ export function askUserExtension(
 	addressee?: () => OwnerIdentity,
 	/** Whether the host is shutting down: no card is posted then, as none survives the restart. */
 	stopping?: () => boolean,
+	/** How long a card holds a yolo turn, in ms; default `DEFAULT_YOLO_QUESTION_GRACE_MS`. */
+	yoloGraceMs: number = DEFAULT_YOLO_QUESTION_GRACE_MS,
 ): ExtensionFactory {
 	const o = ownerWords(owner);
 	return (pi) => {
+		pi.on("before_agent_start", (event) => {
+			if (!slot.yolo) return;
+			const note = yoloAskNote(addressee?.() ?? owner);
+			const appended = event.systemPromptOptions.appendSystemPrompt;
+			event.systemPromptOptions.appendSystemPrompt = appended
+				? `${appended}\n\n${note}`
+				: note;
+		});
 		const parameters = Type.Object(
 			{
 				questions: Type.Array(
@@ -116,6 +132,7 @@ export function askUserExtension(
 						addressee?.() ?? owner,
 						signal,
 						stopping,
+						slot.yolo ? yoloGraceMs : undefined,
 					),
 				);
 			},

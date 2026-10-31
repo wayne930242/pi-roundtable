@@ -69,6 +69,7 @@ The room menu has two switches, kept per room and across restarts.
 **Yolo** approves the held calls a rule allows, without a card, and writes a line in the room for each.
 It never approves for a webhook or report turn, a call with named approvers, or a card that is the speaker's alone, and the destructive classes (`sudo`, `rm`, disk, power, services, docker, firewall, packages, force push, hard reset, `gh`, `crontab`) still ask.
 A plain `git push` and a write outside the workspace are approved, and a push to `main` may deploy; list `shell.push` in `autonomy.yolo.card` of the host configuration to make it ask.
+Question cards and the timeout card still come in yolo, but they wait shorter (30 seconds and one minute by default) and an unanswered one does not stop the work: the agent goes on with its own best choice and says what it assumed, and the timeout card continues the turn by itself up to the long-running cap.
 **Long-running** lets a turn go past its time limit, up to `autonomy.longRunning.maxSeconds` (four hours by default), then it asks on a card or aborts.
 A banner shows while either is on.
 The [core guide](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#hold-classes-and-yolo-mode) lists the classes and the guardrails.

@@ -20,8 +20,13 @@ interface Tool {
 	) => Promise<{ content: { text: string }[] }>;
 }
 
-/** ask_user over a slot whose cards answer with `answer`, recording each question. */
-function askUser(answer: OwnerAnswer | "pending" | undefined, bound = true) {
+/** ask_user over a slot whose cards answer with `answer`, recording each question; `yolo` is the conversation's mode. */
+function askUser(
+	answer: OwnerAnswer | "pending" | undefined,
+	bound = true,
+	yolo?: () => boolean,
+	yoloGraceMs?: number,
+) {
 	const asked: { title: string; question: OwnerQuestion }[] = [];
 	const waits: PromptWait[] = [];
 	const slot = new PromptSlot();
@@ -37,14 +42,27 @@ function askUser(answer: OwnerAnswer | "pending" | undefined, bound = true) {
 				}
 			: undefined,
 		"infra",
+		undefined,
+		yolo,
 	);
 	let tool: Tool | undefined;
+	let beforeStart:
+		| ((event: {
+				systemPromptOptions: { appendSystemPrompt?: string };
+		  }) => void)
+		| undefined;
 	askUserExtension(
 		slot,
 		OWNER,
+		undefined,
+		undefined,
+		yoloGraceMs,
 	)({
 		registerTool: (t: Tool) => {
 			tool = t;
+		},
+		on: (event: string, handler: typeof beforeStart) => {
+			if (event === "before_agent_start") beforeStart = handler;
 		},
 	} as unknown as ExtensionAPI);
 	if (tool?.name !== ASK_USER_TOOL) throw new Error("ask_user not registered");
@@ -52,6 +70,16 @@ function askUser(answer: OwnerAnswer | "pending" | undefined, bound = true) {
 	return {
 		asked,
 		waits,
+		/** The system prompt's appended part after the run starts, from `appended`. */
+		start: (appended?: string) => {
+			const event = {
+				systemPromptOptions: {
+					...(appended === undefined ? {} : { appendSystemPrompt: appended }),
+				},
+			};
+			beforeStart?.(event);
+			return event.systemPromptOptions.appendSystemPrompt;
+		},
 		call: async (params: unknown) =>
 			(await t.execute("call-1", t.prepareArguments?.(params) ?? params))
 				.content[0]?.text ?? "",
@@ -256,6 +284,7 @@ describe("ask_user, review fixes", () => {
 				registerTool: (t: Tool) => {
 					tool = t;
 				},
+				on: () => undefined,
 			} as unknown as ExtensionAPI);
 			return { tool };
 		})();
@@ -279,5 +308,50 @@ describe("ask_user, review fixes", () => {
 			questions: [{ question: "First?" }, { question: "Second?" }],
 		});
 		expect(text).toStartWith("1. First?: No answer");
+	});
+
+	describe("in a yolo conversation", () => {
+		test("an unanswered card waits 30 seconds by default and tells the model to keep working", async () => {
+			const { waits, call } = askUser("pending", true, () => true);
+			const text = await call({ question: "Which day?" });
+			expect(waits[0]?.graceMs).toBe(30_000);
+			expect(text).toContain(
+				"yolo mode is on in this conversation, so keep working",
+			);
+			expect(text).toContain(
+				"Only a question that truly blocks may end your turn",
+			);
+			expect(text).not.toContain("End your turn now");
+		});
+
+		test("the wait follows the configuration", async () => {
+			const { waits, call } = askUser("pending", true, () => true, 12_000);
+			await call({ question: "Which day?" });
+			expect(waits[0]?.graceMs).toBe(12_000);
+		});
+
+		test("yolo is read at each call, so a toggle applies to the next card", async () => {
+			let on = false;
+			const { waits, call } = askUser("pending", true, () => on);
+			expect(await call({ question: "One?" })).toContain("End your turn now");
+			on = true;
+			expect(await call({ question: "Two?" })).toContain("keep working");
+			expect(waits.map((w) => w.graceMs)).toEqual([undefined, 30_000]);
+		});
+
+		test("the system prompt carries the yolo rule, after what was appended before, and only in yolo", () => {
+			let on = true;
+			const f = askUser("pending", true, () => on);
+			const note = f.start("persona");
+			expect(note).toStartWith(
+				"persona\n\nYolo mode is on in this conversation",
+			);
+			expect(note).toContain("do not end your turn with a question");
+			expect(note).toContain("truly blocks");
+			expect(f.start()).toStartWith("Yolo mode is on");
+			on = false;
+			expect(f.start("persona")).toBe("persona");
+			expect(askUser("pending").start()).toBeUndefined();
+		});
 	});
 });

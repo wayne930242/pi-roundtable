@@ -435,6 +435,7 @@ export class SessionFactory {
 								this.#options.owner,
 							),
 						this.#options.stopping,
+						this.#options.autonomy?.yolo.questionGraceMs,
 					),
 					selfCompactGuard: selfCompactGuardExtension(),
 					// Each request carries no one's memory but the running turn's reader's.

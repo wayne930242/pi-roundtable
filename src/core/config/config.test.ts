@@ -17,6 +17,9 @@ const minimal: RoundtableConfig = {
 	http: { publicUrl: "https://bot.example.com" },
 };
 
+/** Yolo's default card waits, which config-yolo.test.ts covers. */
+const YOLO_WAITS = { questionGraceMs: 30_000, timeoutCardGraceMs: 60_000 };
+
 const refused = (input: unknown): string => {
 	try {
 		resolveConfig(input);
@@ -661,7 +664,7 @@ describe("turn limits and autonomy", () => {
 
 	test("long-running work stops at four hours and yolo allows and cards nothing extra unless the config says so", () => {
 		expect(resolveConfig(minimal).autonomy).toEqual({
-			yolo: { allow: [], card: [] },
+			yolo: { allow: [], card: [], ...YOLO_WAITS },
 			longRunningMaxMs: 14_400_000,
 		});
 		expect(
@@ -673,7 +676,11 @@ describe("turn limits and autonomy", () => {
 				},
 			}).autonomy,
 		).toEqual({
-			yolo: { allow: ["shell.rm"], card: ["shell.push", "tool:repo_push"] },
+			yolo: {
+				allow: ["shell.rm"],
+				card: ["shell.push", "tool:repo_push"],
+				...YOLO_WAITS,
+			},
 			longRunningMaxMs: 7_200_000,
 		});
 		expect(

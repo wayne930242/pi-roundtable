@@ -35,7 +35,9 @@ export function timeoutMessage(timeout: TurnTimeout): string {
 /**
  * The time limit of a turn of the built-in runtime; see `runtimeTurnBudget`. `abort` aborts the
  * turn. In a long-running conversation (`options.modes`) a limit extends the turn instead of
- * asking or aborting, until the turn has worked `options.autonomy.longRunningMaxMs`. A
+ * asking or aborting, until the turn has worked `options.autonomy.longRunningMaxMs`; in a yolo
+ * conversation the card waits `autonomy.yolo.timeoutCardGraceMs` and, unanswered, goes on up to
+ * that same cap. A
  * `timeLimitMs` replaces the turn's limit and its cap, both held under that same ceiling.
  */
 export function turnLimits(
@@ -46,7 +48,7 @@ export function turnLimits(
 	abort: () => void,
 	timeLimitMs?: number,
 ): TurnLimits {
-	const { longRunningMaxMs } = options.autonomy ?? DEFAULT_AUTONOMY;
+	const { longRunningMaxMs, yolo } = options.autonomy ?? DEFAULT_AUTONOMY;
 	const limited =
 		timeLimitMs === undefined
 			? options
@@ -68,7 +70,15 @@ export function turnLimits(
 			timedOut = timeout;
 			abort();
 		},
-		{ activity, keepGoing, ceilingMs: longRunningMaxMs },
+		{
+			activity,
+			keepGoing,
+			ceilingMs: longRunningMaxMs,
+			yolo: () => options.modes?.peek(channel).yolo === true,
+			...(yolo.timeoutCardGraceMs === undefined
+				? {}
+				: { yoloCardMs: yolo.timeoutCardGraceMs }),
+		},
 	);
 	return {
 		budget,

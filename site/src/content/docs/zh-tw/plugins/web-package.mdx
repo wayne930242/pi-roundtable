@@ -69,6 +69,7 @@ export default {
 **Yolo** 會直接核准規則允許的暫緩呼叫，不開卡片，並在房間裡為每一次核准留一行紀錄。
 它不會核准 webhook 或報告觸發的那輪、指定了核准人的呼叫，以及只有發言者本人能回答的卡片；破壞性的類別（`sudo`、`rm`、磁碟、電源、服務、docker、防火牆、套件、強制推送、hard reset、`gh`、`crontab`）一律照問。
 單純的 `git push` 和工作區外的寫入會被核准，而推到 `main` 可能就是部署；要讓它也詢問，就把 `shell.push` 列進 host 設定的 `autonomy.yolo.card`。
+Yolo 模式下問題卡片和逾時卡片仍然會出現，但等待時間比較短（預設 30 秒和一分鐘），沒回答也不會讓工作停下：agent 照它自己的最佳選擇繼續，並說明它做了什麼假設；逾時卡片則會自動讓這一輪繼續，最多到長時間執行的上限。
 **長時間執行**讓一輪執行超過時間上限後自動繼續，最多做到 `autonomy.longRunning.maxSeconds`（預設四小時），之後開卡片詢問，無法顯示卡片時就中止。
 任一模式開著時，畫面上會有橫幅提示。
 類別清單和防護規則見[核心指南](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#hold-classes-and-yolo-mode)。

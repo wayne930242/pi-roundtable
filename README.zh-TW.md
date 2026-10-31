@@ -187,6 +187,8 @@ export default {
 | `turnLimits.cardSeconds` | `300` | 那張卡片等你回答多久，30 到 3600；時間到沒回答，這一輪就停止 |
 | `autonomy.longRunning.maxSeconds` | `14400`（4 小時） | 長時間執行對話的一輪，工作到這個上限才會詢問或停止，600 到 604800 |
 | `autonomy.yolo.allow`、`autonomy.yolo.card` | 無 | yolo 模式在預設之外可以核准的 hold 類別（例如 `shell.rm`），以及它也核准其呼叫的規則名稱（該規則沒有回報類別，例如 `tool:repo_push`），以及它永遠不核准的類別或規則名稱（例如 `shell.push`）。預設下 yolo 會核准一般的 `git push` 和工作區以外的寫入，其餘破壞性的 shell 類別仍然出卡；見[外掛指南](docs/plugins.md#hold-classes-and-yolo-mode) |
+| `autonomy.yolo.questionGraceSeconds` | `30` | yolo 對話裡，`ask_user` 卡片讓這一輪等多久，5 到 600；沒回答時，這一輪照它自己的最佳選擇繼續，卡片仍然開著 |
+| `autonomy.yolo.timeoutCardSeconds` | `60` | yolo 對話裡，逾時卡片等多久，10 到 3600；沒回答時，這一輪就像按了「繼續」一樣接著做，最多到 `autonomy.longRunning.maxSeconds` |
 
 沒有 `discord` 時，只要 `agents` 列了 agent，它們就在支援房間的 surface（例如 pi-roundtable-web）裡運作；沒有任何 surface 支援房間時 host 拒絕啟動：
 

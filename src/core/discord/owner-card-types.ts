@@ -120,6 +120,8 @@ export interface CardSpec<T> {
 			by: Answerer,
 			prompt: string,
 		): ReturnType<PromptWait["late"]>;
+		/** The turn's own grace period, in ms, in place of the cards' `graceMs`; see `PromptWait.graceMs`. */
+		graceMs?: number;
 	};
 	/** Hears who approved the card, before it resolves approved in its turn. */
 	approved?(by: Answerer, prompt: string): void;

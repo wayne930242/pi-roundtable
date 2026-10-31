@@ -1,5 +1,10 @@
 import { ConfigError } from "../domain/errors.ts";
-import { type Autonomy, DEFAULT_LONG_RUNNING_MS } from "../modes/autonomy.ts";
+import {
+	type Autonomy,
+	DEFAULT_LONG_RUNNING_MS,
+	DEFAULT_YOLO_QUESTION_GRACE_MS,
+	DEFAULT_YOLO_TIMEOUT_CARD_GRACE_MS,
+} from "../modes/autonomy.ts";
 import { integer, list, optional, shape, text } from "./schema.ts";
 
 /** The configuration's `turnLimits` and `autonomy`: how long a turn works, and what runs without a person. */
@@ -27,6 +32,16 @@ export interface LimitsConfig {
 			allow?: readonly string[];
 			/** Hold classes or rule names yolo never approves, such as `shell.push` or `tool:repo_push`. */
 			card?: readonly string[];
+			/**
+			 * How long an `ask_user` card holds a yolo turn before it goes on with its own best choice
+			 * (the card stays open, and a later answer starts a new turn); 5 to 600, default 30.
+			 */
+			questionGraceSeconds?: number;
+			/**
+			 * How long the timeout card waits in a yolo conversation before the turn goes on as if
+			 * Continue were pressed, up to `longRunning.maxSeconds` of work; 10 to 3600, default 60.
+			 */
+			timeoutCardSeconds?: number;
 		};
 		/** Long-running mode: a turn that reaches its time limit goes on by itself, up to this. */
 		longRunning?: {
@@ -48,7 +63,12 @@ export const limitsShape = {
 	autonomy: optional(
 		shape({
 			yolo: optional(
-				shape({ allow: optional(list(text)), card: optional(list(text)) }),
+				shape({
+					allow: optional(list(text)),
+					card: optional(list(text)),
+					questionGraceSeconds: optional(integer(5, 600)),
+					timeoutCardSeconds: optional(integer(10, 3_600)),
+				}),
 			),
 			longRunning: optional(
 				shape({ maxSeconds: optional(integer(600, 604_800)) }),
@@ -83,6 +103,14 @@ export function limitsOf(config: LimitsConfig): ResolvedLimits {
 			yolo: {
 				allow: autonomy?.yolo?.allow ?? [],
 				card: autonomy?.yolo?.card ?? [],
+				questionGraceMs: secondsOr(
+					autonomy?.yolo?.questionGraceSeconds,
+					DEFAULT_YOLO_QUESTION_GRACE_MS,
+				),
+				timeoutCardGraceMs: secondsOr(
+					autonomy?.yolo?.timeoutCardSeconds,
+					DEFAULT_YOLO_TIMEOUT_CARD_GRACE_MS,
+				),
 			},
 			longRunningMaxMs:
 				longRunning === undefined
@@ -90,4 +118,9 @@ export function limitsOf(config: LimitsConfig): ResolvedLimits {
 					: longRunning * 1_000,
 		},
 	};
+}
+
+/** Seconds as ms, or the default in ms when unset. */
+function secondsOr(seconds: number | undefined, defaultMs: number): number {
+	return seconds === undefined ? defaultMs : seconds * 1_000;
 }
