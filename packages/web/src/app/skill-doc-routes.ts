@@ -2,6 +2,7 @@ import type { SkillDocument, SkillRegistry } from "pi-roundtable";
 import { SkillConflictError } from "pi-roundtable";
 import type {
 	SkillConflict,
+	SkillDeleted,
 	SkillDocCreate,
 	SkillDocSave,
 	SkillDocView,
@@ -18,7 +19,11 @@ const MAX_SKILL_BYTES = 64 * 1024;
 export interface SkillDocApiOptions {
 	skills: Pick<
 		SkillRegistry,
-		"document" | "saveDocument" | "createDocument" | "documentHistory"
+		| "document"
+		| "saveDocument"
+		| "createDocument"
+		| "documentHistory"
+		| "delete"
 	>;
 	/** The catalog the page lists, so a name it does not list is a 404 before the registry is asked. */
 	catalog(): SkillView[];
@@ -34,7 +39,7 @@ const viewOf = (document: SkillDocument): SkillDocView => ({
 
 /**
  * The app's REST for a skill's SKILL.md: reading it whole, saving an agent-written skill's, making a
- * skill and listing the versions kept. The frontmatter rules are the skill tools': the registry
+ * skill, deleting an agent-written one and listing the versions kept. The frontmatter rules are the skill tools': the registry
  * checks them, and a refusal is a 400 with its words. Every call is an owner's; a save names the
  * hash it was edited from, and a skill that changed meanwhile answers 409 with what is there now.
  */
@@ -106,6 +111,11 @@ export class SkillDocApi {
 				throw error;
 			}
 		}
+		// The registry refuses a skill it did not write, in its own words; deleting detaches it from every carrier.
+		if (!action && method === "DELETE")
+			return json({
+				message: await skills.delete(name),
+			} satisfies SkillDeleted);
 		if (action === "history" && method === "GET" && parts.length === 4) {
 			return json({
 				versions: (await skills.documentHistory(name)).map((version) => ({

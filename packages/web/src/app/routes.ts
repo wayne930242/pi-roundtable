@@ -131,10 +131,14 @@ export interface AppApiOptions {
 			add: readonly string[],
 			remove: readonly string[],
 		): Promise<string[]>;
-		/** The registry's documents: a skill's SKILL.md read, saved and made, and its versions. */
+		/** The registry's documents: a skill's SKILL.md read, saved, made and deleted, and its versions. */
 		documents: Pick<
 			SkillRegistry,
-			"document" | "saveDocument" | "createDocument" | "documentHistory"
+			| "document"
+			| "saveDocument"
+			| "createDocument"
+			| "documentHistory"
+			| "delete"
 		>;
 	};
 	/** Present when the host has prompt documents (the prompts plugin): the main prompts the owner edits. */
