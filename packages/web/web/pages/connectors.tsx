@@ -14,21 +14,17 @@ export function ConnectorsPage() {
 	const parts = connectorParts ?? { gateways: true };
 	return (
 		<section className="stack connectors-page">
-			<div className="card-head">
-				<div>
-					<h2>{t("Connectors")}</h2>
-					<p className="hint">
-						{t(
-							"Upstream MCP gateways and virtual servers used by the knights.",
-						)}
-					</p>
-				</div>
+			<header className="page-head">
+				<h1>{t("Connectors")}</h1>
 				{connectorAdminUrl ? (
 					<a href={connectorAdminUrl} target="_blank" rel="noreferrer">
 						{t("Open connector admin")}
 					</a>
 				) : null}
-			</div>
+			</header>
+			<p className="hint">
+				{t("Upstream MCP gateways and virtual servers used by the knights.")}
+			</p>
 			{parts.manage ? <ConnectorManage /> : null}
 			{parts.grants ? <McpGrants /> : null}
 			{parts.gateways ? <Gateways /> : null}

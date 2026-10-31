@@ -2,6 +2,7 @@ import { lazy, Suspense, useContext, useEffect, useState } from "react";
 import type { RoomView } from "../../src/api-types.ts";
 import { Composer } from "../components/composer.tsx";
 import { GroupStage, useGroupFocus } from "../components/group-scene.tsx";
+import { Icon } from "../components/icons.tsx";
 import { RoomChat } from "../components/room-chat.tsx";
 import {
 	RoundTable,
@@ -160,10 +161,12 @@ function HostedTable({ focus }: { focus: string | undefined }) {
 					{table?.kind === "webgl" ? (
 						<button
 							type="button"
-							className="secondary"
+							className="icon-button"
+							aria-label={t("Reset view")}
+							title={t("Reset view")}
 							onClick={() => table.focus(null)}
 						>
-							{t("Reset view")}
+							<Icon name="reset" />
 						</button>
 					) : null}
 					<button
@@ -245,10 +248,12 @@ function CouncilTable({ named }: { named: string | undefined }) {
 					{table?.kind === "webgl" ? (
 						<button
 							type="button"
-							className="secondary"
+							className="icon-button"
+							aria-label={t("Reset view")}
+							title={t("Reset view")}
 							onClick={() => look(null)}
 						>
-							{t("Reset view")}
+							<Icon name="reset" />
 						</button>
 					) : null}
 					{council && seated ? (
