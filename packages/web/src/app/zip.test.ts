@@ -24,7 +24,7 @@ test.skipIf(!Bun.which("unzip"))(
 				zipStore(
 					[
 						{ name: "notes.md", data: text("# hello\n") },
-						{ name: "報告.pdf", data: bytes },
+						{ name: "\u5831\u544a.pdf", data: bytes },
 						{ name: "empty.txt", data: new Uint8Array() },
 					],
 					new Date("2026-10-31T09:30:00Z"),
@@ -33,13 +33,13 @@ test.skipIf(!Bun.which("unzip"))(
 			const listed = unzip("-Z1", path).stdout.toString();
 			expect(listed.trim().split("\n")).toEqual([
 				"notes.md",
-				"報告.pdf",
+				"\u5831\u544a.pdf",
 				"empty.txt",
 			]);
 			const tested = unzip("-t", path);
 			expect(tested.exitCode).toBe(0);
 			expect(unzip("-p", path, "notes.md").stdout.toString()).toBe("# hello\n");
-			const read = unzip("-p", path, "報告.pdf").stdout;
+			const read = unzip("-p", path, "\u5831\u544a.pdf").stdout;
 			expect(new Uint8Array(read)).toEqual(bytes);
 		} finally {
 			rmSync(dir, { recursive: true, force: true });

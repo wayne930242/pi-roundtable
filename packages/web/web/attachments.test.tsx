@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import type { RoomFile, RoomMessage } from "../src/api-types.ts";
+import { ZH_TW } from "../src/i18n/zh-tw.ts";
 import { MessageRow } from "./components/message-row.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { loadBuiltInMessages, setPresentation } from "./lib/messages.ts";
@@ -199,10 +200,12 @@ test("the block and the jump read in Traditional Chinese on a zh-TW page", async
 	bubbleHeight = 2000;
 	const row = await draw(message(8, SEVEN));
 	expect(row.querySelector(".attachments-head span")?.textContent).toBe(
-		"附件（7）",
+		ZH_TW["Attachments ({count})"]?.replace("{count}", "7"),
 	);
 	expect(row.querySelector(".attachments-head a")?.textContent).toBe(
-		"全部下載",
+		ZH_TW["Download all"],
 	);
-	expect(row.querySelector(".attachments-jump")?.textContent).toBe("7 個附件");
+	expect(row.querySelector(".attachments-jump")?.textContent).toBe(
+		ZH_TW["{count} attachments"]?.replace("{count}", "7"),
+	);
 });
