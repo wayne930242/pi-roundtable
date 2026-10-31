@@ -119,8 +119,13 @@ async function build(settings: ResolvedOptions, context: Context) {
 		typeof settings.features === "function"
 			? await settings.features(context)
 			: settings.features;
+	// The Connectors page also serves the MCP authorizations alone.
+	const served = {
+		skills: features?.skills,
+		connectors: features?.connectors ?? features?.mcpGrants,
+	};
 	for (const pane of ["skills", "connectors"] as const) {
-		if (settings.panes.includes(pane) && !features?.[pane])
+		if (settings.panes.includes(pane) && !served[pane])
 			throw new Error(`web-console: the ${pane} pane needs its feature port`);
 	}
 	const rooms = settings.panes.includes("rooms");

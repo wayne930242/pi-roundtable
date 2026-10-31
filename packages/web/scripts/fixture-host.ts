@@ -31,6 +31,7 @@ import {
 	TEAM,
 } from "../src/testing/fixtures.ts";
 import { webConsole } from "../src/web-plugin.ts";
+import { fixtureConnectorFeatures } from "./fixture-connectors.ts";
 
 const port = Number(process.env.PORT ?? 4173);
 const origin = `http://localhost:${port}`;
@@ -99,7 +100,8 @@ const harness = await testPlugin(
 		dataDir,
 		title: "Fixture console",
 		// The owner app's panes need services this host does not have; `fixture-app.ts` serves them.
-		panes: ["overview", "conversations", "notes"],
+		panes: ["overview", "conversations", "notes", "connectors"],
+		features: fixtureConnectorFeatures(),
 	}),
 	{
 		env: { timeZone: "Europe/Paris" },

@@ -815,7 +815,21 @@ The host wrapper must declare any additional required service keys in its plugin
 | `schedules` | `count(key)` returns the workspace schedule count. |
 | `cleanup` | `startFresh(key)` archives/waits for active turns and returns its kind; `deleteConversation(key)` returns `deleted` or `busy`. The package validates key shape, ownership, existence and exclusions before calling either hook. |
 | `skills` | `catalog()` supplies public `SkillView[]`; `read(name)` reads only that catalog entry and returns `{ frontmatter, body }`. The host bounds disk reads and the API shows what `read` returns, flattening metadata in source order. A skill that cannot be read answers with a fixed message; set `errorDetail: true` to append the catalog's `missing` text or the read error's message (cut at 300 characters) when the host's reasons are safe to show. |
-| `connectors` | `gateways()`, `servers()`, `usedBy(server)` provide status/tools/usage. Optional `adminUrl` accepts HTTP(S) or an absolute local path, never script URLs. |
+| `connectors` | `gateways()`, `servers()`, `usedBy(server)` provide status/tools/usage. Optional `adminUrl` accepts HTTP(S) or an absolute local path, never script URLs. Optional `manage` lets the owners list, add, re-describe and remove connectors from the page (below). |
+| `mcpGrants` | Optional. Shows the MCP authorizations on the Connectors page and manages them as `/<root> mcp` does (below). With it alone, the `connectors` pane serves just that section. |
+
+`connectors.manage` is `{ list(), add(input), describe(name, description), remove(name) }`; pi-roundtable-mcp's `CONNECTORS` service fits it as it is.
+`add` receives `{ name, url, description, header?, token? }`; the token is write-only, sent to the port and never returned, logged or shown again.
+The page shows each connector's name, purpose, tool count and only the scheme and host of its URL (with `/…` when the URL has a path, query, fragment or user part), so a credential in the URL never shows.
+
+`mcpGrants` is `{ operations, bundles(), channels(actor), revoke(bundle, channelId), describe(bundle, channelId, { displayName?, description? }), rotate(bundle), authorize(input, actor) }`.
+`operations` lists `{ id, label }`; `bundles()` returns each bundle with its channels (`channelId`, `guildName`, `channelName`, `visible`, `displayName`, `description`, `operations`, `authorizedAt`, `audit`).
+`actor` is the acting owner, `{ principalId, speakerId }`: the host maps them to their Discord ID for `authorize`, which must keep the Discord flow's channel checks, and lists in `channels(actor)` the channels `{ id, name, guild }` they may pick.
+`rotate` returns `{ url }`, and `authorize` returns `{ bundle, url? }` with the URL only when it created the bundle; the page shows such a URL once, with a copy button.
+pi-roundtable-mcp's `REMOTE_MCP` provides each of these once the host passes its Discord client to `bundles` and `authorize`.
+
+Both ports' routes are under `api/connectors/` and answer owners only (`403` to anyone else, before any port is called).
+A rejection whose error carries `refusal: true` (as pi-roundtable-mcp's `ConnectorError` and `RemoteMcpError` do) answers `400` with its message, already in the host's wording; any other is logged and answered `502` with a fixed message, so nothing the error holds reaches the page.
 
 `sessionSummary(directory)` is a public helper for a trusted host to summarize separately stored party session files.
 It reports live bytes, archive count and last activity without revealing message contents.

@@ -42,6 +42,7 @@ export const ROUTES: readonly Rule[] = [
 	row("*", "api/skills", "O"),
 	row("*", "api/skills/:name", "O"),
 	row("*", "api/connectors", "O"),
+	row("*", "api/connectors/**", "O"),
 	row("*", "api/models", "O"),
 	// The owner's conversations; a member's own are filtered inside the handler.
 	row("*", "api/conversations", "V"),

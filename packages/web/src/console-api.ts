@@ -114,6 +114,7 @@ export interface ConsolePorts {
 }
 
 import { cleanupConversation } from "./cleanup-api.ts";
+import { connectorRoutes, grantRoutes } from "./connector-manage-api.ts";
 import { connectorsView } from "./connectors-api.ts";
 import { ConsoleHttpError as HttpError, json } from "./http.ts";
 import { readLimited } from "./request-body.ts";
@@ -256,6 +257,12 @@ export class ConsoleApi {
 			if (!connectors) throw new HttpError(404, "This pane is not served.");
 			return json(await connectorsView(connectors));
 		}
+		if (
+			head === "connectors" &&
+			(id === "managed" || id === "grants") &&
+			parts.length >= 2
+		)
+			return this.#manage(request, parts.slice(1), visitor);
 		if (head === "notes" && parts.length <= 2) {
 			this.#pane("notes", visitor);
 			return this.#notes(request, id, visitor);
@@ -264,6 +271,35 @@ export class ConsoleApi {
 			this.#pane("notes", visitor);
 			return json(await this.principals(visitor));
 		}
+		throw new HttpError(404, "There is no such API.");
+	}
+
+	/** Connector and MCP authorization management: the owners' alone, whatever panes another tier has. */
+	async #manage(
+		request: Request,
+		parts: string[],
+		visitor: Visitor,
+	): Promise<Response> {
+		this.#pane("connectors", visitor);
+		if (visitor.tier !== "owner")
+			throw new HttpError(403, "Only an owner may do this.");
+		const [area, ...rest] = parts;
+		const { features, logger } = this.#ports;
+		const context = {
+			logger,
+			actor: {
+				principalId: visitor.principal.id,
+				speakerId: visitor.speakerId,
+			},
+			body: () => readBody(request),
+			changed: () => this.#ports.changed(),
+		};
+		const manage = features?.connectors?.manage;
+		if (area === "managed" && manage && rest.length <= 1)
+			return connectorRoutes(manage, request.method, rest[0], context);
+		const grants = features?.mcpGrants;
+		if (area === "grants" && grants && rest.length <= 2)
+			return grantRoutes(grants, request.method, rest, context);
 		throw new HttpError(404, "There is no such API.");
 	}
 
@@ -313,6 +349,15 @@ export class ConsoleApi {
 			...(presentation?.messages ? { messages: presentation.messages } : {}),
 			...(features?.cleanup ? { cleanup: true } : {}),
 			...(connectorAdminUrl ? { connectorAdminUrl } : {}),
+			...(features?.connectors || features?.mcpGrants
+				? {
+						connectorParts: {
+							...(features.connectors ? { gateways: true as const } : {}),
+							...(features.connectors?.manage ? { manage: true as const } : {}),
+							...(features.mcpGrants ? { grants: true as const } : {}),
+						},
+					}
+				: {}),
 			look: this.#ports.look ?? "modern",
 			...(this.#ports.characterSkins
 				? { characterSkins: [...this.#ports.characterSkins] }

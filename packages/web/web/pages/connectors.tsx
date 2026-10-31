@@ -1,17 +1,19 @@
+import { ConnectorManage } from "../components/connector-manage.tsx";
+import { McpGrants } from "../components/mcp-grants.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
+import { installConnectorsStyle } from "../lib/connectors-style.ts";
 import { translate as t } from "../lib/messages.ts";
 import { useFetched } from "../lib/use-fetched.ts";
 
 export function ConnectorsPage() {
-	const { connectorAdminUrl } = useConfig();
-	const { data: view, error } = useFetched(
-		() => api.connectors(),
-		"connectors",
-	);
+	installConnectorsStyle();
+	const { connectorAdminUrl, connectorParts } = useConfig();
+	// A host from before the parts were named serves the gateways whenever it serves the page.
+	const parts = connectorParts ?? { gateways: true };
 	return (
-		<section className="stack">
+		<section className="stack connectors-page">
 			<div className="card-head">
 				<div>
 					<h2>{t("Connectors")}</h2>
@@ -27,6 +29,21 @@ export function ConnectorsPage() {
 					</a>
 				) : null}
 			</div>
+			{parts.manage ? <ConnectorManage /> : null}
+			{parts.grants ? <McpGrants /> : null}
+			{parts.gateways ? <Gateways /> : null}
+		</section>
+	);
+}
+
+/** What ContextForge holds: upstream gateways and virtual servers, read only. */
+function Gateways() {
+	const { data: view, error } = useFetched(
+		() => api.connectors(),
+		"connectors",
+	);
+	return (
+		<section className="stack">
 			{error ? <Failure message={error} /> : null}
 			{!view && !error ? <Loading /> : null}
 			{view ? (

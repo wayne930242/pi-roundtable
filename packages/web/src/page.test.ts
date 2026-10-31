@@ -31,9 +31,11 @@ test("the page builds with relative URLs only, and every file it names is in the
  * What the page loads before it draws, gzipped, at master b54b4ed before the characters: the entry
  * script (145,612 bytes) and the stylesheet (8,707 bytes). The 2,000 bytes added to it are the long
  * press and menu hook the entry script now carries (`useLongPress`, its menu state and the row
- * props); the menus' drawing and their builders are lazy chunks and are not counted here.
+ * props); the menus' drawing and their builders are lazy chunks and are not counted here. The
+ * 200 bytes after it are the minifier's renaming: 0.28's Connectors management, a lazy chunk, left
+ * the entry script 16 bytes longer and 66 bytes larger gzipped, on 16 bytes of headroom.
  */
-const FIRST_LOAD_BASELINE = 145_612 + 8_707 + 2_000;
+const FIRST_LOAD_BASELINE = 145_612 + 8_707 + 2_000 + 200;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 

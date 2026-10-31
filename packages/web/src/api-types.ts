@@ -48,6 +48,8 @@ export interface ConfigView {
 	messages?: Readonly<Record<string, string>>;
 	cleanup?: boolean;
 	connectorAdminUrl?: string;
+	/** Which parts of the Connectors page the host serves; each is absent when it does not. */
+	connectorParts?: { gateways?: true; manage?: true; grants?: true };
 	/** Only supplied for path-based routing; also the base for page/API URLs. */
 	mountPath?: string;
 	/** Present when the `rooms` pane is served: how the page opens the owner app's socket. */
@@ -327,6 +329,67 @@ export interface ConnectorsView {
 		tools: number;
 	}[];
 	servers: { name: string; tools: string[]; usedBy: string[] }[];
+}
+
+/** A connector as the page shows it: the URL is scheme and host only, and no token is ever in it. */
+export interface ManagedConnectorView {
+	name: string;
+	/** Absent when the URL cannot be parsed. */
+	displayUrl?: string;
+	description: string;
+	/** Absent when its tools could not be read. */
+	tools?: number;
+}
+
+export interface ConnectorInput {
+	name: string;
+	url: string;
+	description: string;
+	header?: string;
+	/** Write-only: sent once, never returned. */
+	token?: string;
+}
+
+export interface ConnectorAddedView {
+	connector: ManagedConnectorView;
+	skipped: string[];
+}
+
+export interface McpGrantView {
+	channelId: string;
+	guildName: string;
+	channelName: string;
+	visible: boolean;
+	displayName: string;
+	description: string;
+	operations: string[];
+	authorizedAt: string;
+	audit: { tool: string; status: string; at: string }[];
+}
+
+export interface McpGrantsView {
+	operations: { id: string; label: string }[];
+	bundles: { name: string; grants: McpGrantView[] }[];
+}
+
+export interface McpChannelView {
+	id: string;
+	name: string;
+	guild: string;
+}
+
+export interface McpAuthorizeInput {
+	bundle: string;
+	channelId: string;
+	operations: string[];
+	displayName?: string;
+	description?: string;
+}
+
+/** A bundle URL, shown once: after a rotation, or when an authorization created the bundle. */
+export interface McpUrlView {
+	bundle: string;
+	url?: string;
 }
 
 /** Every error body the API returns. */

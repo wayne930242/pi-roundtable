@@ -45,6 +45,7 @@ import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
 import { buildPage } from "./build-page.ts";
+import { fixtureConnectorFeatures } from "./fixture-connectors.ts";
 
 // The host serves the built page and stops at start-up without one: build it here when it is missing.
 const pageDir = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -731,6 +732,7 @@ host = await testHost({
 						"conversations",
 						"notes",
 						"skills",
+						"connectors",
 					],
 			...(process.env.LOCALE
 				? { presentation: { locale: process.env.LOCALE } }
@@ -752,6 +754,7 @@ host = await testHost({
 					startFresh: async () => "archived",
 					deleteConversation: async () => "deleted",
 				},
+				...fixtureConnectorFeatures(),
 			}),
 			...(process.env.LOOK === "camelot"
 				? { appearance: { look: "camelot" as const } }

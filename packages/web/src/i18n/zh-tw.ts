@@ -377,6 +377,78 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"騎士使用的上游 MCP 閘道與虛擬伺服器。",
 	"Used by": "使用者",
 	"Virtual servers": "虛擬伺服器",
+	"MCP connectors": "MCP 連接器",
+	"No connectors yet.": "還沒有連接器。",
+	"Tools unreadable": "讀不到工具",
+	"(the URL cannot be parsed)": "（無法解析網址）",
+	"Add connector": "新增連接器",
+	"Add an MCP connector": "新增 MCP 連接器",
+	"Edit purpose": "編輯用途",
+	"Edit purpose of {name}": "編輯 {name} 的用途",
+	"Remove connector": "移除連接器",
+	"Remove {name} and its token? From the next message on, the knights no longer use it.":
+		"要移除 {name} 和它的權杖嗎？從下一則訊息起，騎士不再使用它。",
+	"Removed {name}.": "已移除 {name}。",
+	"Added {name}.": "已新增 {name}。",
+	"Added {name}. Left out tools whose names are too long: {tools}":
+		"已新增 {name}。名稱太長而略過的工具：{tools}",
+	Purpose: "用途",
+	"Purpose updated.": "用途已更新。",
+	"From the next message on, the knights follow the new purpose.":
+		"從下一則訊息起，騎士會依照新的用途。",
+	"Lowercase letters, digits and -, up to 12; it becomes the prefix of its tool names.":
+		"小寫英文字母、數字和 -，最多 12 個字元；會成為它的工具名稱前綴。",
+	"MCP URL": "MCP 網址",
+	"A Streamable HTTP endpoint; one ending in /sse uses SSE. A credential may be part of the URL.":
+		"Streamable HTTP 端點；以 /sse 結尾的使用 SSE。憑證可以放在網址裡。",
+	"The knights decide from this text when to use the connector.":
+		"騎士依這段文字決定何時使用這個連接器。",
+	"Header name (optional)": "標頭名稱（選填）",
+	"Leave empty to send Authorization: Bearer <token>.":
+		"留空則送出 Authorization: Bearer <token>。",
+	"Token (optional)": "權杖（選填）",
+	"Stored encrypted by the gateway and never shown again; leave empty if the credential is in the URL.":
+		"由閘道加密保存，之後不會再顯示；憑證若在網址裡就留空。",
+	"MCP authorizations": "MCP 授權",
+	"Which channels outside AI clients may use through each bundle's MCP URL, and with which operations.":
+		"外部 AI 用戶端可以透過各組合的 MCP 網址使用哪些頻道，以及可做哪些操作。",
+	"Authorize a channel": "授權頻道",
+	"There are no authorizations yet.": "還沒有任何授權。",
+	"New URL": "換新網址",
+	"No channels": "沒有頻道",
+	"Not visible now": "目前看不到",
+	"No purpose set.": "未設定用途。",
+	"Allowed: {operations}": "允許：{operations}",
+	"Recent activity": "最近紀錄",
+	"Rename / purpose": "名稱／用途",
+	Revoke: "撤銷",
+	"Revoke the channel": "撤銷頻道",
+	"Revoked.": "已撤銷。",
+	"Remove {channel} from bundle {bundle}? Its other channels and its URL keep working; operations already sent are not undone.":
+		"要把 {channel} 從組合 {bundle} 移除嗎？它的其他頻道和網址照常運作；已送出的操作不會復原。",
+	"Replace the MCP URL": "更換 MCP 網址",
+	"Replace URL": "更換網址",
+	"Replace the URL of bundle {bundle}? The old URL stops working at once; every channel setting stays.":
+		"要更換組合 {bundle} 的網址嗎？舊網址立即失效；所有頻道設定都會保留。",
+	"MCP URL of {bundle}": "{bundle} 的 MCP 網址",
+	"This URL is the access credential and is shown only this once. Add a remote MCP server in the AI client and paste it; no separate token is needed.":
+		"這個網址就是存取憑證，只會顯示這一次。在 AI 用戶端新增遠端 MCP 伺服器並貼上它，不需要另外的權杖。",
+	"Allowed operations": "允許的操作",
+	"Authorized the channel in {bundle}.": "已在 {bundle} 授權這個頻道。",
+	Bundle: "組合",
+	"New bundle…": "新組合…",
+	"New bundle name": "新組合名稱",
+	"Channels in one bundle share one MCP URL.":
+		"同一組合的頻道共用一個 MCP 網址。",
+	Channel: "頻道",
+	"Name outside AI clients see (optional)": "外部 AI 用戶端看到的名稱（選填）",
+	"Name outside AI clients see": "外部 AI 用戶端看到的名稱",
+	"Purpose (optional)": "用途（選填）",
+	Authorize: "授權",
+	"Updated what outside AI clients see.": "已更新外部 AI 用戶端看到的內容。",
+	"What outside AI clients see": "外部 AI 用戶端看到的內容",
+	"The channel's name and topic on Discord stay as they are.":
+		"頻道在 Discord 上的名稱和主題維持不變。",
 
 	// 對話
 	"{count} archived": "已封存 {count} 筆",
@@ -873,6 +945,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"The push endpoint must have no credentials, port or fragment.":
 		"推播端點不可包含帳密、連接埠或片段。",
 	"That push service is not allowed.": "不允許使用這個推播服務。",
+	"The MCP authorization service did not respond. Try again later.":
+		"MCP 授權服務沒有回應，請稍後再試。",
 	"The connector service did not respond. Try again later.":
 		"連接器服務沒有回應，請稍後再試。",
 	"The console could not complete the request.": "主控台無法完成這個請求。",
