@@ -29,6 +29,12 @@ import {
 	setTableMode,
 	tableModeOf,
 } from "./lib/table-mode.ts";
+import { DIALOGUE_FOLD_CSS } from "./lib/table-page-style.ts";
+import {
+	DIALOGUE_FOLDED_KEY,
+	resetTableView,
+	setDialogueFolded,
+} from "./lib/table-view.ts";
 
 const SCOUT = "app:agent.lena";
 const MASON = "app:agent.otto";
@@ -141,6 +147,8 @@ afterEach(async () => {
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	clearDrafts();
+	localStorage.removeItem(DIALOGUE_FOLDED_KEY);
+	resetTableView();
 });
 
 const settle = (ms = 80) =>
@@ -364,29 +372,81 @@ test("the Log button opens the room's whole message list over the scene", async 
 	);
 });
 
-test("the box's last button hides it with a chevron and says so, and the chevron turns to bring it back; no second dots stand beside More", async () => {
+test("the box's last button folds it, labelled, and the folded box is one bar that a tap opens again; the choice stays on the device", async () => {
 	await render(SCOUT);
 	await arrive();
-	const hide = () => query<HTMLButtonElement>(".scene-collapse");
+	const toggle = () => query<HTMLButtonElement>(".scene-collapse");
 	const shape = (button: Element | null) =>
 		button?.querySelector("path")?.getAttribute("d");
-	const turn = () => hide()?.querySelector("svg")?.style.rotate;
-	// A chevron, not the dots of More or the vertical dots the button had.
-	expect(shape(hide())).toBe("M9 6l6 6-6 6");
-	expect(shape(hide())).not.toBe(shape(query(".scene-more")));
-	expect(shape(hide())).not.toBe("M12 5h.01M12 12h.01M12 19h.01");
-	// It points down while the box is up: it tucks it away.
+	const turn = () => toggle()?.querySelector("svg")?.style.rotate;
+	// A chevron with words beside it, not the dots of More.
+	expect(shape(toggle())).toBe("M9 6l6 6-6 6");
+	expect(shape(toggle())).not.toBe(shape(query(".scene-more")));
+	expect(toggle()?.textContent).toBe("Collapse dialogue");
 	expect(turn()).toBe("90deg");
-	expect(hide()?.getAttribute("aria-label")).toBe("Hide the message box");
-	expect(hide()?.getAttribute("title")).toBe("Hide the message box");
-	expect(hide()?.getAttribute("aria-expanded")).toBe("true");
-	await page.click(hide());
-	expect(query(".scene-box")?.hasAttribute("data-collapsed")).toBe(true);
-	// And up once it is tucked away: it brings it back.
+	expect(toggle()?.getAttribute("aria-expanded")).toBe("true");
+	expect(query(".scene-bar")).toBeNull();
+	await page.click(toggle());
+	const box = query(".scene-box");
+	expect(box?.hasAttribute("data-collapsed")).toBe(true);
+	// Folded, nothing but the bar shows: no tab, no line, no strip; the composer keeps its text out of sight.
+	expect(query(".scene-tab")).toBeNull();
+	expect(query(".scene-body")).toBeNull();
+	expect(query(".order-strip")).toBeNull();
+	expect(query<HTMLElement>(".scene-composer")?.hidden).toBe(true);
+	const bar = query(".scene-bar");
+	expect(bar?.querySelector(".scene-bar-name")?.textContent).toBe("Lena");
+	expect(bar?.querySelector(".scene-bar-preview")?.textContent).toBe(
+		"Found three leads.",
+	);
+	// The button on the bar says it opens the box, and the chevron turns.
+	expect(toggle()?.closest(".scene-bar")).toBe(bar);
+	expect(toggle()?.textContent).toBe("Expand dialogue");
 	expect(turn()).toBe("-90deg");
-	expect(hide()?.getAttribute("aria-label")).toBe("Show the message box");
-	expect(hide()?.getAttribute("title")).toBe("Show the message box");
-	expect(hide()?.getAttribute("aria-expanded")).toBe("false");
+	expect(toggle()?.getAttribute("aria-expanded")).toBe("false");
+	expect(localStorage.getItem(DIALOGUE_FOLDED_KEY)).toBe("1");
+	// A page that comes back to it finds it folded.
+	resetTableView();
+	await page.render(null);
+	await render(SCOUT);
+	await arrive();
+	expect(query(".scene-bar")).not.toBeNull();
+	// A tap anywhere on the bar opens the box.
+	await page.click(query(".scene-bar-preview"));
+	expect(query(".scene-bar")).toBeNull();
+	expect(query(".scene-box")?.hasAttribute("data-collapsed")).toBe(false);
+	expect(query(".scene-body")).not.toBeNull();
+	expect(toggle()?.getAttribute("aria-expanded")).toBe("true");
+	expect(localStorage.getItem(DIALOGUE_FOLDED_KEY)).toBe("0");
+	// The bar's own button opens it too, once.
+	await page.click(toggle());
+	await page.click(toggle());
+	expect(query(".scene-bar")).toBeNull();
+});
+
+test("on an upright phone a folded box gives the scene its height: the frame says so, and the box's row is only as tall as the bar", async () => {
+	setDialogueFolded(true);
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [agent("lena", "Lena"), agent("otto", "\u6885\u68ee"), crew()],
+	});
+	await page.render(
+		<ConfigContext.Provider value={config}>
+			<GroupScene roomKey={CREW} members={["lena", "otto"]} />
+		</ConfigContext.Provider>,
+	);
+	await arrive();
+	expect(query(".room-scene")?.hasAttribute("data-folded")).toBe(true);
+	const portrait = DIALOGUE_FOLD_CSS.slice(
+		DIALOGUE_FOLD_CSS.indexOf(
+			"@media (max-width: 719px) and (orientation: portrait)",
+		),
+	);
+	expect(portrait).toContain(
+		".table-frame[data-focused][data-folded] {\n\t\tgrid-template-rows: minmax(0, 1fr) auto;",
+	);
+	await page.click(query(".scene-collapse"));
+	expect(query(".room-scene")?.hasAttribute("data-folded")).toBe(false);
 });
 
 const CREW = "app:group.crew";

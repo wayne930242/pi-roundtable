@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { followFocus, speakerOf } from "../lib/dialogue.ts";
 import { speakerOfRound } from "../lib/round-view.ts";
+import { useDialogueFolded } from "../lib/table-view.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
 import { DialogueBox, useRoomLine } from "./dialogue-box.tsx";
 import { OrderStrip } from "./order-strip.tsx";
@@ -44,12 +45,20 @@ export function GroupStage(props: {
 	focus: string | null;
 	onLook(member: string | null): void;
 	streams?: boolean;
+	/** A message sent from the box closes a phone's keyboard. */
+	blurAfterSend?: boolean;
 	onHandle?(handle: TableHandle | undefined): void;
 	onSeatMenu?(request: SeatMenuRequest): void;
 }) {
 	const { roomKey, members } = props;
+	// A folded box is a bar: the scene takes the height it gave back.
+	const [folded] = useDialogueFolded();
 	return (
-		<div className="table-frame room-scene" data-focused="">
+		<div
+			className="table-frame room-scene"
+			data-focused=""
+			data-folded={folded || undefined}
+		>
 			<RoundTable
 				members={members}
 				groupRoom={roomKey}
@@ -64,6 +73,7 @@ export function GroupStage(props: {
 				roomKey={roomKey}
 				open
 				streams={props.streams ?? false}
+				blurAfterSend={props.blurAfterSend === true}
 				strip={<OrderStrip roomKey={roomKey} />}
 			/>
 		</div>

@@ -16,11 +16,12 @@ import {
 	createExpressionSwaps,
 	type ExpressionSwaps,
 	type GroupRound,
-	seatPicture,
+	seatPictures,
 	seatStates,
 	seatUid,
 } from "../lib/seats.ts";
 import { useSkins } from "../lib/skins.ts";
+import { useVoices } from "../lib/voices.ts";
 import { MAX_SEATED } from "../table/camera.ts";
 import type {
 	SeatInit,
@@ -97,11 +98,13 @@ export function useAgents(): RoomView[] {
 
 /**
  * The rounds of the group rooms that count for this table: one group's, or every group's. The member
- * a running round says speaks is the speaker, since the room's `agent` only names the author of the
- * last reply.
+ * a running round says speaks is the one whose turn runs, since the room's `agent` only names the
+ * author of the last reply. The voice is the member whose words the room's dialogue box reveals, or,
+ * where no box speaks (a room page's strip), the member whose words stream in now.
  */
 function useRounds(groupRoom: string | undefined): GroupRound[] {
-	return useSelector(
+	const voices = useVoices();
+	const rounds = useSelector(
 		(state) =>
 			Object.values(state.rooms)
 				.filter((room) =>
@@ -110,12 +113,23 @@ function useRounds(groupRoom: string | undefined): GroupRound[] {
 				.map((room) => {
 					const speaking = speakerOfRound(room.round);
 					const agent = speaking ?? room.agent;
+					const streaming = room.typing && room.progress.text !== "";
 					return {
+						key: room.key,
 						typing: room.typing || speaking !== undefined,
 						...(agent === undefined ? {} : { agent }),
+						...(streaming && agent !== undefined ? { streamer: agent } : {}),
 					};
 				}),
 		groupRoom ?? "",
+	);
+	return useMemo(
+		() =>
+			rounds.map(({ key, streamer, ...round }) => {
+				const voice = voices[key] ?? streamer;
+				return voice === undefined ? round : { ...round, voice };
+			}),
+		[rounds, voices],
 	);
 }
 
@@ -205,7 +219,7 @@ export function RoundTable(props: RoundTableProps) {
 				id: view.name,
 				name: view.displayName,
 				color: kit.accentOf(spec, style.look),
-				avatarSvg: seatPicture(
+				...seatPictures(
 					kit,
 					spec,
 					style.look,
@@ -259,17 +273,15 @@ export function RoundTable(props: RoundTableProps) {
 				const kitNow = kitRef.current;
 				const index = rosterRef.current.findIndex((view) => view.name === id);
 				if (!spec || !kitNow || index < 0) return;
-				void table?.setAvatar(
-					id,
-					seatPicture(
-						kitNow,
-						spec,
-						styleRef.current.look,
-						state,
-						seatUid(index, id),
-						skinsRef.current,
-					),
+				const { avatarSvg, talkSvg } = seatPictures(
+					kitNow,
+					spec,
+					styleRef.current.look,
+					state,
+					seatUid(index, id),
+					skinsRef.current,
 				);
+				void table?.setAvatar(id, avatarSvg, talkSvg);
 			},
 		});
 		swaps.current = exchange;

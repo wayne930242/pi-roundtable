@@ -65,6 +65,8 @@ export function Composer(props: {
 	stopLabel?: string;
 	/** Hears whether the person is addressing the agent with a leading `@AI`, as it starts and stops. */
 	onAddressed?(addressed: boolean): void;
+	/** A sent message leaves the box (a phone's keyboard closes, so the answer has the screen); without it the box keeps the focus for the next one. */
+	blurAfterSend?: boolean;
 	/** Files dropped on the room come here as the composer's own. */
 	incoming?: File[];
 	onIncomingTaken?(): void;
@@ -220,6 +222,7 @@ export function Composer(props: {
 		}
 		sendingNow.current = true;
 		setSending(true);
+		let sent = false;
 		try {
 			// Long texts become files now, in the order they were added, the overflow last.
 			const uploads = await uploadForSend(files, plan.overflow, {
@@ -233,12 +236,13 @@ export function Composer(props: {
 			);
 			setText("");
 			setFiles(() => []);
+			sent = true;
 		} catch (failure) {
 			toast(messageOf(failure), "danger");
 		} finally {
 			sendingNow.current = false;
 			setSending(false);
-			area.current?.focus();
+			area.current?.[sent && props.blurAfterSend ? "blur" : "focus"]();
 		}
 	};
 

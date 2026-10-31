@@ -1,6 +1,8 @@
 import { lazy, Suspense, useContext, useEffect, useState } from "react";
 import type { RoomView } from "../../src/api-types.ts";
+import { Composer } from "../components/composer.tsx";
 import { GroupStage, useGroupFocus } from "../components/group-scene.tsx";
+import { RoomChat } from "../components/room-chat.tsx";
 import {
 	RoundTable,
 	useAgents,
@@ -16,10 +18,16 @@ import {
 	useHostSeatsSync,
 } from "../lib/host-seats.ts";
 import type { Via } from "../lib/long-press.ts";
+import { useMedia } from "../lib/media.ts";
 import { seatMenuOf } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
 import { navigate } from "../lib/router.ts";
+import { useConnection } from "../lib/socket.ts";
+import { installTablePageStyle } from "../lib/table-page-style.ts";
+import { type TablePageMode, useTablePageMode } from "../lib/table-view.ts";
 import type { SeatMenuRequest, TableHandle } from "../table/entry.ts";
+
+installTablePageStyle();
 
 // Who sits is chosen in a sheet that loads when it is first asked for.
 const CouncilSheet = lazy(() =>
@@ -41,6 +49,81 @@ function openSeatMenu(
 			if (spec) openMenu({ ...spec, at, via, source });
 		},
 		() => undefined,
+	);
+}
+
+/** A phone's screen, narrow or touched: a message sent from the table closes its keyboard, so the answer has the screen. */
+function usePhone(): boolean {
+	const narrow = useMedia("(max-width: 719px)");
+	const touch = useMedia("(pointer: coarse)");
+	return narrow || touch;
+}
+
+/**
+ * The council's room as a chat, for the table page's chat mode: its messages and cards as the room's
+ * own page lists them, and the same composer, whose unsent text the scene's box shares. The page
+ * streams the room's progress here as the scene's box would.
+ */
+function CouncilChat({ roomKey, name }: { roomKey: string; name: string }) {
+	const connection = useConnection();
+	const phone = usePhone();
+	const room = useSelector((state) => state.rooms[roomKey]);
+	const limits = useSelector((state) => state.limits);
+	useEffect(() => {
+		connection.focus(roomKey);
+		return () => connection.focus(undefined);
+	}, [connection, roomKey]);
+	return (
+		<div className="table-chat">
+			<RoomChat
+				roomKey={roomKey}
+				name={name}
+				composer={(toEnd) =>
+					room?.view?.readOnly ? null : (
+						<Composer
+							key={roomKey}
+							draftKey={roomKey}
+							name={name}
+							limits={limits}
+							stoppable={Boolean(room?.stoppable)}
+							stopLabel={t("Stop the round")}
+							blurAfterSend={phone}
+							onSend={(text, files) => {
+								connection.say(roomKey, text, files);
+								toEnd(true);
+							}}
+							onStop={() => connection.send({ type: "stop", room: roomKey })}
+						/>
+					)
+				}
+			/>
+		</div>
+	);
+}
+
+/** The switch between the scene with its dialogue box and the council's messages as a chat. */
+function ModeSwitch(props: {
+	mode: TablePageMode;
+	onMode(mode: TablePageMode): void;
+}) {
+	const option = (mode: TablePageMode, label: string) => (
+		<label data-checked={props.mode === mode}>
+			<input
+				type="radio"
+				name="table-mode"
+				value={mode}
+				checked={props.mode === mode}
+				onChange={() => props.onMode(mode)}
+			/>
+			{label}
+		</label>
+	);
+	return (
+		<fieldset className="segmented table-mode">
+			<legend className="visually-hidden">{t("Show the council as")}</legend>
+			{option("scene", t("Animation mode"))}
+			{option("chat", t("Chat mode"))}
+		</fieldset>
 	);
 }
 
@@ -125,7 +208,8 @@ function HostedTable({ focus }: { focus: string | undefined }) {
  * which has the private chat. The council sheet picks, edits and saves councils.
  *
  * The address `#/table/<group>` is the council; without one the table shows the council this device
- * looked at last, or the first group.
+ * looked at last, or the first group. The page plays the scene or, in chat mode, lists the council's
+ * messages as a chat; the device keeps the choice.
  */
 function CouncilTable({ named }: { named: string | undefined }) {
 	const [table, setTable] = useState<TableHandle>();
@@ -138,6 +222,8 @@ function CouncilTable({ named }: { named: string | undefined }) {
 	const agents = useAgents();
 	const { focus, look } = useGroupFocus(council?.key ?? "", members);
 	const [choosing, setChoosing] = useState(false);
+	const [mode, setMode] = useTablePageMode();
+	const phone = usePhone();
 	// Mounted when first asked for and kept, so the sheet can slide away.
 	const [asked, setAsked] = useState(false);
 	const choose = () => {
@@ -165,6 +251,9 @@ function CouncilTable({ named }: { named: string | undefined }) {
 							{t("Reset view")}
 						</button>
 					) : null}
+					{council && seated ? (
+						<ModeSwitch mode={mode} onMode={setMode} />
+					) : null}
 					{agents.length > 0 ? (
 						<button
 							type="button"
@@ -179,13 +268,16 @@ function CouncilTable({ named }: { named: string | undefined }) {
 					) : null}
 				</div>
 			</header>
-			{council && seated ? (
+			{council && seated && mode === "chat" ? (
+				<CouncilChat roomKey={council.key} name={council.displayName} />
+			) : council && seated ? (
 				<GroupStage
 					roomKey={council.key}
 					members={members}
 					focus={focus}
 					onLook={look}
 					streams
+					blurAfterSend={phone}
 					onHandle={setTable}
 					onSeatMenu={(request: SeatMenuRequest) => {
 						const one = roster.find((view) => view.name === request.id);
@@ -209,7 +301,7 @@ function CouncilTable({ named }: { named: string | undefined }) {
 							{council
 								? t("Every member of this council is gone. Edit who sits.")
 								: t(
-										"A council is a group of up to {max} knights who answer in turn. Pick who sits.",
+										"A council is a group of up to {max} knights who answer in turn.",
 										{ max: 8 },
 									)}
 						</p>

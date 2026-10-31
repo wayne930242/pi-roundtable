@@ -559,10 +559,6 @@
 	flex: none;
 	border-top: 1px solid var(--border);
 }
-.scene-box[data-collapsed] .scene-body,
-.scene-box[data-collapsed] .scene-composer {
-	display: none;
-}
 .scene-log {
 	max-height: 70dvh;
 	overflow: auto;

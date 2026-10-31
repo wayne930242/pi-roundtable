@@ -253,14 +253,36 @@ test("under Camelot a group room renders the compact strip, lit on its speaker",
 	);
 	await settle();
 	expect(query('[data-variant="compact"]')).not.toBeNull();
-	const states = Object.fromEntries(
-		all("g.seat").map((seat) => [
-			seat.getAttribute("aria-label")?.split(" ")[0],
-			seat.getAttribute("data-state"),
-		]),
-	);
-	// Only the group's members sit in the strip, and the one the round names speaks.
-	expect(states).toEqual({ scout: "idle", mason: "speaking" });
+	const states = () =>
+		Object.fromEntries(
+			all("g.seat").map((seat) => [
+				seat.getAttribute("aria-label")?.split(" ")[0],
+				seat.getAttribute("data-state"),
+			]),
+		);
+	// Only the group's members sit in the strip; the one whose turn runs thinks until its words come.
+	expect(states()).toEqual({ scout: "idle", mason: "thinking" });
+	// Its words stream into the room: it speaks.
+	await page.act(() => {
+		store.dispatch({ type: "focused", room: "app:group.crew" });
+		store.dispatch({
+			type: "progress",
+			room: "app:group.crew",
+			event: { type: "text", delta: "Here is what I found." },
+		});
+	});
+	await settle();
+	expect(states()).toEqual({ scout: "idle", mason: "speaking" });
+	// the turn ends: what streamed goes with it, and so does the room's focus
+	await page.act(() => {
+		store.dispatch({
+			type: "activity",
+			room: "app:group.crew",
+			typing: false,
+			stoppable: false,
+		});
+		store.dispatch({ type: "focused", room: undefined });
+	});
 });
 
 test("under modern the strip is collapsed, and the Table button switches the room to the scene and back", async () => {

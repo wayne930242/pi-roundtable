@@ -30,6 +30,11 @@ export type CharacterLook =
 export interface ComposeOptions {
 	/** Default `STATE_EXPRESSION[state ?? "idle"]`. */
 	expr?: Expression;
+	/**
+	 * The mouth drawn open or closed in place of the expression's own, for the frames of a talking
+	 * figure; the expression's own mouth when absent.
+	 */
+	mouth?: "open" | "closed";
 	/** With `still`: which overlay is baked in. Live output carries every overlay. */
 	state?: AvatarState;
 	/** Background and ring only. Default `"modern-light"`. */
@@ -55,6 +60,7 @@ export interface ComposeOptions {
 
 const LOOKS = ["modern-light", "modern-dark", "camelot-light", "camelot-dark"];
 const FRAMES = ["disc", "shield"] as const;
+const MOUTHS = ["open", "closed"] as const;
 const UID = /^[a-z0-9]{1,16}$/;
 const MAX_LABEL = 200;
 const MAX_SIZE = 4096;
@@ -174,6 +180,10 @@ export function composeSvg(
 		"look",
 	) as CharacterLook;
 	const frame = checkOneOf(FRAMES, options.frame ?? "disc", "frame");
+	const mouth =
+		options.mouth === undefined
+			? undefined
+			: checkOneOf(MOUTHS, options.mouth, "mouth");
 	const uid = options.uid ?? "a";
 	if (typeof uid !== "string" || !UID.test(uid))
 		throw new CharacterError("uid", "must match /^[a-z0-9]{1,16}$/");
@@ -203,6 +213,7 @@ export function composeSvg(
 	const face = faceParts(
 		{ ink: INK, brow: mix(s.hairColor, INK, 0.5), dot: mix(tones.p, INK, 0.1) },
 		expr,
+		mouth,
 	);
 
 	const hair = HAIR[s.hair](tones);

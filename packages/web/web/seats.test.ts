@@ -9,6 +9,7 @@ import {
 	createExpressionSwaps,
 	seatExpressionOf,
 	seatPicture,
+	seatPictures,
 	seatStateOf,
 	seatStates,
 } from "./lib/seats.ts";
@@ -31,12 +32,39 @@ describe("seatStateOf", () => {
 describe("seatStates", () => {
 	const agents = { a: "idle", b: "working", c: "sleepy" } as const;
 
-	test("a group room typing with agent b lights b as speaking", () => {
-		const states = seatStates(agents, [{ typing: true, agent: "b" }]);
-		expect(states).toEqual({ a: "idle", b: "speaking", c: "idle" });
+	test("a running turn keeps its member thinking, or working when its presence says so, with no light", () => {
+		expect(seatStates(agents, [{ typing: true, agent: "a" }])).toEqual({
+			a: "thinking",
+			b: "working",
+			c: "idle",
+		});
+		expect(seatStates(agents, [{ typing: true, agent: "b" }]).b).toBe(
+			"working",
+		);
 	});
 
-	test("a group room that is not typing lights nobody", () => {
+	test("thinking, then speaking only while the box reveals the member's words, then idle", () => {
+		const timeline = [
+			// the turn starts: no words yet
+			{ typing: true, agent: "a" },
+			// the words stream into the box
+			{ typing: true, agent: "a", voice: "a" },
+			// the turn ended, and the last of its words still type out
+			{ typing: false, agent: "a", voice: "a" },
+			// everything shows
+			{ typing: false, agent: "a" },
+		].map((round) => seatStates(agents, [round]).a);
+		expect(timeline).toEqual(["thinking", "speaking", "speaking", "idle"]);
+	});
+
+	test("the member whose words still show speaks while the next member's turn thinks", () => {
+		const states = seatStates(agents, [
+			{ typing: true, agent: "a", voice: "b" },
+		]);
+		expect(states).toEqual({ a: "thinking", b: "speaking", c: "idle" });
+	});
+
+	test("a group room that is not typing and reveals nothing lights nobody", () => {
 		expect(seatStates(agents, [{ typing: false, agent: "b" }])).toEqual({
 			a: "idle",
 			b: "working",
@@ -44,19 +72,18 @@ describe("seatStates", () => {
 		});
 	});
 
-	test("a speaker who has no seat is ignored", () => {
-		expect(seatStates(agents, [{ typing: true, agent: "zed" }])).toEqual({
-			a: "idle",
-			b: "working",
-			c: "idle",
-		});
+	test("a member who has no seat is ignored", () => {
+		expect(
+			seatStates(agents, [{ typing: true, agent: "zed", voice: "zed" }]),
+		).toEqual({ a: "idle", b: "working", c: "idle" });
 	});
 
-	test("a waiting card still shows under a speaking round: speaking wins only over quiet states", () => {
-		const states = seatStates({ a: "waiting", b: "idle" }, [
-			{ typing: true, agent: "a" },
+	test("a waiting card or a failure still shows over a turn and over the member's words", () => {
+		const states = seatStates({ a: "waiting", b: "error" }, [
+			{ typing: true, agent: "a", voice: "a" },
+			{ typing: true, agent: "b", voice: "b" },
 		]);
-		expect(states.a).toBe("waiting");
+		expect(states).toEqual({ a: "waiting", b: "error" });
 	});
 });
 
@@ -203,5 +230,27 @@ describe("seatPicture", () => {
 		expect(svg).toContain('viewBox="-7 -3 114 100"');
 		expect(svg).toContain('width="256" height="225"');
 		expect(svg).not.toContain('viewBox="0 0 100 100"');
+	});
+
+	test("a speaker has a closed and an open mouth to alternate; other states have one picture", async () => {
+		const kit = await loadKit();
+		const mouthOf = (svg: string) =>
+			svg.match(/<g class="mouth"[^>]*>(.*?)<\/g>/)?.[1];
+		const quiet = seatPictures(kit, knight, "camelot-dark", "thinking", "s0");
+		expect(quiet.talkSvg).toBeUndefined();
+		const speaking = seatPictures(
+			kit,
+			knight,
+			"camelot-dark",
+			"speaking",
+			"s0",
+		);
+		expect(speaking.talkSvg).toBeDefined();
+		const closed = mouthOf(speaking.avatarSvg);
+		const open = mouthOf(speaking.talkSvg ?? "");
+		expect(closed).toContain("<path");
+		expect(closed).not.toContain("<ellipse");
+		expect(open).not.toBe(closed);
+		expect(open).toContain('fill="#');
 	});
 });

@@ -176,6 +176,42 @@ export function createReveal(): Reveal {
 	};
 }
 
+/**
+ * Who speaks in the box now: the agent whose words are being revealed, or still streaming in
+ * (`streamer`, the member the room streams for, names who is writing them). Nobody while the turn
+ * only thinks or runs its tools, and nobody once the words stand whole.
+ */
+export function voiceOf(
+	line: Pick<Line, "who" | "agent" | "live"> | undefined,
+	revealing: boolean,
+	streamer: string | undefined,
+): string | undefined {
+	if (line?.who !== "agent") return undefined;
+	if (line.live && streamer !== undefined) return streamer;
+	return revealing ? line.agent : undefined;
+}
+
+/**
+ * What the folded dialogue box shows of a line: its first line of words, without the marks of
+ * Markdown, cut to `max` characters.
+ */
+export function linePreview(text: string, max = 80): string {
+	const line =
+		text
+			.split("\n")
+			.map((one) =>
+				one
+					.replace(/^\s*(?:#{1,6}\s|>\s?|[-*+]\s|\d+\.\s)+/, "")
+					.replace(/[*_`~]/g, "")
+					.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+					.replace(/\s+/g, " ")
+					.trim(),
+			)
+			.find((one) => one !== "") ?? "";
+	const chars = Array.from(line);
+	return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : line;
+}
+
 /** The first `count` characters of a text, never half of a surrogate pair. */
 export const sliceChars = (text: string, count: number): string =>
 	Array.from(text).slice(0, count).join("");
