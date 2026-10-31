@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A group round answers only the members a person's message names. When the text (or the quoted text of a reply) mentions one or more members with `@display name` or `@name`, those members answer and nobody is scored, so a high-scoring member that was not named no longer joins. A reply target and a seat holding an action the speaker may approve still answer as before, handoffs by `@` inside a member's reply keep working, and a message that names no one is scored and planned as it was. This applies wherever group rounds run: Discord channels and web rooms.
+
 ## [0.29.2] - 2026-10-31
 
 - Release for the web package's changes (see its changelog); no core behavior changes.

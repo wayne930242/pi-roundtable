@@ -83,10 +83,10 @@ describeDb("PostgreSQL", () => {
 			);
 		});
 
-		test("a mentioned member speaks whatever its score; replying to one counts too", async () => {
+		test("a message that names a member is answered by it alone, whatever the scores; replying to one counts too", async () => {
 			script.scores = { coordinator: 0.1, infra: 0.9, doctor: 0.05 };
 			await round("@Doctor what do you think");
-			expect(speakers()).toEqual(["doctor", "infra"]);
+			expect(speakers()).toEqual(["doctor"]);
 			fx.runtime.turns = [];
 			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
 			await round("and this one", "Infra");

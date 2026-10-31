@@ -74,8 +74,9 @@ export class GroupTurns {
 	}
 
 	/**
-	 * One owner message in a group channel: scored, then answered by the chosen members one at
-	 * a time, each seeing every group message since its last turn. Call inside the queue.
+	 * One owner message in a group channel: answered by the members it names, or else scored and
+	 * answered by the chosen members, one at a time, each seeing every group message since its last
+	 * turn. Call inside the queue.
 	 */
 	async answerGroup(
 		channel: ChannelKey,
@@ -102,7 +103,8 @@ export class GroupTurns {
 			text,
 		});
 
-		const forced = new Set(mentionedMembers(replyText, members));
+		const named = mentionedMembers(replyText, members);
+		const forced = new Set(named);
 		const repliedTo = members.find((m) => m.displayName === repliedToName);
 		if (repliedTo) forced.add(repliedTo.name);
 		const approvals = new Map<string, boolean>();
@@ -118,8 +120,10 @@ export class GroupTurns {
 				await confirmations.approves(pending, replyText),
 			);
 		}
+		// A message that names members is answered by them alone (and by a seat forced by a held
+		// approval or a reply target), so nobody is scored.
 		const scores =
-			forced.size === members.length
+			named.length > 0 || forced.size === members.length
 				? undefined
 				: await scorer.score(members, recent, text);
 		const order = planRound({
