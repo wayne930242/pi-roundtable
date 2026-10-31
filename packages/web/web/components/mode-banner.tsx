@@ -6,7 +6,8 @@ import { Icon } from "./icons.tsx";
 
 /**
  * The strip that stays at the top of a room while yolo or long-running mode is on, so the person
- * is never unsure why a card did not come. Each line has its own way out.
+ * is never unsure why a card did not come. Each line has its own way out, except in a room whose
+ * modes are inherited (a temp knight's): it says where they come from, the place to switch them.
  */
 export function ModeBanner(props: {
 	room: string;
@@ -14,6 +15,7 @@ export function ModeBanner(props: {
 	approved: number;
 }) {
 	const { mode } = props;
+	const inherited = mode?.inheritedFrom;
 	const [busy, setBusy] = useState<"yolo" | "longRunning">();
 	const turnOff = async (which: "yolo" | "longRunning") => {
 		setBusy(which);
@@ -39,14 +41,16 @@ export function ModeBanner(props: {
 									? ` · ${t("{count} approved", { count: props.approved })}`
 									: ""}
 							</span>
-							<button
-								type="button"
-								className="link-button"
-								disabled={busy === "yolo"}
-								onClick={() => turnOff("yolo")}
-							>
-								{t("Turn off")}
-							</button>
+							{inherited === undefined ? (
+								<button
+									type="button"
+									className="link-button"
+									disabled={busy === "yolo"}
+									onClick={() => turnOff("yolo")}
+								>
+									{t("Turn off")}
+								</button>
+							) : null}
 						</div>
 					) : null}
 					{mode?.longRunning ? (
@@ -59,14 +63,21 @@ export function ModeBanner(props: {
 						>
 							<Icon name="timer" size={16} />
 							<span>{t("Long-running on")}</span>
-							<button
-								type="button"
-								className="link-button"
-								disabled={busy === "longRunning"}
-								onClick={() => turnOff("longRunning")}
-							>
-								{t("Turn off")}
-							</button>
+							{inherited === undefined ? (
+								<button
+									type="button"
+									className="link-button"
+									disabled={busy === "longRunning"}
+									onClick={() => turnOff("longRunning")}
+								>
+									{t("Turn off")}
+								</button>
+							) : null}
+						</div>
+					) : null}
+					{inherited !== undefined ? (
+						<div className="mode-line" data-mode="inherited">
+							<span>{t("Inherited from {name}", { name: inherited })}</span>
 						</div>
 					) : null}
 				</div>

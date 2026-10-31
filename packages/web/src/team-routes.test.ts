@@ -206,9 +206,8 @@ function setup(withSkills = true) {
 		uploads: {} as never,
 		files: {} as never,
 		modes: {
-			set: async (room: string) => {
+			forget: async (room: string) => {
 				calls.push(`modes reset ${room}`);
-				return { yolo: false, longRunning: false };
 			},
 		} as never,
 		conversations: {} as never,

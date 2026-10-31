@@ -5,6 +5,7 @@ import type {
 	AgentTeam,
 	AvatarStudio,
 	ChannelKey,
+	ConversationMode,
 	ConversationModes,
 } from "pi-roundtable";
 import {
@@ -15,7 +16,18 @@ import {
 	isHelper,
 	roomOf,
 } from "pi-roundtable";
-import type { RoomKind, RoomView } from "../api-types.ts";
+import type { RoomKind, RoomMode, RoomView } from "../api-types.ts";
+
+/** A conversation's modes as a room shows them: an inherited one names where it comes from. */
+export function roomModeOf(mode: ConversationMode): RoomMode {
+	const from = mode.inheritedFrom;
+	return {
+		yolo: mode.yolo,
+		longRunning: mode.longRunning,
+		...(from ? { inheritedFrom: from.name ?? from.channel } : {}),
+	};
+}
+
 import type { PushMutes } from "../push/mutes.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { WebThreads } from "./threads.ts";
@@ -176,12 +188,11 @@ export class Rooms {
 		const thread = await this.#options.threads.get(room.name);
 		if (!thread) return undefined;
 		const { modes, activity, log } = this.#options;
-		const { yolo, longRunning } = modes.peek(key);
 		const last = (await log.lastOf([key])).get(key);
 		return {
 			home: false,
 			readOnly: true,
-			mode: { yolo, longRunning },
+			mode: roomModeOf(modes.peek(key)),
 			...activity(key),
 			kind: "thread",
 			name: thread.id,
@@ -207,11 +218,10 @@ export class Rooms {
 			key: ChannelKey,
 			rest: Pick<RoomView, "kind" | "name" | "displayName"> & Partial<RoomView>,
 		): RoomView => {
-			const { yolo, longRunning } = modes.peek(key);
 			return {
 				home: key === home,
 				readOnly: false,
-				mode: { yolo, longRunning },
+				mode: roomModeOf(modes.peek(key)),
 				...(muted.has(key) ? { muted: true as const } : {}),
 				...(notes && rest.kind !== "thread" ? { notes: true as const } : {}),
 				...activity(key),

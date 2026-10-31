@@ -257,6 +257,29 @@ describe("modes", () => {
 		expect(banner(state, GUIDE)).toBeUndefined();
 	});
 
+	test("a mode frame carries where an inherited mode comes from, and a later one without it drops it", () => {
+		let state = run([READY, { type: "rooms_loaded", rooms: [view(SCOUT)] }]);
+		state = reduce(state, {
+			type: "mode",
+			room: SCOUT,
+			yolo: true,
+			longRunning: false,
+			inheritedFrom: "Guide",
+		});
+		expect(banner(state, SCOUT)).toEqual({
+			yolo: true,
+			longRunning: false,
+			inheritedFrom: "Guide",
+		});
+		state = reduce(state, {
+			type: "mode",
+			room: SCOUT,
+			yolo: true,
+			longRunning: false,
+		});
+		expect(banner(state, SCOUT)).toEqual({ yolo: true, longRunning: false });
+	});
+
 	test("the room list carries each room's mode", () => {
 		const state = run([
 			{

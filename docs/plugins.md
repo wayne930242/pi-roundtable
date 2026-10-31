@@ -473,6 +473,12 @@ modes.peek(channel).longRunning; // true
 
 `set` throws `PluginError` for anyone but an owner, and for the host's own principal (`SYSTEM_PRINCIPAL`), so a webhook or a report turn cannot switch a conversation to run unattended. A change names only the modes it sets. It logs `conversation modes changed` with the channel, both modes and who changed them. `onChange(listener)` hears every change until the function it returns is called; a listener that throws is logged and the rest still hear it.
 
+#### Modes a temp knight inherits
+
+A temp knight's conversations (its Discord thread and its rooms) follow the yolo and long-running modes of the conversation that made it, live: `helper_create` records them with `follow(channels, origin, by)`, and `peek` on each returns the origin's modes with `ConversationMode.inheritedFrom` (`{ channel, name?, gone? }`, `name` the knight's display name). Switching a mode in the knight's conversation applies to its temp knights at once, and `onChange` tells each of their conversations too. `set` refuses a conversation that follows another (`PluginError`), so its modes are switched only where they come from; the web room's banner says "Inherited from <knight>" in place of its switches, and a switch in its menu is refused with that reason. When the origin's agent or group is archived or deleted, the temp knight's modes read off (`gone: true`). The follow is stored in the `follows` column of `conversation_modes` (the migration `conversation-modes-follows`), so it survives a restart; the agent server tells the modes which conversations still follow theirs with `trackOrigins`, so a name an agent takes later follows nothing. A yolo approval in a temp knight's turn names its own conversation in `autoApproved`.
+
+Inheriting adds no permission: an owner turned the modes on in the origin. `follow` takes an owner, as `set` does, so only an owner's turn makes a temp knight follow; a temp knight that a member's turn, or the host's own, made follows nothing and starts with both modes off (`forget(channel)` drops a conversation's modes and what it follows, and needs no speaker since it only turns modes off). A temp knight made before 0.28 keeps the long-running mode it was given.
+
 When a held call is approved by yolo mode, `ApprovedBy.auto` is `"yolo"` (a person's answer never sets it; `ToolTurn.approvedBy` shows it to the tool), and the approver reports it with `autoApproved(entry)`, which logs `held call approved by yolo mode` and tells the `onAutoApproved` listeners, so a surface can show it. What yolo approves, and what it never does, is under [hold classes and yolo mode](#hold-classes-and-yolo-mode).
 
 ## Principals and access
@@ -3099,7 +3105,7 @@ Both tools are on the `member` tier and are offered to every agent that is not i
 A temp knight is a real agent: an ordinary row of the agent table with a nullable `parent` and `finished_at` (the migration `agents-helpers`, additive), its own prompt, picture and sessions, and a name that defaults to `<parent>-<n>`.
 Its model and thinking level are its knight's unless the call names others.
 It has no group seat, and no agent, group, archive, channel-arrange or schedule tools.
-It follows its knight's routing rules, and whether it counts as a long-running conversation follows the conversation that made it.
+It follows its knight's routing rules, and its yolo and long-running modes follow the conversation that made it, live (see [modes a temp knight inherits](#modes-a-temp-knight-inherits)).
 
 | Rule | What happens |
 |---|---|

@@ -76,7 +76,7 @@ export interface TeamApiOptions {
 	log: Pick<RoomLog, "removeRoom">;
 	cards: Pick<CardLog, "removeRoom">;
 	mutes: Pick<PushMutes, "set">;
-	modes: Pick<ConversationModes, "set">;
+	modes: Pick<ConversationModes, "forget">;
 	/** The dispatch threads under a room, which go with it. */
 	threads: Pick<WebThreads, "under" | "removeUnder">;
 	/** The owners' shared arrangement, which drops a deleted room's pin and folder place. */
@@ -467,11 +467,7 @@ export class TeamApi {
 		await cards.removeRoom(room);
 		await mutes.set(room, false, by.principalId);
 		await layout.forget(room);
-		// A name made again later starts with the modes of a new room.
-		await modes.set(
-			room as ChannelKey,
-			{ yolo: false, longRunning: false },
-			by,
-		);
+		// A name made again later starts with the modes of a new room, and follows nothing.
+		await modes.forget(room as ChannelKey);
 	}
 }

@@ -250,6 +250,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} approved": "已核准 {count} 項",
 	"Long-running mode is on: turns go on past their time limit.":
 		"長時間執行模式已開啟：回合可超過時間上限繼續進行。",
+	"Inherited from {name}": "沿用 {name} 的模式",
 	"Long-running on": "長時間執行已開啟",
 	"Turn off": "關閉",
 	"Yolo mode is on: held actions are approved without asking.":
@@ -863,6 +864,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"There is no such API.": "沒有這個 API。",
 	"before and limit must be whole numbers.": "before 與 limit 必須是整數。",
 	"Give yolo or longRunning.": "請提供 yolo 或 longRunning。",
+	"This room follows the modes of the conversation that made it; switch them there.":
+		"這個房間沿用建立它的對話的模式；請到那個對話切換。",
 	"muted must be true or false.": "muted 必須是 true 或 false。",
 	// 分組與置頂
 	"Give the folder a name of 1 to 40 characters.": "分組名稱要 1 到 40 個字。",

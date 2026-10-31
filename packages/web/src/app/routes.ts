@@ -56,7 +56,7 @@ import type { LayoutStore } from "./layout.ts";
 import { LayoutRoutes } from "./layout-routes.ts";
 import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
-import type { ResolvedRoom, Rooms } from "./rooms.ts";
+import { type ResolvedRoom, type Rooms, roomModeOf } from "./rooms.ts";
 import { SkillDocApi } from "./skill-doc-routes.ts";
 import type { AppSurface } from "./surface.ts";
 import { TeamApi } from "./team-routes.ts";
@@ -84,7 +84,7 @@ export interface AppApiOptions {
 	uploads: Uploads;
 	/** Where stored files are read from. */
 	files: FileDir;
-	modes: Pick<ConversationModes, "set" | "peek">;
+	modes: Pick<ConversationModes, "set" | "peek" | "forget">;
 	/** The rooms whose push the owners muted. */
 	mutes: Pick<PushMutes, "set" | "setMany">;
 	/** The dispatch threads, which go with the room they hang under. */
@@ -624,8 +624,12 @@ export class AppApi {
 			}
 			if (Object.keys(change).length === 0)
 				throw bad("Give yolo or longRunning.");
+			if (modes.peek(room.key).inheritedFrom)
+				throw bad(
+					"This room follows the modes of the conversation that made it; switch them there.",
+				);
 			const mode = await modes.set(room.key, change, owner);
-			return json({ mode: { yolo: mode.yolo, longRunning: mode.longRunning } });
+			return json({ mode: roomModeOf(mode) });
 		}
 		if (action === "start-over" && method === "POST" && parts.length === 4) {
 			if (room.readOnly) throw notFound();
