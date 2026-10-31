@@ -65,6 +65,7 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 	RoomLog.noteMigration,
 	RoomLog.intercomMigration,
 	RoomLog.startOverMigration,
+	RoomLog.deliveryMigration,
 	HostCardLog.migration,
 	HostCardLog.keepMigration,
 	RoomReads.migration,

@@ -28,6 +28,9 @@ const isId = (value: unknown): value is string =>
 
 const isText = (value: unknown): value is string => typeof value === "string";
 
+const isMessageId = (value: unknown): value is number =>
+	typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+
 const optional = <T>(value: unknown, check: (v: unknown) => v is T) =>
 	value === undefined || check(value);
 
@@ -184,6 +187,21 @@ export function parseClientFrame(
 				: undefined;
 		case "stop":
 			return isId(value.room) ? { type: "stop", room: value.room } : undefined;
+		case "edit_queued":
+			return isId(value.room) &&
+				isMessageId(value.message) &&
+				isText(value.text)
+				? {
+						type: "edit_queued",
+						room: value.room,
+						message: value.message,
+						text: value.text,
+					}
+				: undefined;
+		case "cancel_queued":
+			return isId(value.room) && isMessageId(value.message)
+				? { type: "cancel_queued", room: value.room, message: value.message }
+				: undefined;
 		case "approval":
 			return isId(value.prompt) && typeof value.approved === "boolean"
 				? { type: "approval", prompt: value.prompt, approved: value.approved }

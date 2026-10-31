@@ -1,14 +1,15 @@
-import { memo } from "react";
+import { type ComponentProps, memo } from "react";
 import type { RoomMessage } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { clock } from "../lib/format.ts";
 import { translate as t } from "../lib/messages.ts";
 import { installNoteStyle } from "../lib/note-style.ts";
+import { DeliveryLine } from "./delivery-line.tsx";
 import { HelpersEndedLine } from "./helpers-ended-line.tsx";
 import { HostPicture } from "./host-picture.tsx";
 import { IntercomRow } from "./intercom-row.tsx";
 import { MessageMarkdown } from "./message-markdown.tsx";
-import { Files } from "./message-row.tsx";
+import { Files, MessageRow } from "./message-row.tsx";
 
 installNoteStyle();
 
@@ -65,12 +66,16 @@ const NoteRow = memo(function NoteRow(props: {
  * What the first note, the first line of a knight's archived temp knights, or the first message
  * between agents loads: a note's row, that line, or the message's card.
  */
-export default function ExtraRow(props: {
-	message: RoomMessage;
-	enter: boolean;
-	timeZone: string;
-}) {
-	const { intercom } = props.message;
+export default function ExtraRow(props: ComponentProps<typeof MessageRow>) {
+	const { delivery, intercom } = props.message;
+	if (delivery)
+		return (
+			<MessageRow
+				{...props}
+				plain
+				below={<DeliveryLine delivery={delivery} />}
+			/>
+		);
 	if (intercom)
 		return (
 			<IntercomRow

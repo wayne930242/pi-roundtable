@@ -601,6 +601,10 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Quote reply": "引用回覆",
 	"Select text": "選取文字",
 	"Copy all": "全部複製",
+	"Its turn has already started, so it can no longer be changed.":
+		"這一輪已經開始，無法再更改。",
+	"Added to this turn": "已插入這一輪",
+	Queued: "排隊中",
 	Share: "分享",
 	"Knight profile": "騎士資料",
 	"Copy details": "複製細節",

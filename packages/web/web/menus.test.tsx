@@ -19,6 +19,7 @@ import { ActionMenuHost } from "./components/action-menu.tsx";
 import { PromptCard } from "./components/cards.tsx";
 import { Composer } from "./components/composer.tsx";
 import { MessageRow } from "./components/message-row.tsx";
+import { QueuedEditHost } from "./components/queued-edit.tsx";
 import { RoomConfirmHost } from "./components/room-confirms.tsx";
 import { RoomMenu } from "./components/room-menu.tsx";
 import { SelectTextSheetHost } from "./components/select-text-sheet.tsx";
@@ -697,5 +698,131 @@ test("a file chip's menu downloads the file, and shares it when the browser can"
 		expect(labels()).toEqual(["Download", "Share"]);
 	} finally {
 		document.removeEventListener("click", onClick, true);
+	}
+});
+
+/** An owner message of Ada's, sent while a turn ran. */
+const sentDuring = (
+	delivery: NonNullable<RoomMessage["delivery"]>,
+	over: Partial<RoomMessage> = {},
+): RoomMessage => ({
+	id: 21,
+	room: SCOUT,
+	kind: "owner",
+	principalId: "ada",
+	author: "Ada",
+	text: "one more thing",
+	files: [],
+	at: "2026-10-28T10:00:00.000Z",
+	delivery,
+	...over,
+});
+
+const signedInAsAda = () =>
+	store.dispatch({
+		type: "ready",
+		protocol: 1,
+		principal: "ada",
+		name: "Ada",
+		uploads: { perMessage: 4, maxBytes: 1000 },
+	} as never);
+
+/** Replaces the page's connection with one that keeps what it is told to send. */
+function listening(): object[] {
+	const sent: object[] = [];
+	setConnection(
+		partial<AppConnection>({
+			send: (frame: object) => {
+				sent.push(frame);
+				return true;
+			},
+		}),
+	);
+	return sent;
+}
+
+test("a message sent during a turn says where it stands: added to the turn, queued, or cancelled", async () => {
+	for (const [delivery, line] of [
+		["steered", "Added to this turn"],
+		["queued", "Queued"],
+		["cancelled", "Cancelled"],
+	] as const) {
+		await page.render(<Message message={sentDuring(delivery)} />);
+		await page.act(async () => {
+			await settle(120);
+		});
+		expect(q(".delivery-line")?.textContent).toBe(line);
+		expect(q("li.message")?.getAttribute("data-delivery")).toBe(delivery);
+	}
+	await page.render(<Message message={sentDuring("queued")} />);
+	await page.render(<Message message={said()} />);
+	expect(q(".delivery-line")).toBeNull();
+});
+
+test("a queued message offers its author Edit and Cancel; Cancel sends the frame", async () => {
+	signedInAsAda();
+	const sent = listening();
+	await page.render(<Message message={sentDuring("queued")} />);
+	await settle(120);
+	await rightClick(q("li.message"));
+	expect(labels().slice(0, 3)).toEqual(["Edit", "Cancel", "Copy"]);
+	await choose("Cancel");
+	expect(sent).toEqual([{ type: "cancel_queued", room: SCOUT, message: 21 }]);
+	setConnection(partial<AppConnection>({ send: () => true }));
+});
+
+test("Edit opens the text in a sheet and Save sends the new text", async () => {
+	signedInAsAda();
+	const sent = listening();
+	await page.render(
+		<>
+			<Message message={sentDuring("queued")} />
+			<QueuedEditHost />
+		</>,
+	);
+	await settle(120);
+	await rightClick(q("li.message"));
+	await choose("Edit");
+	const box = q<HTMLTextAreaElement>("textarea.queued-edit-text");
+	expect(box?.value).toBe("one more thing");
+	await page.act(() => {
+		if (box) {
+			Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set?.call(box, "one more thing, please");
+			box.dispatchEvent(new Event("input", { bubbles: true }));
+		}
+	});
+	const save = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+		(one) => one.textContent === "Save",
+	);
+	if (!save) throw new Error("no Save button");
+	await page.click(save);
+	await settle(40);
+	expect(sent).toEqual([
+		{
+			type: "edit_queued",
+			room: SCOUT,
+			message: 21,
+			text: "one more thing, please",
+		},
+	]);
+	setConnection(partial<AppConnection>({ send: () => true }));
+});
+
+test("a steered, a cancelled, or another person's queued message offers neither Edit nor Cancel", async () => {
+	signedInAsAda();
+	for (const message of [
+		sentDuring("steered"),
+		sentDuring("cancelled"),
+		sentDuring("queued", { principalId: "bob", author: "Bob" }),
+	]) {
+		await page.render(<Message message={message} />);
+		await settle(120);
+		await rightClick(q("li.message"));
+		expect(labels()).not.toContain("Edit");
+		expect(labels()).not.toContain("Cancel");
+		await page.act(() => closeMenu());
 	}
 });

@@ -93,9 +93,13 @@ export type {
 	InboundMessage,
 	MessageObserver,
 	ObserveFilter,
+	QueuedBy,
+	QueuedChange,
+	QueuedMessage,
 	QueuePort,
 	ScheduledOutcome,
 } from "./core/contract/channels.ts";
+export { QUEUED_MARK, STEERED_MARK } from "./core/contract/channels.ts";
 export type {
 	ImageDrawer,
 	Judge,

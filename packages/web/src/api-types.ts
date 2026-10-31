@@ -491,6 +491,12 @@ export interface RoomMessage {
 	 * whole request or answer, or why no answer came.
 	 */
 	intercom?: RoomIntercom;
+	/**
+	 * An `owner` message sent while a turn ran: `steered` was added to that turn, `queued` waits for
+	 * its own (it can be edited or cancelled until the turn starts, and goes away when it does),
+	 * `cancelled` was cancelled while it waited and never runs. Absent on an ordinary message.
+	 */
+	delivery?: "steered" | "queued" | "cancelled";
 }
 
 /** What an agents' message card shows besides its text: which way it went and the other agent. */
@@ -1290,6 +1296,8 @@ export type RefusalCode =
 	| "empty"
 	| "too_long"
 	| "not_accepted"
+	/** A queued message was cancelled or edited too late: its turn has started, or it was never queued. */
+	| "not_queued"
 	/** A required onboarding step stands undone, so the frame is not taken yet. */
 	| "gated";
 
@@ -1315,6 +1323,10 @@ export type ClientFrame =
 			mode?: "note" | "turn";
 	  }
 	| { type: "stop"; room: string }
+	/** Replaces the text of a message of yours that waits for its turn (`delivery: "queued"`). */
+	| { type: "edit_queued"; room: string; message: number; text: string }
+	/** Cancels a message of yours that waits for its turn (`delivery: "queued"`). */
+	| { type: "cancel_queued"; room: string; message: number }
 	/** Host rooms: follow a room's frames. At most 200 at once; the viewer must be able to read it. */
 	| { type: "subscribe"; room: string }
 	| { type: "unsubscribe"; room: string }

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Queued messages can be listed, edited and cancelled. A message sent while a turn runs that the turn did not take waits in the channel's queue (`QUEUED_MARK`); until its own turn starts, `ConversationPort.queued(channel)` lists it (`QueuedMessage`: `messageId`, `principalId`, `text`, `queuedAt`), `cancelQueued(channel, messageId, by)` makes its turn never run (the claim's `Admission.dropped` is called and the mark comes off), and `editQueued(channel, messageId, by, text)` admits it again with the new text, so the turn runs on that. `by` is the author's principal (`QueuedBy`); anyone else gets `forbidden`, and a message that started, was steered or was cancelled is `unknown` (`QueuedChange`). The three are optional on the port type, as `messageDeleted` is. A surface that reports a deleted queued message cancels it, and one that reports an edited one changes its text, through `SurfaceMessageEvents` as before: on Discord, deleting a queued message cancels it and editing it changes what its turn uses. `QUEUED_MARK` and `STEERED_MARK` are exported from the main entry.
+
 ## [0.29.0] - 2026-10-31
 
 ### Added

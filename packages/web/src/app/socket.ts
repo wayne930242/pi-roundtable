@@ -26,6 +26,8 @@ import type { PluggedFrames, Viewer, WebAppRegistry } from "../web-app.ts";
 import type { Answerer, OwnerDesk } from "./desk.ts";
 import type { Presence } from "./presence.ts";
 import { parseClientFrame } from "./protocol.ts";
+import { coreMessageId } from "./queued-delivery.ts";
+import { changeQueued } from "./queued-frames.ts";
 import type { Rooms } from "./rooms.ts";
 import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import type { AppSurface } from "./surface.ts";
@@ -65,7 +67,7 @@ export interface SocketRouteOptions {
 	 * not: the pieces of the app send what is per person there, such as the notices and the badge.
 	 */
 	opened?(connection: AppSocket): Promise<void>;
-	conversations: Pick<ConversationPort, "stop">;
+	conversations: Pick<ConversationPort, "stop" | "cancelQueued" | "editQueued">;
 	logger: Logger;
 	/**
 	 * The longest a socket stays open, whatever its credential says. A password session lives for
@@ -443,6 +445,14 @@ export class SocketRoute {
 				else conversations.stop(room.key);
 				break;
 			}
+			case "edit_queued":
+			case "cancel_queued":
+				refused = await changeQueued(frame, who, {
+					rooms,
+					surface: this.#options.surface,
+					conversations,
+				});
+				break;
 			case "approval":
 			case "answer":
 			case "answers":
@@ -658,7 +668,7 @@ export class SocketRoute {
 		stored?.(message);
 		const inbound: InboundMessage = {
 			channel: room,
-			messageId: `app-${message.id}`,
+			messageId: coreMessageId(message.id),
 			actor: who.actor,
 			authorId: who.principalId,
 			authorName: who.name,

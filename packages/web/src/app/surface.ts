@@ -22,6 +22,7 @@ import {
 } from "../api-types.ts";
 import type { OwnerDesk } from "./desk.ts";
 import { type FileBinding, type FileDir, typeByName } from "./files.ts";
+import { QueuedDelivery } from "./queued-delivery.ts";
 import type { NewRoomMessage, RoomLog } from "./room-log.ts";
 import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import { AppSurfaceThreads } from "./surface-threads.ts";
@@ -118,6 +119,8 @@ export class AppSurface implements ChatSurface {
 	/** Present on a surface with host rooms: what was said in one since the assistant last posted. */
 	channelContext?: ChatSurface["channelContext"];
 	readonly threads: AppSurfaceThreads;
+	/** How the messages sent during a turn stand: steered, queued, cancelled. */
+	readonly delivery: QueuedDelivery;
 	readonly #options: AppSurfaceOptions;
 	readonly #activity = new Map<ChannelKey, Activity>();
 	/** The round each group room runs now; an ended round is dropped, since the page keeps what it was told. */
@@ -132,6 +135,11 @@ export class AppSurface implements ChatSurface {
 		this.surface = options.surface;
 		this.maxAttachmentBytes = options.uploads.maxBytes;
 		this.#options = options;
+		this.delivery = new QueuedDelivery({
+			log: options.log,
+			isHostRoom: options.isHostRoom,
+			show: (stored) => this.#showChange(stored),
+		});
 		if (options.channelContext) this.channelContext = options.channelContext;
 		this.threads = new AppSurfaceThreads({
 			surface: options.surface,
@@ -168,7 +176,7 @@ export class AppSurface implements ChatSurface {
 
 	/** Stores a message of a room and shows it to the sockets that may have the room, except `except`. */
 	async publish(row: NewRoomMessage, except?: AppSocket): Promise<RoomMessage> {
-		const message = await this.#options.log.append(row);
+		const message = this.delivery.shown(await this.#options.log.append(row));
 		this.#options.sockets.deliver(
 			this.#options.isHostRoom(row.room)
 				? { type: "host_message", room: row.room, message }
@@ -180,15 +188,38 @@ export class AppSurface implements ChatSurface {
 	}
 
 	/** Changes the text of a stored message and shows the change to the sockets that may have the room. */
-	async edit(room: ChannelKey, id: number, text: string): Promise<void> {
-		const message = await this.#options.log.edit(room, id, text);
-		if (!message) return;
+	async edit(
+		room: ChannelKey,
+		id: number,
+		text: string,
+		mark = false,
+	): Promise<void> {
+		const stored = await this.#options.log.edit(room, id, text, mark);
+		if (stored) this.#showChange(stored);
+	}
+
+	/** Shows a stored message as it is now to the sockets that may have its room. */
+	#showChange(stored: RoomMessage): void {
+		const { room } = stored;
+		const message = this.delivery.shown(stored);
 		this.#options.sockets.deliver(
 			this.#options.isHostRoom(room)
-				? { type: "host_edited", room: message.room, message }
-				: { type: "edited", room: message.room, message },
+				? { type: "host_edited", room, message }
+				: { type: "edited", room, message },
 			this.#options.audienceOf(room),
 		);
+	}
+
+	react(channel: ChannelKey, messageId: string, emoji: string): Promise<void> {
+		return this.delivery.react(channel, messageId, emoji);
+	}
+
+	unreact(
+		channel: ChannelKey,
+		messageId: string,
+		emoji: string,
+	): Promise<void> {
+		return this.delivery.unreact(channel, messageId, emoji);
 	}
 
 	/** Whether a turn works in the room and whether Stop applies, as `activity` frames say. */

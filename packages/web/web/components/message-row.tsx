@@ -1,5 +1,13 @@
 import type { CharacterSpec } from "pi-roundtable/characters";
-import { lazy, memo, Suspense, useContext, useEffect, useState } from "react";
+import {
+	lazy,
+	memo,
+	type ReactNode,
+	Suspense,
+	useContext,
+	useEffect,
+	useState,
+} from "react";
 import {
 	HELPERS_ENDED,
 	isStartOver,
@@ -19,8 +27,8 @@ import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
 import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
 
-// An internal note's row and its styles, a knight's line that it archived its temp knights, and a
-// message between agents, are read when the first is shown.
+// An internal note's row and its styles, a knight's line that it archived its temp knights, a
+// message between agents, and an owner's message sent during a turn, are read when the first is shown.
 const NoteRow = lazy(() => import("./note-row.tsx"));
 
 // The line where a conversation started over, and its styles, are read when the first is shown.
@@ -112,6 +120,10 @@ export function Files({ files }: { files: readonly RoomFile[] }) {
 
 /** One stored message of a room. Memoized: it redraws only when the message or its look changes. */
 export const MessageRow = memo(function MessageRow(props: {
+	/** Draw an owner's message sent during a turn as an ordinary one; the lazy row that adds its state line does. */
+	plain?: boolean;
+	/** Drawn under the bubble. */
+	below?: ReactNode;
 	message: RoomMessage;
 	/** The author's character, from the room list; none for an agent the list does not have. */
 	character: CharacterSpec | undefined;
@@ -142,15 +154,12 @@ export const MessageRow = memo(function MessageRow(props: {
 	if (
 		message.note ||
 		message.intercom ||
+		(message.delivery && !props.plain) ||
 		(message.kind === "system" && message.text.startsWith(HELPERS_ENDED))
 	)
 		return (
 			<Suspense fallback={<li className="message" data-header />}>
-				<NoteRow
-					message={message}
-					enter={props.enter}
-					timeZone={props.timeZone}
-				/>
+				<NoteRow {...props} />
 			</Suspense>
 		);
 	if (isStartOver(message))
@@ -187,6 +196,7 @@ export const MessageRow = memo(function MessageRow(props: {
 			data-header={props.header || undefined}
 			data-enter={props.enter || undefined}
 			data-unread={props.unread || undefined}
+			data-delivery={message.delivery}
 		>
 			{mine ? null : (
 				<span
@@ -229,6 +239,7 @@ export const MessageRow = memo(function MessageRow(props: {
 					{message.text ? <MessageMarkdown source={message.text} /> : null}
 					<Files files={message.files} />
 				</div>
+				{props.below}
 			</div>
 		</li>
 	);

@@ -109,6 +109,31 @@ export interface InboundMessage {
 export const STEERED_MARK = "↪️";
 export const QUEUED_MARK = "⏳";
 
+/** A message waiting in a channel's queue for its own turn (`ConversationPort.queued`). */
+export interface QueuedMessage {
+	/** The surface's id of the message, as `InboundMessage.messageId`. */
+	messageId: string;
+	/** The principal of the person who wrote it; absent when the router resolved none. */
+	principalId?: string;
+	/** What its turn will use: the text as last edited. */
+	text: string;
+	/** Epoch milliseconds when it was queued. */
+	queuedAt: number;
+}
+
+/** Who asks to change a queued message; only its author may. */
+export interface QueuedBy {
+	principalId: string;
+}
+
+/**
+ * What cancelling or editing a queued message came to. `unknown`: none is queued under that id,
+ * such as one whose turn has started, been cancelled, or been steered into the running turn.
+ * `forbidden`: it is queued, but not by that principal. `refused` (edit only): the claim would no
+ * longer take the message with the new text.
+ */
+export type QueuedChange = "done" | "unknown" | "forbidden" | "refused";
+
 /** How a turn nobody wrote in the channel ended. */
 export type ScheduledOutcome =
 	| { status: "ran" }
@@ -205,8 +230,8 @@ export type Admission =
 			run(): Promise<void>;
 			/**
 			 * Called instead of `run` when the router drops the message the claim admitted, because
-			 * its author, once recorded, was not who they were when admitted; frees what the claim
-			 * holds for it.
+			 * its author, once recorded, was not who they were when admitted, or because it was
+			 * cancelled or replaced by an edit while it waited; frees what the claim holds for it.
 			 */
 			dropped?(): void;
 			/** The log line when the turn throws. */
@@ -327,6 +352,34 @@ export interface ConversationPort {
 	): Promise<void>;
 	/** Tells the claim that owns the channel a message was edited (`ChannelClaim.onMessageEdited`); never rejects. */
 	messageEdited?(message: InboundMessage): Promise<void>;
+	/**
+	 * The messages waiting in the channel for their own turn, oldest first: a message sent during
+	 * a turn that the running turn did not take (`QUEUED_MARK`). One that started, was steered
+	 * into the running turn, or was cancelled is not listed. Optional so a port written before 0.28
+	 * still type-checks; the host's has it.
+	 */
+	queued?(channel: ChannelKey): readonly QueuedMessage[];
+	/**
+	 * Cancels a queued message so its turn never starts, for its author only. `unknown` once the
+	 * turn has started, so a caller can tell the person it is too late. The surface is told only
+	 * through the message's `QUEUED_MARK` being removed.
+	 */
+	cancelQueued?(
+		channel: ChannelKey,
+		messageId: string,
+		by: QueuedBy,
+	): QueuedChange;
+	/**
+	 * Replaces the text a queued message's turn will use, for its author only: the claim that
+	 * admitted the message admits it again with the new text, and the turn runs on that. The
+	 * surface's own copy of the message is the caller's to change.
+	 */
+	editQueued?(
+		channel: ChannelKey,
+		messageId: string,
+		by: QueuedBy,
+		text: string,
+	): QueuedChange;
 }
 
 /**

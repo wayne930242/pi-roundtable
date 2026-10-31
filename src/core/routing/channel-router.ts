@@ -7,28 +7,27 @@ import {
 	type ConversationPort,
 	type InboundMessage,
 	QUEUED_MARK,
+	type QueuedBy,
+	type QueuedChange,
+	type QueuedMessage,
 	type ScheduledOutcome,
 	STEERED_MARK,
 } from "../contract/channels.ts";
-import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
-import { IdentityError } from "../domain/errors.ts";
+import type { SurfacePort } from "../contract/surface.ts";
 import { HostStoppingError, PluginError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
-import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { Contact, ContactAssessor } from "../identity/contact.ts";
-import {
-	type IdentityService,
-	systemSpeaker,
-} from "../identity/identity-service.ts";
-import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
 import type { Logger } from "../log.ts";
 import type { ChannelKey } from "../sessions.ts";
+import { actorOf } from "./actor-of.ts";
+import { speakerOf } from "./background-speaker.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
 import { tellDeleted, tellEdited } from "./claim-events.ts";
 import { ForwardJoin } from "./forward-join.ts";
 import type { MessageObservers } from "./message-observers.ts";
 import { type PeerBots, peerFacts } from "./peer-bots.ts";
-import { isSystemTurn } from "./system-turns.ts";
+import { type QueuedEntry, QueuedMessages } from "./queued-messages.ts";
 
 export interface ChannelRouterOptions {
 	/** Claims in registration order; the router orders them by priority. */
@@ -82,6 +81,8 @@ export class ChannelRouter implements ConversationPort {
 	readonly #options: ChannelRouterOptions;
 	readonly #claims: readonly ChannelClaim[];
 	readonly #forwards: ForwardJoin;
+	/** The messages waiting for their own turn, so one can be cancelled or edited until it starts. */
+	readonly #queued: QueuedMessages;
 	/** Each channel's messages being admitted, so they reach their claim and the queue in the order they came. */
 	readonly #admitting = new Map<ChannelKey, Promise<unknown>>();
 	/** The surfaces already warned that their messages carry no actor. */
@@ -93,6 +94,7 @@ export class ChannelRouter implements ConversationPort {
 		this.#options = options;
 		this.#claims = orderClaims(options.claims);
 		this.#forwards = new ForwardJoin(options.forwardJoinMs);
+		this.#queued = new QueuedMessages(options.logger);
 	}
 
 	#owner(channel: ChannelKey, space?: string): ChannelClaim | undefined {
@@ -137,15 +139,16 @@ export class ChannelRouter implements ConversationPort {
 				);
 				return undefined;
 			}
-			const admission = await this.#admit(claim, message);
-			if (!admission) return undefined;
+			const admitted = await this.#admit(claim, message);
+			if (!admitted) return undefined;
+			const { admission } = admitted;
 			if (listed) peers?.answered(message.channel);
 			// Once the host shuts down only the turns already running finish: this one starts nothing.
 			if (this.#options.queue.closed) {
 				await this.#refuse(message, admission);
 				return undefined;
 			}
-			return this.#start(message, admission);
+			return this.#start(claim, admitted.message, admission);
 		});
 		await started?.done;
 	}
@@ -177,10 +180,10 @@ export class ChannelRouter implements ConversationPort {
 	async #admit(
 		claim: ChannelClaim,
 		message: InboundMessage,
-	): Promise<Admission | undefined> {
+	): Promise<{ admission: Admission; message: InboundMessage } | undefined> {
 		const { logger, contacts } = this.#options;
 		const { speaker: _given, ...facts } = message;
-		const actor = this.#actorOf(message);
+		const actor = actorOf(message, this.#warned, logger);
 		let contact: Contact | undefined;
 		if (actor && contacts)
 			try {
@@ -193,15 +196,16 @@ export class ChannelRouter implements ConversationPort {
 					"could not resolve who wrote a message; it reaches its claim as no one",
 				);
 			}
-		const admission = claim.admit(
-			contact
-				? { ...facts, speaker: Object.freeze({ ...contact.speaker }) }
-				: facts,
-		);
-		if (!admission || !contact) return admission;
+		const admittedAs: InboundMessage = contact
+			? { ...facts, speaker: Object.freeze({ ...contact.speaker }) }
+			: facts;
+		const admission = claim.admit(admittedAs);
+		if (!admission) return undefined;
+		if (!contact) return { admission, message: admittedAs };
 		try {
 			const taken = await contact.take();
-			if (taken?.principalId === contact.speaker.principalId) return admission;
+			if (taken?.principalId === contact.speaker.principalId)
+				return { admission, message: admittedAs };
 			logger.warn(
 				{ channel: message.channel },
 				"the author of a message was linked elsewhere, or refused, while it was admitted; it does not run",
@@ -219,40 +223,6 @@ export class ChannelRouter implements ConversationPort {
 				reason: "its author was not who they were when it was admitted",
 			});
 		return undefined;
-	}
-
-	/**
-	 * Who wrote the message, as its surface reports them; a surface that reports no `actor` has it
-	 * read from the author fields under its own name, once warned. None for a bot or an
-	 * integration, unless the host lists the bot as a peer.
-	 */
-	#actorOf(message: InboundMessage): ActorFacts | undefined {
-		if ((message.authorIsBot && !message.peerBot) || message.integration)
-			return undefined;
-		if (message.actor) return message.actor;
-		const { surface } = parseChannelKey(message.channel);
-		if (!this.#warned.has(surface)) {
-			this.#warned.add(surface);
-			this.#options.logger.warn(
-				{ surface },
-				`deprecated: the ${surface} surface reports no InboundMessage.actor, so its authors are read from authorId, authorName, and authorRoleIds as ${surface} identities; set actor, as this goes away in 1.0`,
-			);
-		}
-		return {
-			provider: surface,
-			subject: message.authorId,
-			name: message.authorName,
-			surface,
-			...(message.authorRoleIds
-				? {
-						roles: message.authorRoleIds.map(
-							(role) => `${surface}:role:${role}`,
-						),
-					}
-				: {}),
-			...(message.space ? { space: message.space } : {}),
-			legacyId: message.authorId,
-		};
 	}
 
 	/**
@@ -287,6 +257,7 @@ export class ChannelRouter implements ConversationPort {
 	 * during a turn is first offered to it, then marked as waiting.
 	 */
 	async #start(
+		claim: ChannelClaim,
 		message: InboundMessage,
 		admission: Admission,
 	): Promise<{ done: Promise<void> }> {
@@ -298,31 +269,61 @@ export class ChannelRouter implements ConversationPort {
 			return { done };
 		}
 		const { busy } = admission;
-		let queued = false;
+		let waiting: QueuedEntry | undefined;
 		// A message during a turn is added to it when the turn takes it, otherwise marked as waiting.
 		if (busy && queue.size(message.channel) > 0) {
 			if (await busy.steer?.()) return { done: busy.react(STEERED_MARK) };
+			// Listed before the mark is placed, so a delete or cancel during that wait reaches it.
+			waiting = this.#queued.add(claim, message, admission);
 			await busy.react(QUEUED_MARK);
-			queued = true;
+			if (waiting.cancelled) return { done: Promise.resolve() };
 		}
 		const done = queue
 			.run(message.channel, () => {
-				if (queued) void busy?.unreact(QUEUED_MARK);
-				return admission.run();
+				if (!waiting) return admission.run();
+				// From here no cancel or edit reaches it: the turn has started or it was cancelled before.
+				if (!this.#queued.remove(waiting)) return Promise.resolve();
+				this.#queued.unmark(waiting);
+				return waiting.admission.run();
 			})
 			// pi-lens-ignore: no-unknown-parameters
 			.catch(async (error: unknown) => {
 				// The host began shutting down while this message waited behind a running turn.
 				if (error instanceof HostStoppingError) {
-					if (queued) void busy?.unreact(QUEUED_MARK);
-					return this.#refuse(message, admission);
+					if (waiting && !this.#queued.remove(waiting)) return undefined;
+					if (waiting) this.#queued.unmark(waiting);
+					return this.#refuse(
+						waiting?.message ?? message,
+						waiting?.admission ?? admission,
+					);
 				}
 				logger.error(
 					{ channel: message.channel, err: error },
-					admission.failure,
+					(waiting?.admission ?? admission).failure,
 				);
 			});
 		return { done };
+	}
+
+	queued(channel: ChannelKey): readonly QueuedMessage[] {
+		return this.#queued.list(channel);
+	}
+
+	cancelQueued(
+		channel: ChannelKey,
+		messageId: string,
+		by: QueuedBy,
+	): QueuedChange {
+		return this.#queued.cancel(channel, messageId, by, true);
+	}
+
+	editQueued(
+		channel: ChannelKey,
+		messageId: string,
+		by: QueuedBy,
+		text: string,
+	): QueuedChange {
+		return this.#queued.edit(channel, messageId, by, text);
 	}
 
 	/** Tells the claim that owns the channel a message was deleted; never rejects, never waits for the channel's queue. */
@@ -331,6 +332,8 @@ export class ChannelRouter implements ConversationPort {
 		messageId: string,
 		space?: string,
 	): Promise<void> {
+		// The surface says it is gone: no author check, and no mark to remove from a deleted message.
+		this.#queued.cancel(channel, messageId, undefined, false);
 		return tellDeleted(
 			this.#owner(channel, space),
 			channel,
@@ -341,6 +344,13 @@ export class ChannelRouter implements ConversationPort {
 
 	/** Tells the claim that owns the channel a message was edited; never rejects, never waits for the channel's queue. */
 	messageEdited(message: InboundMessage): Promise<void> {
+		// Only the author edits a message, so a queued one takes the new text without a check.
+		this.#queued.edit(
+			message.channel,
+			message.messageId,
+			undefined,
+			message.text,
+		);
 		return tellEdited(
 			this.#owner(message.channel, message.space),
 			message,
@@ -392,7 +402,7 @@ export class ChannelRouter implements ConversationPort {
 	 * service cannot tell.
 	 */
 	async runsAs(turn: BackgroundTurn): Promise<BackgroundRunsAs> {
-		const runs = await this.#speakerOf(turn);
+		const runs = await speakerOf(turn, this.#options.principals);
 		if ("skipped" in runs) return runs;
 		// The claim that owns the channel has the last word, so work that must not start for a turn it
 		// would skip, such as a schedule's precheck, does not.
@@ -401,40 +411,6 @@ export class ChannelRouter implements ConversationPort {
 			speaker: runs.speaker,
 		});
 		return refusal === undefined ? runs : { skipped: refusal };
-	}
-
-	async #speakerOf(turn: BackgroundTurn): Promise<BackgroundRunsAs> {
-		const { author, tier } = turn;
-		if (!author?.principalId || !tier)
-			return {
-				skipped:
-					"a background turn names its author's principal (author.principalId) and the tier it runs at (tier); this one does not",
-			};
-		if (author.principalId === SYSTEM_PRINCIPAL)
-			return isSystemTurn(turn)
-				? { speaker: { ...systemSpeaker(tier), name: author.name } }
-				: {
-						skipped: `only the host itself starts a turn as the system principal "${SYSTEM_PRINCIPAL}"`,
-					};
-		const { principals } = this.#options;
-		if (!principals)
-			return {
-				skipped: "the host has no identity service to check whom it runs as",
-			};
-		try {
-			const checked = await principals.speakerFor(author.principalId, tier);
-			return {
-				speaker: {
-					id: author.id,
-					name: author.name,
-					tier: checked.tier,
-					principalId: checked.principalId,
-				},
-			};
-		} catch (error) {
-			if (!(error instanceof IdentityError)) throw error;
-			return { skipped: error.message };
-		}
 	}
 
 	startFresh(channel: ChannelKey): Promise<string> {
