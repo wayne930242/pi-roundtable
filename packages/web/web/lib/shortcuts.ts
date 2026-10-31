@@ -1,7 +1,8 @@
 // The keyboard shortcuts of the app, as one lazy part the page starts after it has drawn:
 // Alt+↑ / Alt+↓ step through the rooms in the order the list shows them, Alt+Shift+↑ / Alt+Shift+↓
 // through the rooms with unread messages, `?` lists the keys, and Esc closes the topmost menu or
-// sheet, else lets go of the message box. The search key (Ctrl/⌘ K) is in `search-key.ts`.
+// sheet, else lets go of the message box, and ↑ in an empty message box edits the person's latest
+// message that still waits for its turn. The search key (Ctrl/⌘ K) is in `search-key.ts`.
 //
 // A key meant for a text field stays the field's: nothing here acts while an input method composes,
 // and in a field Alt+↑ / Alt+↓ (a paragraph move on a Mac) act only when the field is empty or the
@@ -12,6 +13,8 @@ import { store } from "./app-store.ts";
 import { collapsedNow } from "./folds.ts";
 import { unreadOf } from "./host-state.ts";
 import { composingKey } from "./ime.ts";
+import { canChangeQueued } from "./queued-actions.ts";
+import { askQueuedEdit } from "./queued-edit.ts";
 import { neighbour, roomStops, type Stop } from "./room-order.ts";
 import { activityAt } from "./rooms.ts";
 import { currentRoute, hrefFor, navigate } from "./router.ts";
@@ -27,6 +30,7 @@ export type Shortcut =
 	| "previous-unread"
 	| "next-unread"
 	| "help"
+	| "edit-queued"
 	| "escape";
 
 const TEXT_INPUTS = new Set([
@@ -81,6 +85,21 @@ function atEdge(field: HTMLElement, up: boolean): boolean {
 	return side.toString() === "";
 }
 
+/** The person's latest message in the open room that still waits for its turn. */
+function latestQueued() {
+	const route = currentRoute();
+	if (route.pane !== "room" || route.key === undefined) return undefined;
+	const messages = store.getState().rooms[route.key]?.messages ?? [];
+	return messages.findLast(canChangeQueued);
+}
+
+/** Whether `target` is a message box with nothing typed in it. */
+const emptyComposer = (target: EventTarget | null): boolean =>
+	target instanceof HTMLTextAreaElement &&
+	target.closest(".composer") !== null &&
+	target.value === "" &&
+	!target.readOnly;
+
 /** What a key press asks for, or nothing when it is not ours to act on. */
 export function classify(event: KeyboardEvent): Shortcut | undefined {
 	if (event.defaultPrevented || composingKey(event)) return undefined;
@@ -97,6 +116,17 @@ export function classify(event: KeyboardEvent): Shortcut | undefined {
 		if (event.shiftKey) return up ? "previous-unread" : "next-unread";
 		return up ? "previous" : "next";
 	}
+	if (
+		key === "ArrowUp" &&
+		!event.altKey &&
+		!event.ctrlKey &&
+		!event.metaKey &&
+		!event.shiftKey &&
+		!event.repeat
+	)
+		return emptyComposer(event.target) && latestQueued()
+			? "edit-queued"
+			: undefined;
 	if (key === "?" && !event.ctrlKey && !event.metaKey && !event.repeat)
 		return editable(event.target) ? undefined : "help";
 	return undefined;
@@ -183,6 +213,14 @@ export function run(shortcut: Shortcut, event: KeyboardEvent): void {
 			if (shortcutHelpOpen()) closeShortcutHelp();
 			else if (!overlayOpen()) openShortcutHelp();
 			break;
+		case "edit-queued": {
+			if (overlayOpen()) break;
+			const message = latestQueued();
+			if (!message) break;
+			event.preventDefault();
+			askQueuedEdit(message);
+			break;
+		}
 		default:
 			// Behind an open menu, sheet or drawer the room stays where it is.
 			if (overlayOpen()) break;

@@ -679,6 +679,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Next room with unread messages": "下一個有未讀訊息的聊天室",
 	"Close the open menu or sheet, or leave the message box":
 		"關閉開啟的選單或面板；都沒有時離開訊息輸入框",
+	"Edit your latest message that is still waiting, from an empty message box":
+		"在空的訊息輸入框編輯你最新一則還在排隊的訊息",
 	"Show these shortcuts": "顯示這份快速鍵清單",
 	"In a message box the arrow shortcuts switch rooms only when it is empty or the caret is at its very start (up) or very end (down).":
 		"在訊息輸入框裡，方向鍵快速鍵只在框內沒有文字，或游標在最開頭（上）、最結尾（下）時才會切換聊天室。",

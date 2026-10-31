@@ -1,4 +1,4 @@
-import type { ConversationPort } from "pi-roundtable";
+import type { ChannelKey, ConversationPort } from "pi-roundtable";
 import {
 	type ClientFrame,
 	MAX_MESSAGE_CHARS,
@@ -30,6 +30,50 @@ export async function changeQueued(
 	const room = await deps.rooms.resolve(frame.room);
 	if (!room) return "unknown_room";
 	if (room.readOnly) return "read_only";
+	return inTurn(deps.surface, room.key, () =>
+		apply(frame, who, deps, room.key),
+	);
+}
+
+/** The changes of one room per surface, each waiting for the one before it. */
+const lines = new WeakMap<
+	QueuedFrameDeps["surface"],
+	Map<string, Promise<unknown>>
+>();
+
+/**
+ * Runs `change` after every change already asked for in the room has finished. The host takes an
+ * edit at once but the room's log is written a moment later; two edits from two sockets would
+ * otherwise land in the log in either order, and the room would show a text the turn does not use.
+ */
+function inTurn<T>(
+	owner: QueuedFrameDeps["surface"],
+	room: string,
+	change: () => Promise<T>,
+): Promise<T> {
+	let rooms = lines.get(owner);
+	if (!rooms) {
+		rooms = new Map();
+		lines.set(owner, rooms);
+	}
+	const before = rooms.get(room) ?? Promise.resolve();
+	const result = before.then(change, change);
+	const tail = result.catch(() => undefined);
+	rooms.set(room, tail);
+	// A room with nothing waiting leaves no entry behind.
+	tail.then(() => {
+		if (rooms.get(room) === tail) rooms.delete(room);
+	});
+	return result;
+}
+
+async function apply(
+	frame: Extract<ClientFrame, { type: "edit_queued" | "cancel_queued" }>,
+	who: Answerer,
+	deps: QueuedFrameDeps,
+	roomKey: ChannelKey,
+): Promise<RefusalCode | undefined> {
+	const room = { key: roomKey };
 	const stored = await deps.surface.delivery.stored(room.key, frame.message);
 	if (stored?.kind !== "owner") return "not_queued";
 	if (stored.principalId !== who.principalId) return "forbidden";

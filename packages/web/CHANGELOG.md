@@ -9,6 +9,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A message of yours sent while a turn runs shows where it stands under it, live and after a reload: "Added to this turn" when the running turn took it, "Queued" while it waits for its own turn (the line goes when the turn starts), and "Cancelled" for one you cancelled, which stays in the room dimmed and never runs. A queued message's long-press or right-click menu offers its author Edit (a sheet with the text; the turn runs on the new text and the message shows as edited) and Cancel. Once the turn has started a notice says it is too late. `RoomMessage.delivery` carries the state (`steered` and `cancelled` are stored, in a new `delivery` column; `queued` is read from the host's queue and so does not outlive a restart); client frames `edit_queued` and `cancel_queued` (`room`, `message` id, `text`) answer with the changed message as an `edited` frame or a `refused` frame (`not_queued` when the turn has started, `forbidden` for another person's message). With a core that has no `ConversationPort.cancelQueued` and `editQueued`, both answer `not_queued`.
 
+- Pressing ↑ in an empty message box opens Edit on your latest message in the room that still waits for its turn (not while an input method composes; Alt+↑ / Alt+↓ still switch rooms), and the `?` shortcut list names it.
+
+### Fixed
+
+- Two edits of a waiting message from two sockets reach the room's log in the order the host took them, so the room shows the text the turn runs.
+
 ## [0.29.0] - 2026-10-31
 
 ### Added
