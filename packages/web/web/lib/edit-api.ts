@@ -11,6 +11,10 @@ import type {
 	SkillDocCreate,
 	SkillDocSave,
 	SkillDocView,
+	SkillGroupApplied,
+	SkillGroupChanged,
+	SkillGroupSave,
+	SkillGroupsView,
 	SkillHistoryView,
 } from "../../src/api-types.ts";
 import { request } from "./api.ts";
@@ -46,4 +50,16 @@ export const editApi = {
 		send<SkillDeleted>(`skill-docs/${named(name)}`, "DELETE"),
 	skillHistory: (name: string) =>
 		request<SkillHistoryView>(`skill-docs/${named(name)}/history`),
+	skillGroups: () => request<SkillGroupsView>("skill-groups"),
+	/** Creates or replaces a group; `from` renames the group it names. */
+	saveSkillGroup: (name: string, save: SkillGroupSave) =>
+		send<SkillGroupChanged>(`skill-groups/${named(name)}`, "PUT", save),
+	/** Deletes a group; its skills and their carriers stay as they are. */
+	deleteSkillGroup: (name: string) =>
+		send<SkillGroupChanged>(`skill-groups/${named(name)}`, "DELETE"),
+	/** Switches on the group's skills a knight lacks; nothing is switched off. */
+	applySkillGroup: (name: string, agent: string) =>
+		send<SkillGroupApplied>(`skill-groups/${named(name)}/apply`, "POST", {
+			agent,
+		}),
 };

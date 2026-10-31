@@ -102,6 +102,8 @@ const EXPECTED: [string, string, Record<string, Outcome>][] = [
 	["GET", "api/prompts", O],
 	["PUT", "api/prompts/main", O],
 	["GET", "api/skill-docs", O],
+	["GET", "api/skill-groups", O],
+	["POST", "api/skill-groups/coding/apply", O],
 	["GET", "api/workspace/tree", O],
 	["PUT", "api/workspace/file", O],
 	["GET", "avatars/abc.png", V],

@@ -139,6 +139,7 @@ let agent: ReturnType<typeof spyOn>;
 let models: ReturnType<typeof spyOn>;
 let update: ReturnType<typeof spyOn>;
 let skills: ReturnType<typeof spyOn>;
+let skillGroups: ReturnType<typeof spyOn>;
 const skillList = (carried: string[] = []): AgentSkillsView => ({
 	skills: [
 		{
@@ -169,6 +170,9 @@ beforeEach(() => {
 		profile(patch as Partial<AgentProfileView>),
 	);
 	skills = spyOn(teamApi, "skills").mockResolvedValue(skillList());
+	skillGroups = spyOn(editApi, "skillGroups").mockResolvedValue({
+		groups: [],
+	});
 });
 afterEach(async () => {
 	closeAgentSheet();
@@ -178,6 +182,7 @@ afterEach(async () => {
 	models.mockRestore();
 	update.mockRestore();
 	skills.mockRestore();
+	skillGroups.mockRestore();
 	clearRoomConfirm();
 	closeTeamSheet();
 });
@@ -829,6 +834,63 @@ test("a refused skill change shows the server's words and leaves the switch wher
 	} finally {
 		set.mockRestore();
 	}
+});
+
+test("Apply a group says what each group lacks, asks first, switches on only the missing skills and names them", async () => {
+	skillGroups.mockResolvedValue({
+		groups: [
+			{ name: "basics", description: "Basics.", skills: ["writing-skills"] },
+			{
+				name: "coding",
+				description: "Coding.",
+				skills: ["writing-skills", "kit-do"],
+			},
+		],
+	});
+	const apply = spyOn(editApi, "applySkillGroup").mockImplementation(
+		async () => {
+			skills.mockResolvedValue(skillList(["kit-do"]));
+			return { added: ["kit-do"] };
+		},
+	);
+	try {
+		await open({ creator: false });
+		await page.act(() => settle(80));
+		const row = (group: string) =>
+			q(`.skill-apply button[aria-label="Apply ${group}"]`)?.closest("li");
+		expect(row("basics")?.textContent).toContain("Carries all of it.");
+		expect(
+			q<HTMLButtonElement>('.skill-apply button[aria-label="Apply basics"]')
+				?.disabled,
+		).toBe(true);
+		expect(row("coding")?.textContent).toContain("Lacks 1: kit-do");
+		await page.click(q('.skill-apply button[aria-label="Apply coding"]'));
+		const confirm = q<HTMLDialogElement>(
+			'dialog[aria-label="Apply this skill group?"]',
+		);
+		expect(confirm?.open).toBe(true);
+		expect(confirm?.textContent).toContain("scout will also carry: kit-do.");
+		expect(apply).not.toHaveBeenCalled();
+		await page.click(button("Apply group"));
+		await page.act(() => settle(80));
+		expect(apply).toHaveBeenCalledWith("coding", "scout");
+		expect(document.body.textContent).toContain("Switched on: kit-do");
+		expect(
+			q(
+				'section[aria-label="Skills"] button[aria-label="kit-do"]',
+			)?.getAttribute("aria-checked"),
+		).toBe("true");
+		expect(row("coding")?.textContent).toContain("Carries all of it.");
+	} finally {
+		apply.mockRestore();
+	}
+});
+
+test("without skill groups the sheet shows no Apply a group", async () => {
+	await open({ creator: false });
+	await page.act(() => settle(80));
+	expect(q('section[aria-label="Skills"]')).not.toBeNull();
+	expect(q(".skill-apply")).toBeNull();
 });
 
 test("a host without skills shows no skills section", async () => {

@@ -1177,10 +1177,38 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"{name} 會被刪除，並從攜帶它的騎士身上拿掉：{carriers}。",
 	"{name} will be deleted. No knight carries it.":
 		"{name} 會被刪除，目前沒有騎士攜帶它。",
-	"It also leaves the skill groups {groups}.": "它也會離開技能群組 {groups}。",
+	"It also leaves the skill groups {groups}.": "它也會離開技能組合 {groups}。",
 	"This cannot be undone.": "這個動作無法復原。",
 	"Skills ({count})": "技能（{count}）",
 	"Choose the skills this knight carries.": "選擇這位騎士攜帶的技能。",
+	"Skill groups": "技能組合",
+	"A group lists skills to switch on for a knight in one step, from the knight's sheet. Knights carry the skills, not the group.":
+		"技能組合列出一組技能，可在騎士的設定頁一次開啟。騎士攜帶的是技能，不是組合。",
+	"No skill groups.": "還沒有技能組合。",
+	"Edit {name}": "編輯 {name}",
+	"New skill group": "新增技能組合",
+	"Delete this skill group?": "要刪除這個技能組合嗎？",
+	"Delete group": "刪除組合",
+	"{name} will be deleted. Its skills stay, and so does every knight that carries them.":
+		"{name} 會被刪除。其中的技能會保留，攜帶它們的騎士也不受影響。",
+	"Saved {name}.": "已儲存 {name}。",
+	"Lowercase letters, digits and single hyphens, up to 64.":
+		"小寫字母、數字與單一連字號，最多 64 個字元。",
+	Description: "描述",
+	"Save group": "儲存組合",
+	"Apply a group": "套用技能組合",
+	"Switches on every skill of the group this knight lacks; nothing is switched off.":
+		"開啟組合中這位騎士還沒有的技能，不會關閉任何技能。",
+	"Carries all of it.": "已攜帶全部技能。",
+	"Lacks {count}: {skills}": "缺少 {count} 個：{skills}",
+	"Apply {name}": "套用 {name}",
+	Apply: "套用",
+	"Apply this skill group?": "要套用這個技能組合嗎？",
+	"Apply group": "套用組合",
+	"Switched on: {skills}": "已開啟：{skills}",
+	"Nothing to add: it carries all of {name}.":
+		"沒有要新增的：已攜帶 {name} 的全部技能。",
+	"{agent} will also carry: {skills}.": "{agent} 將會再攜帶：{skills}。",
 	// 主要提示詞與技能內容的編輯：伺服器的拒絕訊息
 	"This host has no prompts to edit.": "這個主機沒有可編輯的提示詞。",
 	"There is no such prompt.": "沒有這份提示詞。",
@@ -1194,6 +1222,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"baseHash 必須是讀取技能時的雜湊值。",
 	"This skill changed while you were editing it.":
 		"這個技能在你編輯時被更動了。",
+	"There is no such skill group.": "沒有這個技能組合。",
 	// 成員、登入與設定關卡
 	Profile: "個人資料",
 	Owner: "擁有者",

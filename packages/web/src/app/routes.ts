@@ -60,6 +60,7 @@ import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
 import { PAGE_LIMIT, type RoomLog } from "./room-log.ts";
 import { type ResolvedRoom, type Rooms, roomModeOf } from "./rooms.ts";
 import { SkillDocApi } from "./skill-doc-routes.ts";
+import { SkillGroupApi } from "./skill-group-routes.ts";
 import type { AppSurface } from "./surface.ts";
 import { TeamApi } from "./team-routes.ts";
 import type { WebThreads } from "./threads.ts";
@@ -142,6 +143,8 @@ export interface AppApiOptions {
 			| "documentHistory"
 			| "delete"
 		>;
+		/** The registry's skill groups: listed, saved and deleted. */
+		groups: Pick<SkillRegistry, "groups" | "setGroup" | "deleteGroup">;
 	};
 	/** Present when the host has prompt documents (the prompts plugin): the main prompts the owner edits. */
 	prompts?: PromptApiOptions["prompts"];
@@ -285,6 +288,7 @@ export class AppApi {
 	readonly #helpers: HelperRoutes;
 	readonly #prompts: PromptApi | undefined;
 	readonly #skillDocs: SkillDocApi | undefined;
+	readonly #skillGroups: SkillGroupApi | undefined;
 
 	constructor(options: AppApiOptions) {
 		this.#options = options;
@@ -309,6 +313,17 @@ export class AppApi {
 			? new SkillDocApi({
 					skills: options.skills.documents,
 					catalog: () => options.skills?.catalog() ?? [],
+				})
+			: undefined;
+		const skills = options.skills;
+		this.#skillGroups = skills
+			? new SkillGroupApi({
+					groups: skills.groups,
+					catalog: () => skills.catalog(),
+					attach: (agent, add, remove) => skills.attach(agent, add, remove),
+					active: (agent) =>
+						options.directory.agent(agent)?.status === "active",
+					changed: () => options.changed(),
 				})
 			: undefined;
 		this.#team = new TeamApi({
@@ -394,6 +409,7 @@ export class AppApi {
 					"workspace",
 					"prompts",
 					"skill-docs",
+					"skill-groups",
 				].includes(second ?? ""));
 		if (!mine) return undefined;
 		try {
@@ -491,6 +507,11 @@ export class AppApi {
 			if (!this.#skillDocs)
 				throw new HttpError(404, "This host has no skills.");
 			return this.#skillDocs.handle(request, parts, owner);
+		}
+		if (area === "skill-groups") {
+			if (!this.#skillGroups)
+				throw new HttpError(404, "This host has no skills.");
+			return this.#skillGroups.handle(request, parts, owner);
 		}
 		throw new HttpError(404, "There is no such API.");
 	}

@@ -1003,6 +1003,40 @@ export interface SkillDeleted {
 	message: string;
 }
 
+/** A skill group: a named list of skills to filter by and to apply to a knight once. A knight carries skills, not groups. */
+export interface SkillGroupView {
+	name: string;
+	description: string;
+	skills: string[];
+}
+
+/** The answer of `GET api/skill-groups`, by name. */
+export interface SkillGroupsView {
+	groups: SkillGroupView[];
+}
+
+/** The body of `PUT api/skill-groups/<name>`, which creates or replaces a group; `from` renames the group it names. */
+export interface SkillGroupSave {
+	description: string;
+	skills: string[];
+	from?: string;
+}
+
+/** The body of `POST api/skill-groups/<name>/apply`. */
+export interface SkillGroupApply {
+	agent: string;
+}
+
+/** The answer of applying a group: the skills newly switched on, in the group's order; none were switched off. */
+export interface SkillGroupApplied {
+	added: string[];
+}
+
+/** The answer of a group's save or delete: the registry's words. */
+export interface SkillGroupChanged {
+	message: string;
+}
+
 /** A 409: the skill is not as the writer saw it. */
 export interface SkillConflict extends ApiError {
 	conflict: "changed";

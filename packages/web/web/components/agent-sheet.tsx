@@ -11,6 +11,7 @@ import type {
 	AgentPatch,
 	AgentProfileView,
 	AgentSkillsView,
+	SkillGroupView,
 } from "../../src/api-types.ts";
 import {
 	closeAgentSheet,
@@ -28,6 +29,7 @@ import { teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
 import { Chips } from "./chips.tsx";
+import { Confirm } from "./confirm.tsx";
 import { TextDiff } from "./diff-block.tsx";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
@@ -493,6 +495,10 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 	}, [name, opened]);
 	if (error) return <Failure message={error} />;
 	if (!view) return null;
+	const reread = () =>
+		teamApi.skills(name).then(setView, (failure) => {
+			toast(messageOf(failure), "danger");
+		});
 	const flip = async (skill: string, next: boolean) => {
 		setBusy(skill);
 		try {
@@ -554,7 +560,111 @@ function Skills({ name, opened }: { name: string; opened: number }) {
 					);
 				})}
 			</ul>
+			<ApplyGroup name={name} view={view} onApplied={reread} />
 		</section>
+	);
+}
+
+/**
+ * Applies a skill group once: after a confirmation, the group's skills the knight lacks are switched
+ * on and none is switched off. The knight carries the skills, not the group. A host without groups,
+ * or an app without them, shows nothing.
+ */
+function ApplyGroup({
+	name,
+	view,
+	onApplied,
+}: {
+	name: string;
+	view: AgentSkillsView;
+	onApplied(): void;
+}) {
+	const [groups, setGroups] = useState<SkillGroupView[]>();
+	const [applying, setApplying] = useState<SkillGroupView>();
+	useEffect(() => {
+		let current = true;
+		editApi.skillGroups().then(
+			(loaded) => current && setGroups(loaded.groups),
+			() => undefined,
+		);
+		return () => {
+			current = false;
+		};
+	}, []);
+	if (!groups?.length) return null;
+	const carried = new Set(
+		view.skills.filter((skill) => skill.carried).map((skill) => skill.name),
+	);
+	const lacking = (group: SkillGroupView) =>
+		group.skills.filter((skill) => !carried.has(skill));
+	return (
+		<div className="stack skill-apply">
+			<h4>{t("Apply a group")}</h4>
+			<p className="meta">
+				{t(
+					"Switches on every skill of the group this knight lacks; nothing is switched off.",
+				)}
+			</p>
+			<ul className="menu">
+				{groups.map((group) => {
+					const missing = lacking(group);
+					return (
+						<li key={group.name}>
+							<div className="menu-item menu-toggle">
+								<span className="menu-text">
+									<strong>{group.name}</strong>
+									<span className="meta">
+										{missing.length === 0
+											? t("Carries all of it.")
+											: t("Lacks {count}: {skills}", {
+													count: missing.length,
+													skills: missing.join(", "),
+												})}
+									</span>
+								</span>
+								<button
+									type="button"
+									className="secondary"
+									disabled={missing.length === 0}
+									aria-label={t("Apply {name}", { name: group.name })}
+									onClick={() => setApplying(group)}
+								>
+									{t("Apply")}
+								</button>
+							</div>
+						</li>
+					);
+				})}
+			</ul>
+			<Confirm
+				open={applying !== undefined}
+				title={t("Apply this skill group?")}
+				confirmLabel={t("Apply group")}
+				tone="primary"
+				onClose={() => setApplying(undefined)}
+				onConfirm={async () => {
+					if (!applying) return;
+					const { added } = await editApi.applySkillGroup(applying.name, name);
+					toast(
+						added.length
+							? t("Switched on: {skills}", { skills: added.join(", ") })
+							: t("Nothing to add: it carries all of {name}.", {
+									name: applying.name,
+								}),
+					);
+					onApplied();
+				}}
+			>
+				<p>
+					{applying
+						? t("{agent} will also carry: {skills}.", {
+								agent: name,
+								skills: lacking(applying).join(", "),
+							})
+						: null}
+				</p>
+			</Confirm>
+		</div>
 	);
 }
 

@@ -61,6 +61,7 @@ export const ROUTES: readonly Rule[] = [
 	row("*", "api/archive/**", "O"),
 	row("*", "api/prompts/**", "O"),
 	row("*", "api/skill-docs/**", "O"),
+	row("*", "api/skill-groups/**", "O"),
 	row("*", "api/workspace/**", "O"),
 	row(["GET", "HEAD"], "avatars/:file", "V"),
 	// Uploads and files: the upload is the sender's own; a file answers by the room it is bound to.

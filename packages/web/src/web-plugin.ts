@@ -198,6 +198,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 					remove: readonly string[],
 				) => skillRegistry.attach(agent, add, remove),
 				documents: skillRegistry,
+				groups: skillRegistry,
 			}
 		: undefined;
 	// The prompts plugin is always on; a host that replaced it may leave it out.

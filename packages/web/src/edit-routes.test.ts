@@ -19,6 +19,9 @@ import type {
 	SkillConflict,
 	SkillDeleted,
 	SkillDocView,
+	SkillGroupApplied,
+	SkillGroupChanged,
+	SkillGroupsView,
 	SkillHistoryView,
 	SkillView,
 } from "./api-types.ts";
@@ -48,6 +51,7 @@ let history: PromptVersion[];
 let agentHistory: PromptVersion[];
 let skillDocs: Map<string, SkillDocument>;
 let skillVersions: SkillVersion[];
+let skillGroups: { name: string; description: string; skills: string[] }[];
 /** Set by a test: the next save throws this. */
 let saveFails: Error | undefined;
 
@@ -80,6 +84,20 @@ const CATALOG: SkillView[] = [
 		name: "kit-do",
 		source: { kind: "linked", repo: "acme/kit", path: "skills/kit-do" },
 		description: "Use when changing source.",
+		groups: [],
+		carriers: ["scout"],
+	},
+	{
+		name: "writing-skills",
+		source: { kind: "builtin" },
+		description: "Use when writing skills.",
+		groups: [],
+		carriers: [],
+	},
+	{
+		name: "tidy",
+		source: { kind: "written" },
+		description: "Use when tidying.",
 		groups: [],
 		carriers: [],
 	},
@@ -187,6 +205,32 @@ function setup(
 			return `Removed skill ${name}; detached from agents scout.`;
 		},
 	};
+	const groupsApi = {
+		groups: () => skillGroups.map((group) => ({ ...group })),
+		setGroup: async (
+			name: string,
+			description: string,
+			skills: readonly string[],
+		) => {
+			const unknown = skills.filter(
+				(skill) => !CATALOG.some((entry) => entry.name === skill),
+			);
+			if (unknown.length > 0)
+				throw new AgentError(`Unknown skills: ${unknown.join(", ")}.`);
+			calls.push(`set group ${name}: ${skills.join(", ")}`);
+			const existed = skillGroups.some((group) => group.name === name);
+			skillGroups = [
+				...skillGroups.filter((group) => group.name !== name),
+				{ name, description, skills: [...skills] },
+			];
+			return `${existed ? "Replaced" : "Created"} skill group ${name}.`;
+		},
+		deleteGroup: async (name: string) => {
+			calls.push(`delete group ${name}`);
+			skillGroups = skillGroups.filter((group) => group.name !== name);
+			return `Deleted skill group ${name}; its skills are untouched.`;
+		},
+	};
 	const team = {
 		update: async (name: string, _change: unknown, by?: string) => {
 			calls.push(`update ${name} by ${by ?? "-"}`);
@@ -234,8 +278,18 @@ function setup(
 			? {
 					skills: {
 						catalog: () => CATALOG,
-						attach: async () => [],
+						attach: async (
+							agent: string,
+							add: readonly string[],
+							remove: readonly string[],
+						) => {
+							calls.push(
+								`attach ${agent} +${add.join(",")} -${remove.join(",")}`,
+							);
+							return [];
+						},
 						documents: documentsApi,
+						groups: groupsApi,
 					},
 				}
 			: {}),
@@ -270,6 +324,13 @@ function setup(
 
 beforeEach(() => {
 	calls = [];
+	skillGroups = [
+		{
+			name: "coding",
+			description: "Coding workflow.",
+			skills: ["kit-do", "writing-skills", "tidy", "daily-notes"],
+		},
+	];
 	saveFails = undefined;
 	who = { id: "owner", name: "Riley", tier: "owner" };
 	documents = new Map([
@@ -781,6 +842,165 @@ describe("api/skill-docs", () => {
 				await call(server, "POST", "skill-docs", {
 					body: { text: "x" },
 					origin: "https://evil.example.test",
+				})
+			).status,
+		).toBe(403);
+		expect(calls).toEqual([]);
+	});
+});
+
+describe("api/skill-groups", () => {
+	test("lists the groups with their skills", async () => {
+		const response = await call(setup(), "GET", "skill-groups");
+		expect(response.status).toBe(200);
+		expect(((await response.json()) as SkillGroupsView).groups).toEqual([
+			{
+				name: "coding",
+				description: "Coding workflow.",
+				skills: ["kit-do", "writing-skills", "tidy", "daily-notes"],
+			},
+		]);
+	});
+
+	test("creates and replaces a group, and a rename deletes the old name", async () => {
+		const server = setup();
+		const made = await call(server, "PUT", "skill-groups/notes", {
+			body: { description: "Notes.", skills: ["daily-notes"] },
+		});
+		expect(made.status).toBe(201);
+		expect(((await made.json()) as SkillGroupChanged).message).toBe(
+			"Created skill group notes.",
+		);
+		const replaced = await call(server, "PUT", "skill-groups/notes", {
+			body: { description: "Notes.", skills: [] },
+		});
+		expect(replaced.status).toBe(200);
+		const renamed = await call(server, "PUT", "skill-groups/build", {
+			body: { description: "Build.", skills: ["kit-do"], from: "coding" },
+		});
+		expect(renamed.status).toBe(201);
+		expect(skillGroups.map((group) => group.name)).toEqual(["notes", "build"]);
+		expect(calls).toEqual([
+			"set group notes: daily-notes",
+			"set group notes: ",
+			"set group build: kit-do",
+			"delete group coding",
+		]);
+	});
+
+	test("refusals: a bad body, an unknown skill, a rename onto a taken name or from a missing group", async () => {
+		const server = setup();
+		for (const body of [
+			{ skills: [] },
+			{ description: "x", skills: "kit-do" },
+			{ description: "x", skills: [1] },
+		])
+			expect(
+				(await call(server, "PUT", "skill-groups/notes", { body })).status,
+			).toBe(400);
+		const unknown = await call(server, "PUT", "skill-groups/notes", {
+			body: { description: "x", skills: ["ghost"] },
+		});
+		expect(unknown.status).toBe(400);
+		expect(((await unknown.json()) as ApiError).error).toContain("ghost");
+		await call(server, "PUT", "skill-groups/notes", {
+			body: { description: "x", skills: [] },
+		});
+		calls = [];
+		expect(
+			(
+				await call(server, "PUT", "skill-groups/notes", {
+					body: { description: "x", skills: [], from: "coding" },
+				})
+			).status,
+		).toBe(400);
+		expect(
+			(
+				await call(server, "PUT", "skill-groups/other", {
+					body: { description: "x", skills: [], from: "ghost" },
+				})
+			).status,
+		).toBe(404);
+		expect(calls).toEqual([]);
+	});
+
+	test("deletes a group and leaves its skills alone", async () => {
+		const server = setup();
+		const response = await call(server, "DELETE", "skill-groups/coding");
+		expect(response.status).toBe(200);
+		expect(skillGroups).toEqual([]);
+		expect(calls).toEqual(["delete group coding"]);
+	});
+
+	test("applying switches on only the skills the knight lacks, through the toggle's attach, and names them", async () => {
+		const server = setup();
+		const response = await call(server, "POST", "skill-groups/coding/apply", {
+			body: { agent: "scout" },
+		});
+		expect(response.status).toBe(200);
+		expect(((await response.json()) as SkillGroupApplied).added).toEqual([
+			"tidy",
+			"daily-notes",
+		]);
+		expect(calls).toEqual(["attach scout +tidy,daily-notes -"]);
+	});
+
+	test("applying a group the knight already carries changes nothing", async () => {
+		skillGroups = [
+			{
+				name: "kit",
+				description: "Kit.",
+				skills: ["kit-do", "writing-skills"],
+			},
+		];
+		const response = await call(setup(), "POST", "skill-groups/kit/apply", {
+			body: { agent: "scout" },
+		});
+		expect(((await response.json()) as SkillGroupApplied).added).toEqual([]);
+		expect(calls).toEqual([]);
+	});
+
+	test("applying to an unknown knight is a 404 and to no knight a 400", async () => {
+		const server = setup();
+		expect(
+			(
+				await call(server, "POST", "skill-groups/coding/apply", {
+					body: { agent: "ghost" },
+				})
+			).status,
+		).toBe(404);
+		expect(
+			(await call(server, "POST", "skill-groups/coding/apply", { body: {} }))
+				.status,
+		).toBe(400);
+		expect(calls).toEqual([]);
+	});
+
+	test("a host without the skills addon answers 404", async () => {
+		expect(
+			(await call(setup({ prompts: true }), "GET", "skill-groups")).status,
+		).toBe(404);
+	});
+
+	ownerOnly("a group's delete", {
+		method: "DELETE",
+		path: "skill-groups/coding",
+		unknown: "skill-groups/ghost",
+	});
+	ownerOnly("applying a group", {
+		method: "POST",
+		path: "skill-groups/coding/apply",
+		body: { agent: "scout" },
+		unknown: "skill-groups/ghost/apply",
+	});
+	test("listing and saving: a member is refused, and nothing is saved", async () => {
+		const server = setup();
+		who = { id: "member", name: "Mel", tier: "member" };
+		expect((await call(server, "GET", "skill-groups")).status).toBe(403);
+		expect(
+			(
+				await call(server, "PUT", "skill-groups/notes", {
+					body: { description: "x", skills: [] },
 				})
 			).status,
 		).toBe(403);

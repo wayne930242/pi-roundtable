@@ -238,6 +238,7 @@ function setup(withSkills = true) {
 			? {
 					skills: {
 						documents: {} as never,
+						groups: {} as never,
 						catalog: () =>
 							CATALOG.map((entry) => ({
 								...entry,

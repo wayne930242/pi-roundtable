@@ -3,6 +3,7 @@ import {
 	afterEach,
 	beforeAll,
 	beforeEach,
+	describe,
 	expect,
 	spyOn,
 	test,
@@ -11,6 +12,7 @@ import type {
 	ConfigView,
 	SessionView,
 	SkillDocView,
+	SkillGroupView,
 	SkillView,
 } from "../src/api-types.ts";
 import { Toaster } from "./components/toaster.tsx";
@@ -119,9 +121,40 @@ let history: ReturnType<typeof spyOn>;
 let remove: ReturnType<typeof spyOn>;
 let deleted: string[];
 let canEdit = true;
+let groups: SkillGroupView[];
+let listGroups: ReturnType<typeof spyOn>;
+let saveGroup: ReturnType<typeof spyOn>;
+let removeGroup: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
 	canEdit = true;
+	groups = [
+		{
+			name: "notes",
+			description: "Note keeping.",
+			skills: ["daily-notes"],
+		},
+	];
+	listGroups = spyOn(editApi, "skillGroups").mockImplementation(async () => ({
+		groups: groups.map((group) => ({ ...group })),
+	}));
+	saveGroup = spyOn(editApi, "saveSkillGroup").mockImplementation(
+		async (name, save) => {
+			groups = [
+				...groups.filter(
+					(group) => group.name !== name && group.name !== save.from,
+				),
+				{ name, description: save.description, skills: save.skills },
+			];
+			return { message: `Saved ${name}.` };
+		},
+	);
+	removeGroup = spyOn(editApi, "deleteSkillGroup").mockImplementation(
+		async (name) => {
+			groups = groups.filter((group) => group.name !== name);
+			return { message: `Deleted ${name}.` };
+		},
+	);
 	current = {
 		name: "daily-notes",
 		source: { kind: "written" },
@@ -182,7 +215,18 @@ beforeEach(() => {
 });
 afterEach(async () => {
 	await page.render(null);
-	for (const spy of [skills, session, read, save, create, history, remove])
+	for (const spy of [
+		skills,
+		session,
+		read,
+		save,
+		create,
+		history,
+		remove,
+		listGroups,
+		saveGroup,
+		removeGroup,
+	])
 		spy.mockRestore();
 });
 
@@ -507,4 +551,129 @@ test("Cancel deletes nothing, and a refusal stays in the question in the server'
 		q('dialog[aria-label="Delete this skill?"] .failure')?.textContent,
 	).toBe('There is no skill "daily-notes"; see skill_list.');
 	expect(card("daily-notes")).not.toBeUndefined();
+});
+
+describe("skill groups at phone width", () => {
+	let width: number;
+	beforeEach(() => {
+		width = window.innerWidth;
+		window.innerWidth = 390;
+	});
+	afterEach(() => {
+		window.innerWidth = width;
+	});
+
+	const section = () => q('section[aria-label="Skill groups"]');
+	const groupCard = (name: string) =>
+		[...(section()?.querySelectorAll("article.card") ?? [])].find(
+			(one) => one.querySelector("strong")?.textContent === name,
+		);
+	const inGroup = (name: string, label: string) =>
+		[
+			...(groupCard(name)?.querySelectorAll<HTMLButtonElement>("button") ?? []),
+		].find((one) => one.textContent?.trim() === label) ?? null;
+	const form = () =>
+		q<HTMLDialogElement>("dialog[open] form") as HTMLFormElement | null;
+	const setValue = (
+		element: HTMLInputElement | HTMLTextAreaElement | null | undefined,
+		value: string,
+	) => {
+		if (!element) throw new Error("nothing to type into");
+		return page.act(() => {
+			Object.getOwnPropertyDescriptor(
+				Object.getPrototypeOf(element),
+				"value",
+			)?.set?.call(element, value);
+			element.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+	};
+	const box = (skill: string) =>
+		[...(form()?.querySelectorAll("label") ?? [])]
+			.find((one) => one.querySelector("strong")?.textContent === skill)
+			?.querySelector<HTMLInputElement>('input[type="checkbox"]') ?? null;
+
+	test("lists each group with its skills, only for an owner who can edit", async () => {
+		await show();
+		expect(groupCard("notes")?.textContent).toContain("Note keeping.");
+		expect(groupCard("notes")?.textContent).toContain("Skills: daily-notes");
+		await page.render(null);
+		canEdit = false;
+		await show();
+		expect(section()).toBeNull();
+	});
+
+	test("creates a group from the catalog's checkboxes", async () => {
+		await show();
+		await page.click(button("New group"));
+		await setValue(form()?.querySelector("input:not([type])"), "build");
+		await setValue(form()?.querySelector("textarea"), "Building things.");
+		await page.click(box("kit-do"));
+		await page.click(box("writing-skills"));
+		await page.act(() => {
+			form()?.requestSubmit();
+			return settle(80);
+		});
+		expect(saveGroup).toHaveBeenCalledWith("build", {
+			description: "Building things.",
+			skills: ["writing-skills", "kit-do"],
+		});
+		expect(document.body.textContent).toContain("Saved build.");
+		expect(groupCard("build")?.textContent).toContain("writing-skills, kit-do");
+	});
+
+	test("edits a group's name, description and skills; a rename names the group it came from", async () => {
+		await show();
+		await page.click(inGroup("notes", "Edit"));
+		expect(box("daily-notes")?.checked).toBe(true);
+		await setValue(form()?.querySelector("input:not([type])"), "journal");
+		await page.click(box("daily-notes"));
+		await page.click(box("kit-do"));
+		await page.act(() => {
+			form()?.requestSubmit();
+			return settle(80);
+		});
+		expect(saveGroup).toHaveBeenCalledWith("journal", {
+			description: "Note keeping.",
+			skills: ["kit-do"],
+			from: "notes",
+		});
+		expect(groupCard("notes")).toBeUndefined();
+		expect(groupCard("journal")?.textContent).toContain("Skills: kit-do");
+	});
+
+	test("a refusal stays in the form in the server's words", async () => {
+		await show();
+		await page.click(button("New group"));
+		saveGroup.mockRejectedValueOnce(
+			new ApiFailure('"Bad" is not a usable skill name.', undefined, 400),
+		);
+		await setValue(form()?.querySelector("input:not([type])"), "Bad");
+		await setValue(form()?.querySelector("textarea"), "x");
+		await page.act(() => {
+			form()?.requestSubmit();
+			return settle(80);
+		});
+		expect(form()?.querySelector(".failure")?.textContent).toBe(
+			'"Bad" is not a usable skill name.',
+		);
+	});
+
+	test("Delete asks first and says the skills stay; Cancel deletes nothing", async () => {
+		await show();
+		await page.click(inGroup("notes", "Delete"));
+		const confirm = q<HTMLDialogElement>(
+			'dialog[aria-label="Delete this skill group?"]',
+		);
+		expect(confirm?.open).toBe(true);
+		expect(confirm?.textContent).toContain("Its skills stay");
+		await page.click(button("Cancel"));
+		expect(removeGroup).not.toHaveBeenCalled();
+		await page.act(() => settle(300));
+		await page.click(inGroup("notes", "Delete"));
+		await page.click(button("Delete group"));
+		await page.act(() => settle(80));
+		expect(removeGroup).toHaveBeenCalledWith("notes");
+		expect(groupCard("notes")).toBeUndefined();
+		expect(section()?.textContent).toContain("No skill groups.");
+	});
 });

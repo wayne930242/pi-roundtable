@@ -8,6 +8,7 @@ import { Confirm } from "../components/confirm.tsx";
 import { Dialog } from "../components/dialog.tsx";
 import { Icon } from "../components/icons.tsx";
 import { MarkdownDocument } from "../components/markdown.tsx";
+import { SkillGroups } from "../components/skill-groups.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { editApi } from "../lib/edit-api.ts";
@@ -83,6 +84,12 @@ export function SkillsPage() {
 					}
 				/>
 			))}
+			{canEdit ? (
+				<SkillGroups
+					catalog={skills ?? []}
+					onChanged={() => setVersion((n) => n + 1)}
+				/>
+			) : null}
 			{editing ? (
 				<Suspense fallback={null}>
 					<SkillEditor

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Skill groups in the app. The Skills page has a "Skill groups" section that lists each group with its skills and creates, edits (name, description, skills picked from the catalog) and deletes a group after a confirmation. The Edit knight sheet's Skills section has "Apply a group": each group says whether the knight carries all of it, and applying one, after a confirmation, switches on the group's skills the knight lacks through the same path as the per-skill switch, switches nothing off, and names what it added. A knight carries skills, not groups. The routes are under `api/skill-groups/` (list, `PUT` to create or replace with `from` to rename, `DELETE`, `POST …/apply`) and answer owners only; `AppApiOptions.skills.groups` takes the registry's `groups`, `setGroup` and `deleteGroup`.
+
 ### Changed
 
 - A group's council has one view, `CouncilView`, that both the group room and the round table page show: the council chip and sheet, the Animation mode / Chat mode switch, Reset view in the scene, the waiting cards, the room menu, the mode and offline banners, and the scene or the chat with the room's composer (with its @AI/note switch where the room takes notes). The table page gains the waiting cards and the room menu; the room gains the council chip, seat menus in the scene, and a phone keyboard that closes after a send.
