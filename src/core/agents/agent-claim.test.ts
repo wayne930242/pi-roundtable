@@ -358,7 +358,7 @@ test("an embed-only webhook post, as the Discord surface reads it, starts the re
 			reference: null,
 			messageSnapshots: { first: () => undefined },
 			mentions: { users: new Map() },
-			channel: { isDMBased: () => false },
+			channel: { isDMBased: () => false, isThread: () => false },
 			attachments: new Map(),
 			embeds: [
 				{

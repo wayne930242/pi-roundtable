@@ -11,9 +11,13 @@ export type DiscordFailure =
 
 /**
  * More about why Discord refused, where its code alone does not say: a category that is full (a
- * 400 with a form-body error) and a channel that is no category or in no right guild.
+ * 400 with a form-body error), a channel that is no category or forum, and one in no right guild.
  */
-export type DiscordReason = "category_full" | "not_category" | "wrong_guild";
+export type DiscordReason =
+	| "category_full"
+	| "not_category"
+	| "not_forum" // a forum call on a channel that is no forum, or a post call on a thread that is no forum post
+	| "wrong_guild";
 
 /**
  * A failed Discord call. The message names the operation and Discord's own reason, never a URL,
@@ -103,4 +107,9 @@ export function failure(operation: string, error: unknown): DiscordPosterError {
 /** Whether the REST client threw Discord's error with one of these JSON codes. */
 export function isCode(error: unknown, ...codes: number[]): boolean {
 	return error instanceof DiscordAPIError && codes.includes(Number(error.code));
+}
+
+/** A call refused before it was sent, for an argument Discord would refuse. */
+export function invalid(message: string): DiscordPosterError {
+	return new DiscordPosterError("invalid", message);
 }

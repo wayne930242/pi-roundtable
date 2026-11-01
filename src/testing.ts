@@ -103,6 +103,7 @@ export {
 export { eagerText, useEagerCatalog } from "./core/testing/eager-catalog.ts";
 export type {
 	FakeDiscordPoster,
+	FakeForum,
 	FakePosterChannel,
 	FakePosterMessage,
 } from "./core/testing/fake-poster.ts";

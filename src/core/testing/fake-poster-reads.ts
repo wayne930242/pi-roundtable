@@ -5,10 +5,10 @@ import {
 } from "../discord/poster/poster.ts";
 import { checkSnowflake } from "../discord/poster/poster-checks.ts";
 import { DiscordPosterError } from "../discord/poster/poster-errors.ts";
-import { FakePosterGuild } from "./fake-poster-guild.ts";
+import { FakePosterForum } from "./fake-poster-forum.ts";
 
 /** The fake's pin calls and message reads, on top of its channel, thread and member calls. */
-export abstract class FakePosterReads extends FakePosterGuild {
+export abstract class FakePosterReads extends FakePosterForum {
 	async pin(channelId: string, messageId: string): Promise<void> {
 		checkSnowflake("a channel", channelId);
 		checkSnowflake("a message", messageId);

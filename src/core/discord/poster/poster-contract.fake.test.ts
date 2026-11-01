@@ -19,6 +19,17 @@ function fakeSubject(): PosterSubject {
 					avatars: new Map(),
 				}),
 			category: (id) => void fake.categories.add(id),
+			forum: (id) => {
+				fake.channels.set(id, {
+					name: undefined,
+					parentId: undefined,
+					topic: "",
+					messages: [],
+					pins: [],
+					avatars: new Map(),
+				});
+				fake.forums.set(id, { tags: [] });
+			},
 			member: (userId, names) =>
 				void fake.memberNames.set(
 					userId,
@@ -58,9 +69,31 @@ function fakeSubject(): PosterSubject {
 					.map(() => ({ parse: [], users: [] })),
 			autoArchiveMinutes: (threadId) =>
 				fake.channels.get(threadId)?.autoArchiveMinutes,
-			isCard: (channelId, messageId) =>
-				fake.messagesIn(channelId).find((message) => message.id === messageId)
-					?.card !== undefined,
+			isCard: (channelId, messageId) => {
+				const card = fake
+					.messagesIn(channelId)
+					.find((message) => message.id === messageId)?.card;
+				return card !== undefined && card.preview === undefined;
+			},
+			legacyCard: (channelId, messageId) => {
+				const message = fake
+					.messagesIn(channelId)
+					.find((entry) => entry.id === messageId);
+				const card = message?.card;
+				if (!(message && card) || card.preview === undefined) return undefined;
+				return {
+					content: message.content,
+					embeds: 1,
+					title: card.title,
+					color: card.accent,
+					rows:
+						(card.selects?.length ?? 0) +
+						((card.buttons?.length ?? 0) + (card.links?.length ?? 0) > 0
+							? 1
+							: 0),
+				};
+			},
+			appliedTags: (threadId) => fake.channels.get(threadId)?.appliedTags ?? [],
 			requests: () => fake.requests,
 		},
 	};

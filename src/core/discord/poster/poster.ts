@@ -94,10 +94,25 @@ export interface CardPicture {
 
 /**
  * A card the bot posts: a Components V2 container with a heading, text sections, a quiet last line
- * and an optional colour bar. Plain data, so a fake can hold and compare it. It carries no
- * `content` and no embeds and never pings.
+ * and an optional colour bar. Plain data, so a fake can hold and compare it. It never pings. A card
+ * without `preview` carries no `content` and no embeds, so its push notification is blank; with
+ * `preview` it is a legacy message (see `preview`).
  */
 export interface DiscordCard {
+	/**
+	 * One line of plain text for the message's `content`, which is what Discord builds a push or
+	 * desktop notification from (a Components V2 message has none). Whitespace runs, line breaks
+	 * included, are flattened to one space; at most 2,000 characters after that, and a short line
+	 * (about 120 characters) reads best. When set, the card is sent as a legacy message instead:
+	 * `content: preview`, one embed (the title, the sections joined by blank lines as its
+	 * description, `accent` as its colour, `footer`, `thumbnail` and `image`) and ordinary action
+	 * rows for `buttons`, `links` and `selects` (at most five rows: one per menu, one for the
+	 * buttons). An embed has no alt text, so a picture's `description` is dropped. A message keeps
+	 * its kind for good: `editCard` and `editWebhookCard` re-send the card (and an edit sets
+	 * `content` too), but a Components V2 message cannot be edited into a preview card or the other
+	 * way round (`rejected`).
+	 */
+	preview?: string;
 	/** The colour of the bar along the side, as 0xRRGGBB. */
 	accent?: number;
 	title: string;
@@ -166,6 +181,81 @@ export interface CategoryChannel {
 	topic: string;
 }
 
+/** What a channel is, as `channelKind` tells it. */
+export type ChannelKind =
+	| "text"
+	| "category"
+	/** A thread of a text channel (or of any parent that is not a forum). */
+	| "thread"
+	| "forum"
+	/** A post of a forum: a thread whose parent is a forum, so its first message has the thread's own id. */
+	| "forum_post"
+	/** Voice, stage, announcement, media and the rest. */
+	| "other";
+
+/** A channel's guild, kind and parent. */
+export interface ChannelKindInfo {
+	guildId: string;
+	kind: ChannelKind;
+	/** The category of a text channel or forum, the parent channel of a thread (the forum for a `forum_post`); absent for a channel under no category. */
+	parentId?: string;
+}
+
+/** A tag a forum offers its posts. */
+export interface ForumTag {
+	id: string;
+	/** 1 to 20 characters. */
+	name: string;
+	/** Only members with Manage Threads can apply a moderated tag. */
+	moderated: boolean;
+	/** A Unicode emoji shown beside the name. */
+	emoji?: string;
+	/** The id of a custom emoji shown beside the name; never together with `emoji`. */
+	emojiId?: string;
+}
+
+/**
+ * A tag as `setForumTags` takes it: a `ForumTag` read earlier is one, and a tag with no `id` is made
+ * new. Discord replaces the forum's whole set, so a tag left out is deleted.
+ */
+export interface ForumTagInput {
+	id?: string;
+	name: string;
+	moderated?: boolean;
+	emoji?: string;
+	emojiId?: string;
+}
+
+/** How many minutes without a message Discord waits before it archives a thread. */
+export type ThreadAutoArchive = 60 | 1_440 | 4_320 | 10_080;
+
+/** A post for `createForumPost`: a name, tags, and a first message that is a card or plain text. */
+export type ForumPost = {
+	/** 1 to 100 characters. */
+	name: string;
+	/** Tag ids of the forum, at most five (`invalid`); an id the forum does not offer is `rejected`. */
+	appliedTags?: readonly string[];
+	/** Default a week, as `startThread`. */
+	autoArchive?: ThreadAutoArchive;
+} & (
+	| { card: DiscordCard; content?: undefined; mentions?: undefined }
+	| {
+			card?: undefined;
+			/** 1 to 2,000 characters. */
+			content: string;
+			/** The only users the first message may ping (at most 20). */
+			mentions?: readonly string[];
+	  }
+);
+
+/** The post `createForumPost` made. */
+export interface ForumPostCreated {
+	/** The post's id: a thread is a channel. */
+	threadId: string;
+	/** The id of the first message, which is the thread's own id; `editCard` and `pin` take it with `threadId`. */
+	messageId: string;
+}
+
 /** Discord's limits as the poster keeps them. */
 export const DISCORD_LIMITS = Object.freeze({
 	contentChars: 2_000,
@@ -184,6 +274,14 @@ export const DISCORD_LIMITS = Object.freeze({
 	/** The most buttons (links too) a card's row holds. */
 	cardButtons: 5,
 	selectOptions: 25,
+	/** The most characters an embed title holds (a `preview` card's title). */
+	embedTitleChars: 256,
+	/** The most action rows a legacy message holds (a `preview` card: one per menu, one for the buttons). */
+	actionRows: 5,
+	/** The most tags a forum holds, characters in a tag's name, and tags applied to one post. */
+	forumTags: 20,
+	forumTagNameChars: 20,
+	postTags: 5,
 } as const);
 
 export interface DiscordPoster {
@@ -312,11 +410,19 @@ export interface DiscordPoster {
 	/** Deletes a channel; one that is already gone is `channel_gone`. */
 	deleteChannel(channelId: string): Promise<void>;
 	/**
-	 * Renames a channel (Manage Channels). Discord lets a channel be renamed twice in ten minutes; a
+	 * Renames a channel, or a thread or a forum post (a thread is a channel; the call is the same,
+	 * and Manage Threads is the permission for another person's post). Discord lets a channel be renamed twice in ten minutes; a
 	 * rename past that is not queued: it fails as `unavailable` after a short wait and is never sent
 	 * later.
 	 */
 	renameChannel(channelId: string, name: string): Promise<void>;
+	/**
+	 * What a channel is: a text channel, category, thread, forum, forum post or something else (and
+	 * its guild and parent), so a plugin can tell a post of a forum from a thread of a text channel
+	 * before it starts a thread. Kept after the first read. `channel_gone`; `invalid` with
+	 * `wrong_guild` for a direct-message channel.
+	 */
+	channelKind(channelId: string): Promise<ChannelKindInfo>;
 
 	// Threads
 
@@ -339,4 +445,27 @@ export interface DiscordPoster {
 	 * the entry is not among the log's newest 50.
 	 */
 	threadCloser(threadId: string, state: ThreadState): Promise<ThreadCloser>;
+
+	// Forums
+
+	/** The tags a forum offers, in Discord's order. `invalid` with `not_forum` for a channel that is no forum. */
+	forumTags(forumId: string): Promise<ForumTag[]>;
+	/**
+	 * Replaces the forum's tags with these (Manage Channels): a tag with an `id` is kept and may be
+	 * renamed, one without is made, and one left out is deleted, so read `forumTags` first to add one.
+	 * At most 20 tags, no id twice. Returns the forum's tags afterwards, with the new ids.
+	 */
+	setForumTags(
+		forumId: string,
+		tags: readonly ForumTagInput[],
+	): Promise<ForumTag[]>;
+	/**
+	 * A post in a forum with its first message in the same request (Discord does not allow an empty
+	 * post): a card (Components V2, or a legacy message when it has a `preview`), or plain text. `editCard(threadId, messageId, card)` edits a card
+	 * first message. `invalid` with `not_forum` for a channel that is no forum; `forbidden` without
+	 * Create Posts; `rejected` for a tag the forum does not offer.
+	 */
+	createForumPost(forumId: string, post: ForumPost): Promise<ForumPostCreated>;
+	/** Replaces the tags applied to a forum post (at most five; none clears them). `invalid` with `not_forum` when the thread is no forum post. */
+	setPostTags(threadId: string, tagIds: readonly string[]): Promise<void>;
 }

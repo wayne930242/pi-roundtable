@@ -2,12 +2,14 @@ import {
 	auditId,
 	BOT_ID,
 	channelJson,
+	checkAppliedTags,
 	type EmuChannel,
 	type EmuState,
 	formError,
 	HttpError,
 	missingPermissions,
 	newId,
+	replaceTags,
 	str,
 	unknownChannel,
 	unknownMessage,
@@ -113,6 +115,15 @@ export function guildRoutes(state: EmuState): Route[] {
 			/^\/channels\/(\d+)$/,
 			({ params, body }) => {
 				const channel = channelOf(state, params[0]);
+				if (Array.isArray(body.available_tags) && channel.type === 15)
+					channel.tags = replaceTags(state, channel, body.available_tags);
+				if (Array.isArray(body.applied_tags) && channel.thread) {
+					const forum = channel.parentId
+						? state.channels.get(channel.parentId)
+						: undefined;
+					if (forum?.type === 15)
+						channel.appliedTags = checkAppliedTags(forum, body.applied_tags);
+				}
 				const name = str(body.name);
 				if (name) {
 					// The sublimit on renames: a third inside ten minutes is answered with a long wait.

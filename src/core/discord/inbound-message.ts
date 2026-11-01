@@ -1,4 +1,4 @@
-import { type Message, MessageReferenceType } from "discord.js";
+import { ChannelType, type Message, MessageReferenceType } from "discord.js";
 import type { InboundMessage } from "../contract/channels.ts";
 import { channelKey } from "../contract/surface.ts";
 import type { AttachmentRef } from "../domain/attachment.ts";
@@ -36,6 +36,26 @@ function referenceOf(referenced: Message, mention: RegExp) {
 	};
 }
 
+/** What a thread's parent is: a text channel, a forum, or something else (also a parent that cannot be read). */
+async function threadOf(
+	message: Message,
+): Promise<InboundMessage["thread"] | undefined> {
+	const { channel } = message;
+	if (!channel.isThread() || !channel.parentId) return undefined;
+	const parent =
+		channel.parent ??
+		(await channel.guild.channels.fetch(channel.parentId).catch(() => null));
+	return {
+		parentId: channel.parentId,
+		parentKind:
+			parent?.type === ChannelType.GuildText
+				? "text"
+				: parent?.type === ChannelType.GuildForum
+					? "forum"
+					: "other",
+	};
+}
+
 /**
  * The facts of one Discord message, as the neutral `InboundMessage`; undefined for the bot's own
  * messages and before the client is ready. A forward reports the channel it came from as a
@@ -66,6 +86,7 @@ export async function toInbound(
 	const roleIds = message.member
 		? [...message.member.roles.cache.keys()]
 		: undefined;
+	const thread = await threadOf(message);
 	return {
 		channel: channelKey("discord", message.channelId),
 		messageId: message.id,
@@ -97,6 +118,7 @@ export async function toInbound(
 				}
 			: {}),
 		isDirect: message.channel.isDMBased(),
+		...(thread ? { thread } : {}),
 		...(message.guildId ? { space: message.guildId } : {}),
 		mentionsBot: message.mentions.users.has(botId),
 		repliesToBot: referenced?.author.id === botId,

@@ -79,6 +79,9 @@ await poster.edit(channelId, posted.messageId, { content: "Hello again" }, ["rel
 - 發文、編輯、卡片和私訊都不會 ping 到沒指名的人：請求一律帶 `allowed_mentions` 的 `parse: []`，只有你列在 `mentions` 的人會被 ping。
 - 卡片是 Components V2 訊息。`editCard` 會讓它維持這個型態；用 `say` 發的訊息不能改成卡片（`rejected`），而釘選時 Discord 發的那則通知是 bot 的訊息，沒有人能編輯它。
 - 卡片可帶 `thumbnail`（標題旁的小圖）與 `image`（文字區塊下方的圖），各為 `{ url, description? }`，網址須是 `https`；`editCard` 會保留它們。`postCard` 透過你的 webhook 發卡片，顯示該 webhook 的名稱與頭像，`editWebhookCard` 編輯它；這個 webhook 是 bot 自己建立的，所以卡片上的按鈕會送到你的 interaction 處理器。
+- 帶 `preview`（一行純文字）的卡片會改以傳統訊息送出：preview 成為訊息的 `content`，也就是推播與桌面通知顯示的字，卡片本身是一個 embed，按鈕與選單照常。沒有 `preview` 的卡片，通知是空白的。訊息的型態不能改：Components V2 卡片不能編輯成 preview 卡片，反過來也不行（`rejected`）。
+- `channelKind(channelId)` 回報頻道是 `text`、`category`、`thread`、`forum`、`forum_post` 還是 `other`；在討論串裡寫的訊息則由 `InboundMessage.thread`（`{ parentId, parentKind }`）說明。討論串或論壇貼文裡被提及時，就地回覆，不要再開討論串。
+- `forumTags` 與 `setForumTags` 讀取並整組取代論壇的標籤（帶著標籤的 `id` 就會保留它）；`createForumPost(forumId, { name, card | content, appliedTags?, autoArchive? })` 開一則貼文並附上第一則訊息（卡片或文字），第一則訊息的 id 就是討論串的 id，所以可用 `editCard(threadId, messageId, card)` 編輯；`setPostTags` 改貼文標籤，`renameChannel` 可為貼文改名。
 - Discord 允許頻道 10 分鐘內改名 2 次。`renameChannel` 不會把第 3 次排隊：10 秒後以 `unavailable` 失敗，之後也不會再送出。
 - `threadCloser` 讀 audit log（要有 View Audit Log，否則 `forbidden`），範圍是最近 50 筆討論串更新；Discord 自己的自動封存會讀成 `unknown`。
 - 失敗一律是 `DiscordPosterError`，有 `kind`（`invalid`、`channel_gone`、`message_gone`、`forbidden`、`rejected`、`unavailable`）；訊息裡不會有 URL 或 token。

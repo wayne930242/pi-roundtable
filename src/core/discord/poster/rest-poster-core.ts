@@ -48,13 +48,21 @@ export function text(value: unknown): string | undefined {
 	return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+/** What the poster keeps of a channel it read. */
+export interface ReadChannel {
+	guildId: string;
+	type: unknown;
+	/** The category of a channel, the parent channel of a thread. */
+	parentId?: string;
+}
+
 /** What the poster's two halves share: the REST client, the bot's id and the channels already read. */
 export interface RestCore {
 	rest: DiscordRest;
 	/** The bot's own user id, read on first use. */
 	bot(): Promise<string>;
-	/** A channel's guild and type; neither changes, so they are kept. */
-	readChannel(channelId: string): Promise<{ guildId: string; type: unknown }>;
+	/** A channel's guild, type and parent; none changes, so they are kept. */
+	readChannel(channelId: string): Promise<ReadChannel>;
 	/** The guild of a category; fails when the channel is no category. */
 	guildOf(categoryId: string): Promise<string>;
 }
@@ -77,8 +85,8 @@ export function restCore(rest: DiscordRest): RestCore {
 		return botId;
 	};
 	// A channel's guild and type never change; neither is a secret.
-	const known = new Map<string, { guildId: string; type: unknown }>();
-	const readChannel = async (channelId: string) => {
+	const known = new Map<string, ReadChannel>();
+	const readChannel = async (channelId: string): Promise<ReadChannel> => {
 		const held = known.get(channelId);
 		if (held) return held;
 		const channel = object(
@@ -91,7 +99,12 @@ export function restCore(rest: DiscordRest): RestCore {
 			throw new DiscordPosterError("invalid", "that channel is in no guild", {
 				reason: "wrong_guild",
 			});
-		const read = { guildId, type: channel.type };
+		const parentId = text(channel.parent_id);
+		const read = {
+			guildId,
+			type: channel.type,
+			...(parentId ? { parentId } : {}),
+		};
 		known.set(channelId, read);
 		return read;
 	};

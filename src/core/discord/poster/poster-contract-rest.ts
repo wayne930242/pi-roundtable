@@ -37,6 +37,7 @@ export function restSubject(
 			guildId: GUILD,
 			channel: (id) => void emulator.addChannel(id, GUILD),
 			category: (id) => void emulator.addChannel(id, GUILD, { type: 4 }),
+			forum: (id) => void emulator.addChannel(id, GUILD, { type: 15 }),
 			member: (userId, names) =>
 				void guild()?.members.set(userId, {
 					userId,
@@ -120,6 +121,23 @@ export function restSubject(
 					found.components !== undefined
 				);
 			},
+			legacyCard: (channelId, messageId) => {
+				const found = message(channelId, messageId);
+				if (!found || (found.flags & COMPONENTS_V2) !== 0 || !found.embeds)
+					return undefined;
+				const embed = found.embeds[0] as
+					| { title?: string; color?: number }
+					| undefined;
+				return {
+					content: found.content,
+					embeds: found.embeds.length,
+					title: embed?.title,
+					color: embed?.color,
+					rows: Array.isArray(found.components) ? found.components.length : 0,
+				};
+			},
+			appliedTags: (threadId) =>
+				emulator.state.channels.get(threadId)?.appliedTags ?? [],
 			requests: () => emulator.requests,
 		},
 	};

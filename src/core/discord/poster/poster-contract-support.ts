@@ -30,6 +30,8 @@ export interface PosterWorld {
 	readonly guildId: string;
 	channel(id: string): void;
 	category(id: string): void;
+	/** A forum channel with no tags. */
+	forum(id: string): void;
 	member(userId: string, names: MemberNames): void;
 	/** Arranges why `userId` can or cannot see the channel; returns what `canView` must say. */
 	viewCase(channelId: string, userId: string, how: ViewCase): boolean;
@@ -57,6 +59,21 @@ export interface PosterWorld {
 	autoArchiveMinutes(threadId: string): number | undefined;
 	/** Whether the message is a Components V2 card as Discord holds it. */
 	isCard(channelId: string, messageId: string): boolean;
+	/** A message sent as a `preview` card, as Discord holds it: its content, embed and action rows; undefined for any other message. */
+	legacyCard(
+		channelId: string,
+		messageId: string,
+	):
+		| {
+				content: string;
+				embeds: number;
+				title: string | undefined;
+				color: number | undefined;
+				rows: number;
+		  }
+		| undefined;
+	/** The tag ids applied to a forum post, as Discord holds them. */
+	appliedTags(threadId: string): readonly string[];
 	/** How many requests reached Discord (for the fake: calls past the argument checks). */
 	requests(): number;
 }

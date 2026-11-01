@@ -29,7 +29,7 @@ const FORBIDDEN_WORDS = /clyde|discord/i;
 
 // Messages, webhooks and pins.
 
-function add(
+export function add(
 	state: EmuState,
 	channel: EmuChannel,
 	fields: Partial<EmuMessage> & { authorId: string },
@@ -44,6 +44,9 @@ function add(
 		content: str(body.content) ?? "",
 		flags: typeof body.flags === "number" ? body.flags : 0,
 		...(body.components ? { components: body.components } : {}),
+		...(Array.isArray(body.embeds) && body.embeds.length > 0
+			? { embeds: body.embeds }
+			: {}),
 		attachments: files.map((file, index) => ({
 			id: newId(state),
 			filename: file.name,
@@ -59,17 +62,66 @@ function add(
 	return message;
 }
 
-/** Components V2 needs its flag; without it Discord answers a union error on the components. */
-function checkCard(body: Record<string, unknown>): void {
-	if (
-		body.components !== undefined &&
-		(Number(body.flags ?? 0) & COMPONENTS_V2) === 0
-	)
+const UNION_ERROR =
+	"Value of field type must be one of (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)";
+
+function hasEmbeds(body: Record<string, unknown>): boolean {
+	return Array.isArray(body.embeds) && body.embeds.length > 0;
+}
+
+/** Discord refuses `content` and `embeds` on a Components V2 message. */
+function legacyFieldsOnV2(): HttpError {
+	return formError(
+		"content",
+		"MESSAGE_CANNOT_USE_LEGACY_FIELDS_WITH_COMPONENTS_V2",
+		"Messages using components v2 cannot use content, embeds, poll or sticker_ids",
+	);
+}
+
+/**
+ * What a message body may hold. A Components V2 one needs its flag and carries no `content` or
+ * embeds; one without the flag holds action rows only, else Discord answers a union error.
+ */
+export function checkCard(body: Record<string, unknown>): void {
+	if ((Number(body.flags ?? 0) & COMPONENTS_V2) !== 0) {
+		if (str(body.content) !== undefined || hasEmbeds(body))
+			throw legacyFieldsOnV2();
+		return;
+	}
+	if (body.components === undefined) return;
+	const rows = Array.isArray(body.components) ? body.components : [];
+	if (rows.some((row) => (row as { type?: unknown } | null)?.type !== 1))
+		throw formError("components[0]", "UNION_TYPE_CHOICES", UNION_ERROR);
+	if (rows.length > 5)
+		throw formError(
+			"components",
+			"BASE_TYPE_MAX_LENGTH",
+			"Must be 5 or fewer in length.",
+		);
+}
+
+/** An edit of a message's content, embeds and components, in the rules of its kind. */
+function applyEdit(
+	message: EmuMessage,
+	body: Record<string, unknown>,
+	components: boolean,
+): void {
+	const v2 = (message.flags & COMPONENTS_V2) !== 0;
+	const asksV2 = (Number(body.flags ?? 0) & COMPONENTS_V2) !== 0;
+	checkCard(body);
+	// A message made without the flag cannot become a Components V2 message, nor the other way round.
+	if (asksV2 && !v2)
 		throw formError(
 			"components[0]",
 			"UNION_TYPE_CHOICES",
-			"Value of field type must be one of (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)",
+			"This message cannot hold Components V2",
 		);
+	if (v2 && (str(body.content) !== undefined || hasEmbeds(body)))
+		throw legacyFieldsOnV2();
+	if (components && body.components !== undefined)
+		message.components = body.components;
+	if (Array.isArray(body.embeds)) message.embeds = body.embeds;
+	if (typeof body.content === "string") message.content = body.content;
 }
 
 function webhookOf(
@@ -168,7 +220,12 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 						? body
 						: { ...body, components: undefined, flags: 0 };
 				checkCard(sent);
-				if (!str(body.content) && files.length === 0 && !sent.components)
+				if (
+					!str(body.content) &&
+					files.length === 0 &&
+					!sent.components &&
+					!hasEmbeds(body)
+				)
 					throw new HttpError(400, 50006, "Cannot send an empty message");
 				const username = str(body.username);
 				if (username && FORBIDDEN_WORDS.test(username.normalize("NFKC")))
@@ -200,20 +257,12 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 			/^\/webhooks\/(\d+)\/([^/]+)\/messages\/(\d+)$/,
 			(ctx) => {
 				const { message } = webhookMessage(state, ctx);
-				if (
-					ctx.body.components !== undefined &&
-					ctx.query.get("with_components") === "true"
-				) {
-					if ((message.flags & COMPONENTS_V2) === 0)
-						throw formError(
-							"components[0]",
-							"UNION_TYPE_CHOICES",
-							"Value of field type must be one of (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)",
-						);
-					message.components = ctx.body.components;
-				}
-				if (typeof ctx.body.content === "string")
-					message.content = ctx.body.content;
+				// Components are respected only when the request asks (`with_components`).
+				applyEdit(
+					message,
+					ctx.body,
+					ctx.query.get("with_components") === "true",
+				);
 				const mentions = mentionsOf(ctx.body);
 				if (mentions) message.allowedMentions = mentions;
 				return messageJson(message);
@@ -257,7 +306,11 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 					channel.thread.archived = false;
 				}
 				checkCard(body);
-				if (!str(body.content) && body.components === undefined)
+				if (
+					!str(body.content) &&
+					body.components === undefined &&
+					!hasEmbeds(body)
+				)
 					throw new HttpError(400, 50006, "Cannot send an empty message");
 				return messageJson(add(state, channel, { authorId: BOT_ID }, body));
 			},
@@ -353,19 +406,7 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 						50005,
 						"Cannot edit a message authored by another user",
 					);
-				checkCard(body);
-				// A message made without the flag cannot become a Components V2 message.
-				if (
-					body.components !== undefined &&
-					(message.flags & COMPONENTS_V2) === 0
-				)
-					throw formError(
-						"components[0]",
-						"UNION_TYPE_CHOICES",
-						"This message cannot hold Components V2",
-					);
-				if (body.components !== undefined) message.components = body.components;
-				if (typeof body.content === "string") message.content = body.content;
+				applyEdit(message, body, true);
 				return messageJson(message);
 			},
 		],

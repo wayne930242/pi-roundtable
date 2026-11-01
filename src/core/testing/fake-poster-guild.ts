@@ -52,6 +52,8 @@ export interface FakePosterChannel {
 	avatars: Map<string, Uint8Array>;
 	/** For a thread: the message of the parent channel it was started on. */
 	startedOn?: string;
+	/** For a forum post: the ids of the tags applied to it. */
+	appliedTags?: string[];
 	/** For a thread: the minutes without a message after which it archives itself. */
 	autoArchiveMinutes?: number;
 	/** For a thread: whether it is archived. A post by the bot wakes it, as on Discord. */

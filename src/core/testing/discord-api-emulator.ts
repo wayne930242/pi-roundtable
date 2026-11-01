@@ -1,3 +1,4 @@
+import { forumRoutes } from "./discord-api-emulator-forum.ts";
 import {
 	channelOf,
 	guildRoutes,
@@ -66,6 +67,7 @@ export class DiscordEmulator {
 	constructor() {
 		this.#routes = [
 			...guildRoutes(this.state),
+			...forumRoutes(this.state),
 			...messageRoutes(this.state, this.#pins),
 		];
 	}

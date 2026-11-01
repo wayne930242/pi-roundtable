@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MessageReferenceType } from "discord.js";
+import { ChannelType, MessageReferenceType } from "discord.js";
 import { withReference } from "../routing/message-text.ts";
 import { toInbound } from "./inbound-message.ts";
 
@@ -32,7 +32,7 @@ function discordMessage(extra: Record<string, unknown> = {}) {
 		reference: null,
 		messageSnapshots: { first: () => undefined },
 		mentions: { users: new Map([[BOT, {}]]) },
-		channel: { isDMBased: () => false },
+		channel: { isDMBased: () => false, isThread: () => false },
 		attachments: attachments(),
 		embeds: [],
 		...extra,
@@ -70,7 +70,7 @@ test("a direct message has no space, and the bot's own or an unready client's me
 		discordMessage({
 			guildId: null,
 			member: null,
-			channel: { isDMBased: () => true },
+			channel: { isDMBased: () => true, isThread: () => false },
 		}),
 		identity,
 	);
@@ -230,4 +230,70 @@ test("a long embed is bounded, and a replied-to message's embed is read too", as
 	);
 	expect(inbound?.text.length).toBeLessThanOrEqual(4_000);
 	expect(inbound?.reference?.text).toContain("[FIRING:2] HighLoad");
+});
+
+/** A thread channel as `toInbound` reads it: its parent, from the cache or a fetch. */
+function threadChannel(
+	parent: { type: number } | undefined,
+	options: { fetched?: { type: number } | null } = {},
+) {
+	return {
+		isDMBased: () => false,
+		isThread: () => true,
+		parentId: "55",
+		parent,
+		guild: {
+			channels: {
+				fetch: async () => {
+					if (options.fetched === null) throw new Error("Unknown Channel");
+					return options.fetched;
+				},
+			},
+		},
+	};
+}
+
+test("a message in a thread reports the thread's parent and what it is", async () => {
+	const text = await toInbound(
+		discordMessage({ channel: threadChannel({ type: ChannelType.GuildText }) }),
+		identity,
+	);
+	expect(text?.thread).toEqual({ parentId: "55", parentKind: "text" });
+	const forum = await toInbound(
+		discordMessage({
+			channel: threadChannel({ type: ChannelType.GuildForum }),
+		}),
+		identity,
+	);
+	expect(forum?.thread).toEqual({ parentId: "55", parentKind: "forum" });
+	const other = await toInbound(
+		discordMessage({
+			channel: threadChannel({ type: ChannelType.GuildAnnouncement }),
+		}),
+		identity,
+	);
+	expect(other?.thread).toEqual({ parentId: "55", parentKind: "other" });
+});
+
+test("a thread whose parent is not cached has it fetched; a parent that cannot be read is other", async () => {
+	const fetched = await toInbound(
+		discordMessage({
+			channel: threadChannel(undefined, {
+				fetched: { type: ChannelType.GuildForum },
+			}),
+		}),
+		identity,
+	);
+	expect(fetched?.thread).toEqual({ parentId: "55", parentKind: "forum" });
+	const unreadable = await toInbound(
+		discordMessage({ channel: threadChannel(undefined, { fetched: null }) }),
+		identity,
+	);
+	expect(unreadable?.thread).toEqual({ parentId: "55", parentKind: "other" });
+});
+
+test("a message in a channel or a direct conversation reports no thread", async () => {
+	expect(await toInbound(discordMessage(), identity)).not.toHaveProperty(
+		"thread",
+	);
 });

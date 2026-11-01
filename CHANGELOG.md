@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `DiscordCard.preview`: one line of plain text that makes a card a legacy message instead of a Components V2 one, so a card's push and desktop notification is no longer blank. The preview (whitespace flattened, at most 2,000 characters) is the message's `content`, the card is one embed (title, sections as the description, `accent` as the colour, `footer`, `thumbnail`, `image`) and `buttons`, `links` and `selects` are ordinary action rows. It works through `sayCard`, `postCard`, `editCard`, `editWebhookCard` and a forum post's first message; an edit sets `content` too. A card without `preview` is unchanged. A message keeps its kind: a Components V2 message cannot be edited into a preview card or the other way round (`rejected`).
+- `DiscordPoster.createForumPost(forumId, { name, card | content, appliedTags?, autoArchive?, mentions? })` returns `{ threadId, messageId }` (`ForumPost`, `ForumPostCreated`, `ThreadAutoArchive`); the first message of a post has the thread's own id, so `editCard(threadId, messageId, card)` edits a card first message. `DiscordPoster.forumTags(forumId)` and `setForumTags(forumId, tags)` read and replace a forum's tags (`ForumTag`, `ForumTagInput`; a tag sent with its id is kept), and `setPostTags(threadId, tagIds)` replaces a post's tags. `renameChannel` is documented to rename a thread or a forum post too.
+- `DiscordPoster.channelKind(channelId)` returns `{ guildId, kind, parentId? }` (`ChannelKindInfo`) with `kind` one of `text`, `category`, `thread`, `forum`, `forum_post` and `other` (`ChannelKind`). `DiscordReason` has a new `not_forum`, for a forum call on a channel that is no forum and `setPostTags` on a thread that is no forum post.
+- `InboundMessage.thread?: { parentId, parentKind }`, set by the Discord surface for a message written in a thread: `parentKind` is `text`, `forum` or `other`, so a claim answers a mention in a forum post in place instead of starting a thread.
+- `fakeDiscordPoster` keeps the same calls: `forums` (a forum's tags, `FakeForum`), forum posts as channels with `appliedTags`, `channelKind`, and preview cards held with the preview as the message content. The poster contract scenarios cover all of it for the fake and the real poster over the emulated Discord, which now also emulates forums, forum posts, tags and legacy messages with embeds.
+
 ## [0.30.3] - 2026-11-01
 
 - 0.30.2 was tagged but never published: its release run stopped on lint (a hook's dependency suppression the change had dropped) before any package was published. 0.30.3 carries 0.30.2's changes. No core behavior changes.

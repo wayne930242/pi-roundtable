@@ -14,13 +14,15 @@ import {
 	invalid,
 } from "../discord/poster/poster-checks.ts";
 import { DiscordPosterError } from "../discord/poster/poster-errors.ts";
-import {
-	cardText,
-	type FakePosterChannel,
-	type FakePosterMessage,
+import { assertSameCardKind, cardContent } from "./fake-poster-cards.ts";
+import type { FakeForum } from "./fake-poster-forum.ts";
+import type {
+	FakePosterChannel,
+	FakePosterMessage,
 } from "./fake-poster-guild.ts";
 import { FakePosterReads } from "./fake-poster-reads.ts";
 
+export type { FakeForum } from "./fake-poster-forum.ts";
 export type {
 	FakePosterChannel,
 	FakePosterMessage,
@@ -44,6 +46,11 @@ export interface FakeDiscordPoster extends DiscordPoster {
 	readonly goneChannels: Set<string>;
 	/** The categories that exist; creating a channel under any other fails as `channel_gone`. */
 	readonly categories: Set<string>;
+	/**
+	 * The forums that exist, with the tags each offers. Make one by setting an entry here and
+	 * registering the channel in `channels`; a forum call on any other channel fails as `not_forum`.
+	 */
+	readonly forums: Map<string, FakeForum>;
 	/** How many channels a category holds (Discord: 50) and a guild holds (Discord: 500). */
 	categoryLimit: number;
 	guildLimit: number;
@@ -245,7 +252,7 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 		const message: FakePosterMessage = {
 			id: this.next.toString(),
 			username: body.username,
-			content: cardText(post.card),
+			content: cardContent(post.card),
 			files: [],
 			blobs: [],
 			mentions: [],
@@ -283,8 +290,9 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 				"editing a card failed: that message is not a card",
 				{ discordCode: 50035, status: 400 },
 			);
+		assertSameCardKind(message.card, card);
 		message.card = card;
-		message.content = cardText(card);
+		message.content = cardContent(card);
 	}
 
 	async remove(
@@ -378,7 +386,7 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 		channel.messages.push({
 			id: this.next.toString(),
 			username: "bot",
-			content: cardText(card),
+			content: cardContent(card),
 			files: [],
 			blobs: [],
 			mentions: [],
@@ -406,8 +414,9 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 				"editing a card failed: that message is not a card",
 				{ discordCode: 50035, status: 400 },
 			);
+		assertSameCardKind(message.card, card);
 		message.card = card;
-		message.content = cardText(card);
+		message.content = cardContent(card);
 	}
 
 	async deleteAsBot(channelId: string, messageId: string): Promise<void> {

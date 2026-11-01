@@ -22,6 +22,8 @@ export interface EmuMessage {
 	flags: number;
 	/** Components the message carries; a v2 card has them without `content`. */
 	components?: unknown;
+	/** The embeds of a legacy message. */
+	embeds?: unknown[];
 	attachments: EmuAttachment[];
 	/** `allowed_mentions` as the request sent it: absent when it sent none. */
 	allowedMentions?: { parse: string[]; users: string[] };
@@ -37,9 +39,18 @@ export interface EmuThread {
 	autoArchiveDuration: number;
 }
 
+/** A tag a forum offers, in Discord's wire form. */
+export interface EmuTag {
+	id: string;
+	name: string;
+	moderated: boolean;
+	emoji_id: string | null;
+	emoji_name: string | null;
+}
+
 export interface EmuChannel {
 	id: string;
-	/** 0 text, 1 direct, 4 category, 11 public thread. */
+	/** 0 text, 1 direct, 4 category, 11 public thread, 15 forum. */
 	type: number;
 	guildId?: string;
 	parentId?: string;
@@ -49,6 +60,10 @@ export interface EmuChannel {
 	messages: EmuMessage[];
 	pins: { messageId: string; at: number }[];
 	thread?: EmuThread;
+	/** For a forum: the tags it offers. */
+	tags?: EmuTag[];
+	/** For a forum post: the ids of the tags applied to it. */
+	appliedTags?: string[];
 	/** The times of the renames Discord accepted. */
 	renames: number[];
 	recipientId?: string;
@@ -149,6 +164,8 @@ export function channelJson(channel: EmuChannel) {
 		...(channel.guildId ? { guild_id: channel.guildId } : {}),
 		...(channel.parentId ? { parent_id: channel.parentId } : {}),
 		...(channel.topic ? { topic: channel.topic } : {}),
+		...(channel.type === 15 ? { available_tags: channel.tags ?? [] } : {}),
+		...(channel.appliedTags ? { applied_tags: channel.appliedTags } : {}),
 		permission_overwrites: channel.overwrites,
 		...(channel.thread
 			? {
@@ -176,6 +193,7 @@ export function messageJson(message: EmuMessage) {
 		...(message.webhookId ? { webhook_id: message.webhookId } : {}),
 		attachments: message.attachments,
 		...(message.components ? { components: message.components } : {}),
+		embeds: message.embeds ?? [],
 		...(message.referencedMessageId
 			? {
 					message_reference: {
@@ -214,4 +232,64 @@ export function formError(field: string, code: string, message: string) {
 	return new HttpError(400, 50035, "Invalid Form Body", {
 		[field]: { _errors: [{ code, message }] },
 	});
+}
+
+/** The most tags a forum holds, and the most applied to a post. */
+const FORUM_TAGS = 20;
+const POST_TAGS = 5;
+/**
+ * The tags a forum offers after a PATCH of `available_tags`: a tag with a known id is kept (and
+ * may change), one without an id is made, and one left out is gone. The rules are our model of
+ * Discord, from its documentation, not from what the real one was seen to answer.
+ */
+export function replaceTags(
+	state: EmuState,
+	forum: EmuChannel,
+	given: unknown[],
+): EmuTag[] {
+	if (given.length > FORUM_TAGS)
+		throw formError(
+			"available_tags",
+			"BASE_TYPE_MAX_LENGTH",
+			`Must be ${FORUM_TAGS} or fewer in length.`,
+		);
+	const known = new Set((forum.tags ?? []).map((tag) => tag.id));
+	return given.map((raw) => {
+		const tag = object(raw);
+		const name = str(tag.name);
+		if (!name || [...name].length > 20)
+			throw formError(
+				"available_tags",
+				"BASE_TYPE_BAD_LENGTH",
+				"Must be between 1 and 20 in length.",
+			);
+		const id = str(tag.id);
+		if (id && !known.has(id))
+			throw formError("available_tags", "UNKNOWN_TAG", "Unknown tag");
+		return {
+			id: id ?? newId(state),
+			name,
+			moderated: tag.moderated === true,
+			emoji_id: str(tag.emoji_id) ?? null,
+			emoji_name: str(tag.emoji_name) ?? null,
+		};
+	});
+}
+
+/** The ids a post may carry: at most five, each one the forum offers. */
+export function checkAppliedTags(
+	forum: EmuChannel,
+	given: unknown[],
+): string[] {
+	const ids = given.filter((id): id is string => typeof id === "string");
+	if (ids.length > POST_TAGS)
+		throw formError(
+			"applied_tags",
+			"BASE_TYPE_MAX_LENGTH",
+			`Must be ${POST_TAGS} or fewer in length.`,
+		);
+	const offered = new Set((forum.tags ?? []).map((tag) => tag.id));
+	if (ids.some((id) => !offered.has(id)))
+		throw formError("applied_tags", "UNKNOWN_TAG", "Unknown tag");
+	return ids;
 }

@@ -77,6 +77,14 @@ export interface InboundMessage {
 	space?: string;
 	isDirect: boolean;
 	/**
+	 * Set when the message was written in a thread (on Discord a thread of a text channel or a post
+	 * of a forum); absent in a channel and in a direct conversation. `parentId` is the thread's
+	 * parent channel and `parentKind` what it is: a post of a forum has `"forum"`, so a claim that
+	 * answers in a thread by starting one does not start another inside it. `"other"` is any parent
+	 * that is neither a text channel nor a forum, and also a parent the surface could not read.
+	 */
+	thread?: { parentId: string; parentKind: "text" | "forum" | "other" };
+	/**
 	 * Set when an integration posted the message, such as a Discord webhook; its name is
 	 * `authorName`. `own` says the integration is one the assistant posts through itself, such as an
 	 * agent's voice.

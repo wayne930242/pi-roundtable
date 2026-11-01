@@ -17,6 +17,7 @@ import {
 	restCore,
 	text,
 } from "./rest-poster-core.ts";
+import { forumOperations } from "./rest-poster-forum.ts";
 import { guildOperations } from "./rest-poster-guild.ts";
 import { readOperations } from "./rest-poster-read.ts";
 
@@ -214,6 +215,7 @@ export function restPoster(
 
 	return {
 		...guild,
+		...forumOperations(core),
 		async post(channelId, post) {
 			checkSnowflake("a channel", channelId);
 			const { webhook: name, body, files } = checkedPost(post);

@@ -58,7 +58,7 @@ function fake(content: string, extra: Record<string, unknown> = {}) {
 		webhookId: null,
 		mentions: { users: new Collection() },
 		reference: null,
-		channel: { isDMBased: () => false },
+		channel: { isDMBased: () => false, isThread: () => false },
 		...extra,
 	};
 }
