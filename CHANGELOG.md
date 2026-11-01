@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-01
+
 ### Added
 
 - `DiscordCard.preview`: one line of plain text that makes a card a legacy message instead of a Components V2 one, so a card's push and desktop notification is no longer blank. The preview (whitespace flattened, at most 2,000 characters) is the message's `content`, the card is one embed (title, sections as the description, `accent` as the colour, `footer`, `thumbnail`, `image`) and `buttons`, `links` and `selects` are ordinary action rows. It works through `sayCard`, `postCard`, `editCard`, `editWebhookCard` and a forum post's first message; an edit sets `content` too. A card without `preview` is unchanged. The poster cannot change a message's kind: an edit that would turn a Components V2 message into a preview card, or the other way round, is `rejected`. A preview card's embed text is at most 4,096 characters once the sections are joined, its footer 2,048 and the embed 6,000 in all, else `invalid`.
@@ -13,6 +15,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Archived forum posts: Discord refuses a rename, a retag and any message edit in an archived thread (400, code 50083), so `setPostTags` and `renameChannel` of a thread send `archived: false` in the same request, and `editCard` on a post's first message (`messageId` equal to `threadId`) opens an archived post and sends the edit again. `editCard` on another message of an archived thread stays `rejected`; call `setThreadArchived(threadId, false)` first. A locked post is `forbidden` without Manage Threads. `channelKind` no longer keeps the category of a text channel or forum (a thread's parent it still keeps), and `say`, `sayCard` and a webhook `post` into a forum's own id are `rejected` (use `createForumPost`). The fake and the emulator behave the same way.
 - `InboundMessage.thread?: { parentId, parentKind }`, set by the Discord surface for a message written in a thread: `parentKind` is `text`, `forum` or `other`, so a claim answers a mention in a forum post in place instead of starting a thread.
 - `fakeDiscordPoster` keeps the same calls: `forums` (a forum's tags, `FakeForum`), forum posts as channels with `appliedTags`, `channelKind`, and preview cards held with the preview as the message content. The poster contract scenarios cover all of it for the fake and the real poster over the emulated Discord, which now also emulates forums, forum posts, tags and legacy messages with embeds.
+
+## [0.30.4] - 2026-11-01
+
+- Release for the web package's changes (see its changelog); no core behavior changes.
 
 ## [0.30.3] - 2026-11-01
 

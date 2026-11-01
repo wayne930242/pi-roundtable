@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.4] - 2026-11-01
+
+### Fixed
+
+- On a phone, typing in the animated scene's dialogue box no longer hides the message box under the on-screen keyboard. The scene used to keep its share of the height while the keyboard was up, so a message of three or four lines pushed the box's last line, the caret and the send button below the visible area. While the message box has the focus on a narrow screen, the dialogue box takes what it holds (at least its usual share), the scene gives way down to a sliver, and past 30 % of the visible height the message box scrolls inside. The layout returns when the message box loses the focus.
+
 ## [0.30.3] - 2026-11-01
 
 - 0.30.2 was tagged but never published: its release run stopped on lint (a hook's dependency suppression the change had dropped) before any package was published. 0.30.3 carries 0.30.2's changes.

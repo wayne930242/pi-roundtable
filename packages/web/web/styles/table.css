@@ -598,6 +598,37 @@
 		max-width: none;
 	}
 }
+/* A phone typing in the box: the keyboard has taken most of the height, so the box takes what its words,
+   strip and message box need and the scene keeps the rest, never less than a sliver; a growing message box
+   squeezes the line above it, never itself under the keyboard. The keyboard can turn the visible area wider
+   than tall, so this does not ask which way the phone is held. */
+@media (max-width: 719px) {
+	.table-frame[data-focused]:has(.scene-composer:focus-within) {
+		display: flex;
+		flex-direction: column;
+	}
+	.table-frame[data-focused]:has(.scene-composer:focus-within) .table-host {
+		flex: 1 1 0;
+		min-height: 15%;
+	}
+	.table-frame[data-focused]:has(.scene-composer:focus-within) .scene-box {
+		position: relative;
+		inset: auto;
+		flex: 0 1 auto;
+		min-height: 45%;
+		max-width: none;
+		max-height: none;
+		margin: 0;
+		border-radius: 1rem 1rem 0 0;
+		border-bottom: 0;
+	}
+	/* Its 200 px would not fit the little height left over the keyboard: past this it scrolls inside. */
+	.table-frame[data-focused]:has(.scene-composer:focus-within)
+		.scene-composer
+		textarea {
+		max-height: max(5.5rem, calc(var(--app-height, 100dvh) * 0.3));
+	}
+}
 @media (prefers-reduced-motion: reduce) {
 	.scene-box {
 		transition: none;

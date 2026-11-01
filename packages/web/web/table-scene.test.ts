@@ -762,6 +762,34 @@ describe("the names over the podiums", () => {
 		expect(rule).toMatch(/min-height:\s*0\s*;/);
 	});
 
+	test("a phone typing in the dialogue box keeps the message box over the keyboard: the box sizes to what it holds, the scene yields down to a sliver, and the message box scrolls inside past a share of the visible height", () => {
+		// One space for every run of whitespace: the formatter breaks a long selector over lines.
+		const css = readFileSync(
+			join(import.meta.dir, "styles", "table.css"),
+			"utf8",
+		).replace(/\s+/g, " ");
+		const typing =
+			".table-frame[data-focused]:has(.scene-composer:focus-within)";
+		const ruleOf = (selector: string) => {
+			const start = css.indexOf(`${selector} {`);
+			expect(start).toBeGreaterThan(-1);
+			return css.slice(start, css.indexOf("}", start));
+		};
+		// Not under a portrait query: the keyboard can leave the visible area wider than tall.
+		const media = css.lastIndexOf("@media", css.indexOf(typing));
+		expect(css.slice(media, css.indexOf("{", media))).toBe(
+			"@media (max-width: 719px) ",
+		);
+		expect(ruleOf(typing)).toMatch(/display:\s*flex;/);
+		expect(ruleOf(`${typing} .table-host`)).toMatch(/min-height:\s*15%;/);
+		const box = ruleOf(`${typing} .scene-box`);
+		expect(box).toMatch(/flex:\s*0 1 auto;/);
+		expect(box).toMatch(/max-height:\s*none;/);
+		expect(ruleOf(`${typing} .scene-composer textarea`)).toMatch(
+			/max-height:\s*max\(5\.5rem, calc\(var\(--app-height, 100dvh\) \* 0\.3\)\);/,
+		);
+	});
+
 	test("names that already stand clear stay on their plates, and the nearest name keeps its place when two collide", () => {
 		const apart = [
 			{ x: 100, y: 200, w: 80, h: 22 },
