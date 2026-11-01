@@ -1,4 +1,5 @@
 import {
+	bool,
 	either,
 	type Field,
 	integer,
@@ -20,6 +21,14 @@ export interface PeerBotEntry {
 	guilds?: readonly string[];
 	/** Answer it only in these channels; left out, in every channel. */
 	channels?: readonly string[];
+	/**
+	 * Leave to this bot a person's message that addresses both: when a person mentions or replies to
+	 * the host and in the same message mentions this bot or replies to it, the host starts no turn
+	 * (observers still hear the message), so only this bot answers and it can hand over by mentioning
+	 * the host. Where `guilds` and `channels` do not list the bot, the host does not yield to it.
+	 * Set it on one side only: two hosts that yield to each other both stay silent.
+	 */
+	yields?: boolean;
 }
 
 /**
@@ -58,6 +67,7 @@ const entryShape = shape({
 	id: snowflake,
 	guilds: optional(list(snowflake)),
 	channels: optional(list(snowflake)),
+	yields: optional(bool),
 });
 
 /** `discord.peerBots`, or the `peerBots` of the host's options. */
@@ -93,13 +103,33 @@ export class PeerBots {
 	/** Whether the host lists the bot that wrote this message, for this channel and server. */
 	lists(message: InboundMessage): boolean {
 		if (!message.authorIsBot || message.integration) return false;
+		return this.#listsHere(message.authorId, message) !== undefined;
+	}
+
+	/**
+	 * The peer bot a person's message addressed to the host is left to: one the host lists here with
+	 * `yields` that the message also mentions or replies to; undefined when the host answers it.
+	 */
+	yieldsTo(message: InboundMessage): string | undefined {
+		if (message.authorIsBot || message.integration) return undefined;
+		if (!message.mentionsBot && !message.repliesToBot) return undefined;
+		const addressed = new Set(message.mentionedUserIds ?? []);
+		if (message.reference?.authorId) addressed.add(message.reference.authorId);
+		for (const id of addressed)
+			if (this.#listsHere(id, message)?.yields) return id;
+		return undefined;
+	}
+
+	/** The bot's entry that covers this message's channel and server, preferring one that yields. */
+	#listsHere(botId: string, message: InboundMessage): PeerBotEntry | undefined {
 		const { surface, id: channelId } = parseChannelKey(message.channel);
-		if (surface !== this.#surface) return false;
-		return (this.#entries.get(message.authorId) ?? []).some(
+		if (surface !== this.#surface) return undefined;
+		const here = (this.#entries.get(botId) ?? []).filter(
 			(entry) =>
 				(!entry.guilds || entry.guilds.includes(message.space ?? "")) &&
 				(!entry.channels || entry.channels.includes(channelId)),
 		);
+		return here.find((entry) => entry.yields) ?? here[0];
 	}
 
 	/** Whether the channel has answered its rounds of peer bots since a person last posted. */

@@ -91,6 +91,11 @@ export interface InboundMessage {
 	 */
 	integration?: { id: string; own: boolean };
 	mentionsBot: boolean;
+	/**
+	 * Every user the message mentions, the bot among them, in the surface's ids; absent when the
+	 * surface does not report them. The router reads it for `peerBots` entries that yield.
+	 */
+	mentionedUserIds?: readonly string[];
 	/** The message replies to one of the bot's messages. */
 	repliesToBot: boolean;
 	/** Message text with the bot mention removed. */
@@ -100,6 +105,8 @@ export interface InboundMessage {
 	reference?: {
 		text: string;
 		attachments: AttachmentRef[];
+		/** The surface's id of the referenced message's author, when the surface reports it. */
+		authorId?: string;
 		/** The name a webhook posted the referenced message under, such as an agent's. */
 		webhookName?: string;
 	};

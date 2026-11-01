@@ -59,10 +59,28 @@ test("a guild message reports its space, channel key, roles and mention, with th
 		isDirect: false,
 		space: "g1",
 		mentionsBot: true,
+		mentionedUserIds: [BOT],
 		repliesToBot: false,
 		text: "hello",
 		attachments: [],
 	});
+});
+
+test("every user the message mentions is reported, so the router can tell a peer was addressed too", async () => {
+	const inbound = await toInbound(
+		discordMessage({
+			content: `<@${BOT}> <@800> both of you`,
+			mentions: {
+				users: new Map([
+					[BOT, {}],
+					["800", {}],
+				]),
+			},
+		}),
+		identity,
+	);
+	expect(inbound?.mentionedUserIds).toEqual([BOT, "800"]);
+	expect(inbound?.text).toBe("<@800> both of you");
 });
 
 test("a direct message has no space, and the bot's own or an unready client's messages are not reported", async () => {
@@ -163,6 +181,7 @@ test("a reply to one of the bot's messages says so, and a replied-to webhook pos
 	expect(inbound?.reference).toEqual({
 		text: "earlier",
 		attachments: [],
+		authorId: BOT,
 		webhookName: "Scout",
 	});
 });

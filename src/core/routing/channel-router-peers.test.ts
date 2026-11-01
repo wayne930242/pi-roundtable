@@ -160,6 +160,66 @@ describe("peer bots in the router", () => {
 	});
 });
 
+describe("yielding to a peer bot", () => {
+	const yieldsHere = { id: PEER, yields: true };
+
+	test("a person's message that also mentions a yielding peer starts no turn, and says so in the log", async () => {
+		const recorded = recordingLogger();
+		const { log, routing } = setup({ allow: [yieldsHere] }, recorded.logger);
+		await routing.handle(
+			message({ text: "both", mentionedUserIds: ["me", PEER] }),
+		);
+		expect(log).toEqual([]);
+		expect(
+			recorded.lines.filter((line) => line.message.includes("left to a peer")),
+		).toHaveLength(1);
+	});
+
+	test("a reply to the yielding peer's message that mentions the host is left to the peer too", async () => {
+		const { log, routing } = setup({ allow: [yieldsHere] });
+		await routing.handle(
+			message({
+				text: "reply",
+				mentionedUserIds: ["me"],
+				reference: { text: "peer said", attachments: [], authorId: PEER },
+			}),
+		);
+		expect(log).toEqual([]);
+	});
+
+	test("the host still answers: the peer alone, a peer it does not yield to, or a peer listed elsewhere", async () => {
+		const { log, routing } = setup({
+			allow: [
+				{
+					...yieldsHere,
+					channels: ["700000000000000009"],
+				},
+				STRANGER,
+			],
+		});
+		await routing.handle(message({ text: "a", mentionedUserIds: ["me"] }));
+		await routing.handle(
+			message({ text: "b", mentionedUserIds: ["me", STRANGER] }),
+		);
+		await routing.handle(
+			message({ text: "c", mentionedUserIds: ["me", PEER] }),
+		);
+		expect(log.map((line) => line.split(" ")[0])).toEqual(["a", "b", "c"]);
+	});
+
+	test("the peer's own message that mentions the host is answered: that is the handover", async () => {
+		const { log, routing } = setup({ allow: [yieldsHere] });
+		await routing.handle(
+			message({ text: "both", mentionedUserIds: ["me", PEER] }),
+		);
+		await routing.handle({
+			...fromBot(PEER, "over to you"),
+			mentionedUserIds: ["me"],
+		});
+		expect(log).toEqual([`over to you by p-${PEER} (peer)`]);
+	});
+});
+
 describe("a peer bot's roles", () => {
 	const ROLE = "discord:role:900000000000000001";
 
@@ -263,6 +323,29 @@ describe("PeerBots", () => {
 		expect(lists({ allow: [entry] }, { space: undefined })).toBe(false);
 	});
 
+	test("yields only for a person's message that addresses the host and the peer, where the entry yields", () => {
+		const peers = new PeerBots({
+			allow: [
+				{ id: PEER, guilds: ["600000000000000001"] },
+				{ id: PEER, channels: ["700000000000000001"], yields: true },
+			],
+		});
+		const both = message({ mentionedUserIds: [PEER] });
+		expect(peers.yieldsTo(both)).toBe(PEER);
+		expect(peers.yieldsTo({ ...both, mentionsBot: false })).toBeUndefined();
+		expect(
+			peers.yieldsTo({ ...both, mentionsBot: false, repliesToBot: true }),
+		).toBe(PEER);
+		expect(peers.yieldsTo({ ...both, authorIsBot: true })).toBeUndefined();
+		expect(
+			peers.yieldsTo({ ...both, integration: { id: "wh", own: false } }),
+		).toBeUndefined();
+		expect(
+			peers.yieldsTo({ ...both, channel: "discord:700000000000000009" }),
+		).toBeUndefined();
+		expect(peers.yieldsTo(message())).toBeUndefined();
+	});
+
 	test("lists only bots, and only on its surface", () => {
 		expect(lists({ allow: [PEER] }, { authorIsBot: false })).toBe(false);
 		expect(lists({ allow: [PEER] }, { channel: "web:abc" })).toBe(false);
@@ -287,6 +370,9 @@ describe("PeerBots", () => {
 		);
 		expect(bad([{ id: PEER, guilds: [123] }])).toContain(
 			"peerBots.allow[0].guilds[0]",
+		);
+		expect(bad([{ id: PEER, yields: "yes" }])).toContain(
+			"peerBots.allow[0].yields",
 		);
 		expect(() => new PeerBots({ allow: [PEER], maxRounds: 0 })).toThrow(
 			ConfigError,

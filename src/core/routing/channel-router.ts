@@ -131,6 +131,14 @@ export class ChannelRouter implements ConversationPort {
 		// A bot nobody lists is not heard, as it is not answered; a listed peer is, rounds or not.
 		if (!message.authorIsBot || message.peerBot || message.integration)
 			this.#options.observers?.notify(message);
+		const yieldedTo = peers?.yieldsTo(message);
+		if (yieldedTo) {
+			this.#options.logger.info(
+				{ channel: message.channel, bot: yieldedTo },
+				"message left to a peer bot: it also addresses a peer this host yields to",
+			);
+			return;
+		}
 		const started = await this.#inOrder(message.channel, async () => {
 			if (listed && peers?.exhausted(message.channel)) {
 				this.#options.logger.info(

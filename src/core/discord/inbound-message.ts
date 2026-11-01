@@ -30,6 +30,7 @@ function referenceOf(referenced: Message, mention: RegExp) {
 			.replace(mention, "")
 			.trim(),
 		attachments: attachmentRefs(referenced),
+		authorId: referenced.author.id,
 		...(referenced.webhookId
 			? { webhookName: referenced.author.username }
 			: {}),
@@ -121,6 +122,7 @@ export async function toInbound(
 		...(thread ? { thread } : {}),
 		...(message.guildId ? { space: message.guildId } : {}),
 		mentionsBot: message.mentions.users.has(botId),
+		mentionedUserIds: [...message.mentions.users.keys()],
 		repliesToBot: referenced?.author.id === botId,
 		text: withEmbeds(message.content, message.embeds)
 			.replace(mention, "")
