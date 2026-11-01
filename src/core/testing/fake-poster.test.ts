@@ -248,3 +248,47 @@ test("channelKind in the fake follows what a test registered: categories, forums
 		kind: "channel_gone",
 	});
 });
+
+test("the fake refuses what Discord refuses in an archived post, and a message straight into a forum", async () => {
+	const poster = withForum();
+	const made = await poster.createForumPost(FORUM, {
+		name: "p",
+		card: { title: "T", sections: ["a"] },
+	});
+	const reply = await poster.sayCard(made.threadId, {
+		title: "R",
+		sections: ["b"],
+	});
+	// An edit of a reply is refused (50083); the first message reopens the post, as the poster does.
+	poster.autoArchives(made.threadId);
+	await expect(
+		poster.editCard(made.threadId, reply.messageId, {
+			title: "R2",
+			sections: [],
+		}),
+	).rejects.toMatchObject({ kind: "rejected", discordCode: 50083 });
+	expect((await poster.threadState(made.threadId)).archived).toBe(true);
+	await poster.editCard(made.threadId, made.messageId, {
+		title: "T2",
+		sections: [],
+	});
+	expect((await poster.threadState(made.threadId)).archived).toBe(false);
+	// A retag and a rename reopen it too.
+	poster.autoArchives(made.threadId);
+	await poster.setPostTags(made.threadId, []);
+	expect((await poster.threadState(made.threadId)).archived).toBe(false);
+	poster.autoArchives(made.threadId);
+	await poster.renameChannel(made.threadId, "renamed");
+	expect((await poster.threadState(made.threadId)).archived).toBe(false);
+	// A forum takes posts, not messages.
+	for (const refused of [
+		poster.say(FORUM, { content: "x" }),
+		poster.sayCard(FORUM, { title: "T", sections: [] }),
+		poster.post(FORUM, { webhook: "relay", username: "Ann", content: "x" }),
+	])
+		await expect(refused).rejects.toMatchObject({
+			kind: "rejected",
+			discordCode: 50024,
+		});
+	expect(poster.messagesIn(FORUM)).toEqual([]);
+});

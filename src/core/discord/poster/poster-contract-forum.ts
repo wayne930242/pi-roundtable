@@ -297,6 +297,13 @@ export const forumScenarios: Scenario[] = [
 				}),
 				"channel_gone",
 			);
+			// A forum takes posts, not messages: the forum's id is no place to say or post.
+			await expectFailure(poster.say(forum, { content: "x" }), "rejected");
+			await expectFailure(poster.sayCard(forum, CARD), "rejected");
+			await expectFailure(
+				poster.post(forum, { webhook: "relay", username: "Ann", content: "x" }),
+				"rejected",
+			);
 			const made = await poster.createForumPost(forum, {
 				name: "ok",
 				content: "x",
@@ -384,7 +391,7 @@ export const forumScenarios: Scenario[] = [
 				color: undefined,
 				rows: 0,
 			});
-			// A message keeps its kind: neither way can an edit change it.
+			// The poster cannot change a message's kind: neither way works.
 			await expectFailure(
 				poster.editCard(ch, posted.messageId, CARD),
 				"rejected",
@@ -433,6 +440,15 @@ export const forumScenarios: Scenario[] = [
 			await refused({ preview: " \n\t " });
 			await refused({ preview: "p".repeat(2_001) });
 			await refused({ title: "t".repeat(257) });
+			await refused({ footer: "f".repeat(2_049) });
+			// 1,800 sections of one character are 1,800 in the text guard but 5,398 once joined.
+			await refused({ sections: Array.from({ length: 1_800 }, () => "x") });
+			// Each part fits its own limit, but the embed is over 6,000 in all.
+			await refused({
+				title: "t".repeat(256),
+				footer: "f".repeat(2_048),
+				sections: Array.from({ length: 1_250 }, () => "x"),
+			});
 			await refused({ sections: ["x".repeat(3_801)] });
 			await refused({ thumbnail: { url: "http://img.example.test/t.png" } });
 			await refused({
@@ -448,6 +464,7 @@ export const forumScenarios: Scenario[] = [
 				...PREVIEW,
 				preview: "p".repeat(2_000),
 				title: "t".repeat(256),
+				footer: "f".repeat(2_048),
 			});
 			// A card in a forum post's first message may carry a preview too, and is edited by the post's ids.
 			const forum = freshId();

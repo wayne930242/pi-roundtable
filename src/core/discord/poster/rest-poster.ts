@@ -11,6 +11,7 @@ import {
 	invalid,
 } from "./poster-checks.ts";
 import { DiscordPosterError, failure, isCode } from "./poster-errors.ts";
+import { THREAD_ARCHIVED } from "./poster-forum.ts";
 import {
 	type DiscordRest,
 	object,
@@ -364,13 +365,23 @@ export function restPoster(
 		async editCard(channelId, messageId, card) {
 			checkSnowflake("a channel", channelId);
 			checkSnowflake("a message", messageId);
-			await rest
-				.patch(Routes.channelMessage(channelId, messageId), {
-					body: cardBody(card),
-				})
-				.catch((error: unknown) => {
+			const body = cardBody(card);
+			const edit = () =>
+				rest.patch(Routes.channelMessage(channelId, messageId), { body });
+			try {
+				await edit();
+			} catch (error) {
+				// A forum post's first message has the post's own id. Discord refuses its edit while the
+				// post is archived (50083), so the post is opened again and the edit sent once more.
+				if (channelId !== messageId || !isCode(error, THREAD_ARCHIVED))
 					throw failure("editing a card", error);
-				});
+				await rest
+					.patch(Routes.channel(channelId), { body: { archived: false } })
+					.then(edit)
+					.catch((again: unknown) => {
+						throw failure("editing a card", again);
+					});
+			}
 		},
 		async deleteAsBot(channelId, messageId) {
 			checkSnowflake("a channel", channelId);

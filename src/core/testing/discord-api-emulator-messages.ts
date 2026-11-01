@@ -213,6 +213,12 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 			({ params, body, query }) => {
 				const hook = webhookOf(state, params[0], params[1]);
 				const channel = channelOf(state, hook.channelId);
+				if (channel.type === 15)
+					throw new HttpError(
+						400,
+						220001,
+						"Webhooks posted to forum channels must have a thread_name or thread_id",
+					);
 				const files = Array.isArray(body.__files) ? body.__files : [];
 				// Components are respected only when the request asks (`with_components`); the bot's own webhooks take every kind.
 				const sent =
@@ -299,6 +305,13 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 					state.closedDirects.has(channel.recipientId)
 				)
 					throw new HttpError(403, 50007, "Cannot send messages to this user");
+				// Posts of a forum are made with `POST /channels/{forum}/threads`.
+				if (channel.type === 15)
+					throw new HttpError(
+						400,
+						50024,
+						"Cannot execute action on this channel type",
+					);
 				if (channel.thread?.archived) {
 					// The bot's post wakes an archived thread, unless it is locked.
 					if (channel.thread.locked)
@@ -406,6 +419,9 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 						50005,
 						"Cannot edit a message authored by another user",
 					);
+				// Discord refuses the edit of a message in an archived thread; a message has no way to open it.
+				if (channelOf(state, params[0]).thread?.archived)
+					throw new HttpError(400, 50083, "Thread is archived");
 				applyEdit(message, body, true);
 				return messageJson(message);
 			},

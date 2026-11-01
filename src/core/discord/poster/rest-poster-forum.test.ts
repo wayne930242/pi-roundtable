@@ -250,5 +250,82 @@ test("setPostTags patches applied_tags on the thread", async () => {
 	await restPoster(rest).setPostTags(POST, [TAG]);
 	const patch = rest.sent.find((call) => call.method === "PATCH");
 	expect(patch?.route).toBe(`/channels/${POST}`);
-	expect(patch?.options?.body).toEqual({ applied_tags: [TAG] });
+	// An archived post refuses new tags unless the same PATCH opens it again.
+	expect(patch?.options?.body).toEqual({
+		applied_tags: [TAG],
+		archived: false,
+	});
+});
+
+test("channelKind keeps a thread's parent but reads a channel's category afresh, so a moved channel is not stale", async () => {
+	let category = CATEGORY;
+	const rest = forumRest((call) =>
+		call.method === "GET" && call.route === `/channels/${TEXT}`
+			? { id: TEXT, type: 0, guild_id: GUILD, parent_id: category }
+			: undefined,
+	);
+	const poster = restPoster(rest);
+	expect((await poster.channelKind(TEXT)).parentId).toBe(CATEGORY);
+	category = "900000000000000513";
+	expect((await poster.channelKind(TEXT)).parentId).toBe("900000000000000513");
+	// A thread's parent never changes: one read serves every later call.
+	await poster.channelKind(POST);
+	const reads = rest.sent.length;
+	expect((await poster.channelKind(POST)).parentId).toBe(FORUM);
+	expect(rest.sent.length).toBe(reads);
+});
+
+const ARCHIVED = () =>
+	new DiscordAPIError(
+		{ code: 50083, message: "Thread is archived" },
+		50083,
+		400,
+		"PATCH",
+		"https://discord.test/x",
+		{},
+	);
+
+test("editCard opens an archived post for its first message and sends the edit again, and leaves another message's refusal alone", async () => {
+	let refuse = true;
+	const rest = forumRest((call) => {
+		if (
+			call.method === "PATCH" &&
+			call.route.includes("/messages/") &&
+			refuse
+		) {
+			refuse = false;
+			return ARCHIVED();
+		}
+		return undefined;
+	});
+	const poster = restPoster(rest);
+	await poster.editCard(POST, POST, { title: "T", sections: [] });
+	expect(rest.sent.map((call) => `${call.method} ${call.route}`)).toEqual([
+		`PATCH /channels/${POST}/messages/${POST}`,
+		`PATCH /channels/${POST}`,
+		`PATCH /channels/${POST}/messages/${POST}`,
+	]);
+	expect(rest.sent[1]?.options?.body).toEqual({ archived: false });
+	// A reply is another message: Discord's refusal is the answer (rejected, 50083), nothing is opened.
+	refuse = true;
+	const before = rest.sent.length;
+	const error = (await poster
+		.editCard(POST, "900000000000000599", { title: "T", sections: [] })
+		.catch((thrown) => thrown)) as DiscordPosterError;
+	expect(error).toMatchObject({ kind: "rejected", discordCode: 50083 });
+	expect(rest.sent.length).toBe(before + 1);
+});
+
+test("renameChannel sends archived: false for a thread only", async () => {
+	const rest = forumRest();
+	const poster = restPoster(rest);
+	await poster.renameChannel(POST, "done");
+	await poster.renameChannel(TEXT, "general");
+	const bodies = rest.sent
+		.filter((call) => call.method === "PATCH")
+		.map((call) => call.options?.body);
+	expect(bodies).toEqual([
+		{ name: "done", archived: false },
+		{ name: "general" },
+	]);
 });

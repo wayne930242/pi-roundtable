@@ -115,6 +115,20 @@ export function guildRoutes(state: EmuState): Route[] {
 			/^\/channels\/(\d+)$/,
 			({ params, body }) => {
 				const channel = channelOf(state, params[0]);
+				// An archived thread refuses a rename or new tags unless the same PATCH opens it again.
+				if (
+					channel.thread?.archived &&
+					body.archived !== false &&
+					(body.name !== undefined || body.applied_tags !== undefined)
+				)
+					throw new HttpError(400, 50083, "Thread is archived");
+				// The bot started its threads, so it needs no Manage Threads, except to open a locked one.
+				if (
+					channel.thread?.archived &&
+					channel.thread.locked &&
+					body.archived === false
+				)
+					throw missingPermissions();
 				if (Array.isArray(body.available_tags) && channel.type === 15)
 					channel.tags = replaceTags(state, channel, body.available_tags);
 				if (Array.isArray(body.applied_tags) && channel.thread) {
@@ -137,8 +151,6 @@ export function guildRoutes(state: EmuState): Route[] {
 				}
 				if (typeof body.archived === "boolean" && channel.thread) {
 					const thread = channel.thread;
-					// The bot started its threads, so it needs no Manage Threads, except to open a locked one.
-					if (!body.archived && thread.locked) throw missingPermissions();
 					if (body.archived !== thread.archived) {
 						thread.archived = body.archived;
 						if (body.archived) {

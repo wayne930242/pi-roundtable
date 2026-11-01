@@ -14,6 +14,7 @@ import {
 	invalid,
 } from "../discord/poster/poster-checks.ts";
 import { DiscordPosterError } from "../discord/poster/poster-errors.ts";
+import { archivedThread } from "../discord/poster/poster-forum.ts";
 import { assertSameCardKind, cardContent } from "./fake-poster-cards.ts";
 import type { FakeForum } from "./fake-poster-forum.ts";
 import type {
@@ -162,6 +163,7 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 		const { webhook, body, files } = checkedPost(post);
 		this.sent("post");
 		const channel = this.channel(channelId);
+		this.refuseForum(channelId);
 		const webhookId = await this.#webhook(channelId, webhook);
 		this.next += 1n;
 		const message: FakePosterMessage = {
@@ -361,6 +363,7 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 		const body = checkedText(post.content, post.mentions);
 		this.sent("say");
 		const channel = this.channel(channelId);
+		this.refuseForum(channelId);
 		this.wake(channel);
 		this.next += 1n;
 		channel.messages.push({
@@ -381,6 +384,7 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 		cardBody(card);
 		this.sent("sayCard");
 		const channel = this.channel(channelId);
+		this.refuseForum(channelId);
 		this.wake(channel);
 		this.next += 1n;
 		channel.messages.push({
@@ -407,6 +411,13 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 		cardBody(card);
 		this.sent("editCard");
 		const message = this.found(channelId, messageId);
+		const thread = this.channels.get(channelId);
+		// Discord refuses the edit of a message in an archived thread; the poster opens a post again
+		// for its first message (which has the post's id) and sends the edit once more.
+		if (thread?.archived) {
+			if (channelId !== messageId) throw archivedThread();
+			this.wake(thread);
+		}
 		// A message posted without the Components V2 flag cannot become a card.
 		if (!message.card)
 			throw new DiscordPosterError(

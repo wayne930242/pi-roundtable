@@ -36,6 +36,25 @@ export function legacyCardBody(card: DiscordCard & { preview: string }) {
 		throw invalid(
 			`a card with a preview has a title of at most ${DISCORD_LIMITS.embedTitleChars} characters`,
 		);
+	// The description joins the sections with blank lines, which the text guard above did not count.
+	const description = sections.join("\n\n");
+	const chars = (value: string) => [...value].length;
+	if (chars(description) > DISCORD_LIMITS.embedDescriptionChars)
+		throw invalid(
+			`a card with a preview has text of at most ${DISCORD_LIMITS.embedDescriptionChars} characters once its sections are joined`,
+		);
+	const footer = card.footer ?? "";
+	if (chars(footer) > DISCORD_LIMITS.embedFooterChars)
+		throw invalid(
+			`a card with a preview has a footer of at most ${DISCORD_LIMITS.embedFooterChars} characters`,
+		);
+	if (
+		chars(card.title) + chars(description) + chars(footer) >
+		DISCORD_LIMITS.embedChars
+	)
+		throw invalid(
+			`a card with a preview holds at most ${DISCORD_LIMITS.embedChars} characters in its title, text and footer`,
+		);
 	const thumbnail = card.thumbnail
 		? checkPicture("a card's thumbnail", card.thumbnail)
 		: undefined;
@@ -52,7 +71,7 @@ export function legacyCardBody(card: DiscordCard & { preview: string }) {
 		embeds: [
 			{
 				title: card.title,
-				...(sections.length > 0 ? { description: sections.join("\n\n") } : {}),
+				...(sections.length > 0 ? { description } : {}),
 				...(card.accent === undefined ? {} : { color: card.accent }),
 				...(card.footer ? { footer: { text: card.footer } } : {}),
 				...(thumbnail ? { thumbnail: { url: thumbnail.media.url } } : {}),

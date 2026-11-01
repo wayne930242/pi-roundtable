@@ -361,6 +361,8 @@ export abstract class FakePosterGuild {
 				"unavailable",
 				"renaming a channel failed (held back by Discord's rate limit)",
 			);
+		// The poster sends `archived: false` with a thread's name, so an archived thread is opened again.
+		this.wake(channel);
 		this.#renameTimes.set(channelId, [...recent, at]);
 		channel.name = name;
 		this.renames.push([channelId, name]);

@@ -107,10 +107,10 @@ export interface DiscordCard {
 	 * `content: preview`, one embed (the title, the sections joined by blank lines as its
 	 * description, `accent` as its colour, `footer`, `thumbnail` and `image`) and ordinary action
 	 * rows for `buttons`, `links` and `selects` (at most five rows: one per menu, one for the
-	 * buttons). An embed has no alt text, so a picture's `description` is dropped. A message keeps
-	 * its kind for good: `editCard` and `editWebhookCard` re-send the card (and an edit sets
-	 * `content` too), but a Components V2 message cannot be edited into a preview card or the other
-	 * way round (`rejected`).
+	 * buttons). An embed has no alt text, so a picture's `description` is dropped. `editCard` and
+	 * `editWebhookCard` re-send the card (and an edit sets `content` too), but the poster cannot
+	 * change a message's kind: an edit that would turn a Components V2 message into a preview card,
+	 * or the other way round, is `rejected`.
 	 */
 	preview?: string;
 	/** The colour of the bar along the side, as 0xRRGGBB. */
@@ -276,6 +276,10 @@ export const DISCORD_LIMITS = Object.freeze({
 	selectOptions: 25,
 	/** The most characters an embed title holds (a `preview` card's title). */
 	embedTitleChars: 256,
+	/** The most characters an embed's description and footer text hold, and its title, description and footer together. */
+	embedDescriptionChars: 4_096,
+	embedFooterChars: 2_048,
+	embedChars: 6_000,
 	/** The most action rows a legacy message holds (a `preview` card: one per menu, one for the buttons). */
 	actionRows: 5,
 	/** The most tags a forum holds, characters in a tag's name, and tags applied to one post. */
@@ -356,7 +360,10 @@ export interface DiscordPoster {
 	sayCard(channelId: string, card: DiscordCard): Promise<PostedMessage>;
 	/**
 	 * Replaces a card the bot posted, keeping it a Components V2 message. A message posted without
-	 * the flag cannot become a card: `rejected` (delete it and post a new card).
+	 * the flag cannot become a card: `rejected` (delete it and post a new card). Discord refuses the
+	 * edit of any message in an archived thread (`rejected`, code 50083): call `setThreadArchived(id,
+	 * false)` first. The one exception is a forum post's first message (`messageId` equal to
+	 * `channelId`), where the poster opens the archived post again itself.
 	 */
 	editCard(
 		channelId: string,
@@ -411,7 +418,8 @@ export interface DiscordPoster {
 	deleteChannel(channelId: string): Promise<void>;
 	/**
 	 * Renames a channel, or a thread or a forum post (a thread is a channel; the call is the same,
-	 * and Manage Threads is the permission for another person's post). Discord lets a channel be renamed twice in ten minutes; a
+	 * and Manage Threads is the permission for another person's post; a rename opens an archived thread again,
+	 * as Discord refuses the rename otherwise). Discord lets a channel be renamed twice in ten minutes; a
 	 * rename past that is not queued: it fails as `unavailable` after a short wait and is never sent
 	 * later.
 	 */
@@ -466,6 +474,6 @@ export interface DiscordPoster {
 	 * Create Posts; `rejected` for a tag the forum does not offer.
 	 */
 	createForumPost(forumId: string, post: ForumPost): Promise<ForumPostCreated>;
-	/** Replaces the tags applied to a forum post (at most five; none clears them). `invalid` with `not_forum` when the thread is no forum post. */
+	/** Replaces the tags applied to a forum post (at most five; none clears them), opening the post again if it is archived. `invalid` with `not_forum` when the thread is no forum post. */
 	setPostTags(threadId: string, tagIds: readonly string[]): Promise<void>;
 }

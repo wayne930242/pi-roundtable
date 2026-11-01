@@ -1,5 +1,6 @@
 import { type REST, Routes } from "discord.js";
 import { DiscordPosterError, failure } from "./poster-errors.ts";
+import { isThreadType } from "./poster-forum.ts";
 
 /** The options of discord.js' REST client that the poster uses. */
 export interface RestOptions {
@@ -52,7 +53,7 @@ export function text(value: unknown): string | undefined {
 export interface ReadChannel {
 	guildId: string;
 	type: unknown;
-	/** The category of a channel, the parent channel of a thread. */
+	/** The category of a channel, the parent channel of a thread; kept for a thread only, read afresh for any other channel. */
 	parentId?: string;
 }
 
@@ -61,8 +62,15 @@ export interface RestCore {
 	rest: DiscordRest;
 	/** The bot's own user id, read on first use. */
 	bot(): Promise<string>;
-	/** A channel's guild, type and parent; none changes, so they are kept. */
-	readChannel(channelId: string): Promise<ReadChannel>;
+	/**
+	 * A channel's guild, type and, for a thread, parent; none changes, so they are kept. A text
+	 * channel or forum can be moved to another category, so its `parentId` is only there when the
+	 * call asks `withParent`, and then Discord is asked again.
+	 */
+	readChannel(
+		channelId: string,
+		options?: { withParent?: boolean },
+	): Promise<ReadChannel>;
 	/** The guild of a category; fails when the channel is no category. */
 	guildOf(categoryId: string): Promise<string>;
 }
@@ -84,11 +92,15 @@ export function restCore(rest: DiscordRest): RestCore {
 			});
 		return botId;
 	};
-	// A channel's guild and type never change; neither is a secret.
+	// A channel's guild and type never change, nor does a thread's parent; none is a secret.
+	// The category of any other channel does change, so it is never kept.
 	const known = new Map<string, ReadChannel>();
-	const readChannel = async (channelId: string): Promise<ReadChannel> => {
+	const readChannel = async (
+		channelId: string,
+		options: { withParent?: boolean } = {},
+	): Promise<ReadChannel> => {
 		const held = known.get(channelId);
-		if (held) return held;
+		if (held && (!options.withParent || isThreadType(held.type))) return held;
 		const channel = object(
 			await rest.get(Routes.channel(channelId)).catch((error: unknown) => {
 				throw failure("reading a channel", error);
@@ -105,7 +117,10 @@ export function restCore(rest: DiscordRest): RestCore {
 			type: channel.type,
 			...(parentId ? { parentId } : {}),
 		};
-		known.set(channelId, read);
+		known.set(
+			channelId,
+			isThreadType(read.type) ? read : { guildId, type: read.type },
+		);
 		return read;
 	};
 	const guildOf = async (categoryId: string): Promise<string> => {

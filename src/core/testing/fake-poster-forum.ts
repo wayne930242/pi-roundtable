@@ -11,6 +11,7 @@ import {
 	checkedForumPost,
 	checkedForumTags,
 	checkedTagIds,
+	forumTakesPosts,
 	notForum,
 	readTag,
 } from "../discord/poster/poster-forum.ts";
@@ -44,6 +45,11 @@ export abstract class FakePosterForum extends FakePosterGuild {
 		if (this.channels.has(forumId) || this.categories.has(forumId))
 			throw notForum("that channel");
 		throw new DiscordPosterError("channel_gone", "the channel does not exist");
+	}
+
+	/** Discord takes no message straight into a forum: a post is made with `createForumPost`. */
+	protected refuseForum(channelId: string): void {
+		if (this.forums.has(channelId)) throw forumTakesPosts();
 	}
 
 	/** A tag the forum does not offer is Discord's 400. */
@@ -171,6 +177,8 @@ export abstract class FakePosterForum extends FakePosterGuild {
 				: undefined;
 		if (!forum) throw notForum("that thread's parent");
 		this.#offered(forum, ids);
+		// The poster sends `archived: false` with the tags, so an archived post is opened again.
+		this.wake(channel);
 		channel.appliedTags = ids;
 	}
 }

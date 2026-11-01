@@ -2,6 +2,7 @@ import { AuditLogEvent, RESTJSONErrorCodes, Routes } from "discord.js";
 import type { DiscordPoster } from "./poster.ts";
 import { checkChannelName, checkSnowflake } from "./poster-checks.ts";
 import { DiscordPosterError, failure, isCode } from "./poster-errors.ts";
+import { isThreadType } from "./poster-forum.ts";
 import { object, type RestCore, text } from "./rest-poster-core.ts";
 
 /** How long a rename waits: past Discord's limit on renames the request would be held for minutes. */
@@ -146,13 +147,15 @@ export function guildOperations(
 		async renameChannel(channelId, name) {
 			checkSnowflake("a channel", channelId);
 			checkChannelName("a channel name", name);
+			// Discord refuses a rename of an archived thread (50083) unless the same PATCH opens it again.
+			const { type } = await core.readChannel(channelId);
 			// discord.js sleeps out a rate limit's wait (a rename sublimit can be minutes) without
 			// looking at the signal, so the call is also raced against a timer: the caller is freed
 			// at once, and the signal keeps the held request from being sent later.
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			const patch = rest
 				.patch(Routes.channel(channelId), {
-					body: { name },
+					body: isThreadType(type) ? { name, archived: false } : { name },
 					signal: AbortSignal.timeout(renameWaitMs),
 				})
 				.catch((error: unknown) => {

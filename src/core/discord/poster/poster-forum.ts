@@ -40,6 +40,28 @@ export function isThreadType(type: unknown): boolean {
 	);
 }
 
+/** Discord's JSON error code for an edit of a thread that is archived ("Thread is archived"). */
+export const THREAD_ARCHIVED = 50083;
+/** Discord's JSON error code for an action a channel's type does not take. */
+export const WRONG_CHANNEL_TYPE = 50024;
+
+/** What Discord answers an edit of an archived thread (a message in it, its name or its tags) that does not reopen it. */
+export function archivedThread(): DiscordPosterError {
+	return new DiscordPosterError("rejected", "the thread is archived", {
+		discordCode: THREAD_ARCHIVED,
+		status: 400,
+	});
+}
+
+/** What Discord answers a message posted straight into a forum: posts go through `createForumPost`. */
+export function forumTakesPosts(): DiscordPosterError {
+	return new DiscordPosterError(
+		"rejected",
+		"a forum takes posts, not messages: use createForumPost",
+		{ discordCode: WRONG_CHANNEL_TYPE, status: 400 },
+	);
+}
+
 /** The error for a channel that is no forum (or a thread that is no forum post). */
 export function notForum(what: string): DiscordPosterError {
 	return new DiscordPosterError("invalid", `${what} is not a forum`, {

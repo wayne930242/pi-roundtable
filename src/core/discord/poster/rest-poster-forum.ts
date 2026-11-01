@@ -28,7 +28,8 @@ export function forumOperations(core: RestCore): ForumOperations {
 
 	/** What a channel is, from its type and, for a thread, its parent's. */
 	const kindOf = async (channelId: string) => {
-		const read = await core.readChannel(channelId);
+		// A thread's parent never changes; a channel's category does, so it is read afresh.
+		const read = await core.readChannel(channelId, { withParent: true });
 		let kind: ChannelKind;
 		if (read.type === CHANNEL_TYPE.text) kind = "text";
 		else if (read.type === CHANNEL_TYPE.category) kind = "category";
@@ -119,8 +120,11 @@ export function forumOperations(core: RestCore): ForumOperations {
 			const applied = checkedTagIds(tagIds);
 			if ((await kindOf(threadId)).kind !== "forum_post")
 				throw notForum("that thread's parent");
+			// An archived post is refused (50083) unless the same PATCH opens it again.
 			await rest
-				.patch(Routes.channel(threadId), { body: { applied_tags: applied } })
+				.patch(Routes.channel(threadId), {
+					body: { applied_tags: applied, archived: false },
+				})
 				.catch((error: unknown) => {
 					throw failure("setting a post's tags", error);
 				});

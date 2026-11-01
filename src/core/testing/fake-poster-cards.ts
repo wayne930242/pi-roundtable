@@ -21,7 +21,7 @@ export function assertSameCardKind(held: DiscordCard, edit: DiscordCard): void {
 	if ((held.preview !== undefined) !== (edit.preview !== undefined))
 		throw new DiscordPosterError(
 			"rejected",
-			"editing a card failed: a message keeps its kind, Components V2 or a preview card",
+			"editing a card failed: the poster cannot change a message's kind, Components V2 or a preview card",
 			{ discordCode: 50035, status: 400 },
 		);
 }

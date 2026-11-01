@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { DiscordCard } from "./poster.ts";
+import { archivedScenarios } from "./poster-contract-archived.ts";
 import { cardScenarios } from "./poster-contract-cards.ts";
 import { forumScenarios } from "./poster-contract-forum.ts";
 import { guildScenarios } from "./poster-contract-guild.ts";
@@ -456,6 +457,7 @@ export const posterScenarios: Scenario[] = [
 	...cardScenarios,
 	...guildScenarios,
 	...forumScenarios,
+	...archivedScenarios,
 ];
 
 /** Registers every scenario as a test over a subject made fresh for it. */
