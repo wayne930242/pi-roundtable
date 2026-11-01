@@ -369,6 +369,117 @@ test("the Log button opens the room's whole message list over the scene", async 
 	);
 });
 
+const reads = () => sent.filter((frame) => frame.type === "read");
+
+const setVisibility = (value: DocumentVisibilityState) =>
+	Object.defineProperty(document, "visibilityState", {
+		value,
+		configurable: true,
+	});
+
+const READER = "app:agent.ivy";
+
+test("a message counts as read once the box shows it: not while it waits behind another, and not while the page is hidden", async () => {
+	// A room of its own: the store keeps a room's messages from one test to the next.
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			agent("lena", "Lena"),
+			agent("otto", "\u6885\u68ee"),
+			agent("ivy", "Ivy"),
+		],
+	});
+	store.dispatch({
+		type: "history_loaded",
+		room: READER,
+		messages: [reply(1, READER, "ivy", "Ivy", "First.")],
+		more: false,
+		older: false,
+	});
+	const said = (id: number, text: string) =>
+		store.dispatch({
+			type: "message",
+			room: READER,
+			message: reply(id, READER, "ivy", "Ivy", text),
+		});
+	const frames = manualFrames();
+	try {
+		await render(READER);
+		await arrive();
+		expect(reads()).toEqual([{ type: "read", room: READER, upTo: 1 }]);
+		await frames.advance(100);
+		// Two replies at once: the long first one types out, the second waits behind it unread.
+		await page.act(() => {
+			said(2, "word ".repeat(80));
+			said(3, "Done.");
+		});
+		await frames.advance(100);
+		await settle(1100);
+		expect(reads().at(-1)).toEqual({ type: "read", room: READER, upTo: 2 });
+		expect(reads().some((frame) => frame.upTo === 3)).toBe(false);
+		// A tap shows the first whole, the box moves on to the second, and that one is read.
+		await page.click(query(".scene-line"));
+		await settle(1100);
+		expect(reads().at(-1)).toEqual({ type: "read", room: READER, upTo: 3 });
+		await frames.advance(100);
+		const before = reads().length;
+		// Shown while the page is hidden, a message is read once the page shows again.
+		setVisibility("hidden");
+		try {
+			await page.act(() => said(4, "Next."));
+			await frames.advance(100);
+			await settle(1100);
+			expect(reads()).toHaveLength(before);
+		} finally {
+			setVisibility("visible");
+		}
+		await page.act(() => {
+			document.dispatchEvent(new Event("visibilitychange"));
+		});
+		await settle(40);
+		expect(reads().at(-1)).toEqual({ type: "read", room: READER, upTo: 4 });
+	} finally {
+		frames.restore();
+	}
+}, 10_000);
+
+test("the open Log reads as the chat log does: the newest message in its view", async () => {
+	const realRect = HTMLElement.prototype.getBoundingClientRect;
+	// The log's view is 0–300 and every message stands in it.
+	HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+		const at = this.classList.contains("scene-log")
+			? { top: 0, bottom: 300 }
+			: this.dataset.mid !== undefined
+				? { top: 10, bottom: 60 }
+				: { top: 0, bottom: 0 };
+		return {
+			left: 0,
+			right: 0,
+			width: 0,
+			height: 0,
+			x: 0,
+			y: 0,
+			...at,
+			toJSON: () => ({}),
+		} as DOMRect;
+	};
+	try {
+		// A box slid down shows no line, so only the log reads.
+		await page.render(
+			<ConfigContext.Provider value={config}>
+				<DialogueBox roomKey={SCOUT} open={false} />
+			</ConfigContext.Provider>,
+		);
+		await arrive();
+		expect(reads()).toEqual([]);
+		await page.click(query(".scene-log-button"));
+		await settle(60);
+		expect(reads()).toEqual([{ type: "read", room: SCOUT, upTo: 1 }]);
+	} finally {
+		HTMLElement.prototype.getBoundingClientRect = realRect;
+	}
+});
+
 test("the box's last button folds it, labelled, and the folded box is one bar that a tap opens again; the choice stays on the device", async () => {
 	await render(SCOUT);
 	await arrive();

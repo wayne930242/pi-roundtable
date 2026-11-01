@@ -1,10 +1,10 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useMemo, useRef, useState } from "react";
 import type { ReadMarkView, RoomMessage } from "../../src/api-types.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { noReads, useHost } from "../lib/host-state.ts";
 import { installHostStyle } from "../lib/host-style.ts";
 import { translate as t } from "../lib/messages.ts";
-import { useConnection } from "../lib/socket.ts";
+import { useReadReporting } from "../lib/read-reporting.ts";
 import { HostMessageRow } from "./host-message.tsx";
 import { HostPicture } from "./host-picture.tsx";
 import { RoomLog, type RowDecor } from "./room-log.tsx";
@@ -43,67 +43,6 @@ function Seen({ marks }: { marks: readonly ReadMarkView[] }) {
 			) : null}
 		</li>
 	);
-}
-
-/**
- * Tells the server how far the person has read: the newest message whose box is in the scroller's
- * view while the page is visible. The server keeps a cursor that never moves back, and this sends
- * a new one at most once a second.
- */
-function useReadReporting(
-	room: string,
-	scroller: RefObject<HTMLElement | null>,
-): void {
-	const connection = useConnection();
-	const connects = useSelector((state) => state.connects);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: a new connection says the server may have lost the cursor
-	useEffect(() => {
-		const root = scroller.current;
-		if (!root) return;
-		let sent = 0;
-		let last = 0;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		let frame: number | undefined;
-		const measure = () => {
-			frame = undefined;
-			if (document.visibilityState !== "visible") return;
-			const box = root.getBoundingClientRect();
-			let seen = 0;
-			for (const item of root.querySelectorAll<HTMLElement>("[data-mid]")) {
-				const at = item.getBoundingClientRect();
-				if (at.bottom > box.top && at.top < box.bottom - 4)
-					seen = Math.max(seen, Number(item.dataset.mid));
-			}
-			if (seen <= sent) return;
-			const wait = last + 1000 - Date.now();
-			if (wait > 0) {
-				clearTimeout(timer);
-				timer = setTimeout(schedule, wait);
-				return;
-			}
-			if (connection.send({ type: "read", room, upTo: seen })) {
-				sent = seen;
-				last = Date.now();
-			}
-		};
-		const schedule = () => {
-			if (frame === undefined) frame = requestAnimationFrame(measure);
-		};
-		root.addEventListener("scroll", schedule, { passive: true });
-		document.addEventListener("visibilitychange", schedule);
-		window.addEventListener("resize", schedule);
-		const watcher = new MutationObserver(schedule);
-		watcher.observe(root, { childList: true, subtree: true });
-		schedule();
-		return () => {
-			root.removeEventListener("scroll", schedule);
-			document.removeEventListener("visibilitychange", schedule);
-			window.removeEventListener("resize", schedule);
-			watcher.disconnect();
-			clearTimeout(timer);
-			if (frame !== undefined) cancelAnimationFrame(frame);
-		};
-	}, [connection, room, scroller, connects]);
 }
 
 /** The log of a room with its read marks: a divider where the new messages begin, who has read what. */

@@ -320,7 +320,8 @@ test("an owner's table seats no host room, even where the host has kinds of room
 	await settle();
 	expect(Object.keys(seats())).toEqual(["Guide", "Scout"]);
 	expect(requests.some((one) => one.url.includes("host/"))).toBe(false);
-	expect(sent).toEqual([]);
+	// No host room is followed; the council's own box may report what it shows as read.
+	expect(sent.filter((frame) => frame.type !== "read")).toEqual([]);
 });
 
 test("a member's ring seats at most eight rooms, newest first, with no +N seat and a button to the room list", async () => {

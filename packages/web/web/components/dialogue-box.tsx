@@ -25,6 +25,10 @@ import { useFollowEnd } from "../lib/follow-end.ts";
 import type { Mentionable } from "../lib/mention-pick.ts";
 import { translate as t } from "../lib/messages.ts";
 import { reducedMotion } from "../lib/motion.ts";
+import {
+	useReadReporting,
+	useShownReadReporting,
+} from "../lib/read-reporting.ts";
 import { useRoomCommands } from "../lib/room-commands.ts";
 import type { RoomState } from "../lib/rooms.ts";
 import { speakerOfRound } from "../lib/round-view.ts";
@@ -122,7 +126,45 @@ export function useRoomLine(roomKey: string): {
 	return { room, view, line, displayOf };
 }
 
-/** The sheet that holds the room's whole message list, over the scene. */
+/** The room's whole message list, as the open log sheet holds it: what stands in view counts as read. */
+function LogBody(props: {
+	roomKey: string;
+	loaded: boolean;
+	error: string | undefined;
+}) {
+	const { loaded, error } = props;
+	const room = useSelector((state) => state.rooms[props.roomKey]);
+	const [older, setOlder] = useState(false);
+	const scroller = useRef<HTMLDivElement>(null);
+	useReadReporting(props.roomKey, scroller);
+	// Opening the log lands on the newest.
+	useEffect(() => {
+		if (loaded)
+			scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+	}, [loaded]);
+	return (
+		<div className="scene-log" ref={scroller}>
+			{error ? <p className="failure-text">{error}</p> : null}
+			{room?.more ? (
+				<button
+					type="button"
+					className="secondary older"
+					disabled={older}
+					onClick={async () => {
+						setOlder(true);
+						await loadOlderMessages(props.roomKey);
+						setOlder(false);
+					}}
+				>
+					{older ? t("Loading…") : t("Load earlier messages")}
+				</button>
+			) : null}
+			<RoomLog roomKey={props.roomKey} enterAfter={undefined} quotable />
+		</div>
+	);
+}
+
+/** The sheet that holds the room's whole message list, over the scene; its body is there only while it is open. */
 function LogSheet(props: {
 	roomKey: string;
 	open: boolean;
@@ -131,39 +173,17 @@ function LogSheet(props: {
 	onClose(): void;
 	name: string;
 }) {
-	const { loaded, error } = props;
-	const room = useSelector((state) => state.rooms[props.roomKey]);
-	const [older, setOlder] = useState(false);
-	const scroller = useRef<HTMLDivElement>(null);
-	// Opening the log lands on the newest.
-	useEffect(() => {
-		if (props.open && loaded)
-			scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-	}, [props.open, loaded]);
 	return (
 		<Sheet
 			open={props.open}
 			title={`${props.name} · ${t("Log")}`}
 			onClose={props.onClose}
 		>
-			<div className="scene-log" ref={scroller}>
-				{error ? <p className="failure-text">{error}</p> : null}
-				{room?.more ? (
-					<button
-						type="button"
-						className="secondary older"
-						disabled={older}
-						onClick={async () => {
-							setOlder(true);
-							await loadOlderMessages(props.roomKey);
-							setOlder(false);
-						}}
-					>
-						{older ? t("Loading…") : t("Load earlier messages")}
-					</button>
-				) : null}
-				<RoomLog roomKey={props.roomKey} enterAfter={undefined} quotable />
-			</div>
+			<LogBody
+				roomKey={props.roomKey}
+				loaded={props.loaded}
+				error={props.error}
+			/>
 		</Sheet>
 	);
 }
@@ -239,6 +259,12 @@ export function DialogueBox(props: DialogueBoxProps) {
 			? line.author
 			: (view?.displayName ?? roomKey);
 	const { shown, done, finish } = useReveal(line);
+	// A stored message counts as read once the box shows it; a line still streaming or not yet sent does not.
+	useShownReadReporting(
+		roomKey,
+		line?.id.startsWith("m") ? Number(line.id.slice(1)) : undefined,
+		props.open,
+	);
 	const [, moved] = useReducer((count: number) => count + 1, 0);
 	// Typed out (or tapped whole), the line gives the box to the next one waiting.
 	useEffect(() => {
