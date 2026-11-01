@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.2] - 2026-11-01
+
 ### Fixed
 
 - The animated scene now reports reading, as the chat log does. A stored message counts as read once the dialogue box shows it while the page is visible; a line still waiting in the box's queue, a reply still streaming and an owner's message not yet sent do not count, and a line shown while the page is hidden is reported when the page shows again. The open Log sheet reports the newest message in its view. Before, nothing in the scene moved the read cursor, so unread counts and other people's read marks stayed where the chat log had left them.

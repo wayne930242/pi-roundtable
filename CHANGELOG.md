@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.2] - 2026-11-01
+
+- Release for the web package's changes (see its changelog); no core behavior changes.
+
 ## [0.30.1] - 2026-11-01
 
 ### Fixed
