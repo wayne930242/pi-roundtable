@@ -111,7 +111,9 @@ export class PeerBots {
 	 * `yields` that the message also mentions or replies to; undefined when the host answers it.
 	 */
 	yieldsTo(message: InboundMessage): string | undefined {
-		if (message.authorIsBot || message.integration) return undefined;
+		// The peer cannot answer in a direct conversation, so the host never yields one.
+		if (message.authorIsBot || message.integration || message.isDirect)
+			return undefined;
 		if (!message.mentionsBot && !message.repliesToBot) return undefined;
 		const addressed = new Set(message.mentionedUserIds ?? []);
 		if (message.reference?.authorId) addressed.add(message.reference.authorId);

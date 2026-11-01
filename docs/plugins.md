@@ -2868,6 +2868,12 @@ The router, not each claim, applies the list: for a message from a listed bot it
 A channel answers at most `maxRounds` of the listed bots' messages in a row, counted when a claim takes the message; a person's message in the channel starts the count over, and the messages after the cap are ignored (logged at info).
 Channel context is unchanged: its window still starts after the assistant's last post and other bots' messages are still cut at `botMessageChars`.
 
+When a person addresses two bots in one message, both would answer. An entry with `yields: true` makes the host leave such a message to that peer: a person's message (not in a direct conversation) that mentions or replies to the host and also mentions the peer or replies to its message, in a channel the entry covers, starts no turn here (logged at info as `message left to a peer bot`; observers still hear it). The peer answers alone and hands over by mentioning the host, which answers a listed peer as usual. Set it on one host only, and scope the entry with `guilds` or `channels` to where the peer actually answers; two hosts that yield to each other both stay silent. The router reads `InboundMessage.mentionedUserIds` (every user the message mentions) and `InboundMessage.reference.authorId` (who wrote the replied-to message), which the Discord surface sets.
+
+```ts
+peerBots: { allow: [{ id: "800000000000000002", channels: ["700000000000000001"], yields: true }] },
+```
+
 The agent server answers a peer that mentions the agent or replies to it, like a guest. A listed peer's `speaker` is resolved like a person's, so a claim that checks only `speaker` answers it too. A claim of your own opts in where it once checked `!message.authorIsBot`, with `answersAuthor(message)` from `pi-roundtable/kit`, which is true for a person and for a flagged peer that mentions the bot or replies to it:
 
 ```ts

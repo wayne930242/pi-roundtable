@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `PeerBotEntry.yields`: a host leaves to a listed peer bot a person's message that addresses both. When a person mentions or replies to the host and in the same message mentions that bot or replies to its message, where the entry lists the bot, the host starts no turn and logs `message left to a peer bot`; observers still hear the message. Only the peer answers, and it hands over by mentioning the host, whose answer to a listed peer is unchanged. Set it on one side only: two hosts that yield to each other both stay silent.
+- `PeerBotEntry.yields`: a host leaves to a listed peer bot a person's message that addresses both. When a person mentions or replies to the host and in the same message mentions that bot or replies to its message, where the entry lists the bot and not in a direct conversation, the host starts no turn and logs `message left to a peer bot`; observers still hear the message. Only the peer answers, and it hands over by mentioning the host, whose answer to a listed peer is unchanged. Set it on one side only: two hosts that yield to each other both stay silent.
 - `InboundMessage.mentionedUserIds?` (every user the message mentions, the bot among them) and `InboundMessage.reference.authorId?` (who wrote the replied-to message), both set by the Discord surface.
 
 ## [0.31.1] - 2026-11-01

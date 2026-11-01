@@ -7,6 +7,7 @@ import { silentLogger } from "../log.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";
+import { MessageObservers } from "./message-observers.ts";
 import { answersAuthor, PeerBots, type PeerBotsConfig } from "./peer-bots.ts";
 
 const PEER = "800000000000000001";
@@ -173,6 +174,25 @@ describe("yielding to a peer bot", () => {
 		expect(
 			recorded.lines.filter((line) => line.message.includes("left to a peer")),
 		).toHaveLength(1);
+	});
+
+	test("observers still hear a message left to the peer", async () => {
+		const heard: string[] = [];
+		const observers = new MessageObservers(silentLogger());
+		observers.add({}, (m) => void heard.push(m.text));
+		const routing = new ChannelRouter({
+			claims: [claim([])],
+			targets: () => undefined,
+			queue: new ChannelQueue(),
+			logger: silentLogger(),
+			contacts: contacts(["human", PEER]),
+			peerBots: new PeerBots({ allow: [yieldsHere] }),
+			observers,
+		});
+		await routing.handle(
+			message({ text: "both", mentionedUserIds: ["me", PEER] }),
+		);
+		expect(heard).toEqual(["both"]);
 	});
 
 	test("a reply to the yielding peer's message that mentions the host is left to the peer too", async () => {
@@ -344,6 +364,9 @@ describe("PeerBots", () => {
 			peers.yieldsTo({ ...both, channel: "discord:700000000000000009" }),
 		).toBeUndefined();
 		expect(peers.yieldsTo(message())).toBeUndefined();
+		expect(
+			peers.yieldsTo({ ...both, isDirect: true, space: undefined }),
+		).toBeUndefined();
 	});
 
 	test("lists only bots, and only on its surface", () => {
