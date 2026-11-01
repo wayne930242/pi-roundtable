@@ -45,7 +45,7 @@ export function useReadReporting(
 ): void {
 	const connection = useConnection();
 	const connects = useSelector((state) => state.connects);
-	// `connects` is in the list because a new connection says the server may have lost the cursor.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new connection says the server may have lost the cursor
 	useEffect(() => {
 		const root = scroller.current;
 		if (!root) return;
@@ -98,7 +98,7 @@ export function useShownReadReporting(
 	const shown = useRef<number | undefined>(undefined);
 	shown.current = showing ? upTo : undefined;
 	const sender = useRef<ReturnType<typeof readSender>>(undefined);
-	// `connects` is in the list because a new connection says the server may have lost the cursor.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new connection says the server may have lost the cursor
 	useEffect(() => {
 		const own = readSender(connection, room);
 		sender.current = own;
