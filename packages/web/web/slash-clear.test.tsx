@@ -8,7 +8,6 @@ import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
-import { hostRoomCommands } from "./lib/room-commands.ts";
 import { setRouting } from "./lib/router.ts";
 import type { SlashCommand } from "./lib/slash-commands.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
@@ -84,7 +83,11 @@ const press = (key: string, init: KeyboardEventInit = {}) => {
 		.then(() => event);
 };
 
-function box(commands: SlashCommand[], draftKey: string, sent: string[]) {
+function box(
+	commands: SlashCommand[] | undefined,
+	draftKey: string,
+	sent: string[],
+) {
 	return (
 		<Composer
 			draftKey={draftKey}
@@ -401,18 +404,21 @@ test("a group's room asks the host for no commands", async () => {
 	}
 });
 
-test("a host's room refuses /clear with a notice instead of sending it", async () => {
+test("a host's room sends /clear and /new as ordinary messages, with no menu and no notice", async () => {
 	const sent: string[] = [];
+	// A host's room hands its composer no commands, so the text goes to the host kind as it is.
 	await page.render(
 		<>
 			<Toaster />
-			{box([...hostRoomCommands], "app:agent.host-refuses", sent)}
+			{box(undefined, "app:agent.host-sends", sent)}
 		</>,
 	);
 	await type("/");
 	expect(menu()).toBeNull();
 	await type("/clear");
 	await press("Enter");
-	expect(sent).toEqual([]);
-	expect(page.container.textContent).toContain("cannot be started over");
+	await type("/new");
+	await press("Enter");
+	expect(sent).toEqual(["/clear", "/new"]);
+	expect(page.container.textContent).not.toContain("cannot be started over");
 });

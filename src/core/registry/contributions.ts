@@ -34,7 +34,7 @@ import {
 } from "../sessions.ts";
 import { TIERS } from "../speakers.ts";
 import type { ToolTierTable } from "../tool-tiers.ts";
-import { claimChatCommand } from "./chat-commands.ts";
+import { ChatCommandSources, claimChatCommand } from "./chat-commands.ts";
 import { ServiceRegistry } from "./services.ts";
 import { surfaceService } from "./surface-service.ts";
 
@@ -57,6 +57,8 @@ export interface Registry {
 	directChannels: DirectChannelProvider[];
 	dashboard: string[];
 	chatCommands: ChatCommand[];
+	/** Which of the declared chat commands a loaded extension really registers. */
+	chatCommandSources: ChatCommandSources;
 	tools: ToolContribution[];
 	seeds: AgentSeed[];
 	prompt: PromptSection[];
@@ -79,6 +81,7 @@ export const emptyRegistry = (): Registry => ({
 	directChannels: [],
 	dashboard: [],
 	chatCommands: [],
+	chatCommandSources: new ChatCommandSources(),
 	tools: [],
 	seeds: [],
 	prompt: [],
@@ -451,8 +454,16 @@ export async function collectContributions(
 		registry.backgroundTargets.push(...backgroundTargets);
 		registry.directChannels.push(...directChannels);
 		registry.dashboard.push(...dashboard);
-		for (const command of chatCommands)
+		for (const command of chatCommands) {
 			claimChatCommand(chatCommandNames, plugin.name, command);
+			registry.chatCommandSources.declare(command, {
+				packages: piPackages,
+				sessionTools: [
+					...(contribution.sessionTools ?? []),
+					...tools.map((tool) => tool.session),
+				].map((tool) => tool.name),
+			});
+		}
 		registry.chatCommands.push(...chatCommands);
 		checkSeedCharacters(plugin.name, seeds);
 		registry.seeds.push(...seeds);
@@ -481,5 +492,6 @@ export function linkSessions(registry: Registry): LinkedSessions {
 		requiredTools: [...new Set(registry.requiredTools)],
 		agentTools: registry.tools.flatMap((t) => (t.agent ? [t.name] : [])),
 		agentSelection: () => mergeSelections(registry.agentSelections),
+		chatCommands: registry.chatCommandSources,
 	};
 }

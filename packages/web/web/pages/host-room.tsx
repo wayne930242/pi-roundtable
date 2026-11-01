@@ -26,7 +26,6 @@ import { installHostStyle } from "../lib/host-style.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
-import { hostRoomCommands } from "../lib/room-commands.ts";
 import { ROOM_PAGE } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useConnection } from "../lib/socket.ts";
@@ -398,60 +397,57 @@ export function HostRoomPage({ roomKey }: { roomKey: string }) {
 				</p>
 			) : null}
 			{view && sends.length > 0 ? (
-				<>
-					<Composer
-						key={roomKey}
-						draftKey={roomKey}
-						name={title}
-						placeholder={placeholder}
-						commands={hostRoomCommands}
-						onAddressed={setAddressed}
-						{...(toggled
-							? {
-									above: (
-										<ModeToggle
-											on={asking}
-											label={view?.wording?.turn?.label ?? t("@AI")}
-											{...(mentioned
-												? {
-														locked: t(
-															"The message starts with @AI, so the knight answers.",
-														),
-													}
-												: {})}
-											onChange={(next) => {
-												const one = next ? "turn" : "note";
-												lastMode = one;
-												setMode(one);
-											}}
-										/>
-									),
-								}
-							: {})}
-						limits={limits}
-						stoppable={Boolean(room?.stoppable)}
-						onSend={(text, files, typedAt) => {
-							if (toggled && typedAt) {
-								// Without the token the message may be empty; then it goes as it was typed.
-								const body = withoutLeadingAiMention(text);
-								connection.say(
-									roomKey,
-									body === "" && files.length === 0 ? text : body,
-									files,
-									"turn",
-								);
-							} else connection.say(roomKey, text, files, chosen);
-							toEnd(true);
-						}}
-						onStop={() => connection.send({ type: "stop", room: roomKey })}
-						{...(dropped
-							? {
-									incoming: dropped,
-									onIncomingTaken: () => setDropped(undefined),
-								}
-							: {})}
-					/>
-				</>
+				<Composer
+					key={roomKey}
+					draftKey={roomKey}
+					name={title}
+					placeholder={placeholder}
+					onAddressed={setAddressed}
+					{...(toggled
+						? {
+								above: (
+									<ModeToggle
+										on={asking}
+										label={view?.wording?.turn?.label ?? t("@AI")}
+										{...(mentioned
+											? {
+													locked: t(
+														"The message starts with @AI, so the knight answers.",
+													),
+												}
+											: {})}
+										onChange={(next) => {
+											const one = next ? "turn" : "note";
+											lastMode = one;
+											setMode(one);
+										}}
+									/>
+								),
+							}
+						: {})}
+					limits={limits}
+					stoppable={Boolean(room?.stoppable)}
+					onSend={(text, files, typedAt) => {
+						if (toggled && typedAt) {
+							// Without the token the message may be empty; then it goes as it was typed.
+							const body = withoutLeadingAiMention(text);
+							connection.say(
+								roomKey,
+								body === "" && files.length === 0 ? text : body,
+								files,
+								"turn",
+							);
+						} else connection.say(roomKey, text, files, chosen);
+						toEnd(true);
+					}}
+					onStop={() => connection.send({ type: "stop", room: roomKey })}
+					{...(dropped
+						? {
+								incoming: dropped,
+								onIncomingTaken: () => setDropped(undefined),
+							}
+						: {})}
+				/>
 			) : null}
 			<RoomSwitcher {...switcher.drawer} current={roomKey} />
 		</section>

@@ -429,7 +429,7 @@ describe("Roundtable", () => {
 		expect(read?.()).toEqual(["web link", "metrics link"]);
 	});
 
-	test("gives a plugin every plugin's declared chat commands, once linked", async () => {
+	test("gives a plugin the declared chat commands once linked, and none that no loaded extension registers", async () => {
 		let read: (() => readonly { name: string }[]) | undefined;
 		let early: unknown;
 		const { roundtable } = host([
@@ -448,13 +448,15 @@ describe("Roundtable", () => {
 			{
 				name: "stats",
 				setup: () => ({
-					chatCommands: [{ name: "stats", description: "Show the stats" }],
+					chatCommands: [
+						{ name: "host-test-stats", description: "Show the stats" },
+					],
 				}),
 			},
 		]);
 		await roundtable.run();
 		expect(early).toBeInstanceOf(NotLinkedError);
-		expect(read?.().map((one) => one.name)).toEqual(["stats"]);
+		expect(read?.()).toEqual([]);
 	});
 
 	test("gives a plugin the credential the host's login holds, and none when the host has none", async () => {

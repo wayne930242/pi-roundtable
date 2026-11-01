@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- In a host's room, a message that is `/clear` or `/new` whole is sent as an ordinary message to the host kind, as any other text is: it is no longer caught for a refusal notice, so a host kind whose own conversation takes that text can receive it. A host's room still has no command menu.
+- A Pi extension command is offered in a knight's command menu only when the plugin that declared it also registers it (see the core changelog).
+
 ## [0.30.0] - 2026-11-01
 
 ### Added

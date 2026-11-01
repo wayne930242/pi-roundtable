@@ -1,5 +1,7 @@
+import { sep } from "node:path";
 import type { ChatCommand } from "../contract/chat-command.ts";
 import { PluginError } from "../errors.ts";
+import { packageDir } from "../shared/package-dir.ts";
 
 const CHAT_COMMAND_NAME = /^[a-z][a-z0-9_-]*$/;
 /** The commands the web app answers itself, so a declared command cannot take their names. */
@@ -30,4 +32,82 @@ export function claimChatCommand(
 			`plugin ${plugin}: chat command "${name}" is already declared by plugin ${other}. Keep one declaration per name.`,
 		);
 	names.set(name, plugin);
+}
+
+/** Where a plugin's extensions come from: its Pi packages, and the names of its session tools. */
+export interface ChatCommandOrigin {
+	packages: readonly string[];
+	sessionTools: readonly string[];
+}
+
+/** A command a loaded Pi session registers, with the extension that registered it (Pi's `sourceInfo`). */
+export interface LoadedCommand {
+	/** What a message starts with after the slash. */
+	invocationName: string;
+	sourceInfo: { path: string; baseDir?: string };
+}
+
+/**
+ * Tells which declared chat commands are real. A declaration is only a label; a command is listed
+ * once a session the host built has loaded it from an extension of the plugin that declared it: a
+ * package that plugin lists in `piPackages`, or one of its session tools. A declaration nothing
+ * registers, or one that another plugin's extension registers, is never listed.
+ */
+export class ChatCommandSources {
+	readonly #declared = new Map<
+		string,
+		{ command: ChatCommand; origin: ChatCommandOrigin }
+	>();
+	/** Each command name a session registered, with the extensions that registered it. */
+	readonly #loaded = new Map<string, LoadedCommand["sourceInfo"][]>();
+	readonly #dirs = new Map<string, string | undefined>();
+
+	declare(command: ChatCommand, origin: ChatCommandOrigin): void {
+		this.#declared.set(command.name, { command, origin });
+	}
+
+	/** Records the commands a built session registered; called for every session, so the list grows as extensions load. */
+	loaded(commands: readonly LoadedCommand[]): void {
+		for (const { invocationName, sourceInfo } of commands) {
+			const seen = this.#loaded.get(invocationName) ?? [];
+			if (!seen.some((one) => one.path === sourceInfo.path))
+				this.#loaded.set(invocationName, [...seen, sourceInfo]);
+		}
+	}
+
+	/** The declared commands a loaded extension of the declaring plugin registers, in declaration order. */
+	listed(): ChatCommand[] {
+		return [...this.#declared.values()].flatMap(({ command, origin }) =>
+			(this.#loaded.get(command.name) ?? []).some((source) =>
+				this.#owns(origin, source),
+			)
+				? [command]
+				: [],
+		);
+	}
+
+	#owns(origin: ChatCommandOrigin, source: LoadedCommand["sourceInfo"]) {
+		if (origin.sessionTools.some((name) => source.path === `<inline:${name}>`))
+			return true;
+		return origin.packages.some((name) => {
+			const dir = this.#dir(name);
+			return (
+				dir !== undefined &&
+				(source.baseDir === dir ||
+					source.path === dir ||
+					source.path.startsWith(dir + sep))
+			);
+		});
+	}
+
+	#dir(name: string): string | undefined {
+		if (!this.#dirs.has(name)) {
+			try {
+				this.#dirs.set(name, packageDir(name));
+			} catch {
+				this.#dirs.set(name, undefined);
+			}
+		}
+		return this.#dirs.get(name);
+	}
 }

@@ -8,6 +8,7 @@ import { Type } from "typebox";
 import { coding } from "../packages/coding/src/coding-plugin.ts";
 import { ConfigError } from "./core/domain/errors.ts";
 import type { LinkedSessions } from "./core/plugin.ts";
+import { ChatCommandSources } from "./core/registry/chat-commands.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import { IDENTITY, SKILLS } from "./core/services.ts";
 import type { SessionConversation } from "./core/sessions.ts";
@@ -69,6 +70,7 @@ async function fixture(requiredTools: readonly string[]) {
 			requiredTools,
 			agentTools: [],
 			agentSelection: () => ({ id: "test", tools: [], groups: [] }),
+			chatCommands: new ChatCommandSources(),
 			plan: {
 				mcp: [],
 				tools: [

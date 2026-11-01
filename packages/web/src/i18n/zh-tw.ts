@@ -686,8 +686,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"在訊息輸入框裡讓目前的聊天室重新開始（/new 也行）",
 	"Start over: archive this conversation and begin a new one":
 		"重新開始：封存這段對話，開啟新的對話",
-	"This room cannot be started over from here; the host keeps its conversation.":
-		"這個聊天室無法在這裡重新開始，對話由主機保管。",
 	"Show these shortcuts": "顯示這份快速鍵清單",
 	"In a message box the arrow shortcuts switch rooms only when it is empty or the caret is at its very start (up) or very end (down).":
 		"在訊息輸入框裡，方向鍵快速鍵只在框內沒有文字，或游標在最開頭（上）、最結尾（下）時才會切換聊天室。",

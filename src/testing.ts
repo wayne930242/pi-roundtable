@@ -557,7 +557,7 @@ export async function testPlugin(
 		providers,
 		dashboard: () => (linked ? registry.dashboard : unlinked("dashboard")),
 		chatCommands: () =>
-			linked ? registry.chatCommands : unlinked("chatCommands"),
+			linked ? registry.chatCommandSources.listed() : unlinked("chatCommands"),
 		apiKey: async (provider) =>
 			Object.hasOwn(options.apiKeys ?? {}, provider)
 				? options.apiKeys?.[provider]

@@ -218,7 +218,7 @@ export class Linkage {
 						throw new NotLinkedError(
 							"chat commands are linked once every plugin is set up. Call chatCommands() from a service's start or from a handler, not during setup.",
 						);
-					return this.registry.chatCommands;
+					return this.registry.chatCommandSources.listed();
 				},
 				observe: (filter, observer) => this.observers.add(filter, observer),
 				apiKey: async (provider) => this.#options.apiKey?.(provider),

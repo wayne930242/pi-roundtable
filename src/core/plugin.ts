@@ -37,10 +37,7 @@ import type {
 import type { Speaker, Tier } from "./speakers.ts";
 import type { ToolTiers } from "./tool-tiers.ts";
 
-/**
- * A long-lived part of a plugin. Services start in registration order and stop in reverse,
- * so one registered earlier outlives those registered after it.
- */
+/** A long-lived part of a plugin. Services start in registration order and stop in reverse, so one registered earlier outlives those after it. */
 export interface Service {
 	name: string;
 	start?(): Promise<void> | void;
@@ -291,12 +288,18 @@ export interface LinkedSessions {
 	agentTools: readonly string[];
 	/** Every plugin's agent selection merged, read before each agent turn. */
 	agentSelection(): ToolSelection;
+	/** Told which commands each built session registers, so only declared commands that exist are listed. */
+	chatCommands: {
+		loaded(
+			commands: readonly {
+				invocationName: string;
+				sourceInfo: { path: string; baseDir?: string };
+			}[],
+		): void;
+	};
 }
 
-/**
- * What the agents' turns may use of the machine: "full" gives them the shell and file tools, and
- * "chat-only" none of them, as `agentServer: { tools: "chat-only" }` configures.
- */
+/** What the agents' turns may use of the machine: "full" has the shell and file tools, "chat-only" none (`agentServer: { tools: "chat-only" }`). */
 export type AgentTools = "full" | "chat-only";
 
 /** The host's own locale and time zone, as its plugins read them. */
@@ -378,7 +381,7 @@ export interface PluginContext {
 	providers: ResolvedProviders;
 	/** Every plugin's dashboard lines, in contribution order; throws NotLinkedError during setup. */
 	dashboard(): readonly string[];
-	/** Every plugin's declared chat commands, in contribution order; throws NotLinkedError during setup. */
+	/** The declared chat commands a loaded extension of the declaring plugin registers, in contribution order; throws NotLinkedError during setup. */
 	chatCommands(): readonly ChatCommand[];
 	/**
 	 * The credential the host's model login holds for a provider, such as `openai-codex`: the same
@@ -395,10 +398,7 @@ export interface PluginContext {
 	listener(id: string): Readonly<ListenerAddress> | undefined;
 }
 
-/**
- * An identity a plugin's own credential stands for, such as the bearer token of an endpoint it
- * serves, and the principal it speaks as.
- */
+/** An identity a plugin's own credential stands for, such as the bearer token of an endpoint it serves, and the principal it speaks as. */
 export interface PluginIdentity {
 	/**
 	 * Written `token:<subject>`, such as `token:remote-mcp`. Only the `token` provider is accepted:

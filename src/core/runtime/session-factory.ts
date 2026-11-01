@@ -485,6 +485,9 @@ export class SessionFactory {
 		}
 		await session.setModel(resolved);
 		await this.#awaitTools(session, awaited);
+		this.link().chatCommands.loaded(
+			session.extensionRunner.getRegisteredCommands(),
+		);
 		session.subscribe((event) => {
 			if (event.type === "compaction_end")
 				this.#logCompaction(channel, event, session, tiers);

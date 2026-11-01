@@ -7,7 +7,6 @@ import { api } from "./api.ts";
 import { translate as t } from "./messages.ts";
 import { askRoomConfirm } from "./room-confirm.ts";
 import type { SlashCommand } from "./slash-commands.ts";
-import { toast } from "./toast.ts";
 
 /**
  * The commands the room offers: `/clear` (and `/new`) run by the page, which is the room menu's
@@ -61,20 +60,3 @@ export function useRoomCommands(
 		[room, name, list],
 	);
 }
-
-/** A host's room keeps its own conversation: `/clear` there says so, and is not sent as a message. */
-export const hostRoomCommands: readonly SlashCommand[] = [
-	{
-		name: "clear",
-		aliases: ["new"],
-		description: "",
-		hidden: true,
-		run: () =>
-			toast(
-				t(
-					"This room cannot be started over from here; the host keeps its conversation.",
-				),
-				"danger",
-			),
-	},
-];
