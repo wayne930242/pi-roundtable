@@ -633,6 +633,60 @@ test("a group scene turns the camera to whoever speaks, and rests on the whole r
 	expect(query(".scene-name")?.textContent).toBe("Ada");
 });
 
+test("in a group, the box names the member at work under the owner's line, and folds its tools to one line a tap opens", async () => {
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [agent("lena", "Lena"), agent("otto", "\u6885\u68ee"), crew()],
+	});
+	say(heard(nid(), "owner", "Check the notes."));
+	await page.act(() => {
+		store.dispatch({
+			type: "activity",
+			room: CREW,
+			typing: true,
+			stoppable: true,
+			agent: "otto",
+		});
+	});
+	await render(CREW);
+	await arrive();
+	await page.act(() => {
+		store.dispatch({
+			type: "progress",
+			room: CREW,
+			event: {
+				type: "tool_start",
+				id: "t1",
+				tool: "search-notes",
+				preview: "q",
+			},
+		});
+		store.dispatch({
+			type: "progress",
+			room: CREW,
+			event: { type: "tool_start", id: "t2", tool: "read" },
+		});
+	});
+	expect(query(".scene-name")?.textContent).toBe("Ada");
+	const fold = query<HTMLButtonElement>(".scene-box .progress-fold");
+	expect(fold?.textContent).toContain("\u6885\u68ee is working");
+	expect(fold?.textContent).not.toContain("Ada");
+	expect(fold?.textContent).toContain("2 tools");
+	expect(fold?.getAttribute("aria-expanded")).toBe("false");
+	expect(query(".scene-box .chips")).toBeNull();
+	await page.act(() => fold?.click());
+	expect(fold?.getAttribute("aria-expanded")).toBe("true");
+	expect(query(".scene-box .chips")?.textContent).toContain("search-notes");
+	await page.act(() =>
+		store.dispatch({
+			type: "activity",
+			room: CREW,
+			typing: false,
+			stoppable: false,
+		}),
+	);
+});
+
 test("a seat the person taps turns the camera there until the next line comes", async () => {
 	store.dispatch({
 		type: "rooms_loaded",

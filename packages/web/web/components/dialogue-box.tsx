@@ -303,6 +303,16 @@ export function DialogueBox(props: DialogueBoxProps) {
 		roundSpeaker !== undefined &&
 		roundSpeaker !== line.agent;
 	const showProgress = typing && (!line || line.who === "owner" || nextThinks);
+	// The strip names who works: the round's member, else the agent of the room or the line, never the owner whose words stand above it.
+	const member = roundSpeaker ?? room?.agent;
+	const worker =
+		member !== undefined
+			? displayOf(member)
+			: owned
+				? owned.displayName
+				: line?.who === "agent"
+					? line.author
+					: (view?.displayName ?? roomKey);
 	const shownText = line ? sliceChars(line.text, shown) : "";
 	const chip =
 		owned || line?.who === "agent" ? (
@@ -433,10 +443,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 						) : null}
 					</div>
 					{showProgress && room ? (
-						<ProgressStrip
-							name={nextThinks ? displayOf(roundSpeaker) : speaker}
-							progress={room.progress}
-						/>
+						<ProgressStrip name={worker} progress={room.progress} compact />
 					) : null}
 					{cards.map(({ id, card }) => (
 						<div key={id} className="scene-card">

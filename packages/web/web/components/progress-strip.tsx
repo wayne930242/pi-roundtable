@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLook } from "../lib/look.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import type { Progress } from "../lib/rooms.ts";
+import { Icon } from "./icons.tsx";
 
 // Six strokes read as runes; they are drawn, not typed, so no font has to carry them.
 const RUNES = [
@@ -71,23 +72,61 @@ export function shownTools<T>(
 	};
 }
 
-/** What the running turn shows: a shimmering bar, its streamed words with a caret, and the tools it runs. */
-export function ProgressStrip(props: { name: string; progress: Progress }) {
+/**
+ * What the running turn shows: a shimmering bar, its streamed words with a caret, and the tools it runs.
+ * A `compact` strip (the scene's dialogue box) folds to its one-line head until tapped open.
+ */
+export function ProgressStrip(props: {
+	name: string;
+	progress: Progress;
+	compact?: boolean;
+}) {
 	const [expanded, setExpanded] = useState(false);
 	const [allTools, setAllTools] = useState(false);
+	const [open, setOpen] = useState(false);
 	const { text, tools } = props.progress;
 	const { shown, hidden } = shownTools(tools, allTools);
 	const camelot = useLook() === "camelot";
+	const label = (
+		<>
+			{camelot ? <Candle /> : null}
+			<span className="progress-bar" aria-hidden="true" />
+			<span className="progress-label">
+				{t("{name} is working…", { name: props.name })}
+			</span>
+		</>
+	);
+	const folded = props.compact === true && !open;
 	return (
-		<div className="progress" aria-live="off">
-			<div className="progress-head">
-				{camelot ? <Candle /> : null}
-				<span className="progress-bar" aria-hidden="true" />
-				<span className="progress-label">
-					{t("{name} is working…", { name: props.name })}
-				</span>
-			</div>
-			{tools.length ? (
+		<div
+			className="progress"
+			data-compact={props.compact || undefined}
+			aria-live="off"
+		>
+			{props.compact ? (
+				<button
+					type="button"
+					className="progress-head progress-fold"
+					aria-expanded={open}
+					aria-label={open ? t("Hide tool use") : t("Show tool use")}
+					onClick={() => setOpen((value) => !value)}
+				>
+					{label}
+					{tools.length ? (
+						<span className="progress-count">
+							{plural(tools.length, "{count} tool", "{count} tools")}
+						</span>
+					) : null}
+					<Icon
+						name="chevron"
+						size={14}
+						style={{ rotate: open ? "-90deg" : "90deg" }}
+					/>
+				</button>
+			) : (
+				<div className="progress-head">{label}</div>
+			)}
+			{folded ? null : tools.length ? (
 				<ul className="chips">
 					{hidden > 0 || allTools ? (
 						<li className="chip-more-item">
@@ -118,7 +157,7 @@ export function ProgressStrip(props: { name: string; progress: Progress }) {
 					))}
 				</ul>
 			) : null}
-			{text ? (
+			{!folded && text ? (
 				<button
 					type="button"
 					className="progress-text"

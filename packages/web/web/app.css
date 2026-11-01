@@ -1046,6 +1046,55 @@ button.room-picture:hover:not(:disabled) {
 	flex: 1;
 }
 
+/* The scene's dialogue box folds the strip to its head: one line, a tap opens the tools and the stream. */
+.progress[data-compact] {
+	padding: var(--space-1) var(--space-3);
+}
+
+.progress[data-compact]:has(.progress-fold[aria-expanded="true"]) {
+	padding-bottom: var(--space-3);
+}
+
+button.progress-fold {
+	width: 100%;
+	min-height: 2rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	font: inherit;
+	font-size: var(--text-sm);
+	font-weight: 400;
+	text-align: left;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+button.progress-fold:hover:not(:disabled) {
+	border: 0;
+	background: transparent;
+	color: var(--text);
+}
+
+.progress-fold .progress-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.progress-fold .candle {
+	height: 1.2rem;
+}
+
+.progress-count {
+	flex: none;
+	font-size: var(--text-xs);
+}
+
+.progress-fold > svg:last-child {
+	flex: none;
+}
+
 .progress-bar {
 	position: relative;
 	width: 2.5rem;

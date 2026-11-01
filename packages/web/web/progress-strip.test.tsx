@@ -41,3 +41,19 @@ test("a short run has no fold button", () => {
 	);
 	expect(html).not.toContain("chip-more");
 });
+
+test("a compact strip folds its tools and stream into one line until opened", () => {
+	const html = renderToStaticMarkup(
+		<ProgressStrip
+			name="Nova"
+			progress={{ text: "thinking aloud", tools: chips(5) }}
+			compact
+		/>,
+	);
+	expect(html).toContain("progress-fold");
+	expect(html).toContain('aria-expanded="false"');
+	expect(html).toContain("Nova");
+	expect(html).toContain("5 tools");
+	expect(html).not.toContain('class="chips"');
+	expect(html).not.toContain("thinking aloud");
+});

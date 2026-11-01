@@ -271,6 +271,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} earlier tool": "前面還有 {count} 個工具",
 	"{count} earlier tools": "前面還有 {count} 個工具",
 	"Show fewer tools": "收合工具",
+	"{count} tool": "{count} 個工具",
+	"Show tool use": "展開工具使用",
+	"Hide tool use": "收合工具使用",
 
 	// 聊天室選單
 	"A thread has no settings.": "討論串沒有設定。",
