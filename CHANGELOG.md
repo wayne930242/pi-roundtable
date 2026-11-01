@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-11-01
+
 ### Fixed
 
 - A declared chat command is listed (`PluginContext.chatCommands()`, the web command menu) only after a session the host built has loaded it from an extension of the declaring plugin: a package in its own `piPackages` or one of its own session tools. A declaration nothing registers, or that another plugin's extension registers, is no longer listed, so a plugin cannot label another package's command with its own description. `LinkedSessions` has a new optional `chatCommands` part that the runtime tells of each built session's commands; a hand-built `LinkedSessions` without it still works and lists no declared command. An extension belongs to the package whose folder is nearest to it (the nearest `package.json`), so a package installed inside another's folder is not taken for the outer one.
