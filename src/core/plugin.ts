@@ -288,8 +288,8 @@ export interface LinkedSessions {
 	agentTools: readonly string[];
 	/** Every plugin's agent selection merged, read before each agent turn. */
 	agentSelection(): ToolSelection;
-	/** Told which commands each built session registers, so only declared commands that exist are listed. */
-	chatCommands: {
+	/** Told which commands each built session registers, so only declared commands that exist are listed; a host that links sessions by hand may leave it out, and then no declared command is listed. */
+	chatCommands?: {
 		loaded(
 			commands: readonly {
 				invocationName: string;

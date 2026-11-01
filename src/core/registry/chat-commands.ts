@@ -1,4 +1,5 @@
-import { sep } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { ChatCommand } from "../contract/chat-command.ts";
 import { PluginError } from "../errors.ts";
 import { packageDir } from "../shared/package-dir.ts";
@@ -61,6 +62,14 @@ export class ChatCommandSources {
 	/** Each command name a session registered, with the extensions that registered it. */
 	readonly #loaded = new Map<string, LoadedCommand["sourceInfo"][]>();
 	readonly #dirs = new Map<string, string | undefined>();
+	readonly #roots = new Map<string, string | undefined>();
+
+	/** `resolve` finds a package's folder by name; tests give their own. */
+	readonly #resolve: (name: string) => string;
+
+	constructor(resolve: (name: string) => string = packageDir) {
+		this.#resolve = resolve;
+	}
 
 	declare(command: ChatCommand, origin: ChatCommandOrigin): void {
 		this.#declared.set(command.name, { command, origin });
@@ -91,19 +100,29 @@ export class ChatCommandSources {
 			return true;
 		return origin.packages.some((name) => {
 			const dir = this.#dir(name);
-			return (
-				dir !== undefined &&
-				(source.baseDir === dir ||
-					source.path === dir ||
-					source.path.startsWith(dir + sep))
-			);
+			// The extension's own package is the nearest folder with a package.json, so a package
+			// installed inside another's folder (nested node_modules) is not taken for the outer one.
+			return dir !== undefined && this.#root(source.path) === dir;
 		});
+	}
+
+	#root(path: string): string | undefined {
+		if (!this.#roots.has(path)) {
+			let dir = existsSync(join(path, "package.json")) ? path : dirname(path);
+			while (!existsSync(join(dir, "package.json")) && dirname(dir) !== dir)
+				dir = dirname(dir);
+			this.#roots.set(
+				path,
+				existsSync(join(dir, "package.json")) ? dir : undefined,
+			);
+		}
+		return this.#roots.get(path);
 	}
 
 	#dir(name: string): string | undefined {
 		if (!this.#dirs.has(name)) {
 			try {
-				this.#dirs.set(name, packageDir(name));
+				this.#dirs.set(name, this.#resolve(name));
 			} catch {
 				this.#dirs.set(name, undefined);
 			}

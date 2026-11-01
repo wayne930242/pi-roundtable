@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,7 +12,6 @@ import { Type } from "typebox";
 import { definePlugin } from "./core/define.ts";
 import { ChatCommandSources } from "./core/registry/chat-commands.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import { packageDir } from "./core/shared/package-dir.ts";
 import type { ChatCommand } from "./index.ts";
 import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 
@@ -20,17 +19,22 @@ const names = (commands: readonly ChatCommand[]) =>
 	commands.map((one) => one.name);
 
 describe("which declared chat commands are listed", () => {
+	// A stand-in for the declaring plugin's installed package: a folder with a package.json.
+	const pkg = mkdtempSync(join(tmpdir(), "roundtable-csrc-pkg-"));
+	writeFileSync(join(pkg, "package.json"), "{}");
+	afterAll(() => rmSync(pkg, { recursive: true, force: true }));
+	const make = () => new ChatCommandSources(() => pkg);
 	const declare = (sources: ChatCommandSources, name: string) =>
 		sources.declare(
 			{ name, description: `Run ${name}` },
 			{
-				packages: ["pi-jev-compaction"],
+				packages: ["csrc-pkg"],
 				sessionTools: ["owned-tool"],
 			},
 		);
 
 	test("a declaration nothing registered is not listed", () => {
-		const sources = new ChatCommandSources();
+		const sources = make();
 		declare(sources, "csrc-unregistered");
 		sources.loaded([
 			{
@@ -42,7 +46,7 @@ describe("which declared chat commands are listed", () => {
 	});
 
 	test("a command registered by the declaring plugin's session tool or package is listed", () => {
-		const sources = new ChatCommandSources();
+		const sources = make();
 		declare(sources, "csrc-from-tool");
 		declare(sources, "csrc-from-package");
 		sources.loaded([
@@ -53,7 +57,7 @@ describe("which declared chat commands are listed", () => {
 			{
 				invocationName: "csrc-from-package",
 				sourceInfo: {
-					path: join(packageDir("pi-jev-compaction"), "index.ts"),
+					path: join(pkg, "index.ts"),
 				},
 			},
 		]);
@@ -64,7 +68,7 @@ describe("which declared chat commands are listed", () => {
 	});
 
 	test("a command another plugin's extension registers is not listed", () => {
-		const sources = new ChatCommandSources();
+		const sources = make();
 		declare(sources, "csrc-stolen");
 		declare(sources, "csrc-lookalike");
 		sources.loaded([
@@ -75,10 +79,44 @@ describe("which declared chat commands are listed", () => {
 			{
 				// A folder whose name only starts like the package's is not inside it.
 				invocationName: "csrc-lookalike",
-				sourceInfo: { path: `${packageDir("pi-jev-compaction")}-x/index.ts` },
+				sourceInfo: { path: `${pkg}-x/index.ts` },
 			},
 		]);
 		expect(names(sources.listed())).toEqual([]);
+	});
+
+	test("a package installed inside the declaring package's folder is not taken for it", () => {
+		const root = mkdtempSync(join(tmpdir(), "roundtable-csrc-nested-"));
+		try {
+			const outer = join(root, "outer");
+			const inner = join(outer, "node_modules", "inner");
+			mkdirSync(join(inner, "dist"), { recursive: true });
+			writeFileSync(join(outer, "package.json"), "{}");
+			writeFileSync(join(inner, "package.json"), "{}");
+			mkdirSync(join(outer, "dist"));
+			const sources = new ChatCommandSources(() => outer);
+			sources.declare(
+				{ name: "csrc-nested", description: "Run nested" },
+				{ packages: ["outer"], sessionTools: [] },
+			);
+			sources.declare(
+				{ name: "csrc-outer", description: "Run outer" },
+				{ packages: ["outer"], sessionTools: [] },
+			);
+			sources.loaded([
+				{
+					invocationName: "csrc-nested",
+					sourceInfo: { path: join(inner, "dist", "index.js") },
+				},
+				{
+					invocationName: "csrc-outer",
+					sourceInfo: { path: join(outer, "dist", "index.js") },
+				},
+			]);
+			expect(names(sources.listed())).toEqual(["csrc-outer"]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });
 

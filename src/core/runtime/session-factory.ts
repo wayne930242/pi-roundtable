@@ -485,7 +485,7 @@ export class SessionFactory {
 		}
 		await session.setModel(resolved);
 		await this.#awaitTools(session, awaited);
-		this.link().chatCommands.loaded(
+		this.link().chatCommands?.loaded(
 			session.extensionRunner.getRegisteredCommands(),
 		);
 		session.subscribe((event) => {
