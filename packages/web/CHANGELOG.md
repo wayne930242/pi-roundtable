@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-11-01
+
+### Fixed
+
+- The animated scene's dialogue box named the owner as the one working: under the owner's line, its progress strip read "<owner> is working…" while a member ran tools. It now names the round's member, else the turn's agent, else the room's agent.
+- In the animated scene the progress strip no longer takes the dialogue box's room: it folds to one line (who works and how many tools ran) that a tap opens to the tool calls and the streamed words. Chat mode keeps the full strip.
+
 ## [0.31.0] - 2026-11-01
 
 - Release in lockstep with pi-roundtable 0.31.0; no package-specific behavior changes.
