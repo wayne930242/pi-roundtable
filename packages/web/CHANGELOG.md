@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.3] - 2026-11-01
+
+- 0.30.2 was tagged but never published: its release run stopped on lint (a hook's dependency suppression the change had dropped) before any package was published. 0.30.3 carries 0.30.2's changes.
+
 ## [0.30.2] - 2026-11-01
 
 ### Fixed

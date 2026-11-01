@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.30.3] - 2026-11-01
+
+- Release in lockstep with pi-roundtable 0.30.3; no package-specific behavior changes.
+
 ## [0.30.2] - 2026-11-01
 
 - Release in lockstep with pi-roundtable 0.30.2; no package-specific behavior changes.
