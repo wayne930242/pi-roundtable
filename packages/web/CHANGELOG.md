@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.5] - 2026-11-02
+
 ### Added
 
 - `RoomView.helper.origin`: the room a temp knight was made from, when that is a room of the app (a group's room when a member made it during the group's round). The cards a temp knight asks now show in that room, where its answer goes too, instead of in its knight's own room.

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.5] - 2026-11-02
+
+- Release in lockstep with pi-roundtable-web 0.31.5 (a temp knight's cards show in the room it was made from; answered thread cards survive trimming; a room's cards in opening order; the waiting chip follows redrawn slots); no core behavior changes.
+
 ## [0.31.4] - 2026-11-02
 
 - Release in lockstep with pi-roundtable-web 0.31.4 (a card asked in a dispatch thread or temp knight's room shows in the room above it, in the animated scene and the chat); no core behavior changes.
