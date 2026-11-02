@@ -1,8 +1,8 @@
 // What every view of a room takes from the state, so the views differ in how they lay a room out
 // and never in what they show. The chat (`room-log.tsx`) and the scene's dialogue box
 // (`dialogue-box.tsx`) are two such views of one room; each takes the room's cards from
-// `roomCards` and draws each with `RoomCardSlot`, and `room-surface.test.tsx` holds every view to
-// the same parts.
+// `roomCards` and draws each with `RoomCardBody` (`components/room-card.tsx`), and
+// `room-views.test.tsx` holds every view to the same parts.
 
 import type { CardState, RoomsState } from "./rooms.ts";
 
@@ -43,7 +43,8 @@ export function hangsUnder(
 /**
  * The cards a view of the room shows, in the order they opened. The room's own come all, ended
  * ones too: each view keeps its own record of them. A card asked in a thread or temp knight's room
- * under it comes while it waits, and once ended until the room says something newer, so a person
+ * under it comes while it waits, and once ended until the room says something newer (never while
+ * the room shows no message), so a person
  * answers where they are and sees the answer land; its record stays in the room it was asked in.
  */
 export function roomCards(state: CardParts, key: string): RoomCard[] {
@@ -55,7 +56,9 @@ export function roomCards(state: CardParts, key: string): RoomCard[] {
 		if (!hangsUnder(state, card.room, key)) return [];
 		if (card.outcome !== undefined) {
 			const closed = Date.parse(card.closedAt ?? "");
-			if (Number.isNaN(closed) || closed < newest) return [];
+			// A room with no message yet (its history still on the way) has nothing to measure against.
+			if (Number.isNaN(closed) || Number.isNaN(newest) || closed < newest)
+				return [];
 		}
 		return [{ id, card, from: card.room }];
 	});

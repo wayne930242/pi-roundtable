@@ -197,3 +197,64 @@ test("a card whose thread the room list has not brought yet shows in that thread
 	expect(roomCards(state, CREW)).toEqual([]);
 	expect(roomCards(state, "app:thread.unlisted")).toHaveLength(1);
 });
+
+test("a carried card without a time stands at the end and holds none of the room's own cards back", () => {
+	const untimed: PromptFrame = {
+		id: "untimed",
+		kind: "approval",
+		title: "Old frame",
+		message: "",
+		purpose: "action",
+	};
+	const state = run(
+		[
+			{
+				type: "history_loaded",
+				room: CREW,
+				messages: [
+					said(1, CREW, "2026-11-02T10:00:00.000Z"),
+					said(2, CREW, "2026-11-02T10:10:00.000Z"),
+				],
+				more: false,
+				older: false,
+			},
+			{ type: "prompt", room: THREAD, prompt: untimed },
+			{
+				type: "prompt",
+				room: CREW,
+				prompt: approval("own", "2026-11-02T10:05:00.000Z"),
+			},
+		],
+		listed(),
+	);
+	expect(
+		timeline(state, CREW).map((item) =>
+			item.kind === "card"
+				? item.id
+				: `m${item.kind === "message" ? item.message.id : "?"}`,
+		),
+	).toEqual(["m1", "own", "m2", "untimed"]);
+});
+
+test("an answered carried card does not show while the room has no message to measure it by", () => {
+	const state = run([
+		{ type: "rooms_loaded", rooms: ROOMS },
+		{
+			type: "prompt",
+			room: THREAD,
+			prompt: approval("old", "2025-01-01T10:00:00.000Z"),
+		},
+		{
+			type: "prompt_closed",
+			prompt: "old",
+			outcome: "approved",
+			closedAt: "2025-01-01T10:01:00.000Z",
+		},
+		{
+			type: "prompt",
+			room: THREAD,
+			prompt: approval("open", "2026-11-02T10:01:00.000Z"),
+		},
+	]);
+	expect(roomCards(state, CREW).map((entry) => entry.id)).toEqual(["open"]);
+});
