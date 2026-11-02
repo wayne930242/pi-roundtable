@@ -85,8 +85,12 @@ export default function WaitingChip(props: {
 			{ root },
 		);
 		const attach = () => {
+			// One pass over the log's slots per batch of changes, however many cards wait.
+			const slots = new Map<string, HTMLElement>();
+			for (const slot of root.querySelectorAll<HTMLElement>("[data-card]"))
+				if (slot.dataset.card) slots.set(slot.dataset.card, slot);
 			for (const id of ids.split(" ")) {
-				const slot = id ? cardSlot(root, id) : undefined;
+				const slot = id ? slots.get(id) : undefined;
 				const old = watched.get(id);
 				if (!slot || slot === old) continue;
 				if (old) watch.unobserve(old);
