@@ -181,9 +181,10 @@ export function restPoster(
 
 	/**
 	 * Sends a card edit. A message cannot change its kind, and the poster does not read the message
-	 * first: when an edit of a card with a `preview` is `rejected`, it is sent once more as a
-	 * Components V2 card without the preview (the message was one), and when that fails too the first
-	 * error is the one thrown.
+	 * first: when an edit of a card with a `preview` is `rejected` as an invalid form (Discord's 50035,
+	 * what a change of kind answers), it is sent once more as a Components V2 card without the preview
+	 * (the message was one). When that is `rejected` too the first error is thrown; any other failure
+	 * of the retry (`unavailable`, `forbidden`, `message_gone`) is thrown as it is.
 	 */
 	const keepingKind = async (
 		card: DiscordCard,
@@ -195,12 +196,15 @@ export function restPoster(
 			if (
 				card.preview === undefined ||
 				!(error instanceof DiscordPosterError) ||
-				error.kind !== "rejected"
+				error.kind !== "rejected" ||
+				error.discordCode !== 50035
 			)
 				throw error;
 			const { preview: _dropped, ...v2 } = card;
-			await send(v2).catch(() => {
-				throw error;
+			await send(v2).catch((retry: unknown) => {
+				throw retry instanceof DiscordPosterError && retry.kind === "rejected"
+					? error
+					: retry;
 			});
 		}
 	};

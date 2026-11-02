@@ -11,7 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Editing a Components V2 card with a `preview` set no longer fails: `editCard` and `editWebhookCard` send the legacy body and, when Discord refuses it (`rejected`), send the card once more as Components V2 without the preview, so the message keeps its kind (a second request; if that fails too, the first error is thrown). A preview card edited without `preview` is still `rejected`. `fakeDiscordPoster` behaves the same way. This lets a renderer set `preview` on every card edit, including for cards posted before it did.
+- Editing a Components V2 card with a `preview` set no longer fails: `editCard` and `editWebhookCard` send the legacy body and, when Discord refuses it as an invalid form (`rejected`, code 50035), send the card once more as Components V2 without the preview, so the message keeps its kind (a second request; if that is `rejected` too the first error is thrown, and any other failure of the retry, such as `unavailable` or `message_gone`, is thrown as it is). A preview card edited without `preview` is still `rejected`. `fakeDiscordPoster` behaves the same way. This lets a renderer set `preview` on every card edit, including for cards posted before it did.
 
 ## [0.31.2] - 2026-11-02
 

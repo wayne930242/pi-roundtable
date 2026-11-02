@@ -120,7 +120,7 @@ export interface DiscordCard {
 	/**
 	 * An absolute `http` or `https` address (at most 2,048 characters, else `invalid`) the title links
 	 * to, so `title` stays plain text in both kinds: the embed's `url` for a card with a `preview`
-	 * (Discord does not render Markdown in an embed title), and a masked link a Markdown link in
+	 * (Discord does not render Markdown in an embed title), and a masked Markdown link in
 	 * a Components V2 card's heading, with `\`, `[` and `]` in the title escaped. Non-ASCII
 	 * characters are percent-encoded and so are `(` and `)`. Absent, the title is plain text as before.
 	 */

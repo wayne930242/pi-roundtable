@@ -254,3 +254,47 @@ test("when the Components V2 retry fails too, the first error is the one thrown"
 	expect((error as DiscordPosterError).kind).toBe("rejected");
 	expect((error as DiscordPosterError).message).toContain("refusal 1");
 });
+
+const apiError = (code: number, status: number, message: string) =>
+	new DiscordAPIError(
+		{ code, message },
+		code,
+		status,
+		"PATCH",
+		"https://discord.test/api/v10/x",
+		{},
+	);
+
+test("a retry that fails for another reason is thrown as it is, not as the first refusal", async () => {
+	let calls = 0;
+	const rest = v2Discord();
+	const poster = restPoster({
+		...rest,
+		patch: async () => {
+			calls += 1;
+			if (calls === 1) throw apiError(50035, 400, "kind");
+			throw apiError(10008, 404, "Unknown Message");
+		},
+	});
+	const error = await poster
+		.editCard(CHANNEL, MESSAGE, { ...CARD, preview: "p" })
+		.catch((thrown: unknown) => thrown);
+	expect(calls).toBe(2);
+	expect((error as DiscordPosterError).kind).not.toBe("rejected");
+});
+
+test("a refusal that is not an invalid form (50035) is not retried", async () => {
+	let calls = 0;
+	const rest = v2Discord();
+	const poster = restPoster({
+		...rest,
+		patch: async () => {
+			calls += 1;
+			throw apiError(50027, 401, "Invalid Webhook Token");
+		},
+	});
+	await poster
+		.editCard(CHANNEL, MESSAGE, { ...CARD, preview: "p" })
+		.catch(() => undefined);
+	expect(calls).toBe(1);
+});
