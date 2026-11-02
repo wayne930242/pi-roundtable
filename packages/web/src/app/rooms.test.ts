@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Agent, ChannelKey } from "pi-roundtable";
+import type { Agent, AgentGroup, ChannelKey } from "pi-roundtable";
 import { Rooms, roomModeOf } from "./rooms.ts";
 
 const agent = (name: string, status: Agent["status"] = "active"): Agent => ({
@@ -14,6 +14,7 @@ function rooms(
 	agents: Agent[],
 	coordinator: string | undefined,
 	last: Map<string, unknown> = new Map(),
+	groups: AgentGroup[] = [],
 ) {
 	return new Rooms({
 		surface: "app",
@@ -21,8 +22,8 @@ function rooms(
 		directory: {
 			agents: () => agents,
 			agent: (name) => agents.find((one) => one.name === name),
-			groups: () => [],
-			group: () => undefined,
+			groups: () => groups,
+			group: (name) => groups.find((one) => one.name === name),
 		},
 		team: { coordinator: () => coordinator },
 		avatars: { url: () => "/avatars/x.png" },
@@ -131,4 +132,35 @@ test("a temp knight made on Discord shows here once it is opened by its address"
 	expect(
 		await directory.openHelper("app:agent.boss" as ChannelKey),
 	).toBeUndefined();
+});
+
+test("a temp knight names the room it was made from when that is a room here, and not otherwise", async () => {
+	const crew = {
+		name: "crew",
+		displayName: "Crew",
+		members: ["boss"],
+		status: "active",
+	} as AgentGroup;
+	const listed = await rooms(
+		[
+			agent("boss"),
+			helper("boss-1", "app:group.crew"),
+			helper("boss-2", "app:agent.boss"),
+			helper("boss-3", "app:group.gone"),
+			{ ...agent("boss-4"), parent: "boss" },
+		],
+		"boss",
+		new Map(),
+		[crew],
+	).list();
+	expect(
+		listed.flatMap((room) =>
+			room.helper ? [[room.name, room.helper.parent, room.helper.origin]] : [],
+		),
+	).toEqual([
+		["boss-1", "app:agent.boss", "app:group.crew"],
+		["boss-2", "app:agent.boss", "app:agent.boss"],
+		["boss-3", "app:agent.boss", undefined],
+		["boss-4", "app:agent.boss", undefined],
+	]);
 });

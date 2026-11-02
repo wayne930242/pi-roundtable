@@ -79,10 +79,22 @@ class TestObserver {
 	observe(element: Element) {
 		this.elements.add(element);
 	}
+	unobserve(element: Element) {
+		this.elements.delete(element);
+	}
 	disconnect() {
 		observers.delete(this);
 	}
 }
+/** What the observers that watch an element say of it; a slot taken out of the page reports it is out of view. */
+const reportOf = (target: Element, shown: boolean) => {
+	for (const observer of observers)
+		if (observer.elements.has(target))
+			observer.callback(
+				[{ target, isIntersecting: shown } as never],
+				observer as never,
+			);
+};
 const report = (shown: boolean) => {
 	for (const observer of observers)
 		observer.callback(
@@ -276,6 +288,45 @@ test("in a room a waiting card out of view shows a chip that brings it back", as
 			}),
 		);
 		expect(chip()).toBeNull();
+	} finally {
+		history.mockRestore();
+	}
+});
+
+test("a slot the log draws anew keeps the chip away while its card is in view", async () => {
+	const history = spyOn(api, "messages").mockResolvedValue({
+		messages: [said(GUIDE, 1), said(GUIDE, 2)],
+		more: false,
+		cards: [],
+	});
+	try {
+		await open(GUIDE, "c7", "Send it?");
+		await page.render(
+			<ConfigContext.Provider value={config}>
+				<RoomPage roomKey={GUIDE} />
+			</ConfigContext.Provider>,
+		);
+		await page.act(() => settle(120));
+		const chip = () =>
+			page.container.querySelector<HTMLButtonElement>("button.waiting-chip");
+		await page.act(() => report(true));
+		expect(chip()).toBeNull();
+		// The full log replaces the first one's slot with its own, the card still in view.
+		const first = page.container.querySelector<HTMLElement>('[data-card="c7"]');
+		if (!first) throw new Error("no slot");
+		const redrawn = first.cloneNode(true) as HTMLElement;
+		await page.act(async () => {
+			first.replaceWith(redrawn);
+			await settle(20);
+		});
+		await page.act(() => {
+			reportOf(first, false);
+			reportOf(redrawn, true);
+		});
+		expect(chip()).toBeNull();
+		// The slot that stands now still brings the chip when it leaves the view.
+		await page.act(() => reportOf(redrawn, false));
+		expect(chip()?.textContent).toBe("1 card waiting for an answer");
 	} finally {
 		history.mockRestore();
 	}

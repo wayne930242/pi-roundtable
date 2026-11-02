@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `RoomView.helper.origin`: the room a temp knight was made from, when that is a room of the app (a group's room when a member made it during the group's round). The cards a temp knight asks now show in that room, where its answer goes too, instead of in its knight's own room.
+
+### Fixed
+
+- An answered thread card vanished from the room above at once when the thread held more than a page of messages after it: the thread's trimming took it. It now stays until that room says something newer, as other carried cards do.
+- The chat's "cards waiting" chip showed while every waiting card was in view, the first time a page opened a room's chat: the log's full version replaces the first one's card slots, and the chip kept watching the slots taken out of the page. It now watches the slot that stands.
+- A room's cards could stand out of place after a reload, which hears the open cards after the ended ones the history brings: a room's views now take its cards in the order they opened.
+
 ## [0.31.4] - 2026-11-02
 
 ### Fixed

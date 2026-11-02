@@ -104,8 +104,9 @@ test("a card asked in a thread shows in the room the thread hangs under, marked 
 		{ id: "commit", card: state.cards.commit as never },
 	]);
 	expect(roomWaiting(state, CREW)).toBe(1);
-	// The room list's own count stays the thread's, so no card is counted twice.
+	// The room list counts it on the thread's own card under the room, not twice.
 	expect(waitingCards(state, CREW)).toBe(0);
+	expect(waitingCards(state, THREAD)).toBe(1);
 	expect(roomCards(state, SCOUT)).toEqual([]);
 	// The chat places it among the room's messages by when it opened, the scene's box shows it.
 	expect(
@@ -166,8 +167,9 @@ test("a card carries up through temp knights and their threads, and a loop of pa
 	expect(roomCards(state, HELPER).map((entry) => entry.from)).toEqual([
 		HELPER_THREAD,
 	]);
-	// A temp knight hangs under the knight that made it, not under a group that knight sits in.
+	// A temp knight made in its knight's own room hangs under that room, not under a group the knight sits in.
 	expect(roomCards(state, CREW)).toEqual([]);
+
 	const looped = run(
 		[
 			{
@@ -257,4 +259,104 @@ test("an answered carried card does not show while the room has no message to me
 		},
 	]);
 	expect(roomCards(state, CREW).map((entry) => entry.id)).toEqual(["open"]);
+});
+
+test("a temp knight made during a group's round hangs under the group's room, where its answer goes", () => {
+	const state = run(
+		[
+			{
+				type: "rooms_loaded",
+				rooms: ROOMS.map((one) =>
+					one.key === HELPER
+						? {
+								...one,
+								helper: { parent: SCOUT, parentName: "Scout", origin: CREW },
+							}
+						: one,
+				),
+			},
+			{
+				type: "prompt",
+				room: HELPER,
+				prompt: approval("asked", "2026-11-02T10:01:00.000Z"),
+			},
+		],
+		listed(),
+	);
+	expect(roomCards(state, CREW).map((entry) => entry.from)).toEqual([HELPER]);
+	expect(roomCards(state, SCOUT)).toEqual([]);
+	// The temp knight's own row in the list counts it.
+	expect(waitingCards(state, HELPER)).toBe(1);
+	expect(waitingCards(state, CREW)).toBe(0);
+});
+
+test("an answered thread card stays while the room above still shows it, however the thread trims its cards", () => {
+	// The page shows the thread's latest page only, older messages left out, the card before them.
+	let state = run(
+		[
+			{
+				type: "prompt",
+				room: THREAD,
+				prompt: approval("commit", "2026-11-02T10:01:00.000Z"),
+			},
+			{
+				type: "history_loaded",
+				room: THREAD,
+				messages: [said(9, THREAD, "2026-11-02T10:05:00.000Z")],
+				more: true,
+				older: false,
+			},
+			{ type: "focused", room: CREW },
+			{
+				type: "prompt_closed",
+				prompt: "commit",
+				outcome: "approved",
+				closedAt: "2026-11-02T10:06:00.000Z",
+			},
+		],
+		listed(),
+	);
+	expect(roomCards(state, CREW).map((entry) => entry.card.outcome)).toEqual([
+		"approved",
+	]);
+	// Once the room above moves on, the thread's trimming takes it.
+	state = reduce(state, {
+		type: "message",
+		room: CREW,
+		message: said(2, CREW, "2026-11-02T10:07:00.000Z"),
+	});
+	state = reduce(state, {
+		type: "message",
+		room: THREAD,
+		message: said(10, THREAD, "2026-11-02T10:08:00.000Z"),
+	});
+	expect(roomCards(state, CREW)).toEqual([]);
+	expect(state.cards.commit).toBeUndefined();
+});
+
+test("a room's cards come in the order they opened, whatever order the page heard of them", () => {
+	const state = run(
+		[
+			{
+				type: "prompt",
+				room: CREW,
+				prompt: approval("later", "2026-11-02T10:05:00.000Z"),
+			},
+			{
+				type: "prompt",
+				room: THREAD,
+				prompt: approval("earlier", "2026-11-02T10:02:00.000Z"),
+			},
+		],
+		listed(),
+	);
+	expect(roomCards(state, CREW).map((entry) => entry.id)).toEqual([
+		"earlier",
+		"later",
+	]);
+	expect(
+		timeline(state, CREW).flatMap((item) =>
+			item.kind === "card" ? [item.id] : [],
+		),
+	).toEqual(["earlier", "later"]);
 });

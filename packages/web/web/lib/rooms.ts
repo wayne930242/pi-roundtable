@@ -16,7 +16,7 @@ import type {
 	UploadView,
 } from "../../src/api-types.ts";
 import { isStartOver } from "../../src/api-types.ts";
-import { type RoomCard, roomCards } from "./room-surface.ts";
+import { type RoomCard, roomCards, shownAbove } from "./room-surface.ts";
 
 // The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
 // what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
@@ -277,7 +277,8 @@ function resolvedPruned(state: RoomsState): RoomsState {
 	const without = new Map<string, string[]>();
 	for (const id of state.cardOrder) {
 		const card = state.cards[id];
-		if (!card?.outcome) continue;
+		// A card a room above its own still shows stays until that room moves on.
+		if (!card?.outcome || shownAbove(state, card)) continue;
 		const room = state.rooms[card.room];
 		const first = room?.messages[0];
 		if (first) {

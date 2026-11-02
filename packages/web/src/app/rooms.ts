@@ -245,6 +245,12 @@ export class Rooms {
 				key,
 			};
 		};
+		// A temp knight names the room it was made from only when that is one of these rooms.
+		const keys = new Set<string>([
+			...agents.map((agent) => agentRoomKey(surface, agent.name)),
+			...groups.map((group) => groupRoomKey(surface, group.name)),
+			...shown.map((thread) => channelKey(surface, thread.id)),
+		]);
 		const rooms: RoomView[] = [
 			...agents.map((agent: Agent) =>
 				view(agentRoomKey(surface, agent.name), {
@@ -260,6 +266,9 @@ export class Rooms {
 									parent: agentRoomKey(surface, agent.parent),
 									parentName:
 										directory.agent(agent.parent)?.displayName ?? agent.parent,
+									...(agent.origin && keys.has(agent.origin)
+										? { origin: agent.origin }
+										: {}),
 									...(agent.finishedAt ? { finished: true as const } : {}),
 								},
 								// A temp knight's answers reach its knight's room, which pushes; its cards still do.

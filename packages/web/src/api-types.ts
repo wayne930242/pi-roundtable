@@ -606,10 +606,17 @@ export interface RoomView {
 	/** A thread's parent room. */
 	parent?: string;
 	/**
-	 * A temp knight's room: `parent` is the room of the knight that made it, and `finished` is set
-	 * when it has nothing running, queued or waiting. Absent on every permanent knight.
+	 * A temp knight's room: `parent` is the room of the knight that made it, `origin` the room it was
+	 * made from (a group's, when the knight made it during the group's round; absent when that is no
+	 * room of this app), and `finished` is set when it has nothing running, queued or waiting. Absent
+	 * on every permanent knight.
 	 */
-	helper?: { parent: string; parentName: string; finished?: true };
+	helper?: {
+		parent: string;
+		parentName: string;
+		origin?: string;
+		finished?: true;
+	};
 	/** A thread's room takes no messages from the page. */
 	readOnly: boolean;
 	/**

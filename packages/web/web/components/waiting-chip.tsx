@@ -65,26 +65,45 @@ export default function WaitingChip(props: {
 	const target = useTarget();
 	const [hidden, setHidden] = useState<string[]>([]);
 
-	// Which of the room's waiting cards the scroller does not show.
+	// Which of the room's waiting cards the scroller does not show. The log draws its slots anew
+	// when its full version replaces the first one: each card is watched on the slot that stands
+	// now, and what a slot taken out of the page reports no longer counts.
 	useEffect(() => {
 		const root = scroller.current;
 		if (!root || !loaded || typeof IntersectionObserver === "undefined") return;
 		const inView = new Map<string, boolean>();
+		const watched = new Map<string, Element>();
 		const watch = new IntersectionObserver(
 			(entries) => {
 				for (const entry of entries) {
 					const id = (entry.target as HTMLElement).dataset.card;
-					if (id) inView.set(id, entry.isIntersecting);
+					if (id && watched.get(id) === entry.target)
+						inView.set(id, entry.isIntersecting);
 				}
 				setHidden([...inView].flatMap(([id, shown]) => (shown ? [] : [id])));
 			},
 			{ root },
 		);
-		for (const id of ids.split(" ")) {
-			const slot = id ? cardSlot(root, id) : undefined;
-			if (slot) watch.observe(slot);
-		}
-		return () => watch.disconnect();
+		const attach = () => {
+			for (const id of ids.split(" ")) {
+				const slot = id ? cardSlot(root, id) : undefined;
+				const old = watched.get(id);
+				if (!slot || slot === old) continue;
+				if (old) watch.unobserve(old);
+				watched.set(id, slot);
+				watch.observe(slot);
+			}
+		};
+		attach();
+		const redrawn =
+			typeof MutationObserver === "undefined"
+				? undefined
+				: new MutationObserver(attach);
+		redrawn?.observe(root, { childList: true, subtree: true });
+		return () => {
+			watch.disconnect();
+			redrawn?.disconnect();
+		};
 	}, [ids, scroller, loaded]);
 
 	// A jump to one of this room's cards: shown after the room's own first move to its end, and
