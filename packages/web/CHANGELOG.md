@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.4] - 2026-11-02
+
 ### Fixed
 
 - A card asked in a dispatch thread (or a temp knight's room) did not show in the room the thread hangs under: neither the council's animated scene nor its chat mode showed it, only the waiting count in the top bar. Each view of a room now shows the cards of the rooms under it while they wait, and once answered until the room says something newer, under a "From <thread>" link to where it was asked; the record stays in the thread. The chat's "cards waiting" chip counts them too. The room list's per-room counts are unchanged, so no card is counted twice.
