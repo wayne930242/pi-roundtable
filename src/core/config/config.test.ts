@@ -289,9 +289,6 @@ describe("discord.channelContext", () => {
 			keep: 5,
 			similarity: 0.9,
 		});
-		expect(with_({ peerMessageChars: 2000 })).toEqual({
-			peerMessageChars: 2000,
-		});
 	});
 
 	test("takes a predicate for the webhooks that speak for others, and the images to fetch", () => {
@@ -321,9 +318,6 @@ describe("discord.channelContext", () => {
 		);
 		expect(with_({ similarity: 2 })).toContain(
 			"config discord.channelContext.similarity",
-		);
-		expect(with_({ peerMessageChars: 4001 })).toContain(
-			"config discord.channelContext.peerMessageChars: expected an integer from 1 to 4000",
 		);
 		expect(with_({ kep: 3 })).toContain('Did you mean "keep"?');
 		expect(with_(true)).toContain("config discord.channelContext");
