@@ -12,6 +12,7 @@ import type { ConfigView, RoomView } from "../src/api-types.ts";
 import { ActionMenuHost } from "./components/action-menu.tsx";
 import { CouncilView } from "./components/council-view.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
+import { closeMenu } from "./lib/action-menu.ts";
 import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
@@ -126,6 +127,8 @@ beforeEach(() => {
 });
 afterEach(async () => {
 	messages.mockRestore();
+	// A seat's menu left open would open again, with its history entry, in the next file's menu host.
+	await page.act(() => closeMenu());
 	await page.render(null);
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	window.location.hash = "";

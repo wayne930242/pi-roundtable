@@ -12,7 +12,15 @@ const unzip = (...args: string[]) =>
 		env: { ...process.env, LC_ALL: "C.UTF-8" },
 	});
 
-test.skipIf(!Bun.which("unzip"))(
+/**
+ * Apple's build of Info-ZIP 6.00 (macOS's /usr/bin/unzip) prints a UTF-8 name's bytes as the
+ * locale's question marks whatever the locale says, so only another unzip can read the names back.
+ */
+const readsUtf8Names = (): boolean =>
+	Bun.which("unzip") !== null &&
+	!unzip("-v").stdout.toString().includes("modifications by Apple");
+
+test.skipIf(!readsUtf8Names())(
 	"a zip lists every file under its UTF-8 name, and unzip reads each back unchanged",
 	() => {
 		const dir = mkdtempSync(join(tmpdir(), "web-zip-"));
