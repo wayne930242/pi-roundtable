@@ -54,6 +54,8 @@ export interface RoundtableOptions {
 	/**
 	 * The other bots on Discord whose mentions and replies are answered like a guest's (what
 	 * `discord.peerBots` sets); without it no bot is. Stops the start for an id that is not a Discord id.
+	 * A host composed by hand passes the same value to `discordPlugin` too, so channel context cuts
+	 * the peers' messages at `peerMessageChars`; `defineRoundtable` does both.
 	 */
 	peerBots?: PeerBotsConfig;
 	/** The model the default judge asks, when no plugin provides a judge. */
