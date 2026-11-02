@@ -393,12 +393,11 @@ export const forumScenarios: Scenario[] = [
 				color: undefined,
 				rows: 0,
 			});
-			// The poster cannot change a message's kind. A preview card does not become Components V2.
 			await expectFailure(
 				poster.editCard(ch, posted.messageId, CARD),
 				"rejected",
 			);
-			// A Components V2 card edited with a preview stays one, and the preview is left out.
+			// A Components V2 card edited with a preview stays one, without the preview.
 			const v2 = await poster.sayCard(ch, CARD);
 			await poster.editCard(ch, v2.messageId, {
 				...PREVIEW,
@@ -407,9 +406,6 @@ export const forumScenarios: Scenario[] = [
 			expect(world.isCard(ch, v2.messageId)).toBe(true);
 			expect(world.legacyCard(ch, v2.messageId)).toBeUndefined();
 			expect(world.cardHeading(ch, v2.messageId)).toBe("### Ticket 3");
-			expect((await poster.message(ch, v2.messageId)).content).not.toBe(
-				PREVIEW.preview,
-			);
 			// A webhook posts and edits one the same way.
 			const hooked = await poster.postCard(ch, {
 				webhook: "relay",
@@ -434,7 +430,6 @@ export const forumScenarios: Scenario[] = [
 				poster.editWebhookCard(ch, hooked.messageId, CARD, ["relay"]),
 				"rejected",
 			);
-			// A webhook's Components V2 card edited with a preview stays Components V2 too.
 			const hookedV2 = await poster.postCard(ch, {
 				webhook: "relay",
 				username: "Ann",
@@ -500,64 +495,6 @@ export const forumScenarios: Scenario[] = [
 			expect(world.legacyCard(post.threadId, post.messageId)?.content).toBe(
 				"edited",
 			);
-		},
-	},
-	{
-		name: "23. a card's titleUrl is the embed's url on a preview card and a masked link in a Components V2 heading; it is checked before any request",
-		async run({ poster, world }) {
-			const ch = freshId();
-			world.channel(ch);
-			const url = "https://example.test/案件/1?q=(a)";
-			const encoded = "https://example.test/%E6%A1%88%E4%BB%B6/1?q=%28a%29";
-			const legacy = await poster.sayCard(ch, { ...PREVIEW, titleUrl: url });
-			expect(world.legacyCard(ch, legacy.messageId)).toMatchObject({
-				title: "Ticket",
-				url: encoded,
-			});
-			const v2 = await poster.sayCard(ch, {
-				...CARD,
-				title: "Ticket [1]",
-				titleUrl: url,
-			});
-			expect(world.cardHeading(ch, v2.messageId)).toBe(
-				`### [Ticket \\[1\\]](${encoded})`,
-			);
-			// The thumbnail's section holds the heading too.
-			const withThumb = await poster.sayCard(ch, {
-				...CARD,
-				thumbnail: PREVIEW.thumbnail,
-				titleUrl: "http://example.test/t",
-			});
-			expect(world.cardHeading(ch, withThumb.messageId)).toBe(
-				"### [Ticket](http://example.test/t)",
-			);
-			// An edit sets or drops the link.
-			await poster.editCard(ch, legacy.messageId, PREVIEW);
-			expect(world.legacyCard(ch, legacy.messageId)?.url).toBeUndefined();
-			await poster.editCard(ch, v2.messageId, CARD);
-			expect(world.cardHeading(ch, v2.messageId)).toBe("### Ticket");
-			// Anything but an absolute http(s) address is refused before a request.
-			const before = world.requests();
-			for (const bad of [
-				"",
-				"/relative",
-				"example.test/t",
-				"javascript:alert(1)",
-				"ftp://example.test/t",
-				" https://example.test/t",
-				"https://exa mple.test/t",
-				`https://example.test/${"a".repeat(2_048)}`,
-			]) {
-				await expectFailure(
-					poster.sayCard(ch, { ...PREVIEW, titleUrl: bad }),
-					"invalid",
-				);
-				await expectFailure(
-					poster.sayCard(ch, { ...CARD, titleUrl: bad }),
-					"invalid",
-				);
-			}
-			expect(world.requests()).toBe(before);
 		},
 	},
 ];

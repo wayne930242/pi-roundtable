@@ -88,16 +88,16 @@ test("the title is escaped as a link label: backslash and brackets only", () => 
 });
 
 test("a non-ASCII address is percent-encoded, and parentheses cannot end the link", () => {
-	const encoded = "https://example.test/%E6%A1%88%E4%BB%B6/1?q=%28a%29";
-	const url = "https://example.test/案件/1?q=(a)";
+	const encoded = "https://example.test/caf%C3%A9/1?q=%28a%29";
+	const url = "https://example.test/café/1?q=(a)";
 	expect(heading({ ...CARD, titleUrl: url })).toBe(`### [Ticket](${encoded})`);
 	const body = cardBody({ ...CARD, preview: "p", titleUrl: url }) as {
 		embeds: { url?: string }[];
 	};
 	expect(body.embeds[0]?.url).toBe(encoded);
-	// A host in Unicode is sent as punycode; an address that is already encoded is not encoded twice.
-	expect(heading({ ...CARD, titleUrl: "https://例え.test/a%20b" })).toBe(
-		"### [Ticket](https://xn--r8jz45g.test/a%20b)",
+	// A host with non-ASCII letters is sent as punycode; an address that is already encoded is not encoded twice.
+	expect(heading({ ...CARD, titleUrl: "https://b\u00fccher.test/a%20b" })).toBe(
+		"### [Ticket](https://xn--bcher-kva.test/a%20b)",
 	);
 });
 

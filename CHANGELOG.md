@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `DiscordCard.titleUrl`: an absolute `http` or `https` address (at most 2,048 characters, else `invalid`) the card's title links to, so a renderer passes the title as plain text in both kinds. A card with a `preview` sends it as the embed's `url` (Discord does not render Markdown in an embed title); a Components V2 card writes its heading as `### [title](url)` with `\`, `[` and `]` in the title escaped. Non-ASCII characters are percent-encoded and so are `(` and `)`. Absent, a card is sent exactly as before.
+- `DiscordCard.titleUrl`: an absolute `http` or `https` address (at most 2,048 characters, else `invalid`) the card's title links to, so a renderer passes the title as plain text in both kinds. A card with a `preview` sends it as the embed's `url` (Discord does not render Markdown in an embed title); a Components V2 card writes its heading as a Markdown link whose text is the title, with `\`, `[` and `]` in the title escaped. Non-ASCII characters are percent-encoded and so are `(` and `)`. Absent, a card is sent exactly as before.
 
 ### Changed
 

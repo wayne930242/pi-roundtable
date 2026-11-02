@@ -10,6 +10,7 @@ import {
 	type PosterSubject,
 	type Scenario,
 } from "./poster-contract-support.ts";
+import { titleScenarios } from "./poster-contract-title.ts";
 
 export type {
 	PosterSubject,
@@ -458,6 +459,7 @@ export const posterScenarios: Scenario[] = [
 	...guildScenarios,
 	...forumScenarios,
 	...archivedScenarios,
+	...titleScenarios,
 ];
 
 /** Registers every scenario as a test over a subject made fresh for it. */
