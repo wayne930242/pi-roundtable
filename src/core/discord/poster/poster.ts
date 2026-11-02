@@ -109,13 +109,22 @@ export interface DiscordCard {
 	 * rows for `buttons`, `links` and `selects` (at most five rows: one per menu, one for the
 	 * buttons). An embed has no alt text, so a picture's `description` is dropped. `editCard` and
 	 * `editWebhookCard` re-send the card (and an edit sets `content` too), but the poster cannot
-	 * change a message's kind: an edit that would turn a Components V2 message into a preview card,
-	 * or the other way round, is `rejected`.
+	 * change a message's kind. An edit with a `preview` of a message that is a Components V2 card
+	 * keeps it a Components V2 card and leaves the `preview` out (the message has no `content`
+	 * to put it in); an edit without `preview` of a preview card is `rejected`.
 	 */
 	preview?: string;
 	/** The colour of the bar along the side, as 0xRRGGBB. */
 	accent?: number;
 	title: string;
+	/**
+	 * An absolute `http` or `https` address (at most 2,048 characters, else `invalid`) the title links
+	 * to, so `title` stays plain text in both kinds: the embed's `url` for a card with a `preview`
+	 * (Discord does not render Markdown in an embed title), and a masked link `### [title](url)` in
+	 * a Components V2 card's heading, with `\`, `[` and `]` in the title escaped. Non-ASCII
+	 * characters are percent-encoded and so are `(` and `)`. Absent, the title is plain text as before.
+	 */
+	titleUrl?: string;
 	sections: readonly string[];
 	/** A small picture beside the heading (a Section with a Thumbnail); the heading is the section's text. */
 	thumbnail?: CardPicture;

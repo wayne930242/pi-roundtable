@@ -15,7 +15,7 @@ import {
 } from "../discord/poster/poster-checks.ts";
 import { DiscordPosterError } from "../discord/poster/poster-errors.ts";
 import { archivedThread } from "../discord/poster/poster-forum.ts";
-import { assertSameCardKind, cardContent } from "./fake-poster-cards.ts";
+import { cardContent, editedCard } from "./fake-poster-cards.ts";
 import type { FakeForum } from "./fake-poster-forum.ts";
 import type {
 	FakePosterChannel,
@@ -292,9 +292,8 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 				"editing a card failed: that message is not a card",
 				{ discordCode: 50035, status: 400 },
 			);
-		assertSameCardKind(message.card, card);
-		message.card = card;
-		message.content = cardContent(card);
+		message.card = editedCard(message.card, card);
+		message.content = cardContent(message.card);
 	}
 
 	async remove(
@@ -425,9 +424,8 @@ class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
 				"editing a card failed: that message is not a card",
 				{ discordCode: 50035, status: 400 },
 			);
-		assertSameCardKind(message.card, card);
-		message.card = card;
-		message.content = cardContent(card);
+		message.card = editedCard(message.card, card);
+		message.content = cardContent(message.card);
 	}
 
 	async deleteAsBot(channelId: string, messageId: string): Promise<void> {

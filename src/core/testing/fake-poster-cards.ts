@@ -14,14 +14,20 @@ export function cardContent(card: DiscordCard): string {
 }
 
 /**
- * Refuses an edit that changes a message's kind: a Components V2 message cannot be edited into a
- * `preview` (legacy) card, and a legacy message cannot become a Components V2 card.
+ * The card a message holds after an edit. A message keeps its kind: an edit with a `preview` of a
+ * Components V2 card stays one and drops the preview (as the real poster does), and an edit
+ * without one of a preview card is refused.
  */
-export function assertSameCardKind(held: DiscordCard, edit: DiscordCard): void {
-	if ((held.preview !== undefined) !== (edit.preview !== undefined))
+export function editedCard(held: DiscordCard, edit: DiscordCard): DiscordCard {
+	if (held.preview !== undefined && edit.preview === undefined)
 		throw new DiscordPosterError(
 			"rejected",
 			"editing a card failed: the poster cannot change a message's kind, Components V2 or a preview card",
 			{ discordCode: 50035, status: 400 },
 		);
+	if (held.preview === undefined && edit.preview !== undefined) {
+		const { preview: _dropped, ...v2 } = edit;
+		return v2;
+	}
+	return edit;
 }

@@ -68,10 +68,14 @@ export interface PosterWorld {
 				content: string;
 				embeds: number;
 				title: string | undefined;
+				/** The embed's `url`, the link on its title. */
+				url: string | undefined;
 				color: number | undefined;
 				rows: number;
 		  }
 		| undefined;
+	/** The heading text of a Components V2 card as Discord holds it (its first text); undefined for any other message. */
+	cardHeading(channelId: string, messageId: string): string | undefined;
 	/** The tag ids applied to a forum post, as Discord holds them. */
 	appliedTags(threadId: string): readonly string[];
 	/** How many requests reached Discord (for the fake: calls past the argument checks). */

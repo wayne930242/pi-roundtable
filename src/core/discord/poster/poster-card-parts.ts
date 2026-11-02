@@ -33,6 +33,38 @@ export function isHttps(url: string | undefined): url is string {
 	}
 }
 
+/**
+ * The checked, normalised address of a card's `titleUrl`: absolute `http` or `https`, at most 2,048
+ * characters once normalised. Non-ASCII characters are percent-encoded (the host as punycode), and
+ * so are `(` and `)`, which would end a Markdown link early.
+ */
+export function checkTitleUrl(url: string): string {
+	let href: string;
+	try {
+		const parsed = new URL(url);
+		if (
+			url !== url.trim() ||
+			!(parsed.protocol === "https:" || parsed.protocol === "http:")
+		)
+			throw new Error("not http(s)");
+		href = parsed.href.replace(/\(/g, "%28").replace(/\)/g, "%29");
+	} catch {
+		throw invalid(
+			`a card's titleUrl is an absolute http or https address of at most ${AVATAR_URL_MAX} characters`,
+		);
+	}
+	if (href.length > AVATAR_URL_MAX)
+		throw invalid(
+			`a card's titleUrl is an absolute http or https address of at most ${AVATAR_URL_MAX} characters`,
+		);
+	return href;
+}
+
+/** A card title as the label of a Markdown link: `\`, `[` and `]` escaped, so the label cannot end the link early. */
+export function linkLabel(title: string): string {
+	return title.replace(/[\\[\]]/g, "\\$&");
+}
+
 /** The checked wire form of a card's picture: an `https` address, and an alt text of 1 to 1,024 characters when given. */
 export function checkPicture(label: string, picture: CardPicture) {
 	if (!(isHttps(picture.url) && picture.url === picture.url.trim()))

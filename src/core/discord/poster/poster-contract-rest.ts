@@ -121,17 +121,28 @@ export function restSubject(
 					found.components !== undefined
 				);
 			},
+			cardHeading: (channelId, messageId) => {
+				const found = message(channelId, messageId);
+				if (!found || (found.flags & COMPONENTS_V2) === 0) return undefined;
+				type Part = { type: number; content?: string; components?: Part[] };
+				const [container] = (found.components ?? []) as Part[];
+				const first = container?.components?.[0];
+				return first?.type === 9
+					? first.components?.[0]?.content
+					: first?.content;
+			},
 			legacyCard: (channelId, messageId) => {
 				const found = message(channelId, messageId);
 				if (!found || (found.flags & COMPONENTS_V2) !== 0 || !found.embeds)
 					return undefined;
 				const embed = found.embeds[0] as
-					| { title?: string; color?: number }
+					| { title?: string; url?: string; color?: number }
 					| undefined;
 				return {
 					content: found.content,
 					embeds: found.embeds.length,
 					title: embed?.title,
+					url: embed?.url,
 					color: embed?.color,
 					rows: Array.isArray(found.components) ? found.components.length : 0,
 				};

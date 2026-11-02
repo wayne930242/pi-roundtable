@@ -1,5 +1,5 @@
 import { RESTJSONErrorCodes, Routes } from "discord.js";
-import type { DiscordPoster, PosterFile } from "./poster.ts";
+import type { DiscordCard, DiscordPoster, PosterFile } from "./poster.ts";
 import {
 	cardBody,
 	checkAvatar,
@@ -179,6 +179,32 @@ export function restPoster(
 		}
 	};
 
+	/**
+	 * Sends a card edit. A message cannot change its kind, and the poster does not read the message
+	 * first: when an edit of a card with a `preview` is `rejected`, it is sent once more as a
+	 * Components V2 card without the preview (the message was one), and when that fails too the first
+	 * error is the one thrown.
+	 */
+	const keepingKind = async (
+		card: DiscordCard,
+		send: (card: DiscordCard) => Promise<void>,
+	): Promise<void> => {
+		try {
+			await send(card);
+		} catch (error) {
+			if (
+				card.preview === undefined ||
+				!(error instanceof DiscordPosterError) ||
+				error.kind !== "rejected"
+			)
+				throw error;
+			const { preview: _dropped, ...v2 } = card;
+			await send(v2).catch(() => {
+				throw error;
+			});
+		}
+	};
+
 	/** Asks each named webhook in turn to act on a message; the first that does it ends the search, and `message_gone` is what is left when none could. */
 	const eachWebhook = async (
 		operation: string,
@@ -272,14 +298,16 @@ export function restPoster(
 		async editWebhookCard(channelId, messageId, card, names) {
 			checkSnowflake("a channel", channelId);
 			checkSnowflake("a message", messageId);
-			const body = cardBody(card);
+			cardBody(card);
 			for (const name of names) checkWebhookName(name);
-			await eachWebhook("editing a card", channelId, names, (hook) =>
-				rest.patch(Routes.webhookMessage(hook.id, hook.token, messageId), {
-					auth: false,
-					body,
-					query: new URLSearchParams({ with_components: "true" }),
-				}),
+			await keepingKind(card, (sent) =>
+				eachWebhook("editing a card", channelId, names, (hook) =>
+					rest.patch(Routes.webhookMessage(hook.id, hook.token, messageId), {
+						auth: false,
+						body: cardBody(sent),
+						query: new URLSearchParams({ with_components: "true" }),
+					}),
+				),
 			);
 		},
 		async remove(channelId, messageId, names) {
@@ -365,23 +393,26 @@ export function restPoster(
 		async editCard(channelId, messageId, card) {
 			checkSnowflake("a channel", channelId);
 			checkSnowflake("a message", messageId);
-			const body = cardBody(card);
-			const edit = () =>
-				rest.patch(Routes.channelMessage(channelId, messageId), { body });
-			try {
-				await edit();
-			} catch (error) {
-				// A forum post's first message has the post's own id. Discord refuses its edit while the
-				// post is archived (50083), so the post is opened again and the edit sent once more.
-				if (channelId !== messageId || !isCode(error, THREAD_ARCHIVED))
-					throw failure("editing a card", error);
-				await rest
-					.patch(Routes.channel(channelId), { body: { archived: false } })
-					.then(edit)
-					.catch((again: unknown) => {
-						throw failure("editing a card", again);
-					});
-			}
+			cardBody(card);
+			await keepingKind(card, async (sent) => {
+				const body = cardBody(sent);
+				const edit = () =>
+					rest.patch(Routes.channelMessage(channelId, messageId), { body });
+				try {
+					await edit();
+				} catch (error) {
+					// A forum post's first message has the post's own id. Discord refuses its edit while the
+					// post is archived (50083), so the post is opened again and the edit sent once more.
+					if (channelId !== messageId || !isCode(error, THREAD_ARCHIVED))
+						throw failure("editing a card", error);
+					await rest
+						.patch(Routes.channel(channelId), { body: { archived: false } })
+						.then(edit)
+						.catch((again: unknown) => {
+							throw failure("editing a card", again);
+						});
+				}
+			});
 		},
 		async deleteAsBot(channelId, messageId) {
 			checkSnowflake("a channel", channelId);

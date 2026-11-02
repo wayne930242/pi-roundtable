@@ -3,6 +3,7 @@ import {
 	cardRows,
 	checkCardTextSize,
 	checkPicture,
+	checkTitleUrl,
 } from "./poster-card-parts.ts";
 import { invalid } from "./poster-errors.ts";
 
@@ -61,6 +62,8 @@ export function legacyCardBody(card: DiscordCard & { preview: string }) {
 	const image = card.image
 		? checkPicture("a card's image", card.image)
 		: undefined;
+	const url =
+		card.titleUrl === undefined ? undefined : checkTitleUrl(card.titleUrl);
 	const components = cardRows(card);
 	if (components.length > DISCORD_LIMITS.actionRows)
 		throw invalid(
@@ -71,6 +74,7 @@ export function legacyCardBody(card: DiscordCard & { preview: string }) {
 		embeds: [
 			{
 				title: card.title,
+				...(url ? { url } : {}),
 				...(sections.length > 0 ? { description } : {}),
 				...(card.accent === undefined ? {} : { color: card.accent }),
 				...(card.footer ? { footer: { text: card.footer } } : {}),

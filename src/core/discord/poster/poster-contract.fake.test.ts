@@ -1,4 +1,6 @@
 import { fakeDiscordPoster } from "../../testing/fake-poster.ts";
+import { checkTitleUrl } from "./poster-card-parts.ts";
+import { cardBody } from "./poster-checks.ts";
 import { runContract } from "./poster-contract.ts";
 import type { PosterSubject } from "./poster-contract-support.ts";
 
@@ -75,6 +77,23 @@ function fakeSubject(): PosterSubject {
 					.find((message) => message.id === messageId)?.card;
 				return card !== undefined && card.preview === undefined;
 			},
+			cardHeading: (channelId, messageId) => {
+				const card = fake
+					.messagesIn(channelId)
+					.find((entry) => entry.id === messageId)?.card;
+				if (!card || card.preview !== undefined) return undefined;
+				const [container] = cardBody(card).components as unknown as {
+					components: {
+						type: number;
+						content?: string;
+						components?: { content?: string }[];
+					}[];
+				}[];
+				const first = container?.components[0];
+				return first?.type === 9
+					? first.components?.[0]?.content
+					: first?.content;
+			},
 			legacyCard: (channelId, messageId) => {
 				const message = fake
 					.messagesIn(channelId)
@@ -85,6 +104,10 @@ function fakeSubject(): PosterSubject {
 					content: message.content,
 					embeds: 1,
 					title: card.title,
+					url:
+						card.titleUrl === undefined
+							? undefined
+							: checkTitleUrl(card.titleUrl),
 					color: card.accent,
 					rows:
 						(card.selects?.length ?? 0) +

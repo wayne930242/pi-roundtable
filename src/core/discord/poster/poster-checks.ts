@@ -8,7 +8,9 @@ import {
 	cardRows,
 	checkCardTextSize,
 	checkPicture,
+	checkTitleUrl,
 	isHttps,
+	linkLabel,
 } from "./poster-card-parts.ts";
 import { invalid } from "./poster-errors.ts";
 import { legacyCardBody } from "./poster-legacy-card.ts";
@@ -153,7 +155,10 @@ export function checkChannelName(label: string, name: string): void {
 export function cardBody(card: DiscordCard) {
 	if (card.preview !== undefined)
 		return legacyCardBody({ ...card, preview: card.preview });
-	const heading = `### ${card.title}`;
+	const heading =
+		card.titleUrl === undefined
+			? `### ${card.title}`
+			: `### [${linkLabel(card.title)}](${checkTitleUrl(card.titleUrl)})`;
 	const main = [heading, ...card.sections.filter((section) => section !== "")];
 	const footer = card.footer ? [`-# ${card.footer}`] : [];
 	const texts = [...main, ...footer];
