@@ -44,30 +44,61 @@ const buttons = files
 	);
 
 const ends = (name: string) => new RegExp(`\\.${name}(?![\\w-])`);
-/** The class's own look: a selector naming it without a state, setting a fill or a text colour. */
-const quiet = (name: string) =>
-	rules.some(
-		({ selectors, body }) =>
-			selectors.some(
-				(selector) =>
-					ends(name).test(selector) &&
-					!/[:[]/.test(selector.slice(selector.search(ends(name)))) &&
-					!/\s/.test(selector.slice(selector.search(ends(name)))),
-			) && /(^|[;\s])(background(-color)?|color)\s*:/.test(body),
+/** What a selector naming the class sits under: `.action-items` in `.action-items .menu-item:hover`, nothing in `button.menu-item:hover`. */
+const scopeOf = (selector: string, name: string) =>
+	selector
+		.slice(0, selector.search(ends(name)))
+		.replace(/\S*$/, "")
+		.trim();
+/** Where the class gets a quiet look of its own: each scope of a selector naming it without a state that sets a fill or a text colour. */
+const quietScopes = (name: string) =>
+	rules.flatMap(({ selectors, body }) =>
+		/(^|[;\s])(background(-color)?|color)\s*:/.test(body)
+			? selectors
+					.filter(
+						(selector) =>
+							ends(name).test(selector) &&
+							!/[:[]/.test(selector.slice(selector.search(ends(name)))) &&
+							!/\s/.test(selector.slice(selector.search(ends(name)))),
+					)
+					.map((selector) => scopeOf(selector, name))
+			: [],
 	);
-/** Whether some rule says what hover does to the class's fill. */
-const hovers = (name: string) =>
-	rules.some(
-		({ selectors, body }) =>
-			selectors.some((selector) =>
-				new RegExp(`\\.${name}(?![\\w-])[^\\s]*:hover`).test(selector),
-			) && /(^|[;\s])background(-color)?\s*:/.test(body),
+/** Where some rule says what hover does to the class's fill. */
+const hoverScopes = (name: string) =>
+	rules.flatMap(({ selectors, body }) =>
+		/(^|[;\s])background(-color)?\s*:/.test(body)
+			? selectors
+					.filter((selector) =>
+						new RegExp(`\\.${name}(?![\\w-])[^\\s]*:hover`).test(selector),
+					)
+					.map((selector) => scopeOf(selector, name))
+			: [],
 	);
+/**
+ * Whether the class's quiet look is unreadable somewhere: it has a quiet look in a scope where no
+ * hover rule of the same scope, and no hover rule for every use of the class, says what hover does.
+ * A hover scoped under another element (`.action-items .menu-item:hover`) covers only that scope,
+ * so the class's other uses still hover on the base accent.
+ */
+const unreadable = (name: string) => {
+	const hovered = new Set(hoverScopes(name));
+	return quietScopes(name).some(
+		(scope) => !hovered.has("") && !hovered.has(scope),
+	);
+};
+/** Whether the class has a quiet look of its own anywhere. */
+const quiet = (name: string) => quietScopes(name).length > 0;
 
 test("a button with a quiet look of its own says what hover does to its fill", () => {
 	expect(buttons.length).toBeGreaterThan(20);
-	const unreadable = buttons
-		.filter((classes) => classes.some(quiet) && !classes.some(hovers))
+	const found = buttons
+		.filter(
+			(classes) =>
+				classes.some(quiet) &&
+				classes.filter(quiet).some(unreadable) &&
+				!classes.some((name) => new Set(hoverScopes(name)).has("")),
+		)
 		.map((classes) => classes.join(" "));
-	expect([...new Set(unreadable)]).toEqual([]);
+	expect([...new Set(found)]).toEqual([]);
 });

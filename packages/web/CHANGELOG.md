@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A menu row that is a button or a link hovers in the quiet `--surface-3` fill with its own text colour wherever it is used, with 12 px on each side. A row of the prompt history sheet and of the files pane wrote only `menu-item`, so it took the base button's accent fill on hover, with light text on yellow, and its text sat 4 px from the fill's edge. The shared rule replaces the long-press menu's own hover, and `--surface-3` stands apart from a sheet's `--raised` background, which `--surface-2` all but matched. The button hover test now counts a hover scoped under another element only for the uses in that scope, which is how it missed these rows.
+- The message box shows no scrollbar until its text passes its tallest height. Its height was set from `scrollHeight`, a whole number of pixels, while its padding is not, so a box could stand a fraction of a pixel short of one line of text, and a desktop browser that always draws scrollbars drew one beside it.
+
 ## [0.31.6] - 2026-11-02
 
 - Release in lockstep with pi-roundtable 0.31.6 (channel context reads a peer bot's message up to `peerMessageChars`, default 4000); no package-specific behavior changes.

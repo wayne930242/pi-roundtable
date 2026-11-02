@@ -1264,7 +1264,7 @@ dialog.sheet.full {
 	gap: var(--space-3);
 	width: 100%;
 	min-height: 3.5rem;
-	padding: var(--space-2) var(--space-1);
+	padding: var(--space-2) var(--space-3);
 	border: 0;
 	border-radius: var(--radius);
 	background: transparent;
@@ -1274,9 +1274,21 @@ dialog.sheet.full {
 	font-weight: inherit;
 }
 
+/*
+ * A row a person presses, a button, a link or a switch's label, shows hover and keyboard focus in the
+ * quiet fill with its own text colour, never the base button's accent. The fill is `--surface-3`, which
+ * stands apart from a page and from a sheet's `--raised` alike. Every menu row takes this rule, so a
+ * new row needs no hover of its own.
+ */
+button.menu-item:hover:not(:disabled),
+button.menu-item:focus-visible,
+a.menu-item:hover,
+a.menu-item:focus-visible,
 .menu-link:hover,
 .menu-toggle:hover {
-	background: var(--surface-2);
+	background: var(--surface-3);
+	border-color: transparent;
+	color: var(--text);
 }
 
 /* The whole row is the switch's label, so a tap anywhere on it flips the switch. */

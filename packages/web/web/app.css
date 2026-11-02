@@ -2111,7 +2111,7 @@ pre.diff {
 }
 
 .history .menu-item[aria-pressed="true"] {
-	background: var(--surface-2);
+	background: var(--surface-3);
 }
 
 /* ── Long-press menus: a sheet on a phone, a popover at the pointer elsewhere ───────────────────── */
@@ -2180,11 +2180,6 @@ pre.diff {
 
 .action-items .menu-item {
 	cursor: pointer;
-}
-
-.action-items .menu-item:hover,
-.action-items .menu-item:focus-visible {
-	background: var(--surface-2);
 }
 
 .action-items .menu-item[data-tone="danger"] strong {

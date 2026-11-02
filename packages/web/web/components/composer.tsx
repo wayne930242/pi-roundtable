@@ -41,6 +41,9 @@ import { type Attached, AttachedChips } from "./attached-chips.tsx";
 import { Icon } from "./icons.tsx";
 
 // The menu of commands, and its styles, load when the text first starts with a slash.
+/** The tallest the message box grows, in pixels; the stylesheet's `max-height` matches it. */
+export const COMPOSER_MAX_HEIGHT = 200;
+
 const CommandMenu = lazy(() => import("./command-menu.tsx"));
 // The member list that an `@` opens is read only in a room that has members to name.
 const MentionMenu = lazy(() =>
@@ -138,13 +141,17 @@ export function Composer(props: {
 		element.setSelectionRange(text.length, text.length);
 	}, [text]);
 
-	// Grows with the text up to eight lines, then scrolls.
+	// Grows with the text up to eight lines, then scrolls. Below the cap it never scrolls: scrollHeight
+	// is a whole number of pixels while the box's padding is not, so a box set to it can be a fraction
+	// short of its text, and a desktop browser that always draws scrollbars would draw one.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the text is what changes the height
 	useEffect(() => {
 		const element = area.current;
 		if (!element) return;
 		element.style.height = "auto";
-		element.style.height = `${Math.min(element.scrollHeight, 200)}px`;
+		const full = element.scrollHeight;
+		element.style.height = `${Math.min(full, COMPOSER_MAX_HEIGHT)}px`;
+		element.style.overflowY = full > COMPOSER_MAX_HEIGHT ? "auto" : "hidden";
 	}, [text]);
 
 	const attach = (list: File[]) => {
