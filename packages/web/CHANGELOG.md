@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.7] - 2026-11-02
+
 ### Fixed
 
 - A menu row that is a button or a link hovers in the quiet `--surface-3` fill with its own text colour wherever it is used, with 12 px on each side. A row of the prompt history sheet and of the files pane wrote only `menu-item`, so it took the base button's accent fill on hover, with light text on yellow, and its text sat 4 px from the fill's edge. The shared rule replaces the long-press menu's own hover, and `--surface-3` stands apart from a sheet's `--raised` background, which `--surface-2` all but matched. The button hover test now counts a hover scoped under another element only for the uses in that scope, which is how it missed these rows.

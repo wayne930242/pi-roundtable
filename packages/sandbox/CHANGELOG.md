@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.31.7] - 2026-11-02
+
+- Release in lockstep with pi-roundtable 0.31.7 (menu rows hover in the quiet fill with 12 px padding wherever they are used; the message box draws no scrollbar below its tallest); no package-specific behavior changes.
+
 ## [0.31.6] - 2026-11-02
 
 - Release in lockstep with pi-roundtable 0.31.6: the `channelContext` option takes `peerMessageChars` (an integer from 1 to 4000), where a peer bot's message is cut; a listed peer's messages read up to 4000 characters by default instead of 80.
