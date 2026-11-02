@@ -146,6 +146,15 @@ const rightClick = async (target: Element | null, opens = true) => {
 			await settle(20);
 		});
 };
+/** Waits for the page to show the element: a part that loads on demand shows a moment after its render, however busy the machine is. */
+const shown = async (selector: string): Promise<Element | null> => {
+	const stop = Date.now() + 3000;
+	while (!document.querySelector(selector) && Date.now() < stop)
+		await page.act(async () => {
+			await settle(20);
+		});
+	return document.querySelector(selector);
+};
 const menuItems = (): HTMLElement[] => [
 	...document.querySelectorAll<HTMLElement>('[role^="menuitem"]'),
 ];
@@ -673,7 +682,8 @@ test("a file chip's menu downloads the file, and shares it when the browser can"
 	document.addEventListener("click", onClick, true);
 	try {
 		await page.render(<Message message={said({ files: [doc, picture] })} />);
-		await rightClick(q(".file-chip"));
+		// The attachments load on demand.
+		await rightClick(await shown(".file-chip"));
 		expect(labels()).toEqual(["Download"]);
 		expect(q(".file-chip")?.getAttribute("data-hold")).toBe("row");
 		await choose("Download");
@@ -697,7 +707,7 @@ test("a file chip's menu downloads the file, and shares it when the browser can"
 		]);
 
 		// A picture is a file too; the message's own menu is not what opens over it.
-		await rightClick(q("img.file-image"));
+		await rightClick(await shown("img.file-image"));
 		expect(labels()).toEqual(["Download", "Share"]);
 	} finally {
 		document.removeEventListener("click", onClick, true);
