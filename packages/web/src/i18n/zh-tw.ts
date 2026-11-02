@@ -826,6 +826,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Collapse dialogue": "收起對話",
 	"Expand dialogue": "展開對話",
 	"Waiting for your answer": "等你回覆",
+	"From {name}": "來自 {name}",
 	"Back to the whole table": "回到整張圓桌",
 	You: "你",
 	"Tap to show the whole message": "點一下顯示整段訊息",

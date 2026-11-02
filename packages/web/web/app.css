@@ -1603,6 +1603,15 @@ button.progress-fold:hover:not(:disabled) {
 	font-size: var(--text-xs);
 }
 
+/* Over a card asked in a thread or temp knight's room and shown in the room above it: where it was asked. */
+.card-from {
+	display: inline-block;
+	margin-bottom: var(--space-1);
+	color: var(--muted);
+	font-size: var(--text-xs);
+	font-weight: 600;
+}
+
 .collapse {
 	display: grid;
 	grid-template-rows: 0fr;

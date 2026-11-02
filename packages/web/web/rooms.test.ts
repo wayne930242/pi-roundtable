@@ -1154,7 +1154,7 @@ describe("start over", () => {
 		expect(
 			currentLine(state.rooms[SCOUT], "Ada", (a) => a ?? ""),
 		).toBeUndefined();
-		expect(boxCards(state, SCOUT, 2)).toEqual([]);
+		expect(boxCards(state, SCOUT)).toEqual([]);
 		expect(lastMessage(state, SCOUT)?.id).toBe(2);
 	});
 });

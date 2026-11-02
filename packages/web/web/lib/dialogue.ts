@@ -1,5 +1,6 @@
 import type { RoomFile, RoomMessage } from "../../src/api-types.ts";
-import type { CardState, RoomState } from "./rooms.ts";
+import { type RoomCard, roomCards } from "./room-surface.ts";
+import type { RoomState, RoomsState } from "./rooms.ts";
 
 // What the scene's dialogue box shows of a room, and how its words appear. All of it is pure or takes
 // its clock, so it is tested without a browser; `components/dialogue-box.tsx` wires it up.
@@ -184,20 +185,19 @@ export function sceneSpeaker(
 	return speakerOf(line, members);
 }
 
-/** The open cards and the newest closed ones of a room, in the order they opened. */
+/**
+ * The cards the box shows, in the order they opened: those waiting, the room's own ended since its
+ * newest message, and the ones carried up from a thread or temp knight's room under it as
+ * `roomCards` keeps them.
+ */
 export function boxCards(
-	state: { cards: Record<string, CardState>; cardOrder: string[] },
+	state: Pick<RoomsState, "rooms" | "cards" | "cardOrder">,
 	room: string,
-	lastMessageId: number | undefined,
-): Array<{ id: string; card: CardState }> {
-	const found = state.cardOrder
-		.map((id) => ({ id, card: state.cards[id] }))
-		.filter(
-			(entry): entry is { id: string; card: CardState } =>
-				entry.card?.room === room,
-		);
-	return found.filter(
+): RoomCard[] {
+	const lastMessageId = state.rooms[room]?.messages.at(-1)?.id;
+	return roomCards(state, room).filter(
 		(entry) =>
+			entry.from !== undefined ||
 			entry.card.outcome === undefined ||
 			lastMessageId === undefined ||
 			entry.card.after >= lastMessageId,

@@ -2,13 +2,8 @@ import { type RefObject, useEffect, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { installStyle } from "../lib/lazy-style.ts";
 import { plural } from "../lib/messages.ts";
-import {
-	cardSlot,
-	showCard,
-	targetShown,
-	useTarget,
-	waitingList,
-} from "../lib/waiting.ts";
+import { roomCards } from "../lib/room-surface.ts";
+import { cardSlot, showCard, targetShown, useTarget } from "../lib/waiting.ts";
 import { Icon } from "./icons.tsx";
 
 /** How long after a jump a log drawn anew shows the card again. */
@@ -61,8 +56,8 @@ export default function WaitingChip(props: {
 	const { roomKey, scroller, loaded } = props;
 	const ids = useSelector(
 		(state) =>
-			waitingList(state)
-				.filter((entry) => entry.card.room === roomKey)
+			roomCards(state, roomKey)
+				.filter((entry) => entry.card.outcome === undefined)
 				.map((entry) => entry.id)
 				.join(" "),
 		roomKey,

@@ -36,7 +36,6 @@ import { useConnection } from "../lib/socket.ts";
 import { installDialogueFoldStyle } from "../lib/table-page-style.ts";
 import { useDialogueFolded } from "../lib/table-view.ts";
 import { setVoice } from "../lib/voices.ts";
-import { PromptCard } from "./cards.tsx";
 import { PageCharacter } from "./character.tsx";
 import { Composer } from "./composer.tsx";
 import { Icon } from "./icons.tsx";
@@ -44,6 +43,7 @@ import { MessageMarkdown } from "./message-markdown.tsx";
 import { Files } from "./message-row.tsx";
 import { roundChip } from "./order-strip.tsx";
 import { ProgressStrip } from "./progress-strip.tsx";
+import { RoomCardBody } from "./room-card.tsx";
 import { loadOlderMessages, RoomLog, useRoomHistory } from "./room-log.tsx";
 import { Sheet } from "./sheet.tsx";
 
@@ -226,9 +226,7 @@ export function DialogueBox(props: DialogueBoxProps) {
 		return () => connection.focus(undefined);
 	}, [connection, roomKey, streams]);
 	const limits = useSelector((state) => state.limits);
-	const cards = useSelector((state) =>
-		boxCards(state, roomKey, state.rooms[roomKey]?.messages.at(-1)?.id),
-	);
+	const cards = useSelector((state) => boxCards(state, roomKey), roomKey);
 	const characters = useCharacters();
 	const { room, view, line: newest, displayOf } = useRoomLine(roomKey);
 	const commands = useRoomCommands(
@@ -445,9 +443,9 @@ export function DialogueBox(props: DialogueBoxProps) {
 					{showProgress && room ? (
 						<ProgressStrip name={worker} progress={room.progress} compact />
 					) : null}
-					{cards.map(({ id, card }) => (
-						<div key={id} className="scene-card">
-							<PromptCard card={card} timeZone={config.timeZone} />
+					{cards.map((entry) => (
+						<div key={entry.id} className="scene-card">
+							<RoomCardBody entry={entry} timeZone={config.timeZone} />
 						</div>
 					))}
 				</div>

@@ -16,6 +16,7 @@ import type {
 	UploadView,
 } from "../../src/api-types.ts";
 import { isStartOver } from "../../src/api-types.ts";
+import { roomCards } from "./room-surface.ts";
 
 // The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
 // what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
@@ -854,18 +855,23 @@ export function activityAt(state: RoomsState, room: string): number {
 /**
  * Whether a card opened before a message was stored. Both carry the server's clock, which is what
  * places a card the server sent again after a reload; a card without a time stands after the
- * message that was last when it opened.
+ * message that was last when it opened, and one carried up from another room, whose message ids
+ * are not this room's, at the end.
  */
-function opensBefore(card: CardState, message: RoomMessage): boolean {
+function opensBefore(
+	card: CardState,
+	message: RoomMessage,
+	carried = false,
+): boolean {
 	const opened = Date.parse(card.frame.at ?? "");
 	const stored = Date.parse(message.at);
 	if (!Number.isNaN(opened) && !Number.isNaN(stored)) return opened < stored;
-	return card.after < message.id;
+	return !carried && card.after < message.id;
 }
 
 export type TimelineItem =
 	| { kind: "message"; message: RoomMessage }
-	| { kind: "card"; card: CardState; id: string }
+	| { kind: "card"; card: CardState; id: string; from?: string }
 	| { kind: "pending"; pending: PendingSend }
 	| { kind: "live"; message: RoomMessage };
 
@@ -876,20 +882,24 @@ export function timeline(
 ): TimelineItem[] {
 	const room = state.rooms[key];
 	if (!room) return [];
-	const cards = state.cardOrder
-		.map((id) => ({ id, card: state.cards[id] }))
-		.filter(
-			(entry): entry is { id: string; card: CardState } =>
-				entry.card?.room === key,
-		);
+	const cards = roomCards(state, key);
 	const items: TimelineItem[] = [];
 	let placed = 0;
 	/** Cards that opened before `next` (or all, at the end) stand here. */
 	const cardsBefore = (next: RoomMessage | undefined) => {
 		while (placed < cards.length) {
 			const entry = cards[placed];
-			if (!entry || (next && !opensBefore(entry.card, next))) break;
-			items.push({ kind: "card", card: entry.card, id: entry.id });
+			if (
+				!entry ||
+				(next && !opensBefore(entry.card, next, entry.from !== undefined))
+			)
+				break;
+			items.push({
+				kind: "card",
+				card: entry.card,
+				id: entry.id,
+				...(entry.from ? { from: entry.from } : {}),
+			});
 			placed += 1;
 		}
 	};

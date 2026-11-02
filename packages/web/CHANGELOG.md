@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A card asked in a dispatch thread (or a temp knight's room) did not show in the room the thread hangs under: neither the council's animated scene nor its chat mode showed it, only the waiting count in the top bar. Each view of a room now shows the cards of the rooms under it while they wait, and once answered until the room says something newer, under a "From <thread>" link to where it was asked; the record stays in the thread. The chat's "cards waiting" chip counts them too. The room list's per-room counts are unchanged, so no card is counted twice.
+
+### Changed
+
+- One rule for a room's cards (`web/lib/room-surface.ts`, `roomCards`) and one way to draw each (`RoomCardBody`) serve the chat, the scene's dialogue box and the waiting chip, which each filtered the cards themselves before. A test holds both council views, in the group's room and on the round table, to the same parts: messages, own cards, carried cards and the composer.
+
 ## [0.31.3] - 2026-11-02
 
 - Release in lockstep with pi-roundtable 0.31.3; no package-specific behavior changes.

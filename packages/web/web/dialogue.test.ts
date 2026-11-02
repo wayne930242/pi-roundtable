@@ -186,7 +186,7 @@ test("the box answers the cards open now and the ones just answered, not the old
 		after: 0,
 		...over,
 	});
-	const state = {
+	const cards = {
 		cards: {
 			old: card("old", { after: 3, outcome: "approved" }),
 			fresh: card("fresh", { after: 7, outcome: "approved" }),
@@ -196,9 +196,17 @@ test("the box answers the cards open now and the ones just answered, not the old
 		cardOrder: ["old", "fresh", "open", "other"],
 	};
 	expect(
-		boxCards(state, "app:agent.scout", 7).map((entry) => entry.id),
+		boxCards(
+			{ ...cards, rooms: { "app:agent.scout": room({ messages: [say(7)] }) } },
+			"app:agent.scout",
+		).map((entry) => entry.id),
 	).toEqual(["fresh", "open"]);
-	expect(boxCards(state, "app:agent.scout", undefined)).toHaveLength(3);
+	expect(
+		boxCards(
+			{ ...cards, rooms: { "app:agent.scout": room() } },
+			"app:agent.scout",
+		),
+	).toHaveLength(3);
 });
 
 test("a route key names an agent by its name or by the key of its room, and nobody else seated names nothing", () => {

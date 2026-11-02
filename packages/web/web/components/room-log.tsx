@@ -8,8 +8,8 @@ import { dayKey, dayLabel } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
 import { ROOM_PAGE, type TimelineItem, timeline } from "../lib/rooms.ts";
 import { toast } from "../lib/toast.ts";
-import { PromptCard } from "./cards.tsx";
 import { LiveRow, MessageRow, PendingRow } from "./message-row.tsx";
+import { RoomCardBody } from "./room-card.tsx";
 
 /** A pause this long between two messages of one author shows the author again. */
 const PAUSE_MS = 5 * 60_000;
@@ -209,7 +209,7 @@ export function RoomLog(props: {
 								data-enter
 								data-card={row.item.id}
 							>
-								<PromptCard card={row.item.card} timeZone={config.timeZone} />
+								<RoomCardBody entry={row.item} timeZone={config.timeZone} />
 							</li>
 						);
 					case "pending":

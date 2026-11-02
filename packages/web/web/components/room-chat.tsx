@@ -12,7 +12,8 @@ import {
 import { useSelector } from "../lib/app-store.ts";
 import { hostUi } from "../lib/frame-taps.ts";
 import { translate as t } from "../lib/messages.ts";
-import { timeline, waitingCards } from "../lib/rooms.ts";
+import { roomWaiting } from "../lib/room-surface.ts";
+import { timeline } from "../lib/rooms.ts";
 import { useStickToEnd } from "../lib/stick-to-end.ts";
 import { Icon } from "./icons.tsx";
 import { ProgressStrip } from "./progress-strip.tsx";
@@ -46,7 +47,7 @@ export function RoomChat(props: {
 	}));
 	const { loaded, error } = useRoomHistory(roomKey);
 	const waiting = useSelector(
-		(state) => waitingCards(state, roomKey) > 0,
+		(state) => roomWaiting(state, roomKey) > 0,
 		roomKey,
 	);
 	const [loadingOlder, setLoadingOlder] = useState(false);
