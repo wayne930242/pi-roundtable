@@ -213,7 +213,7 @@ The sandbox calls `DISCORD.channelContext` with the addressed message, which rea
 Core's defaults and caps apply (the newest 15 messages, 500 characters each, other bots 80), and so do the host's `discord.channelContext` settings, which the option overrides key by key; a host `channelContext: false` turns it off and the option then does nothing. `attachments` is ignored, because the sealed worker has no image input.
 The addressed message (with its quote) comes first and the block follows it, framed as untrusted public text, not instructions, so the worker's saved history, which keeps the head of an entry, keeps the message. The framing says the addressed message is only the text before the block.
 It is cut oldest first so the whole stays within `runTurn`'s 32,000 characters and the worker's current-message budget; the addressed message is never cut, and when no context fits, the turn is sent as before.
-Options are validated at startup with core's bounds (`keep`, `fetch` at most 100; `messageChars`, `botMessageChars` at most 4000; unknown keys refused), and the option needs the Discord plugin.
+Options are validated at startup with core's bounds (`keep`, `fetch` at most 100; `messageChars`, `botMessageChars`, `peerMessageChars` at most 4000; unknown keys refused), and the option needs the Discord plugin.
 A failed read is logged as a warning and the turn runs without it.
 `replyText` works unchanged.
 It is host-only: no worker protocol change and no image rebuild.

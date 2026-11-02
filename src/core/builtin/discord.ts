@@ -24,6 +24,7 @@ import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
+import { PeerBots, type PeerBotsConfig } from "../routing/peer-bots.ts";
 import { IDENTITY, THREADS } from "../services.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 
@@ -77,6 +78,8 @@ export interface DiscordOptions {
 	refusalHint?: string;
 	/** The host's channel context settings; `false` turns it off. Default: on, with the defaults. */
 	channelContext?: ChannelContextOptions | false;
+	/** The host's peer bots (`discord.peerBots`): channel context cuts their messages at `peerMessageChars`. Default none. */
+	peerBots?: PeerBotsConfig;
 	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: a short English divider. */
 	freshMarker?: string | false;
 	/** What the model is told about how replies render in Discord; `false` tells it nothing. Default: Markdown renders, except tables. */
@@ -198,10 +201,19 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				...(identity ? { identity } : {}),
 				logger,
 			});
+			const peers = options.peerBots
+				? new PeerBots(options.peerBots, "discord", "discord.peerBots")
+				: undefined;
 			const context = new ChannelContextReader({
 				read: (channelId, before, limit) =>
 					connected.messagesBefore(channelId, before, limit),
 				owners: () => owners.ids(),
+				...(peers
+					? {
+							peer: (authorId: string, message: InboundMessage) =>
+								peers.listsBot(authorId, message),
+						}
+					: {}),
 				settings: options.channelContext ?? {},
 				logger,
 			});

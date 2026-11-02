@@ -472,6 +472,7 @@ test("startup refuses an invalid option naming it, and the option without Discor
 		{ keep: 101 },
 		{ messageChars: 4001 },
 		{ botMessageChars: 4001 },
+		{ peerMessageChars: 4001 },
 		{ keeps: 20 } as unknown as ChannelContextOptions,
 		{
 			attachments: { images: 0, extra: 1 },
@@ -480,6 +481,7 @@ test("startup refuses an invalid option naming it, and the option without Discor
 		{ similarity: 2 },
 		{ messageChars: -1 },
 		{ botMessageChars: 0 },
+		{ peerMessageChars: 0 },
 		{ foreignWebhook: "no" as unknown as () => boolean },
 		{ attachments: { images: 9 } },
 		false as unknown as true,

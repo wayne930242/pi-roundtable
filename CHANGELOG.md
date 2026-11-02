@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Channel context cuts a peer bot's message at the new option `peerMessageChars` (default 4000, an integer from 1 to 4000 in `discord.channelContext`), not at `botMessageChars` (80): a bot `discord.peerBots` lists with an entry that covers the addressed message's channel and server. A host that talks with a peer read only the first 80 characters of what the peer had said to others in the channel, such as a report a person then asked the host about. Every other bot's message is still cut at `botMessageChars`. The sandbox package's `channelContext` option takes `peerMessageChars` with the same bound.
+
 ## [0.31.5] - 2026-11-02
 
 - Release in lockstep with pi-roundtable-web 0.31.5 (a temp knight's cards show in the room it was made from; answered thread cards survive trimming; a room's cards in opening order; the waiting chip follows redrawn slots); no core behavior changes.

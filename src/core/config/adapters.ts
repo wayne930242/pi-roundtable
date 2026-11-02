@@ -166,6 +166,7 @@ const channelContextShape = shape({
 	similarity: optional(number(0, 1)),
 	messageChars: optional(integer(1, 4000)),
 	botMessageChars: optional(integer(1, 4000)),
+	peerMessageChars: optional(integer(1, 4000)),
 	foreignWebhook: optional(
 		guarded(
 			"a function of a webhook id",

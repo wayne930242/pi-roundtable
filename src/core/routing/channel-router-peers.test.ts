@@ -369,6 +369,22 @@ describe("PeerBots", () => {
 		).toBeUndefined();
 	});
 
+	test("listsBot reads a bot's entry for another author's message, by its channel and server", () => {
+		const peers = new PeerBots({
+			allow: [{ id: PEER, channels: ["700000000000000001"] }],
+		});
+		const person = message();
+		expect(peers.listsBot(PEER, person)).toBe(true);
+		expect(peers.listsBot(STRANGER, person)).toBe(false);
+		expect(
+			peers.listsBot(PEER, {
+				...person,
+				channel: "discord:700000000000000009",
+			}),
+		).toBe(false);
+		expect(peers.listsBot(PEER, { ...person, channel: "web:abc" })).toBe(false);
+	});
+
 	test("lists only bots, and only on its surface", () => {
 		expect(lists({ allow: [PEER] }, { authorIsBot: false })).toBe(false);
 		expect(lists({ allow: [PEER] }, { channel: "web:abc" })).toBe(false);

@@ -24,6 +24,12 @@ export interface ChannelContextOptions {
 	/** Where another bot's message is cut; default 80 characters. */
 	botMessageChars?: number;
 	/**
+	 * Where a message of a peer bot is cut: a bot the host lists in `discord.peerBots` whose entry
+	 * covers the channel, since the host talks with it and reads what it says; default 4000
+	 * characters. Any other bot's message is cut at `botMessageChars`.
+	 */
+	peerMessageChars?: number;
+	/**
 	 * Whether a post through a webhook of the assistant's own application is another author's, not
 	 * the assistant's. `webhookId` is the webhook's id; when this returns true the post is kept as a
 	 * message of a bot named by the post's username, and does not end the window, so people a

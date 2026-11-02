@@ -228,6 +228,7 @@ Tune it under `discord.channelContext`, or set `channelContext: false` to turn i
 | `similarity` | `0.8` | How alike two consecutive messages of one author must be to count as one |
 | `messageChars` | `500` | Where a message is cut |
 | `botMessageChars` | `80` | Where another bot's message is cut |
+| `peerMessageChars` | `4000` | Where a peer bot's message is cut (a bot `discord.peerBots` lists for the channel) |
 | `foreignWebhook` | none | `(webhookId) => boolean \| "skip"`: posts through the webhooks it returns true for are read as other people's messages, not the assistant's; `"skip"` drops a webhook's posts as if absent, without ending the window (code only) |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`: how many images of the kept messages are fetched for the turn, at most 4 |
 

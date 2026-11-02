@@ -36,6 +36,7 @@ export const CHANNEL_CONTEXT_DEFAULTS: Readonly<
 	similarity: 0.8,
 	messageChars: 500,
 	botMessageChars: 80,
+	peerMessageChars: 4_000,
 	foreignWebhook: () => false,
 	authors: () => undefined,
 	attachments: Object.freeze({ images: 0, maxBytes: 10 * 1024 * 1024 }),
@@ -63,9 +64,22 @@ function resolvedSettings(
 
 /** Throws on a value outside what the configuration accepts: a programming error of the caller. */
 function assertChannelContextSettings(settings: ChannelContextSettings): void {
-	const { fetch, keep, similarity, messageChars, botMessageChars } = settings;
+	const {
+		fetch,
+		keep,
+		similarity,
+		messageChars,
+		botMessageChars,
+		peerMessageChars,
+	} = settings;
 	const { images, maxBytes } = settings.attachments;
-	const positive = { fetch, keep, messageChars, botMessageChars };
+	const positive = {
+		fetch,
+		keep,
+		messageChars,
+		botMessageChars,
+		peerMessageChars,
+	};
 	for (const [name, value] of Object.entries(positive))
 		if (!Number.isInteger(value) || value < 1)
 			throw new RangeError(
@@ -217,12 +231,32 @@ export interface ChannelContextSelection {
 	seen: ReadonlySet<string>;
 	/** The owners' user ids. */
 	owners: readonly string[];
+	/** Whether a bot author is a peer the host talks with here, cut at `peerMessageChars`; without it none is. */
+	peer?: (authorId: string) => boolean;
 	/** What the selection reads of the settings; without `foreignWebhook` every webhook of the application is the assistant's. */
 	settings: Omit<
 		ChannelContextSettings,
-		"foreignWebhook" | "authors" | "attachments"
+		"foreignWebhook" | "authors" | "attachments" | "peerMessageChars"
 	> &
-		Partial<Pick<ChannelContextSettings, "foreignWebhook" | "authors">>;
+		Partial<
+			Pick<
+				ChannelContextSettings,
+				"foreignWebhook" | "authors" | "peerMessageChars"
+			>
+		>;
+}
+
+/** Where a kept message is cut: a person's, a peer bot's, or another bot's limit. */
+function limitOf(
+	message: ContextSourceMessage,
+	{ peer, settings }: ChannelContextSelection,
+): number {
+	if (!message.bot) return settings.messageChars;
+	if (peer?.(message.authorId))
+		return (
+			settings.peerMessageChars ?? CHANNEL_CONTEXT_DEFAULTS.peerMessageChars
+		);
+	return settings.botMessageChars;
 }
 
 /**
@@ -232,8 +266,9 @@ export interface ChannelContextSelection {
  */
 export function selectChannelContext(
 	fetched: readonly ContextSourceMessage[],
-	{ seen, owners, settings }: ChannelContextSelection,
+	selection: ChannelContextSelection,
 ): { messages: ChannelContextMessage[]; window: string[] } {
+	const { seen, owners, settings } = selection;
 	// `authors` says whose a message is; without an answer, a webhook of the application that the
 	// host calls foreign (`foreignWebhook`) speaks for other people, one it calls "skip" speaks for
 	// no one, and the rest is the assistant's when it posted it. A skipped post is not in the channel
@@ -270,10 +305,7 @@ export function selectChannelContext(
 		)
 		.map((message) => ({
 			...message,
-			text: cut(
-				message.text,
-				message.bot ? settings.botMessageChars : settings.messageChars,
-			),
+			text: cut(message.text, limitOf(message, selection)),
 		}));
 	const kept = merged(fresh, settings.similarity, foreign).slice(
 		-settings.keep,
@@ -326,6 +358,8 @@ export interface ChannelContextReaderOptions {
 	): Promise<readonly ContextSourceMessage[] | undefined>;
 	/** The owners' Discord user ids. */
 	owners(): Promise<readonly string[]>;
+	/** Whether a bot is a peer the host lists for the addressed message's channel (`discord.peerBots`); without it no bot is. */
+	peer?: (authorId: string, message: InboundMessage) => boolean;
 	/** The host's settings; `false` turns channel context off for every claim. */
 	settings: ChannelContextOptions | false;
 	logger: Logger;
@@ -371,10 +405,14 @@ export class ChannelContextReader {
 			);
 			if (!fetched) return undefined;
 			const owners = await this.#owners();
+			const peer = this.#options.peer;
 			const { messages, window } = selectChannelContext(fetched, {
 				seen,
 				owners,
 				settings,
+				...(peer
+					? { peer: (authorId: string) => peer(authorId, message) }
+					: {}),
 			});
 			for (const id of window) seen.add(id);
 			this.#trim(seen);

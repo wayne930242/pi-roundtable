@@ -43,6 +43,7 @@ const KEYS = [
 	"similarity",
 	"messageChars",
 	"botMessageChars",
+	"peerMessageChars",
 	"foreignWebhook",
 	"attachments",
 ];
@@ -70,6 +71,7 @@ export function resolveChannelContextOptions(
 	bounded("keep", given.keep, 100);
 	bounded("messageChars", given.messageChars, 4000);
 	bounded("botMessageChars", given.botMessageChars, 4000);
+	bounded("peerMessageChars", given.peerMessageChars, 4000);
 	if (
 		given.similarity !== undefined &&
 		!(

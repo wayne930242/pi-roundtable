@@ -158,6 +158,7 @@ function discordAssembly(
 				? {}
 				: { refusalHint: discord.refusalHint }),
 			channelContext: discord.channelContext,
+			...(discord.peerBots ? { peerBots: discord.peerBots } : {}),
 			...(discord.freshMarker === undefined
 				? {}
 				: { freshMarker: discord.freshMarker }),

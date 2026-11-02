@@ -106,6 +106,11 @@ export class PeerBots {
 		return this.#listsHere(message.authorId, message) !== undefined;
 	}
 
+	/** Whether the host lists this bot for the message's channel and server, whoever wrote the message. */
+	listsBot(botId: string, message: InboundMessage): boolean {
+		return this.#listsHere(botId, message) !== undefined;
+	}
+
 	/**
 	 * The peer bot a person's message addressed to the host is left to: one the host lists here with
 	 * `yields` that the message also mentions or replies to; undefined when the host answers it.

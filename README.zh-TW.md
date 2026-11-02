@@ -223,6 +223,7 @@ routing: {
 | `similarity` | `0.8` | 同一作者相鄰兩則訊息相似到什麼程度算同一則 |
 | `messageChars` | `500` | 訊息截斷的長度 |
 | `botMessageChars` | `80` | 其他 bot 訊息截斷的長度 |
+| `peerMessageChars` | `4000` | peer bot（`discord.peerBots` 為這個頻道列出的 bot）訊息截斷的長度 |
 | `foreignWebhook` | 無 | `(webhookId) => boolean \| "skip"`：回傳 true 的 webhook 所發的貼文視為別人的訊息，不是騎士自己的；回傳 `"skip"` 則把該 webhook 的貼文當作不存在，不納入也不截斷範圍（只能用程式碼設定） |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`：替這一輪抓取保留訊息中的幾張圖片，最多 4 張 |
 

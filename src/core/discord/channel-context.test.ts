@@ -141,6 +141,45 @@ test("long messages are cut, another bot's sooner", () => {
 	]);
 });
 
+test("a peer bot's message is cut at peerMessageChars, any other bot's still at botMessageChars", () => {
+	const fetched = [
+		source("1", "x".repeat(30)),
+		source("2", "p".repeat(30), { bot: true, authorId: "400" }),
+		source("3", "y".repeat(30), { bot: true, authorId: "300" }),
+	];
+	const kept = selectChannelContext(fetched, {
+		seen: new Set(),
+		owners: [OWNER],
+		peer: (authorId) => authorId === "400",
+		settings: {
+			...SETTINGS,
+			messageChars: 20,
+			botMessageChars: 10,
+			peerMessageChars: 25,
+		},
+	}).messages;
+	expect(kept.map((m) => m.text)).toEqual([
+		`${"x".repeat(20)}…`,
+		`${"p".repeat(25)}…`,
+		`${"y".repeat(10)}…`,
+	]);
+});
+
+test("a peer bot's report reads whole by default, where another bot's is cut at 80", () => {
+	const report = `A field report! ${"community feedback ".repeat(50)}`;
+	const fetched = [
+		source("1", report, { bot: true, authorId: "400" }),
+		source("2", report, { bot: true, authorId: "300" }),
+	];
+	const kept = selectChannelContext(fetched, {
+		seen: new Set(),
+		owners: [OWNER],
+		peer: (authorId) => authorId === "400",
+		settings: SETTINGS,
+	}).messages;
+	expect(kept.map((m) => m.text.length)).toEqual([report.length, 81]);
+});
+
 function block(
 	messages: Partial<ChannelContextMessage> & { text: string },
 	...more: (Partial<ChannelContextMessage> & { text: string })[]
@@ -421,6 +460,29 @@ test("the reader fetches before the addressed message, and a message it handed o
 	expect(second?.messages.map((m) => m.id)).toEqual(["12"]);
 });
 
+test("the reader asks whether a bot is a peer for the addressed message's channel", async () => {
+	const asked: [string, string][] = [];
+	const r = new ChannelContextReader({
+		read: async () => [
+			source("1", "p".repeat(200), { bot: true, authorId: "400" }),
+			source("2", "y".repeat(200), { bot: true, authorId: "300" }),
+		],
+		owners: async () => [OWNER],
+		peer: (authorId, message) => {
+			asked.push([authorId, message.channel]);
+			return authorId === "400";
+		},
+		settings: {},
+		logger: recordingLogger().logger,
+	});
+	const got = await r.of(inbound());
+	expect(got?.messages.map((m) => m.text.length)).toEqual([200, 81]);
+	expect(asked).toEqual([
+		["400", "discord:77"],
+		["300", "discord:77"],
+	]);
+});
+
 test("a call's options override the host's", async () => {
 	const asked: unknown[] = [];
 	const { reader: r } = reader(
@@ -500,6 +562,7 @@ test("a call's options are validated like the configuration; an invalid value is
 		{ similarity: -0.1 },
 		{ messageChars: 0 },
 		{ botMessageChars: 0 },
+		{ peerMessageChars: 0 },
 	])
 		await expect(r.of(inbound(), bad)).rejects.toThrow(
 			"channel context option",
