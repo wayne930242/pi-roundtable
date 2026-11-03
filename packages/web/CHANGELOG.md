@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - A test of a folder's "Mark all as read" waited a fixed time for the folder's menu and could find it not yet drawn on a slow machine; it now waits for the menu to appear.
+- The main prompts page words the shared prompt's description in zh-TW again: the catalog keyed it by an older wording than the core registers, so it showed in English. A test now checks every label and description the core registers against the catalog.
+- Settings lists the devices that get push without a list indent, each name centred on its Remove button.
 
 ## [0.32.0] - 2026-11-03
 

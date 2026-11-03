@@ -139,7 +139,7 @@ function Notifications({
 				</div>
 			) : null}
 			{devices.length > 0 ? (
-				<ul className="stack">
+				<ul className="stack device-list">
 					{devices.map((device) => (
 						<li key={device.id} className="card-head">
 							<span>

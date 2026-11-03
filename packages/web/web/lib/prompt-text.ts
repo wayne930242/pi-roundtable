@@ -1,10 +1,11 @@
 import { translate as t, wording } from "./messages.ts";
 
 /** The label and description the core gives the prompt documents it registers, marked so the catalog covers them. */
-const CORE: Record<string, string> = {
+export const CORE: Readonly<Record<string, string>> = {
 	"Shared prompt": wording("Shared prompt"),
 	"Guest prompt": wording("Guest prompt"),
-	"The base every knight's prompt starts with, the main knight's included.":
+	// The core registers the shared prompt with this description (src/core/builtin/agent-server.ts).
+	"The base every agent's prompt starts with, the main assistant's included.":
 		wording(
 			"The base every knight's prompt starts with, the main knight's included.",
 		),
