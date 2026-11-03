@@ -3,6 +3,7 @@ import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ConfigContext } from "../lib/config.ts";
 import { translate as t } from "../lib/messages.ts";
+import { remarkChat } from "../lib/remark-chat.ts";
 import { hrefFor } from "../lib/router.ts";
 import { Icon } from "./icons.tsx";
 
@@ -61,7 +62,8 @@ export function Pre({ children }: { children?: React.ReactNode }) {
 /**
  * An agent's or owner's message as Markdown. Raw HTML in it stays text, links open only if they
  * are web addresses or name a dispatch thread's room (which opens in the app), and an image is
- * shown as its description, so a message can load nothing.
+ * shown as its description, so a message can load nothing. It reads as Discord writes it: a line
+ * break stays one, and a line that starts with `-# ` is subtext.
  */
 export const MessageMarkdown = memo(function MessageMarkdown({
 	source,
@@ -72,7 +74,7 @@ export const MessageMarkdown = memo(function MessageMarkdown({
 	return (
 		<div className="prose">
 			<Markdown
-				remarkPlugins={[remarkGfm]}
+				remarkPlugins={[remarkGfm, remarkChat]}
 				urlTransform={(url) =>
 					threadLink.test(url) ? url : defaultUrlTransform(url)
 				}
