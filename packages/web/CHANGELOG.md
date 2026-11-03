@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.7] - 2026-11-02
+
 ### Added
 
 - A room's row marks the room read when it is swiped right with a finger, on the rooms page (arrange mode and Home included) and in the room drawer. The row follows the finger over a quiet "Read" mark and springs back; let go past 40 % of its width, or flicked, it marks the room read as "Mark all as read" does, with one notice and its Undo. A row with nothing unread only gives a little. A hold still opens the menu or lifts the row, a swipe on a thread card under the row stays the card's, and the drawer does not move with a row's swipe.
@@ -13,8 +15,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - The swipe a thread card clears itself with and the room row's swipe are one shared module, `lib/row-swipe.ts`: how a swipe is told from a scroll, a tap and a hold, the screen-edge guard, the flick, the threshold, the give of a row that cannot act, and less motion. A thread card behaves as before.
-
-## [0.31.7] - 2026-11-02
 
 ### Fixed
 
