@@ -3,21 +3,14 @@
 // cards loads this once there is one, and hands it the element that holds them all.
 
 import { type MenuItem, openMenu } from "./action-menu.ts";
-import { LongPress, type Point, type Via } from "./long-press.ts";
+import type { Point, Via } from "./long-press.ts";
 import { translate as t } from "./messages.ts";
 import { reducedMotion } from "./motion.ts";
-import { armTouches } from "./row-press.ts";
-import { AXIS_RATIO, atScreenEdge, settles } from "./swipe.ts";
+import { attachRowSwipe } from "./row-swipe.ts";
 import { clearFinished, dismissThread } from "./thread-actions.ts";
 
-/** How far (px) the finger goes sideways before the swipe is told from a scroll or a tap. */
-const INTENT = 12;
-/** The most (px) an open card gives to a finger that pulls it, before it pulls back. */
-const RUBBER_MAX = 24;
 const SLIDE_MS = 180;
 const COLLAPSE_MS = 150;
-/** The last stretch of the drag (ms) that the finger's speed is read from. */
-const SPEED_WINDOW_MS = 100;
 
 const CARD = ".thread-card";
 const GROUP = ".thread-group";
@@ -131,160 +124,35 @@ export function openCardMenu(card: HTMLElement, at: Point, via: Via): void {
 	});
 }
 
-/** One finger on a card, from its touch to its lift. */
-interface Finger {
-	id: number;
-	card: HTMLElement;
-	origin: Point;
-	press: LongPress;
-	/** Where the finger is judged: a swipe from a screen edge belongs to the system. */
-	swipes: boolean;
-	state: "wait" | "drag" | "reject";
-	offset: number;
-	samples: { x: number; t: number }[];
-}
-
-const keepScroll = (event: TouchEvent) => {
-	if (event.cancelable) event.preventDefault();
-};
-
-/** How fast (px per ms) the finger was going to the right when it lifted at `at`. */
-function speedOf(samples: Finger["samples"], at: number): number {
-	const last = samples.at(-1);
-	if (!last || at - last.t > SPEED_WINDOW_MS) return 0;
-	const first = samples.find((one) => last.t - one.t <= SPEED_WINDOW_MS);
-	if (!first || last.t <= first.t) return 0;
-	return (last.x - first.x) / (last.t - first.t);
-}
-
 /**
  * Gives `root`, the element that holds a list's cards, their gestures. Returns what takes them off
  * again. A card that is finished follows a finger to the right and goes when it is let go past 40 %
  * of its width, or flicked; one that is open only gives a little and comes back.
  */
 export function attachThreadCards(root: HTMLElement): () => void {
-	const disarm = armTouches();
-	let finger: Finger | undefined;
-	/** A swipe or a hold happened: the click that follows the lift must not open the card. */
-	let swallow = false;
-
-	const end = () => {
-		finger?.press.cancel();
-		window.removeEventListener("touchmove", keepScroll);
-		finger = undefined;
-	};
-
-	const onDown = (event: PointerEvent) => {
-		swallow = false;
-		if (event.pointerType === "mouse" || !event.isPrimary) return;
-		const card = cardOf(event.target);
+	const swipe = attachRowSwipe(root, {
+		row: CARD,
 		// The menu button is a button, not a card.
-		if (!card || (event.target as Element).closest(".thread-more")) return;
-		end();
-		const origin = { x: event.clientX, y: event.clientY };
-		const press = new LongPress((at) => {
-			swallow = true;
-			if (typeof navigator.vibrate === "function") navigator.vibrate(10);
-			if (finger) finger.state = "reject";
-			resetPull(card);
-			openCardMenu(card, at, "hold");
-		});
-		press.begin(origin.x, origin.y);
-		finger = {
-			id: event.pointerId,
-			card,
-			origin,
-			press,
-			swipes: !atScreenEdge(origin.x, window.innerWidth),
-			state: "wait",
-			offset: 0,
-			samples: [{ x: origin.x, t: event.timeStamp }],
-		};
-	};
-
-	/** The card back at rest under a finger that is no longer pulling it. */
-	const resetPull = (card: HTMLElement) => {
-		if (card.dataset.leaving !== undefined) return;
-		delete card.dataset.armed;
-		card.style.transition = `transform ${reducedMotion() ? 0 : SLIDE_MS}ms var(--ease-out)`;
-		card.style.transform = "";
-	};
-
-	const onMove = (event: PointerEvent) => {
-		if (!finger || finger.id !== event.pointerId) return;
-		const { card } = finger;
-		const dx = event.clientX - finger.origin.x;
-		const dy = event.clientY - finger.origin.y;
-		if (finger.state === "wait") {
-			// A finger that wanders off the hold gives it up by itself.
-			finger.press.move(event.clientX, event.clientY);
-			const across = Math.abs(dx);
-			if (!finger.swipes) return;
-			if (across >= INTENT && across > AXIS_RATIO * Math.abs(dy)) {
-				// The card follows a finger going right; one going left is not ours.
-				finger.state = dx > 0 ? "drag" : "reject";
-				if (finger.state === "drag") {
-					finger.press.cancel();
-					card.style.transition = "none";
-					window.addEventListener("touchmove", keepScroll, {
-						passive: false,
-					});
-				}
-			} else if (Math.abs(dy) >= INTENT) finger.state = "reject";
-			if (finger.state !== "drag") return;
-		}
-		if (finger.state !== "drag") return;
-		const pulled = Math.max(0, dx - INTENT);
-		const width = card.offsetWidth || 1;
-		finger.offset = isFinished(card)
-			? Math.min(pulled, width)
-			: Math.min(RUBBER_MAX, pulled * 0.3);
-		finger.samples.push({ x: event.clientX, t: event.timeStamp });
-		card.style.transform = `translate3d(${finger.offset}px, 0, 0)`;
-		if (isFinished(card)) {
-			if (settles(finger.offset / width, 0)) card.dataset.armed = "";
-			else delete card.dataset.armed;
-		}
-	};
-
-	const onUp = (event: PointerEvent) => {
-		if (!finger || finger.id !== event.pointerId) return;
-		const { card, state, offset, samples } = finger;
-		const fired = finger.press.end();
-		end();
-		if (fired) swallow = true;
-		if (state !== "drag") return;
-		swallow = true;
-		const width = card.offsetWidth || 1;
-		const velocity = speedOf(samples, event.timeStamp);
-		if (
-			isFinished(card) &&
-			offset > INTENT &&
-			settles(offset / width, velocity)
-		)
-			void leave(card);
-		else resetPull(card);
-	};
-
-	const onCancel = (event: PointerEvent) => {
-		if (!finger || finger.id !== event.pointerId) return;
-		const { card, state } = finger;
-		end();
-		if (state === "drag") resetPull(card);
-	};
+		ignore: ".thread-more",
+		can: isFinished,
+		act: (card) => void leave(card),
+		leaves: true,
+		busy: (card) => card.dataset.leaving !== undefined,
+		hold: (card, at) => openCardMenu(card, at, "hold"),
+	});
 
 	const onContextMenu = (event: MouseEvent) => {
 		const card = cardOf(event.target);
 		if (!card) return;
 		event.preventDefault();
 		// Android reports its long press as this event, after the hold that already opened the menu.
-		if (swallow) return;
-		finger?.press.cancel();
+		if (swipe.swallowing) return;
+		swipe.cancelHold();
 		openCardMenu(card, { x: event.clientX, y: event.clientY }, "contextmenu");
 	};
 
 	const onKey = (event: KeyboardEvent) => {
-		swallow = false;
+		swipe.forget();
 		const card = cardOf(event.target);
 		if (!card) return;
 		if (event.key === "Delete" && isFinished(card)) {
@@ -304,36 +172,11 @@ export function attachThreadCards(root: HTMLElement): () => void {
 		}
 	};
 
-	const onClick = (event: MouseEvent) => {
-		if (!swallow) return;
-		swallow = false;
-		event.preventDefault();
-		event.stopPropagation();
-	};
-
-	// A link is dragged by the browser as an address; the swipe is ours.
-	const onDragStart = (event: DragEvent) => {
-		if (cardOf(event.target)) event.preventDefault();
-	};
-
-	root.addEventListener("pointerdown", onDown);
-	root.addEventListener("pointermove", onMove);
-	root.addEventListener("pointerup", onUp);
-	root.addEventListener("pointercancel", onCancel);
 	root.addEventListener("contextmenu", onContextMenu);
 	root.addEventListener("keydown", onKey);
-	root.addEventListener("click", onClick, true);
-	root.addEventListener("dragstart", onDragStart);
 	return () => {
-		end();
-		disarm();
-		root.removeEventListener("pointerdown", onDown);
-		root.removeEventListener("pointermove", onMove);
-		root.removeEventListener("pointerup", onUp);
-		root.removeEventListener("pointercancel", onCancel);
+		swipe.detach();
 		root.removeEventListener("contextmenu", onContextMenu);
 		root.removeEventListener("keydown", onKey);
-		root.removeEventListener("click", onClick, true);
-		root.removeEventListener("dragstart", onDragStart);
 	};
 }

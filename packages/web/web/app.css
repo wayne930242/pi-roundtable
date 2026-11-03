@@ -289,6 +289,49 @@
 	font-weight: var(--weight-medium);
 }
 
+/* What a room's row uncovers as it is swiped to the right: the room will be marked read. */
+li:has(> .read-reveal) {
+	position: relative;
+}
+
+li:has(> .read-reveal[data-shown]) {
+	overflow-x: clip;
+}
+
+.read-reveal {
+	position: absolute;
+	right: 0;
+	left: 0;
+	display: none;
+	align-items: center;
+	gap: var(--space-2);
+	padding-left: var(--space-4);
+	border-radius: var(--radius-lg);
+	background: var(--surface-2);
+	color: var(--muted);
+	font-size: var(--text-sm);
+	font-weight: var(--weight-medium);
+}
+
+.read-reveal[data-shown] {
+	display: flex;
+}
+
+.switcher-list .read-reveal {
+	padding-left: var(--space-3);
+	border-radius: var(--radius);
+}
+
+.room-row,
+.switcher-row {
+	/* The page scrolls up and down; the row is swiped sideways. */
+	touch-action: pan-y;
+}
+
+.switcher-row[data-swiping] {
+	background: var(--surface);
+}
+
 .thread-card[data-armed] {
 	border-color: var(--danger);
 }

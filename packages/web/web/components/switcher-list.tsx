@@ -15,6 +15,7 @@ import { hrefFor, navigate } from "../lib/router.ts";
 import { useRowPress } from "../lib/row-press.ts";
 import { drawerGroups } from "../lib/sections.ts";
 import { Icon } from "./icons.tsx";
+import { ReadReveal, useReadSwipe } from "./read-swipe.tsx";
 import { RoomPicture } from "./room-picture.tsx";
 import { FoldToggle } from "./section-fold.tsx";
 import { Unread } from "./unread.tsx";
@@ -95,10 +96,12 @@ function Row(props: {
 				? { "data-drop-item": "", "data-key": key }
 				: {})}
 		>
+			<ReadReveal />
 			<a
 				className="switcher-row"
 				{...press}
 				href={hrefFor("room", key)}
+				data-room={key}
 				aria-current={key === props.current ? "page" : undefined}
 				style={accent}
 				onClick={(event) => {
@@ -178,6 +181,8 @@ export function SwitcherList(props: {
 	close(then?: () => void): void;
 }) {
 	const [query, setQuery] = useState("");
+	const scroll = useRef<HTMLDivElement>(null);
+	useReadSwipe(scroll);
 	const groups = useGroups();
 	const collapsed = useCollapsed();
 	const unread = useHost((state) => state.unread);
@@ -272,7 +277,7 @@ export function SwitcherList(props: {
 					<Icon name="plus" />
 				</button>
 			</div>
-			<div className="switcher-scroll" data-drop-root="">
+			<div className="switcher-scroll" data-drop-root="" ref={scroll}>
 				{shown.map((group) => {
 					const waiting = group.id === "waiting";
 					const zone =

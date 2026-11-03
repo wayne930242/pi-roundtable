@@ -740,6 +740,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"restore must be a list of at most 500 moves.":
 		"restore 必須是最多 500 筆移動紀錄的清單。",
 	"Mark all as read": "全部標為已讀",
+	"Mark as read": "標為已讀",
+	Read: "已讀",
 	"Marked {count} room as read": "已將 {count} 個聊天室標為已讀",
 	"Marked {count} rooms as read": "已將 {count} 個聊天室標為已讀",
 	"Clear all finished threads": "清除所有已結束的討論串",

@@ -1,5 +1,6 @@
 import { lazy, memo, type ReactNode, Suspense, useMemo, useRef } from "react";
 import { Icon } from "../components/icons.tsx";
+import { useReadSwipe } from "../components/read-swipe.tsx";
 import SectionFold from "../components/section-fold.tsx";
 import { Empty } from "../components/states.tsx";
 import { openMenu } from "../lib/action-menu.ts";
@@ -189,6 +190,8 @@ function Section(props: {
  * it, and what each is doing. The page the room list becomes once anything is arranged.
  */
 export function ArrangedRoomsPage(props: RoomsPageProps) {
+	const page = useRef<HTMLDivElement>(null);
+	useReadSwipe(page);
 	const hosted = Boolean(useConfig().kinds?.length);
 	// One string, so the page redraws only when the arrangement changes, not on every message.
 	const shape = useSelector((state) =>
@@ -224,6 +227,7 @@ export function ArrangedRoomsPage(props: RoomsPageProps) {
 	const common = { threads, active: props.active, arranging };
 	return (
 		<div
+			ref={page}
 			className="page"
 			data-column={props.active ? "" : undefined}
 			data-drop-root=""

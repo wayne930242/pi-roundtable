@@ -13,7 +13,7 @@ import { type MenuItem, openMenu } from "./action-menu.ts";
 import { openAgentSheet } from "./agent-sheet.ts";
 import { messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
-import { helperItems } from "./bulk-items.ts";
+import { helperItems, unreadIn } from "./bulk-items.ts";
 import { COUNCIL_MIN } from "./council.ts";
 import { quoteInto } from "./drafts.ts";
 import { openSelectText } from "./message-sheets.ts";
@@ -76,8 +76,18 @@ export function roomMenu(
 	if (!view || view.kind === "thread") return undefined;
 	const mode = room.mode;
 	// Home stays at the top; every other room can be pinned or put in a folder. A temp knight follows its knight's place.
-	const items: MenuItem[] =
-		view.home || view.helper ? [] : placementItems(key, leave);
+	const items: MenuItem[] = [];
+	// A swipe to the right on the row does the same; this is the way to it that every reader is told of.
+	if (Object.keys(unreadIn([key])).length > 0)
+		items.push({
+			id: "read",
+			label: t("Mark as read"),
+			icon: "check",
+			run: () => {
+				void actions().then((one) => one.markAllRead([key]));
+			},
+		});
+	if (!view.home && !view.helper) items.push(...placementItems(key, leave));
 	if (view.kind === "agent") {
 		const name = view.name;
 		items.push(

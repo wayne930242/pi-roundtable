@@ -1,6 +1,7 @@
-import { lazy, memo, type ReactNode, Suspense, useMemo } from "react";
+import { lazy, memo, type ReactNode, Suspense, useMemo, useRef } from "react";
 import { isStartOver, type RoomView } from "../../src/api-types.ts";
 import { Icon } from "../components/icons.tsx";
+import { ReadReveal, useReadSwipe } from "../components/read-swipe.tsx";
 import { RoomPicture } from "../components/room-picture.tsx";
 import { Empty } from "../components/states.tsx";
 import { Unread } from "../components/unread.tsx";
@@ -77,10 +78,12 @@ export function RoomRowView(
 	const accent = useAccentStyle(view.character);
 	return (
 		<li {...props.item}>
+			<ReadReveal />
 			<a
 				className="room-row"
 				{...press}
 				href={hrefFor("room", view.key)}
+				data-room={view.key}
 				data-home={view.home || undefined}
 				aria-current={props.active ? "page" : undefined}
 				style={accent}
@@ -318,6 +321,8 @@ export function RoomsPage(props: RoomsPageProps) {
 }
 
 function PlainRoomsPage(props: RoomsPageProps) {
+	const page = useRef<HTMLDivElement>(null);
+	useReadSwipe(page);
 	const hosted = Boolean(useConfig().kinds?.length);
 	// One string, so the page redraws only when the grouping changes, not on every message.
 	const shape = useSelector((state) => {
@@ -372,7 +377,11 @@ function PlainRoomsPage(props: RoomsPageProps) {
 		Object.values(groups).every((list) => list.length === 0) &&
 		orphans.open.length + orphans.closed.length === 0;
 	return (
-		<div className="page" data-column={props.active ? "" : undefined}>
+		<div
+			ref={page}
+			className="page"
+			data-column={props.active ? "" : undefined}
+		>
 			<header className="page-head">
 				<h1>{t("Rooms")}</h1>
 				<div className="actions">
