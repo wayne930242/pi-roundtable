@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { inspect } from "node:util";
-import { DiscordAPIError, HTTPError } from "discord.js";
+import { DiscordAPIError, HTTPError, REST } from "discord.js";
+import { BOT_TOKEN } from "../../testing/discord-api-emulator-state.ts";
 import { restSubject } from "./poster-contract-rest.ts";
 import { freshId } from "./poster-contract-support.ts";
 import type { DiscordFailure } from "./poster-errors.ts";
 import { DiscordPosterError } from "./poster-errors.ts";
-import { type DiscordRest, restPoster } from "./rest-poster.ts";
+import { type DiscordRest, restOf, restPoster } from "./rest-poster.ts";
 import { canViewChannel } from "./rest-poster-guild.ts";
 
 const CHANNEL = "900000000000000101";
@@ -375,5 +376,52 @@ test("a rename Discord holds for minutes frees the caller after about the wait, 
 		expect(took).toBeLessThan(1_500);
 	} finally {
 		close();
+	}
+});
+
+test("a role Discord itself refuses after the checks passed is forbidden, and the error names the role", async () => {
+	const subject = restSubject();
+	try {
+		const { poster, world, emulator } = subject;
+		const bot = freshId();
+		const low = freshId();
+		const target = freshId();
+		world.role({ id: bot, name: "bot", position: 5 });
+		world.role({ id: low, name: "low", position: 2 });
+		world.role({ id: target, name: "target", position: 3 });
+		world.botRoles([bot]);
+		const member = freshId();
+		world.member(member, { username: "ann" });
+		// The client's check sees `target` below the bot; then it moves above, as in a race.
+		const rest = restOf(
+			new REST({ version: "10", api: emulator.api, timeout: 5_000 }).setToken(
+				BOT_TOKEN,
+			),
+		);
+		const racing = restPoster({
+			...rest,
+			put: async (route, options) => {
+				const held = emulator.state.guilds
+					.get(world.guildId)
+					?.roles.find((role) => role.id === target);
+				if (held) held.position = 9;
+				return rest.put(route, options);
+			},
+		});
+		const error = await racing
+			.addMemberRoles(world.guildId, member, [low, target], "race")
+			.then(
+				() => undefined,
+				(thrown: unknown) => thrown,
+			);
+		expect(error).toBeInstanceOf(DiscordPosterError);
+		expect((error as DiscordPosterError).kind).toBe("forbidden");
+		expect((error as DiscordPosterError).message).toContain(target);
+		// Not atomic: the role given before the refusal stays, and a retry is safe.
+		expect(world.rolesHeldBy(member)).toEqual([low]);
+		await poster.addMemberRoles(world.guildId, member, [low], "retry");
+		expect(world.rolesHeldBy(member)).toEqual([low]);
+	} finally {
+		await subject.close();
 	}
 });

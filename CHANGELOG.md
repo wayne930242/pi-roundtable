@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+This is a minor release (0.32.0): `DiscordPoster` gains four required methods and `DiscordReason` three members, so an outside implementer of the poster or an exhaustive switch over the reasons must be updated.
+
 ### Added
 
 - `discord.memberEvents` (default `false`) asks Discord for the privileged Server Members intent and reports each member that joins the server (the `MemberJoinedEvent` type, exported from the main entry) as the new plugin event `memberJoined({ surface: "discord", guildId, userId, bot })`. With it off no intent is added and no join is reported, so a deployment without the Developer Portal switch starts as before. `roundtable doctor` checks the Server Members intent when it is on and says where to turn it on; a login Discord refuses for it names the same switch.

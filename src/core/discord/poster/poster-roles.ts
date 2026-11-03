@@ -39,6 +39,10 @@ export interface MemberRoles {
 	 * role, and one at or above the bot's highest role (`forbidden`, both with `role_unassignable`);
 	 * a role the guild does not have is `rejected` with `unknown_role`, and a user who is not a
 	 * member `rejected` with `not_member`.
+	 *
+	 * Not atomic: the checks run first, but a Discord failure after them (a 5xx, a timeout, a lost
+	 * permission) may leave the earlier roles of the call changed; the error names the role that
+	 * failed. Each change is idempotent, so retry the whole call and it converges.
 	 */
 	addMemberRoles(
 		guildId: string,
@@ -58,7 +62,10 @@ export interface MemberRoles {
 	 * or a managed role), made with no permissions and no colour when there is none (Manage Roles,
 	 * `reason` in the audit log). A role that exists is never edited: its permissions, colour and
 	 * position stay as they are. With several of the name, the oldest. Calls for the same name run
-	 * one after another, so two of them make one role.
+	 * one after another in this process, so two of them make one role; separate processes do not
+	 * coordinate and may make two. A role that exists may sit at or above the bot's highest role (or
+	 * be one the bot cannot hand out): it is returned all the same, and the next `addMemberRoles`
+	 * refuses it with `role_unassignable`.
 	 */
 	ensureRole(guildId: string, name: string, reason: string): Promise<string>;
 }

@@ -67,7 +67,8 @@ export function roleOperations(core: RestCore): MemberRoles {
 		checkSnowflake("a user", userId);
 		const wanted = checkRoleIds(roleIds);
 		const why = checkAuditReason(reason);
-		// Everything is checked before the first role is given, so a refusal gives none.
+		// Everything is checked before the first role is given, so a refusal gives none; a Discord
+		// failure after that leaves the earlier roles changed, and the error names the one that failed.
 		const botRoles = await rolesOf(guildId, await core.bot());
 		if (!botRoles)
 			throw new DiscordPosterError(
@@ -84,8 +85,8 @@ export function roleOperations(core: RestCore): MemberRoles {
 				if (isCode(error, RESTJSONErrorCodes.UnknownMember)) throw notMember();
 				throw failure(
 					verb === "add"
-						? "giving a member a role"
-						: "taking a role from a member",
+						? `giving a member the role ${roleId}`
+						: `taking the role ${roleId} from a member`,
 					error,
 				);
 			}

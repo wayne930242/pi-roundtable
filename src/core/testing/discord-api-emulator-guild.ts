@@ -96,6 +96,21 @@ export function guildRoutes(state: EmuState): Route[] {
 		const roleId = params[2] ?? "";
 		if (!guild.roles.some((role) => role.id === roleId))
 			throw new HttpError(404, 10011, "Unknown Role");
+		// Like Discord: no @everyone, no managed role, none at or above the bot's highest role.
+		const byId = new Map(guild.roles.map((role) => [role.id, role]));
+		const top = Math.max(
+			0,
+			...(guild.members.get(BOT_ID)?.roles ?? []).map(
+				(id) => byId.get(id)?.position ?? 0,
+			),
+		);
+		const target = byId.get(roleId);
+		if (
+			roleId === guild.id ||
+			target?.managed === true ||
+			(target?.position ?? 0) >= top
+		)
+			throw missingPermissions();
 		member.roles =
 			action === "add"
 				? member.roles.includes(roleId)
