@@ -143,6 +143,12 @@ async function shows(words: string): Promise<void> {
 	for (let i = 0; i < 80 && !text().includes(words); i += 1) await settle(25);
 	expect(text()).toContain(words);
 }
+/** Waits for a menu to be drawn: a slow machine draws its lazy chunk late. */
+async function menuShown(): Promise<void> {
+	for (let i = 0; i < 160 && menuItems().length === 0; i += 1)
+		await page.act(() => settle(25));
+	expect(menuItems().length).toBeGreaterThan(0);
+}
 /** The newest button of that name: notices of earlier tests may still be up. */
 const button = (label: string) =>
 	all("button")
@@ -235,13 +241,54 @@ test("Undo asks the server to put the cursors back, and the counts return", asyn
 	expect(unreadCounts()).toEqual({ [SCOUT]: 3 });
 });
 
-test("a refusal says why and leaves the counts as they were", async () => {
+test("the counts clear before the server answers", async () => {
+	let answer: (value: { moved: [] }) => void = () => undefined;
+	track(spyOn(bulkApi, "readAll")).mockReturnValue(
+		new Promise((resolve) => {
+			answer = resolve;
+		}),
+	);
+	await show(ROOMS, {}, { [SCOUT]: 3, [BUILD]: 1 });
+	await openPageMenu();
+	const item = menuItems().find((one) => one.textContent === "Mark all as read");
+	await page.act(() => item?.click());
+	expect(unreadCounts()).toEqual({});
+	expect(text()).not.toContain("Marked 2 rooms as read");
+	await page.act(async () => {
+		answer({ moved: [] });
+		await settle(40);
+	});
+	await shows("Marked 2 rooms as read");
+	expect(unreadCounts()).toEqual({});
+});
+
+test("a refusal says why and puts the counts back as they were", async () => {
 	track(spyOn(bulkApi, "readAll")).mockRejectedValue(new Error("Not today."));
-	await show(ROOMS, {}, { [SCOUT]: 3 });
+	await show(ROOMS, {}, { [SCOUT]: 3, [BUILD]: 1 });
 	await openPageMenu();
 	await choose("Mark all as read");
 	await shows("Not today.");
-	expect(unreadCounts()).toEqual({ [SCOUT]: 3 });
+	expect(unreadCounts()).toEqual({ [SCOUT]: 3, [BUILD]: 1 });
+});
+
+test("a refusal leaves alone a count a newer message raised while the request was out", async () => {
+	let refuse: (reason: Error) => void = () => undefined;
+	track(spyOn(bulkApi, "readAll")).mockReturnValue(
+		new Promise((_, reject) => {
+			refuse = reject;
+		}),
+	);
+	await show(ROOMS, {}, { [SCOUT]: 3, [BUILD]: 1 });
+	await openPageMenu();
+	await choose("Mark all as read");
+	expect(unreadCounts()).toEqual({});
+	await page.act(() => seedUnread({ [SCOUT]: 1 }));
+	await page.act(async () => {
+		refuse(new Error("Not today."));
+		await settle(40);
+	});
+	await shows("Not today.");
+	expect(unreadCounts()).toEqual({ [SCOUT]: 1, [BUILD]: 1 });
 });
 
 test("a folder's menu marks only its own rooms and the threads under them", async () => {
@@ -254,7 +301,7 @@ test("a folder's menu marks only its own rooms and the threads under them", asyn
 		{ [SCOUT]: 2, [T1]: 5, [BUILD]: 7 },
 	);
 	await page.click(document.querySelector(".folder-more"));
-	await settle(60);
+	await menuShown();
 	expect(labels()).toContain("Mark all as read");
 	await choose("Mark all as read");
 	expect(askedFor(send)).toEqual([SCOUT, T1]);

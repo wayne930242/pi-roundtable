@@ -259,6 +259,26 @@ test("a row swiped right past the threshold uncovers the quiet Read mark, spring
 	expect(window.location.hash).toBe("#/rooms");
 });
 
+test("the swiped row's badge is gone the moment it is let go, before the server answers", async () => {
+	let answer: (value: { moved: [] }) => void = () => undefined;
+	track(spyOn(bulkApi, "readAll")).mockReturnValue(
+		new Promise((resolve) => {
+			answer = resolve;
+		}),
+	);
+	await show();
+	const row = rowOf(SCOUT);
+	expect(row.querySelector(".unread-mark")).not.toBeNull();
+	await drag(row, 60, 260);
+	await page.act(() => touch(row, "pointerup", 260, 102));
+	expect(unreadCounts()[SCOUT]).toBeUndefined();
+	expect(row.querySelector(".unread-mark")).toBeNull();
+	await page.act(async () => {
+		answer({ moved: [] });
+		await settle();
+	});
+});
+
 test("home's row marks read too", async () => {
 	const send = readAll();
 	await show({ [HOME]: 2 });

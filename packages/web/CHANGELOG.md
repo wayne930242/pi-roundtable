@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Marking rooms read clears their unread counts at once, before the server answers, for every way to it: a row's swipe right, the room menu's "Mark as read", and "Mark all as read" on the page or a folder. A swiped row's badge is gone in the same frame the finger lets go. A refusal puts back the counts it cleared, except where a newer message has counted a room up meanwhile, and says why; Undo works as before.
+
+### Fixed
+
+- A test of a folder's "Mark all as read" waited a fixed time for the folder's menu and could find it not yet drawn on a slow machine; it now waits for the menu to appear.
+
 ## [0.32.0] - 2026-11-03
 
 - Release in lockstep with pi-roundtable 0.32.0 (plugins hear member joins and manage member roles on Discord); no package-specific behavior changes.

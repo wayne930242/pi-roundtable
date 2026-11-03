@@ -5,7 +5,7 @@ import { messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
 import { bulkApi } from "./bulk-api.ts";
 import { unreadIn } from "./bulk-items.ts";
-import { seedUnread } from "./host-state.ts";
+import { seedUnread, unreadCounts } from "./host-state.ts";
 import { plural, translate as t } from "./messages.ts";
 import { teamApi } from "./team-api.ts";
 import { clearAcross } from "./thread-actions.ts";
@@ -24,22 +24,34 @@ const chunks = <T>(items: readonly T[]): T[][] => {
 /** The list read again from the server: what a refusal or an undo leaves to be drawn. */
 const refresh = () => store.dispatch({ type: "changed" });
 
-/** Marks every unread room of `rooms` (a folder's), or of the whole list, read; a notice carries the undo. */
+/**
+ * Marks every unread room of `rooms` (a folder's), or of the whole list, read; a notice carries the
+ * undo. The counts clear at once, before the server answers; a refusal puts back the ones still clear.
+ */
 export async function markAllRead(rooms?: readonly string[]): Promise<void> {
 	const counts = unreadIn(rooms);
 	const keys = Object.keys(counts);
 	if (keys.length === 0) return;
+	// Cleared in the same task as the choice, so a swiped row's badge goes with the finger.
+	seedUnread(Object.fromEntries(keys.map((key) => [key, 0])));
 	const moved: Awaited<ReturnType<typeof bulkApi.readAll>>["moved"] = [];
 	try {
 		for (const part of chunks(keys))
 			moved.push(...(await bulkApi.readAll(part)).moved);
 	} catch (failure) {
+		// A room a newer message counted up meanwhile keeps that count.
+		const now = unreadCounts();
+		seedUnread(
+			Object.fromEntries(
+				keys
+					.filter((key) => (now[key] ?? 0) === 0)
+					.map((key) => [key, counts[key] ?? 0]),
+			),
+		);
 		toast(messageOf(failure), "danger");
 		refresh();
 		return;
 	}
-	// The server also tells every page of the person; this one need not wait for it.
-	seedUnread(Object.fromEntries(keys.map((key) => [key, 0])));
 	toast(
 		plural(
 			keys.length,
