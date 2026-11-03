@@ -6,6 +6,7 @@ import {
 	Suspense,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -58,6 +59,8 @@ export function useSwitcher(enabled: boolean): {
 } {
 	const [open, setOpen] = useState(false);
 	const [dragging, setDragging] = useState(false);
+	/** Counts the fingers let go, so the paint is cleared after each, even one whose drag never rendered. */
+	const [lifts, setLifts] = useState(0);
 	const root = useRef<HTMLDivElement>(null);
 	const panel = useRef<HTMLDivElement>(null);
 	const swipe = useRef<{ pointer: number; swipe: Swipe } | undefined>(
@@ -118,12 +121,15 @@ export function useSwitcher(enabled: boolean): {
 		}
 	}, [open]);
 
-	const paint = (progress: number | undefined) => {
-		const element = root.current;
-		if (!element) return;
-		if (progress === undefined)
-			element.style.removeProperty("--switcher-progress");
-		else element.style.setProperty("--switcher-progress", String(progress));
+	// The drawer's state after a swipe is drawn in the same frame as the finger's place is let go, so
+	// the panel's transition starts from where the finger left it.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `lifts` is the trigger; the effect reads the element
+	useLayoutEffect(() => {
+		root.current?.style.removeProperty("--switcher-progress");
+	}, [lifts]);
+
+	const paint = (progress: number) => {
+		root.current?.style.setProperty("--switcher-progress", String(progress));
 	};
 
 	const handlers = (from: "closed" | "open"): SwipeHandlers => {
@@ -134,11 +140,17 @@ export function useSwitcher(enabled: boolean): {
 			if (!live.current) return;
 			live.current = false;
 			const opens = current.swipe.finish(event.timeStamp);
+			// The finger's place stays painted until the drawer's new state is drawn (see the layout
+			// effect below): cleared now, the panel would jump shut for a frame and slide out again.
 			setDragging(false);
-			paint(undefined);
+			setLifts((count) => count + 1);
 			if (opens === undefined) return;
 			if (opens) commitOpen();
-			else if (from === "open") close();
+			else if (from === "open") {
+				// Closed at once, not when Back lands: the panel slides on from where the finger left it.
+				setOpen(false);
+				close();
+			}
 		};
 		return {
 			onPointerDown(event) {

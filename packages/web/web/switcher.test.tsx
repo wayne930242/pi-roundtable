@@ -241,6 +241,80 @@ test("a swipe left over the open drawer closes it, though the room's own handler
 	expect(drawer()).toBe("closed");
 });
 
+/**
+ * The drawer's state and whether the finger's place is painted on it, at each change to either while
+ * `run` goes, rebuilt from the attribute records in order.
+ */
+async function framesOf(
+	run: () => Promise<void>,
+): Promise<{ state: string | null; painted: boolean }[]> {
+	const root = page.container.querySelector<HTMLElement>(".switcher");
+	if (!root) throw new Error("no drawer");
+	const names = ["style", "data-state"] as const;
+	const records: MutationRecord[] = [];
+	const observer = new MutationObserver((batch) => records.push(...batch));
+	observer.observe(root, {
+		attributes: true,
+		attributeOldValue: true,
+		attributeFilter: [...names],
+	});
+	await run();
+	records.push(...observer.takeRecords());
+	observer.disconnect();
+	const now: Record<string, string | null> = {};
+	for (const name of names)
+		now[name] =
+			records.find((one) => one.attributeName === name)?.oldValue ??
+			root.getAttribute(name);
+	const frame = () => ({
+		state: now["data-state"] ?? null,
+		painted: /--switcher-progress/.test(now.style ?? ""),
+	});
+	const frames = [frame()];
+	records.forEach((record, at) => {
+		const name = record.attributeName ?? "";
+		now[name] =
+			records.slice(at + 1).find((one) => one.attributeName === name)
+				?.oldValue ?? root.getAttribute(name);
+		frames.push(frame());
+	});
+	return frames;
+}
+
+/** Once the finger has painted the drawer, it is never drawn unpainted in any state but the one it ends in. */
+function expectNoJump(
+	frames: { state: string | null; painted: boolean }[],
+	end: string,
+): void {
+	const from = frames.findIndex((one) => one.painted);
+	expect(from).toBeGreaterThanOrEqual(0);
+	const unpainted = frames.slice(from).filter((one) => !one.painted);
+	expect(unpainted.length).toBeGreaterThan(0);
+	for (const one of unpainted) expect(one.state).toBe(end);
+}
+
+test("let go, the drawer slides on from where the finger left it: the finger's place is cleared only with the new state", async () => {
+	await page.render(<Room />);
+	expectNoJump(
+		await framesOf(() => swipe(element("plain"), [100, 300], [260, 305], 400)),
+		"open",
+	);
+	const panel = page.container.querySelector<HTMLElement>(".switcher-panel");
+	if (!panel) throw new Error("no panel");
+	expectNoJump(
+		await framesOf(async () => {
+			await swipe(panel, [250, 300], [60, 300], 400);
+			await settle(60);
+		}),
+		"closed",
+	);
+	expect(drawer()).toBe("closed");
+	expectNoJump(
+		await framesOf(() => swipe(element("plain"), [100, 300], [200, 300], 900)),
+		"closed",
+	);
+});
+
 test("mostly vertical motion, and a leftward swipe, open nothing", async () => {
 	await page.render(<Room />);
 	// A scroll that starts at 40 % of the screen's width and drifts a little sideways.
