@@ -39,10 +39,12 @@ export const memberScenarios: Scenario[] = [
 			const { keep, low, member } = arrange(subject);
 			expect(await poster.memberRoles(world.guildId, member)).toEqual([keep]);
 			world.holdRoles(member, [keep, low]);
-			expect(sorted((await poster.memberRoles(world.guildId, member)) ?? [])).toEqual(
-				sorted([keep, low]),
-			);
-			expect(await poster.memberRoles(world.guildId, freshId())).toBeUndefined();
+			expect(
+				sorted((await poster.memberRoles(world.guildId, member)) ?? []),
+			).toEqual(sorted([keep, low]));
+			expect(
+				await poster.memberRoles(world.guildId, freshId()),
+			).toBeUndefined();
 			await expectFailure(poster.memberRoles("12", member), "invalid");
 		},
 	},
@@ -52,10 +54,14 @@ export const memberScenarios: Scenario[] = [
 			const { poster, world } = subject;
 			const { keep, low, mid, member } = arrange(subject);
 			await poster.addMemberRoles(world.guildId, member, [low, mid], REASON);
-			expect(sorted(world.rolesHeldBy(member))).toEqual(sorted([keep, low, mid]));
+			expect(sorted(world.rolesHeldBy(member))).toEqual(
+				sorted([keep, low, mid]),
+			);
 			// A role the member holds is left as it is.
 			await poster.addMemberRoles(world.guildId, member, [low], REASON);
-			expect(sorted(world.rolesHeldBy(member))).toEqual(sorted([keep, low, mid]));
+			expect(sorted(world.rolesHeldBy(member))).toEqual(
+				sorted([keep, low, mid]),
+			);
 			await poster.removeMemberRoles(world.guildId, member, [low], REASON);
 			expect(sorted(world.rolesHeldBy(member))).toEqual(sorted([keep, mid]));
 			// A role the member lacks is left alone, and so is every role not named.
@@ -77,7 +83,11 @@ export const memberScenarios: Scenario[] = [
 			const { poster, world } = subject;
 			const { low, botRole, high, managed, member } = arrange(subject);
 			const before = world.roleChanges().length;
-			const refused = async (roleIds: string[], kind: "invalid" | "forbidden" | "rejected", reason?: "role_unassignable" | "unknown_role") => {
+			const refused = async (
+				roleIds: string[],
+				kind: "invalid" | "forbidden" | "rejected",
+				reason?: "role_unassignable" | "unknown_role",
+			) => {
 				for (const verb of ["addMemberRoles", "removeMemberRoles"] as const)
 					await expectFailure(
 						poster[verb](world.guildId, member, roleIds, REASON),
@@ -134,7 +144,9 @@ export const memberScenarios: Scenario[] = [
 			const { low, member } = arrange(subject);
 			// An existing role is returned and nothing is made.
 			expect(await poster.ensureRole(world.guildId, "low", REASON)).toBe(low);
-			expect(world.roleChanges().filter((c) => c.action === "create")).toEqual([]);
+			expect(world.roleChanges().filter((c) => c.action === "create")).toEqual(
+				[],
+			);
 			// A managed role of the name is not the one; a made role is.
 			const clash = freshId();
 			world.role({ id: clash, name: "marker", position: 2, managed: true });
@@ -144,11 +156,15 @@ export const memberScenarios: Scenario[] = [
 			]);
 			expect(first).toBe(second);
 			expect(first).not.toBe(clash);
-			expect(world.roleIdsNamed("marker").filter((id) => id !== clash)).toEqual([first]);
+			expect(world.roleIdsNamed("marker").filter((id) => id !== clash)).toEqual(
+				[first],
+			);
 			const created = world.roleChanges().filter((c) => c.action === "create");
 			expect(created).toHaveLength(1);
 			expect(created[0]).toMatchObject({ roleId: first, reason: REASON });
-			expect(await poster.ensureRole(world.guildId, "marker", REASON)).toBe(first);
+			expect(await poster.ensureRole(world.guildId, "marker", REASON)).toBe(
+				first,
+			);
 			// The role made sits below the bot's, so it can be given at once.
 			await poster.addMemberRoles(world.guildId, member, [first], REASON);
 			expect(world.rolesHeldBy(member)).toContain(first);
@@ -158,11 +174,25 @@ export const memberScenarios: Scenario[] = [
 			world.role({ id: newer, name: "twin", position: 2 });
 			world.role({ id: older, name: "twin", position: 2 });
 			const oldest = BigInt(older) < BigInt(newer) ? older : newer;
-			expect(await poster.ensureRole(world.guildId, "twin", REASON)).toBe(oldest);
-			await expectFailure(poster.ensureRole(world.guildId, "", REASON), "invalid");
-			await expectFailure(poster.ensureRole(world.guildId, "@everyone", REASON), "invalid");
-			await expectFailure(poster.ensureRole(world.guildId, "x".repeat(101), REASON), "invalid");
-			await expectFailure(poster.ensureRole(world.guildId, "ok", ""), "invalid");
+			expect(await poster.ensureRole(world.guildId, "twin", REASON)).toBe(
+				oldest,
+			);
+			await expectFailure(
+				poster.ensureRole(world.guildId, "", REASON),
+				"invalid",
+			);
+			await expectFailure(
+				poster.ensureRole(world.guildId, "@everyone", REASON),
+				"invalid",
+			);
+			await expectFailure(
+				poster.ensureRole(world.guildId, "x".repeat(101), REASON),
+				"invalid",
+			);
+			await expectFailure(
+				poster.ensureRole(world.guildId, "ok", ""),
+				"invalid",
+			);
 		},
 	},
 ];

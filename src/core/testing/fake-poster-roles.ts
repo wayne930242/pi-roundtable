@@ -94,7 +94,12 @@ export abstract class FakePosterRoles extends FakePosterReads {
 				"forbidden",
 				"the bot is not a member of that guild",
 			);
-		refuseUnassignable(guildId, [...this.roles.values()], this.botRoles, wanted);
+		refuseUnassignable(
+			guildId,
+			[...this.roles.values()],
+			this.botRoles,
+			wanted,
+		);
 		const held = this.#held(guildId, userId);
 		if (!held) throw notMember();
 		let next = held;

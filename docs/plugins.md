@@ -4553,6 +4553,7 @@ Import from the entries listed below; source area files are internal.
 | `MAX_ATTACHMENT_BYTES` | `pi-roundtable` | value |
 | `MODES` | `pi-roundtable` | value |
 | `MEMORY_KINDS` | `pi-roundtable` | value |
+| `MemberJoinedEvent` | `pi-roundtable` | type |
 | `Memory` | `pi-roundtable` | type |
 | `MemoryError` | `pi-roundtable` | value |
 | `MemoryKind` | `pi-roundtable` | type |
@@ -4786,6 +4787,7 @@ Import from the entries listed below; source area files are internal.
 | `fakePrechecks` | `pi-roundtable/testing` | value |
 | `FakePrecheck` | `pi-roundtable/testing` | type |
 | `FakePrecheckAnswer` | `pi-roundtable/testing` | type |
+| `FakeRoleChange` | `pi-roundtable/testing` | type |
 | `fakeScriptRunner` | `pi-roundtable/testing` | value |
 | `FakeScriptAnswer` | `pi-roundtable/testing` | type |
 | `FakeScriptRunner` | `pi-roundtable/testing` | type |
@@ -4996,6 +4998,9 @@ Import from the entries listed below; source area files are internal.
 | `DiscordConnection` | `pi-roundtable/discord` | type |
 | `DiscordServices` | `pi-roundtable/discord` | type |
 | `DISCORD_LIMITS` | `pi-roundtable/discord` | value |
+| `ROLE_LIMITS` | `pi-roundtable/discord` | value |
+| `GuildRole` | `pi-roundtable/discord` | type |
+| `MemberRoles` | `pi-roundtable/discord` | type |
 | `DiscordPosterError` | `pi-roundtable/discord` | value |
 | `CardButton` | `pi-roundtable/discord` | type |
 | `CardLink` | `pi-roundtable/discord` | type |

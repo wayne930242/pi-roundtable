@@ -66,9 +66,7 @@ export class Discord {
 	/** Whether the configuration asks for member joins (`discord.memberEvents`), which needs the Server Members intent. */
 	async wantsMemberEvents(): Promise<boolean> {
 		const raw = await this.#project.raw();
-		return (
-			raw.ok && object(object(raw.value).discord).memberEvents === true
-		);
+		return raw.ok && object(object(raw.value).discord).memberEvents === true;
 	}
 
 	/** Who the token belongs to. */

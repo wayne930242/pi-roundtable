@@ -81,8 +81,7 @@ export function roleOperations(core: RestCore): MemberRoles {
 				if (verb === "add") await rest.put(route, { reason: why });
 				else await rest.delete(route, { reason: why });
 			} catch (error) {
-				if (isCode(error, RESTJSONErrorCodes.UnknownMember))
-					throw notMember();
+				if (isCode(error, RESTJSONErrorCodes.UnknownMember)) throw notMember();
 				throw failure(
 					verb === "add"
 						? "giving a member a role"

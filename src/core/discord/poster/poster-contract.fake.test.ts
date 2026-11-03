@@ -38,7 +38,10 @@ function fakeSubject(): PosterSubject {
 					names.nick ?? names.global ?? names.username,
 				),
 			role: (role) =>
-				void fake.roles.set(role.id, { ...role, managed: role.managed === true }),
+				void fake.roles.set(role.id, {
+					...role,
+					managed: role.managed === true,
+				}),
 			botRoles: (ids) => {
 				fake.botRoles = [...ids];
 			},
