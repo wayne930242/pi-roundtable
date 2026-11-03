@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.8] - 2026-11-03
+
+- Release in lockstep with pi-roundtable 0.31.8 (the room drawer slides on from where the finger lets it go, without a frame shut); no package-specific behavior changes.
+
 ## [0.31.7] - 2026-11-02
 
 - Release in lockstep with pi-roundtable 0.31.7 (menu rows hover in the quiet fill with 12 px padding wherever they are used; the message box draws no scrollbar below its tallest; a room row swiped right marks the room read); no package-specific behavior changes.

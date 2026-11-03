@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.8] - 2026-11-03
+
 ### Fixed
 
 - The room drawer no longer flickers when a finger lets it go: the finger's place was cleared before the drawer's new state was drawn, so for one frame the panel jumped shut and then slid out again (or, closing, jumped open). The place is now cleared in the same frame as the new state, after every lift, and the panel slides on from where the finger left it.
