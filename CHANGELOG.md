@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `discord.memberEvents` (default `false`) asks Discord for the privileged Server Members intent and reports each member that joins the server as the new plugin event `memberJoined({ surface: "discord", guildId, userId, bot })`. With it off no intent is added and no join is reported, so a deployment without the Developer Portal switch starts as before. `roundtable doctor` checks the Server Members intent when it is on and says where to turn it on; a login Discord refuses for it names the same switch.
+- `DISCORD.poster` reads and changes member roles: `memberRoles(guildId, userId)`, `addMemberRoles` and `removeMemberRoles(guildId, userId, roleIds, reason)`, and `ensureRole(guildId, name, reason)`. A change gives or takes only the roles named, with the required reason in the audit log, and refuses before giving any the @everyone role, a managed role, and a role at or above the bot's highest. `ensureRole` finds a role by exact name, makes one with no permissions when there is none, and never edits an existing one. `DiscordReason` gains `role_unassignable`, `unknown_role` and `not_member`; `fakeDiscordPoster()` models the same rules (`roles`, `botRoles`, `memberRoleIds`, `roleChanges`).
+
 ## [0.31.8] - 2026-11-03
 
 - Release in lockstep with pi-roundtable-web 0.31.8 (the room drawer slides on from where the finger lets it go, without a frame shut); no core behavior changes.

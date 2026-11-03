@@ -4,6 +4,7 @@ import { archivedScenarios } from "./poster-contract-archived.ts";
 import { cardScenarios } from "./poster-contract-cards.ts";
 import { forumScenarios } from "./poster-contract-forum.ts";
 import { guildScenarios } from "./poster-contract-guild.ts";
+import { memberScenarios } from "./poster-contract-members.ts";
 import {
 	expectFailure,
 	freshId,
@@ -457,6 +458,7 @@ export const posterScenarios: Scenario[] = [
 	...messageScenarios,
 	...cardScenarios,
 	...guildScenarios,
+	...memberScenarios,
 	...forumScenarios,
 	...archivedScenarios,
 	...titleScenarios,

@@ -5,11 +5,15 @@
  * (from `pi-roundtable/testing`) stands in for it in tests, and no test reaches Discord.
  */
 
+import type { MemberRoles } from "./poster-roles.ts";
+
 export type {
 	DiscordFailure,
 	DiscordReason,
 } from "./poster-errors.ts";
 export { DiscordPosterError } from "./poster-errors.ts";
+export type { GuildRole, MemberRoles } from "./poster-roles.ts";
+export { ROLE_LIMITS } from "./poster-roles.ts";
 
 /** A file sent with a post. */
 export interface PosterFile {
@@ -297,7 +301,7 @@ export const DISCORD_LIMITS = Object.freeze({
 	postTags: 5,
 } as const);
 
-export interface DiscordPoster {
+export interface DiscordPoster extends MemberRoles {
 	// Webhook posts
 
 	/** Posts through the channel's webhook of that name, found or made on first use. */

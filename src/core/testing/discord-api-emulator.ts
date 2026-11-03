@@ -45,6 +45,7 @@ export class DiscordEmulator {
 		channels: new Map(),
 		webhooks: new Map(),
 		audit: new Map(),
+		roleAudit: [],
 		closedDirects: new Set(),
 		auditReadable: true,
 		pinNotices: false,
@@ -211,6 +212,7 @@ export class DiscordEmulator {
 					params: match.slice(1),
 					query: url.searchParams,
 					body,
+					headers: request.headers,
 				});
 				if (out === undefined) return new Response(null, { status: 204 });
 				return Response.json(out);

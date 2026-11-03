@@ -11,6 +11,8 @@ export interface RestOptions {
 	auth?: boolean;
 	/** Gives up on the request when it fires (a call that discord.js would otherwise hold for a rate limit). */
 	signal?: AbortSignal;
+	/** The audit-log reason of a change to a guild; discord.js sends it as `X-Audit-Log-Reason`. */
+	reason?: string;
 }
 
 /** The part of discord.js' `REST` the poster calls, so a test can answer without a network. */

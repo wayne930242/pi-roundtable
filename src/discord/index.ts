@@ -95,6 +95,8 @@ export type {
 	ForumPostCreated,
 	ForumTag,
 	ForumTagInput,
+	GuildRole,
+	MemberRoles,
 	PostedMessage,
 	PosterFile,
 	RecentMessage,
@@ -107,6 +109,7 @@ export type {
 export {
 	DISCORD_LIMITS,
 	DiscordPosterError,
+	ROLE_LIMITS,
 } from "../core/discord/poster/poster.ts";
 export type { OwnerOperations } from "../core/modules/discord-admin/discord-admin.ts";
 export { DISCORD_ADMIN_TOOLS } from "../core/modules/discord-admin/discord-admin.ts";

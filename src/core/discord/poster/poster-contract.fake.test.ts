@@ -37,6 +37,24 @@ function fakeSubject(): PosterSubject {
 					userId,
 					names.nick ?? names.global ?? names.username,
 				),
+			role: (role) =>
+				void fake.roles.set(role.id, { ...role, managed: role.managed === true }),
+			botRoles: (ids) => {
+				fake.botRoles = [...ids];
+			},
+			holdRoles: (userId, ids) => void fake.memberRoleIds.set(userId, [...ids]),
+			rolesHeldBy: (userId) => fake.memberRoleIds.get(userId) ?? [],
+			roleIdsNamed: (name) =>
+				[...fake.roles.values()]
+					.filter((role) => role.name === name)
+					.map((role) => role.id),
+			roleChanges: () =>
+				fake.roleChanges.map(({ action, roleId, userId, reason }) => ({
+					action,
+					roleId,
+					reason,
+					...(userId ? { userId } : {}),
+				})),
 			viewCase: (channelId, userId, how) => {
 				if (how === "member-denied")
 					fake.hiddenFrom.add(`${channelId}:${userId}`);

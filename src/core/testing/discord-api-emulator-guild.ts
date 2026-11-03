@@ -21,6 +21,7 @@ export interface Ctx {
 	params: string[];
 	query: URLSearchParams;
 	body: Record<string, unknown>;
+	headers: Headers;
 }
 
 export type Route = [
@@ -71,12 +72,44 @@ function rateLimited(state: EmuState): HttpError {
 	);
 }
 
+/** The reason a request gave for the audit log, as it was written. */
+function auditReason(headers: Headers): string | null {
+	const sent = headers.get("x-audit-log-reason");
+	return sent === null ? null : decodeURIComponent(sent);
+}
+
 /** Channels, threads, members, roles and the audit log. */
 export function guildRoutes(state: EmuState): Route[] {
 	const guildOf = (id: string | undefined) => {
 		const guild = id ? state.guilds.get(id) : undefined;
 		if (!guild) throw new HttpError(404, 10004, "Unknown Guild");
 		return guild;
+	};
+	/** One role given to or taken from a member; Discord answers 204 either way. */
+	const changeRole = (
+		{ params, headers }: Ctx,
+		action: "add" | "remove",
+	): undefined => {
+		const guild = guildOf(params[0]);
+		const member = guild.members.get(params[1] ?? "");
+		if (!member) throw new HttpError(404, 10007, "Unknown Member");
+		const roleId = params[2] ?? "";
+		if (!guild.roles.some((role) => role.id === roleId))
+			throw new HttpError(404, 10011, "Unknown Role");
+		member.roles =
+			action === "add"
+				? member.roles.includes(roleId)
+					? member.roles
+					: [...member.roles, roleId]
+				: member.roles.filter((id) => id !== roleId);
+		state.roleAudit.push({
+			action,
+			guildId: guild.id,
+			roleId,
+			userId: member.userId,
+			reason: auditReason(headers),
+		});
+		return undefined;
 	};
 	return [
 		["GET", /^\/users\/@me$/, () => ({ id: BOT_ID, username: "relay-bot" })],
@@ -297,6 +330,46 @@ export function guildRoutes(state: EmuState): Route[] {
 			"GET",
 			/^\/guilds\/(\d+)\/roles$/,
 			({ params }) => guildOf(params[0]).roles,
+		],
+		[
+			"PUT",
+			/^\/guilds\/(\d+)\/members\/(\d+)\/roles\/(\d+)$/,
+			(ctx) => changeRole(ctx, "add"),
+		],
+		[
+			"DELETE",
+			/^\/guilds\/(\d+)\/members\/(\d+)\/roles\/(\d+)$/,
+			(ctx) => changeRole(ctx, "remove"),
+		],
+		[
+			"POST",
+			/^\/guilds\/(\d+)\/roles$/,
+			({ params, body, headers }) => {
+				const guild = guildOf(params[0]);
+				const name = str(body.name);
+				if (!name) throw formError("name", "BASE_TYPE_REQUIRED", "required");
+				// A new role goes just above @everyone and the roles above it move up one.
+				guild.roles = guild.roles.map((role) =>
+					(role.position ?? 0) >= 1
+						? { ...role, position: (role.position ?? 0) + 1 }
+						: role,
+				);
+				const role = {
+					id: newId(state),
+					name,
+					permissions: str(body.permissions) ?? "0",
+					position: 1,
+					managed: false,
+				};
+				guild.roles.push(role);
+				state.roleAudit.push({
+					action: "create",
+					guildId: guild.id,
+					roleId: role.id,
+					reason: auditReason(headers),
+				});
+				return role;
+			},
 		],
 		[
 			"GET",

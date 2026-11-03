@@ -90,7 +90,26 @@ export interface EmuGuild {
 	id: string;
 	ownerId: string;
 	members: Map<string, EmuMember>;
-	roles: { id: string; permissions: string }[];
+	roles: EmuRole[];
+}
+
+/** A role; a role set up with only an id and permissions is at position 0 and unmanaged. */
+export interface EmuRole {
+	id: string;
+	permissions: string;
+	name?: string;
+	position?: number;
+	managed?: boolean;
+}
+
+/** A change of roles the audit log would show. */
+export interface EmuRoleAudit {
+	action: "add" | "remove" | "create";
+	guildId: string;
+	roleId: string;
+	userId?: string;
+	/** The `X-Audit-Log-Reason` header, decoded; null when the request had none. */
+	reason: string | null;
 }
 
 export interface EmuAudit {
@@ -106,6 +125,8 @@ export interface EmuState {
 	channels: Map<string, EmuChannel>;
 	webhooks: Map<string, EmuWebhook>;
 	audit: Map<string, EmuAudit[]>;
+	/** Every change of roles, in order. */
+	roleAudit: EmuRoleAudit[];
 	closedDirects: Set<string>;
 	auditReadable: boolean;
 	pinNotices: boolean;

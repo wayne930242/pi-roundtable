@@ -18,6 +18,7 @@ import type { Migration } from "./db/migrations.ts";
 import type { ToolContribution } from "./define.ts";
 import type { TurnProgress } from "./domain/progress.ts";
 import { PluginError } from "./errors.ts";
+import type { ActionEvent, MemberJoinedEvent } from "./event-types.ts";
 import type { HoldCheck, HoldRule } from "./holds.ts";
 import type { HttpRoute, ListenerAddress } from "./http/listeners.ts";
 import type { Locale } from "./i18n/index.ts";
@@ -36,6 +37,8 @@ import type {
 } from "./sessions.ts";
 import type { Speaker, Tier } from "./speakers.ts";
 import type { ToolTiers } from "./tool-tiers.ts";
+
+export type { ActionEvent, MemberJoinedEvent };
 
 /** A long-lived part of a plugin. Services start in registration order and stop in reverse, so one registered earlier outlives those after it. */
 export interface Service {
@@ -113,22 +116,13 @@ export interface EventHandlers {
 	 * the kind, who did it and whether it worked, never the content.
 	 */
 	action?(event: ActionEvent): Promise<void> | void;
+	/**
+	 * Someone joined the Discord server. Reported only when the host's `discord.memberEvents` is
+	 * on, which asks Discord for the privileged Server Members intent; otherwise never.
+	 */
+	memberJoined?(event: MemberJoinedEvent): Promise<void> | void;
 	/** The shutdown drain ended, before any service stops; `left` is the work it gave up on. */
 	shutdown?(left: readonly string[]): Promise<void> | void;
-}
-
-/** One thing a person did through a plugin's surface, as a handler hears of it. */
-export interface ActionEvent {
-	/** What was done, in the reporting plugin's words, such as "assign" or "close". */
-	kind: string;
-	/** The `Speaker.id` of who did it. */
-	actor: string;
-	principalId: string;
-	/** The conversation or page it concerns, when there is one. */
-	channel?: ChannelKey | `page:${string}`;
-	/** Whether it worked. */
-	ok: boolean;
-	at: Date;
 }
 
 /** What the core reports to the plugins' handlers. */
@@ -140,6 +134,8 @@ export interface EventSink {
 	changed(): void;
 	/** Optional, as `turnProgress` is: a sink of your own written before it still fits. */
 	action?(event: ActionEvent): void;
+	/** Optional, as `action` is. */
+	memberJoined?(event: MemberJoinedEvent): void;
 }
 
 /** What a prompt section is built for: one agent's turn. */

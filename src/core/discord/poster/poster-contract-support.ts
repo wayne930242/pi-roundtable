@@ -33,6 +33,28 @@ export interface PosterWorld {
 	/** A forum channel with no tags. */
 	forum(id: string): void;
 	member(userId: string, names: MemberNames): void;
+	/** A role of the guild (not @everyone's); the bot may give only roles below its highest. */
+	role(role: {
+		id: string;
+		name: string;
+		position: number;
+		managed?: boolean;
+	}): void;
+	/** Sets the roles the bot holds. */
+	botRoles(ids: readonly string[]): void;
+	/** Sets the roles a member holds; the member must exist (`member`). */
+	holdRoles(userId: string, ids: readonly string[]): void;
+	/** The ids of the roles a member holds, as Discord holds them. */
+	rolesHeldBy(userId: string): string[];
+	/** The ids of the guild's roles of that name. */
+	roleIdsNamed(name: string): string[];
+	/** Every change of roles so far, in order. */
+	roleChanges(): {
+		action: "add" | "remove" | "create";
+		roleId: string;
+		userId?: string;
+		reason: string | null;
+	}[];
 	/** Arranges why `userId` can or cannot see the channel; returns what `canView` must say. */
 	viewCase(channelId: string, userId: string, how: ViewCase): boolean;
 	/** A webhook by someone else, under that name; returns its id. */

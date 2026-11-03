@@ -106,6 +106,7 @@ export type {
 	FakeForum,
 	FakePosterChannel,
 	FakePosterMessage,
+	FakeRoleChange,
 } from "./core/testing/fake-poster.ts";
 export { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 export type { TestLocale } from "./core/testing/locale.ts";

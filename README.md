@@ -246,6 +246,11 @@ When a conversation is started over in a server channel or thread, the assistant
 | text | `─── new conversation ───` | The divider's text |
 | `false` | | Post no divider |
 
+| `discord.memberEvents` | Default | What it is |
+| --- | --- | --- |
+| `false` | `false` | The bot asks Discord for no privileged intent beyond Message Content |
+| `true` | | Plugins hear each member that joins the server (`memberJoined`). Needs Server Members Intent switched on under Bot in the Developer Portal; `roundtable doctor` checks it |
+
 | `discord.formatting` | Default | What it is |
 | --- | --- | --- |
 | text | Markdown renders except tables | What the model is told, in English, about how a reply renders in Discord; appended to the system prompt of every turn that replies there |

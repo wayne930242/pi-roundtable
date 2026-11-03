@@ -1,6 +1,7 @@
 import type {
 	DiscordCard,
 	DiscordPoster,
+	GuildRole,
 	PostedMessage,
 } from "../discord/poster/poster.ts";
 import {
@@ -21,7 +22,7 @@ import type {
 	FakePosterChannel,
 	FakePosterMessage,
 } from "./fake-poster-guild.ts";
-import { FakePosterReads } from "./fake-poster-reads.ts";
+import { FakePosterRoles, type FakeRoleChange } from "./fake-poster-roles.ts";
 
 export type { FakeForum } from "./fake-poster-forum.ts";
 export type {
@@ -29,6 +30,7 @@ export type {
 	FakePosterMessage,
 } from "./fake-poster-guild.ts";
 export { cardText } from "./fake-poster-guild.ts";
+export type { FakeRoleChange } from "./fake-poster-roles.ts";
 
 function blobOf(file: { data: Uint8Array; contentType?: string }) {
 	return {
@@ -77,6 +79,14 @@ export interface FakeDiscordPoster extends DiscordPoster {
 	readonly requests: number;
 	/** Makes the next call of `operation` throw `error`. */
 	failNext(operation: keyof DiscordPoster, error: DiscordPosterError): void;
+	/** The guild's roles by id, @everyone's left out; `ensureRole` makes more. Set them up here. */
+	readonly roles: Map<string, GuildRole>;
+	/** The ids of the roles the bot holds; it may give only roles below its highest. */
+	botRoles: string[];
+	/** The ids of the roles each member holds, by user id; a user is a member when `memberNames` or this lists them. */
+	readonly memberRoleIds: Map<string, string[]>;
+	/** Every change of roles, in order, with its audit-log reason. */
+	readonly roleChanges: FakeRoleChange[];
 	/** The channel's messages that still exist, oldest first. */
 	messagesIn(channelId: string): FakePosterMessage[];
 	/** A person writes in the channel (not through a webhook); the message's id. */
@@ -114,7 +124,7 @@ export interface FakeDiscordPoster extends DiscordPoster {
  * the next call or to refuse direct messages from a person. The same scenarios run against it and
  * against the real poster over an emulated Discord, so the two answer alike.
  */
-class FakePosterImpl extends FakePosterReads implements FakeDiscordPoster {
+class FakePosterImpl extends FakePosterRoles implements FakeDiscordPoster {
 	readonly #webhooks = new Map<string, string>();
 	readonly #madeListeners = new Set<
 		(channelId: string, webhook: string) => Promise<void>

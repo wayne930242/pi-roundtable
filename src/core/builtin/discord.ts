@@ -82,6 +82,12 @@ export interface DiscordOptions {
 	peerBots?: PeerBotsConfig;
 	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: a short English divider. */
 	freshMarker?: string | false;
+	/**
+	 * Asks Discord for the privileged Server Members intent and reports each member that joins as
+	 * the `memberJoined` event. Needs the intent switched on under Bot in the Developer Portal, or
+	 * the connection is refused. Default: off.
+	 */
+	memberEvents?: boolean;
 	/** What the model is told about how replies render in Discord; `false` tells it nothing. Default: Markdown renders, except tables. */
 	formatting?: string | false;
 	/**
@@ -120,7 +126,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				collection.compose(ownerRootCommand(options.rootCommand)),
 			);
 		},
-		setup: async ({ conversations, services, logger }) => {
+		setup: async ({ conversations, services, logger, events }) => {
 			const identity = services.find(IDENTITY);
 			// A host that keeps no copy texts on disk drops what an earlier run left.
 			if (options.cardCopies === false)
@@ -174,8 +180,12 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				...(options.formatting === undefined
 					? {}
 					: { formatting: options.formatting }),
+				...(options.memberEvents ? { memberEvents: true } : {}),
 			});
 			surface = connected;
+			// Joins come only with the Server Members intent, which `memberEvents` asks for.
+			if (options.memberEvents)
+				connected.onMemberJoined((event) => events.memberJoined?.(event));
 			// Every owner may use the owner's commands, by the identity service; the primary owner always.
 			const guard = commandGuard({
 				ownerId: options.ownerId,

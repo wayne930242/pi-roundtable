@@ -165,6 +165,7 @@ function discordAssembly(
 			...(discord.formatting === undefined
 				? {}
 				: { formatting: discord.formatting }),
+			...(discord.memberEvents ? { memberEvents: true } : {}),
 			cardGraceMs: discord.cardGraceSeconds * 1_000,
 			cardCopies: discord.cardCopies,
 		}),

@@ -1,6 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { Client, Collection, Events } from "discord.js";
+import { Client, Collection, Events, GatewayIntentBits } from "discord.js";
 import type { InboundMessage } from "../domain/conversation.ts";
+import type { MemberJoinedEvent } from "../event-types.ts";
 import { silentLogger } from "../log.ts";
 import { DiscordSurface } from "./discord-surface.ts";
 
@@ -14,7 +15,7 @@ afterEach(() => {
 });
 
 /** Starts a surface over a client that never connects, and hands back the client to emit events on. */
-async function started() {
+async function started(options: { memberEvents?: boolean } = {}) {
 	let client: Client | undefined;
 	spyOn(Client.prototype, "login").mockImplementation(async function (
 		this: Client,
@@ -30,7 +31,11 @@ async function started() {
 		ownerName: "Ada",
 		prompts: () => undefined,
 		logger: silentLogger(),
+		...options,
 	});
+	const joined: MemberJoinedEvent[] = [];
+	if (options.memberEvents)
+		surface.onMemberJoined((event) => void joined.push(event));
 	const deleted: string[] = [];
 	const edited: InboundMessage[] = [];
 	await surface.start(() => undefined, {
@@ -39,7 +44,7 @@ async function started() {
 		edited: (message) => void edited.push(message),
 	});
 	if (!client) throw new Error("the client did not start");
-	return { client, deleted, edited };
+	return { client, deleted, edited, joined, surface };
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
@@ -119,4 +124,42 @@ test("an edit of an uncached message is fetched before it is read", async () => 
 	);
 	await tick();
 	expect(edited.map((m) => m.text)).toEqual(["fetched"]);
+});
+
+const newcomer = (bot: boolean) => ({
+	id: "200",
+	guild: { id: GUILD },
+	user: { bot },
+});
+
+test("a member who joins is reported with the server, the user and whether it is a bot", async () => {
+	const { client, joined } = await started({ memberEvents: true });
+	client.emit(Events.GuildMemberAdd, newcomer(false) as never);
+	client.emit(Events.GuildMemberAdd, newcomer(true) as never);
+	expect(joined).toEqual([
+		{ surface: "discord", guildId: GUILD, userId: "200", bot: false },
+		{ surface: "discord", guildId: GUILD, userId: "200", bot: true },
+	]);
+});
+
+test("a join handler that throws is logged and the next join is still reported", async () => {
+	const { client, surface } = await started({ memberEvents: true });
+	const heard: string[] = [];
+	surface.onMemberJoined(() => {
+		throw new Error("boom");
+	});
+	surface.onMemberJoined((event) => void heard.push(event.userId));
+	client.emit(Events.GuildMemberAdd, newcomer(false) as never);
+	client.emit(Events.GuildMemberAdd, newcomer(false) as never);
+	expect(heard).toEqual(["200", "200"]);
+});
+
+test("the Server Members intent is asked for only with memberEvents", async () => {
+	const intents = async (memberEvents: boolean) => {
+		const { client } = await started({ memberEvents });
+		return client.options.intents.has(GatewayIntentBits.GuildMembers);
+	};
+	expect(await intents(false)).toBe(false);
+	(Client.prototype.login as unknown as { mockRestore(): void }).mockRestore();
+	expect(await intents(true)).toBe(true);
 });

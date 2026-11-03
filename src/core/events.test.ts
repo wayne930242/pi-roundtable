@@ -119,4 +119,42 @@ describe("EventBus", () => {
 		expect(heard).toEqual(["assign discord:1 true"]);
 		expect(logged).toMatchObject([{ plugin: "bad", event: "action" }]);
 	});
+
+	test("a member join reported to the sink reaches every handler, and a throwing one is logged", async () => {
+		const logged: { plugin: string; event: string }[] = [];
+		const bus = new EventBus({
+			...silentLogger(),
+			error: (fields: unknown) => {
+				logged.push(fields as { plugin: string; event: string });
+			},
+		});
+		const heard: string[] = [];
+		bus.link([
+			{
+				plugin: "bad",
+				events: {
+					memberJoined: () => {
+						throw new Error("boom");
+					},
+				},
+			},
+			{
+				plugin: "good",
+				events: {
+					memberJoined: (event) => {
+						heard.push(`${event.guildId} ${event.userId} ${event.bot}`);
+					},
+				},
+			},
+		]);
+		bus.sink.memberJoined?.({
+			surface: "discord",
+			guildId: "600000000000000001",
+			userId: "200",
+			bot: false,
+		});
+		await Bun.sleep(1);
+		expect(heard).toEqual(["600000000000000001 200 false"]);
+		expect(logged).toMatchObject([{ plugin: "bad", event: "memberJoined" }]);
+	});
 });

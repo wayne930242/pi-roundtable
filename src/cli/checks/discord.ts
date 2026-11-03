@@ -10,6 +10,8 @@ import { fail, ok, type Result, skipped } from "../report.ts";
 
 const PORTAL = "https://discord.com/developers/applications";
 const MESSAGE_CONTENT_FLAGS = (1 << 18) | (1 << 19);
+/** The application flags for the Server Members intent, granted or limited. */
+const GUILD_MEMBERS_FLAGS = (1 << 14) | (1 << 15);
 
 const object = (value: unknown): Record<string, unknown> =>
 	typeof value === "object" && value !== null
@@ -59,6 +61,14 @@ export class Discord {
 	api(): Promise<Step<DiscordApi>> {
 		this.#api ??= this.#client();
 		return this.#api;
+	}
+
+	/** Whether the configuration asks for member joins (`discord.memberEvents`), which needs the Server Members intent. */
+	async wantsMemberEvents(): Promise<boolean> {
+		const raw = await this.#project.raw();
+		return (
+			raw.ok && object(object(raw.value).discord).memberEvents === true
+		);
 	}
 
 	/** Who the token belongs to. */
@@ -129,7 +139,10 @@ export async function checkGuild(
 	);
 }
 
-/** The Message Content intent is switched on, without which the agents cannot read the channels. */
+/**
+ * The Message Content intent is switched on, without which the agents cannot read the channels,
+ * and, when `discord.memberEvents` is on, the Server Members intent too.
+ */
 export async function checkIntents(discord: Discord): Promise<Result> {
 	const bot = await discord.bot();
 	if (!bot.ok) return skipped("the token check failed");
@@ -148,7 +161,14 @@ export async function checkIntents(discord: Discord): Promise<Result> {
 			"the Message Content intent is off.",
 			`Turn on Message Content Intent under Bot in ${PORTAL}, save, and run the check again.`,
 		);
-	return ok("the Message Content intent is on");
+	if (!(await discord.wantsMemberEvents()))
+		return ok("the Message Content intent is on");
+	if ((flags & GUILD_MEMBERS_FLAGS) === 0)
+		return fail(
+			"the Server Members intent is off, and discord.memberEvents asks for it.",
+			`Turn on Server Members Intent under Bot in ${PORTAL}, save, and run the check again, or set discord.memberEvents to false.`,
+		);
+	return ok("the Message Content and Server Members intents are on");
 }
 
 /** The entry channel exists in the guild and the bot may do in it what the agents do; skipped when the agent server is off, which has no entry channel. */

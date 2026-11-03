@@ -137,6 +137,55 @@ describe("Discord intents", () => {
 	});
 });
 
+describe("Discord intents with discord.memberEvents", () => {
+	const members = project({
+		...validConfig,
+		discord: { ...validConfig.discord, memberEvents: true },
+	});
+	const run = (flags: number) =>
+		checkIntents(
+			new Discord(
+				members,
+				fakeHttp({
+					...healthyDiscord(all),
+					"/applications/@me": { status: 200, body: { flags } },
+				}),
+			),
+		);
+	test("passes with both intents, granted or limited", async () => {
+		for (const flags of [(1 << 18) | (1 << 14), (1 << 19) | (1 << 15)]) {
+			const result = await run(flags);
+			expect(result).toEqual({
+				status: "ok",
+				detail: "the Message Content and Server Members intents are on",
+			});
+		}
+	});
+	test("fails without the Server Members intent, saying where to turn it on", async () => {
+		const text = failure(await run(1 << 18));
+		expect(text).toContain("Server Members intent is off");
+		expect(text).toContain("Bot in https://discord.com/developers");
+		expect(text).toContain("discord.memberEvents");
+	});
+	test("still fails first for a missing Message Content intent", async () => {
+		expect(failure(await run(1 << 14))).toContain(
+			"Message Content intent is off",
+		);
+	});
+	test("leaves the Server Members intent alone when the flag is off", async () => {
+		const result = await checkIntents(
+			new Discord(
+				project(),
+				fakeHttp({
+					...healthyDiscord(all),
+					"/applications/@me": { status: 200, body: { flags: 1 << 18 } },
+				}),
+			),
+		);
+		expect(result.status).toBe("ok");
+	});
+});
+
 describe("Discord channel", () => {
 	const check = (routes: Record<string, never> | object) =>
 		checkChannel(project(), new Discord(project(), fakeHttp(routes as never)));

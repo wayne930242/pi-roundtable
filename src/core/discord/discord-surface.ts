@@ -1,8 +1,6 @@
 import {
 	AttachmentBuilder,
-	ChannelType,
 	Client,
-	DiscordAPIError,
 	Events,
 	GatewayIntentBits,
 	type Interaction,
@@ -27,6 +25,7 @@ import type {
 } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { OwnerNotifier } from "../domain/ports.ts";
+import type { MemberJoinedEvent } from "../event-types.ts";
 import { messages } from "../i18n/index.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../log.ts";
@@ -39,6 +38,7 @@ import {
 	contextSourceOf,
 } from "./channel-context.ts";
 import { discordChannelExecutor } from "./channel-executor.ts";
+import { channelInfoOf } from "./channel-info.ts";
 import type { ChannelExecutor } from "./channel-operations.ts";
 import type { ComposedCommands } from "./compose-commands.ts";
 import type { ChannelInfo, DiscordConnection } from "./connection.ts";
@@ -47,15 +47,17 @@ import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
 import { lateAnswerMessage } from "./inbound-message.ts";
 import type { IntercomTexts } from "./intercom-cards.ts";
+import {
+	explainIntents,
+	listenForJoins,
+	memberIntents,
+} from "./member-events.ts";
 import { listenForMessages, reportChanges } from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
 import { showStopPanel } from "./stop-button.ts";
 
 const PREFIX = "discord:";
-/** Discord's error code for a channel that does not exist or cannot be seen. */
-const UNKNOWN_CHANNEL = 10003;
-
 const TYPING_REFRESH_MS = 8_000;
 
 export interface DiscordSurfaceOptions {
@@ -69,6 +71,8 @@ export interface DiscordSurfaceOptions {
 	logger: Logger;
 	/** The divider posted in a server channel when its conversation starts over; `false` posts none. Default: `DEFAULT_FRESH_MARKER`. */
 	freshMarker?: string | false;
+	/** Asks Discord for the privileged Server Members intent, so `onMemberJoined` hears joins. Default: off. */
+	memberEvents?: boolean;
 	/** What the model is told about how replies render here; `false` tells it nothing. Default: `DISCORD_FORMATTING`. */
 	formatting?: string | false;
 	/** Where the agents' message cards keep their whole texts for the open button; without it a card posts as text. */
@@ -101,22 +105,24 @@ export class DiscordSurface
 		close: (threadId) => this.threadHost().close(threadId),
 	});
 	readonly #options: DiscordSurfaceOptions;
-	readonly #client = new Client({
-		intents: [
-			GatewayIntentBits.Guilds,
-			GatewayIntentBits.GuildMessages,
-			GatewayIntentBits.DirectMessages,
-			GatewayIntentBits.MessageContent,
-		],
-		partials: [Partials.Channel, Partials.Message],
-		allowedMentions: { parse: [] },
-	});
+	readonly #client: Client;
 
 	#interactions: ComposedCommands = { commands: [], modules: [] };
 	#onMessage: ((message: InboundMessage) => void) | undefined;
 
 	constructor(options: DiscordSurfaceOptions) {
 		this.#options = options;
+		this.#client = new Client({
+			intents: [
+				GatewayIntentBits.Guilds,
+				GatewayIntentBits.GuildMessages,
+				GatewayIntentBits.DirectMessages,
+				GatewayIntentBits.MessageContent,
+				...memberIntents(options.memberEvents),
+			],
+			partials: [Partials.Channel, Partials.Message],
+			allowedMentions: { parse: [] },
+		});
 		this.formatting = pickFormatting(options.formatting, DISCORD_FORMATTING);
 		// REST works before the gateway logs in; `login` sets the same token again.
 		this.#client.rest.setToken(options.token);
@@ -174,34 +180,9 @@ export class DiscordSurface
 		return new DiscordDashboard(this.#client, guildId, this.#options.logger);
 	}
 
-	/**
-	 * What a channel is called, for the web app's lists: undefined when Discord no longer knows
-	 * it; throws while the connection is not ready or Discord cannot be reached.
-	 */
-	async channelInfo(channelId: string): Promise<ChannelInfo | undefined> {
-		if (!this.#client.isReady()) throw new Error("Discord is not connected");
-		const channel = await this.#client.channels
-			.fetch(channelId)
-			.catch((error: unknown) => {
-				if (error instanceof DiscordAPIError && error.code === UNKNOWN_CHANNEL)
-					return null;
-				throw error;
-			});
-		if (!channel) return undefined;
-		if (channel.isDMBased())
-			return {
-				kind: "dm",
-				name:
-					channel.type === ChannelType.DM
-						? (channel.recipient?.username ?? "")
-						: (channel.name ?? ""),
-			};
-		return {
-			kind: "guild",
-			name: channel.name,
-			guild: channel.guild.name,
-			guildId: channel.guild.id,
-		};
+	/** See `DiscordConnection.channelInfo`. */
+	channelInfo(channelId: string): Promise<ChannelInfo | undefined> {
+		return channelInfoOf(this.#client, channelId);
 	}
 
 	/**
@@ -230,6 +211,11 @@ export class DiscordSurface
 	/** Reports deleted server channels by id; register before start. */
 	onChannelDeleted(handler: (channelId: string) => void): void {
 		this.#client.on(Events.ChannelDelete, (channel) => handler(channel.id));
+	}
+
+	/** Reports members that join a server; register before start. Hears none unless `memberEvents` is on. */
+	onMemberJoined(handler: (event: MemberJoinedEvent) => void): void {
+		listenForJoins(this.#client, handler, this.#options.logger);
 	}
 
 	/** The approval and question cards in a Discord channel, for those the scope names. */
@@ -289,7 +275,9 @@ export class DiscordSurface
 		const ready = new Promise<void>((resolve) =>
 			this.#client.once(Events.ClientReady, () => resolve()),
 		);
-		await this.#client.login(token);
+		await this.#client.login(token).catch((error: unknown) => {
+			throw explainIntents(error, this.#options.memberEvents);
+		});
 		await ready;
 		const { commands } = this.#interactions;
 		await this.#client.application?.commands.set(commands);

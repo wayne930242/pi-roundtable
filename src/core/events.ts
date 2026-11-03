@@ -53,5 +53,6 @@ export class EventBus {
 		turnProgress: (event) => void this.deliver("turnProgress", event),
 		changed: () => void this.deliver("changed"),
 		action: (event) => void this.deliver("action", event),
+		memberJoined: (event) => void this.deliver("memberJoined", event),
 	};
 }

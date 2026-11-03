@@ -11,13 +11,17 @@ export type DiscordFailure =
 
 /**
  * More about why Discord refused, where its code alone does not say: a category that is full (a
- * 400 with a form-body error), a channel that is no category or forum, and one in no right guild.
+ * 400 with a form-body error), a channel that is no category or forum, one in no right guild, and
+ * a role that cannot be given or taken.
  */
 export type DiscordReason =
 	| "category_full"
 	| "not_category"
 	| "not_forum" // a forum call on a channel that is no forum, or a post call on a thread that is no forum post
-	| "wrong_guild";
+	| "wrong_guild"
+	| "role_unassignable" // a role the bot may not give or take: @everyone's, a managed one, or one at or above its own highest
+	| "unknown_role" // the guild has no such role
+	| "not_member"; // the user is not in the guild
 
 /**
  * A failed Discord call. The message names the operation and Discord's own reason, never a URL,

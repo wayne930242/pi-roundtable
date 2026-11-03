@@ -67,6 +67,13 @@ export interface DiscordConfig {
 	 */
 	freshMarker?: string | false;
 	/**
+	 * Asks Discord for the privileged Server Members intent, so plugins hear each member that
+	 * joins the server as the `memberJoined` event. Turn on Server Members Intent under Bot in
+	 * the Developer Portal first: with it off there, the connection is refused, and `roundtable
+	 * doctor` says so. Default `false`, which needs no portal change.
+	 */
+	memberEvents?: boolean;
+	/**
 	 * What the model is told, English, about how a reply renders in Discord, appended to the system
 	 * prompt of every turn that replies there, after the persona. The default says Markdown
 	 * renders except tables, so the model writes bullet lists or `key: value` lines instead. A text
@@ -113,6 +120,7 @@ export interface ResolvedDiscord {
 	channelContext: NonNullable<DiscordConfig["channelContext"]>;
 	peerBots?: PeerBotsConfig;
 	freshMarker?: string | false;
+	memberEvents: boolean;
 	formatting?: string | false;
 	cardGraceSeconds: number;
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
@@ -148,6 +156,7 @@ export function resolvedDiscord(
 		...(discord.freshMarker === undefined
 			? {}
 			: { freshMarker: discord.freshMarker }),
+		memberEvents: discord.memberEvents ?? false,
 		...(discord.formatting === undefined
 			? {}
 			: { formatting: discord.formatting }),
@@ -195,6 +204,7 @@ export const discordShape = shape({
 	channelContext: optional(orOff(channelContextShape)),
 	peerBots: optional(peerBotsShape),
 	freshMarker: optional(orOff(text)),
+	memberEvents: optional(bool),
 	formatting: optional(orOff(text)),
 	cardGraceSeconds: optional(integer(1, 86_400)),
 	cardCopies: optional(

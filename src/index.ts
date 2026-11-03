@@ -351,6 +351,7 @@ export type {
 	EventSink,
 	HostEnv,
 	LinkedSessions,
+	MemberJoinedEvent,
 	Persona,
 	PluginContext,
 	PluginIdentity,

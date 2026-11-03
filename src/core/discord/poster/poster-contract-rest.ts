@@ -1,6 +1,7 @@
 import { REST } from "discord.js";
 import { DiscordEmulator } from "../../testing/discord-api-emulator.ts";
 import {
+	BOT_ID,
 	BOT_TOKEN,
 	COMPONENTS_V2,
 } from "../../testing/discord-api-emulator-state.ts";
@@ -46,6 +47,36 @@ export function restSubject(
 					...(names.nick ? { nick: names.nick } : {}),
 					...(names.global ? { globalName: names.global } : {}),
 				}),
+			role: (role) =>
+				void guild()?.roles.push({
+					id: role.id,
+					name: role.name,
+					permissions: "0",
+					position: role.position,
+					managed: role.managed === true,
+				}),
+			botRoles: (ids) =>
+				void guild()?.members.set(BOT_ID, {
+					userId: BOT_ID,
+					username: "relay-bot",
+					roles: [...ids],
+				}),
+			holdRoles: (userId, ids) => {
+				const member = guild()?.members.get(userId);
+				if (member) member.roles = [...ids];
+			},
+			rolesHeldBy: (userId) => guild()?.members.get(userId)?.roles ?? [],
+			roleIdsNamed: (name) =>
+				(guild()?.roles ?? [])
+					.filter((role) => role.name === name)
+					.map((role) => role.id),
+			roleChanges: () =>
+				emulator.state.roleAudit.map(({ action, roleId, userId, reason }) => ({
+					action,
+					roleId,
+					reason,
+					...(userId ? { userId } : {}),
+				})),
 			viewCase: (channelId, userId, how) => {
 				const found = guild();
 				const channel = emulator.state.channels.get(channelId);
