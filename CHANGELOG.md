@@ -5,7 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-This is a minor release (0.32.0): `DiscordPoster` gains four required methods and `DiscordReason` three members, so an outside implementer of the poster or an exhaustive switch over the reasons must be updated.
+## [0.32.0] - 2026-11-03
+
+This is a minor release: `DiscordPoster` gains four required methods and `DiscordReason` three members, so an outside implementer of the poster or an exhaustive switch over the reasons must be updated.
 
 ### Added
 

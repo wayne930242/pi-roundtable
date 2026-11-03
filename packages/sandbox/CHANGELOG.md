@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-03
+
+- Release in lockstep with pi-roundtable 0.32.0 (plugins hear member joins and manage member roles on Discord); no package-specific behavior changes.
+
 ## [0.31.8] - 2026-11-03
 
 - Release in lockstep with pi-roundtable 0.31.8 (the room drawer slides on from where the finger lets it go, without a frame shut); no package-specific behavior changes.
