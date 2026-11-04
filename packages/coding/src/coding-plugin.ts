@@ -34,10 +34,11 @@ import {
 	codingReport,
 	MAX_CODING_TASK_CHARS,
 } from "./coding-desk.ts";
-import { PiCodingWorker } from "./pi-coding-worker.ts";
+import { PiCodingWorker, type WorkerEnv } from "./pi-coding-worker.ts";
 import {
 	type ChangeReport,
 	type CloneCommand,
+	type GithubToken,
 	RepoShelf,
 	type RepoSummary,
 	reportPost,
@@ -129,6 +130,18 @@ export interface CodingOptions {
 	/** Absolute installed extension package paths. Default: none. */
 	workerPackages?: string[];
 	agentDir?: string;
+	/**
+	 * Host variables the worker process gets for its model and Pi runtime, such as the key its
+	 * `models.json` `$VAR` names or `CLAUDE_CODE_OAUTH_TOKEN`; its shell never gets them. Default:
+	 * the shell's whitelist and `PI_CODING_AGENT_DIR` only.
+	 */
+	workerEnv?: WorkerEnv;
+	/**
+	 * The token git and gh calls of the shelf (clone, fetch, push) get as GH_TOKEN, or a function
+	 * read at each call; no other host secret reaches them. Default: the host's GH_TOKEN, read when
+	 * the plugin sets up.
+	 */
+	githubToken?: GithubToken;
 	timeoutMs?: number;
 	/** Workers running at once on the host; default 4. More tasks wait in a queue. */
 	maxWorkers?: number;
@@ -230,6 +243,9 @@ export function coding(options: CodingOptions) {
 		setup(context) {
 			const shelf = new RepoShelf(options.shelfDir, options.clone, {
 				diagnosticChars: options.diagnosticChars,
+				...(options.githubToken !== undefined
+					? { githubToken: options.githubToken }
+					: {}),
 			});
 			for (const adoption of options.adoptClones ?? [])
 				shelf.adopt(adoption.from, adoption.repo);
@@ -243,6 +259,8 @@ export function coding(options: CodingOptions) {
 					...(context.env.scratchDir
 						? { scratchDir: context.env.scratchDir }
 						: {}),
+					...(options.workerEnv ? { workerEnv: options.workerEnv } : {}),
+					...(context.env.shellEnv ? { shellEnv: context.env.shellEnv } : {}),
 					prompt: options.workerPrompt,
 					blockText: options.workerBlockText,
 					diagnosticChars: options.diagnosticChars,

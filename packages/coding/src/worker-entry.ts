@@ -2,15 +2,20 @@ import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import {
 	createAgentSession,
+	createBashToolDefinition,
 	DefaultResourceLoader,
 	ModelRuntime,
 	SessionManager,
 	SettingsManager,
+	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import type { ShellEnv } from "pi-roundtable";
 import {
 	activeToolsExtension,
+	childEnv,
 	runWorkerTask,
 	SHELL_TOOLS,
+	secretMaskExtension,
 	textOf,
 } from "pi-roundtable/kit";
 import type { CodingJob, HeldCallAnswer } from "./coding-desk.ts";
@@ -25,6 +30,29 @@ interface StartMessage {
 	progress?: boolean;
 	/** The host's scratch dir, the worker's TMPDIR, where writes and removals need no approval. */
 	scratchDir?: string;
+	/** What the worker's shell gets besides `SHELL_ENV_NAMES`. */
+	shellEnv?: ShellEnv;
+}
+
+/**
+ * Pi's bash with the worker's environment cut to the shell's whitelist and `shellEnv`: the model's
+ * credentials the worker process holds never reach a command.
+ */
+export function workerBash(
+	cwd: string,
+	scratchDir: string | undefined,
+	shellEnv: ShellEnv = {},
+): ToolDefinition {
+	// SAFETY: Pi's bash definition is a ToolDefinition typed by its own parameter schema, which the session takes as any custom tool.
+	return createBashToolDefinition(cwd, {
+		spawnHook: (context) => ({
+			...context,
+			env: {
+				...childEnv(context.env, shellEnv),
+				...(scratchDir === undefined ? {} : { TMPDIR: scratchDir }),
+			},
+		}),
+	}) as unknown as ToolDefinition;
 }
 /** Said to every worker whose host has a scratch dir, after the host's own prompt or the default. */
 export function scratchDirPrompt(scratchDir: string): string {
@@ -54,6 +82,7 @@ async function run({
 	prompt,
 	progress,
 	scratchDir,
+	shellEnv,
 }: StartMessage): Promise<string> {
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
@@ -86,6 +115,7 @@ async function run({
 				name: "coding-shell",
 				factory: activeToolsExtension(() => SHELL_TOOLS),
 			},
+			{ name: "secret-mask", factory: secretMaskExtension() },
 			{
 				name: "coding-approvals",
 				factory: (pi) => {
@@ -127,6 +157,7 @@ async function run({
 		modelRuntime,
 		thinkingLevel: job.thinking,
 		resourceLoader: loader,
+		customTools: [workerBash(job.dir, scratchDir, shellEnv)],
 		sessionManager: SessionManager.inMemory(job.dir),
 		settingsManager: SettingsManager.inMemory({}),
 	});

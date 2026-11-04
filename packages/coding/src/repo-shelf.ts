@@ -13,7 +13,12 @@ import {
 	rmSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { AgentError, checkRepoName, scrubDiagnostic } from "pi-roundtable/kit";
+import {
+	AgentError,
+	checkRepoName,
+	childEnv,
+	scrubDiagnostic,
+} from "pi-roundtable/kit";
 
 /** What a clone would push to its default branch (repos-and-skills spec behavior 10). */
 export interface ChangeReport {
@@ -53,6 +58,12 @@ export interface RepoState {
 	uncommitted: string[];
 }
 
+/**
+ * The GitHub token git and gh calls get as GH_TOKEN, or a function read at each call; undefined
+ * leaves them to gh's own login.
+ */
+export type GithubToken = string | undefined | (() => string | undefined);
+
 export type CloneCommand = (repo: string, dir: string) => Promise<void>;
 
 /** A coding worker's own checkout: a linked worktree on its own branch, cut from the clone's HEAD. */
@@ -89,9 +100,39 @@ const GIT_TIMEOUT_MS = 60_000;
 const MAX_STAT_FILES = 40;
 const MAX_SUMMARY_CHARS = 120;
 
+/**
+ * Host variables git and gh need besides the shell's: their config files and homes, the identity a
+ * rebase commits as, ssh agent and ssh command, and gh's host; never a token, which comes from
+ * `githubToken`.
+ */
+const GIT_ENV_NAMES = [
+	"XDG_CONFIG_HOME",
+	"GIT_CONFIG_GLOBAL",
+	"GIT_CONFIG_SYSTEM",
+	"GIT_CONFIG_NOSYSTEM",
+	"GIT_AUTHOR_NAME",
+	"GIT_AUTHOR_EMAIL",
+	"GIT_COMMITTER_NAME",
+	"GIT_COMMITTER_EMAIL",
+	"GH_CONFIG_DIR",
+	"GH_HOST",
+	"SSH_AUTH_SOCK",
+	"GIT_SSH",
+	"GIT_SSH_COMMAND",
+];
+
+/** The environment of a git or gh call: the shell's whitelist, git's own names, and the token as GH_TOKEN. */
+function gitEnv(token: string | undefined): Record<string, string> {
+	return childEnv(process.env, {
+		pass: GIT_ENV_NAMES,
+		...(token ? { set: { GH_TOKEN: token } } : {}),
+	});
+}
+
 async function run(
 	command: string[],
-	cwd?: string,
+	cwd: string | undefined,
+	env: Record<string, string>,
 ): Promise<{ out: string; err: string; code: number }> {
 	const safeCommand =
 		command[0] === "git"
@@ -106,6 +147,7 @@ async function run(
 			: command;
 	const child = Bun.spawn(safeCommand, {
 		...(cwd ? { cwd } : {}),
+		env,
 		stdout: "pipe",
 		stderr: "pipe",
 		timeout: GIT_TIMEOUT_MS,
@@ -118,22 +160,21 @@ async function run(
 	return { out: out.trimEnd(), err: err.trim(), code };
 }
 
-/** Clones with gh, which authenticates with the host's GH_TOKEN; a failure's stderr is cut at `diagnosticChars`. */
+/**
+ * Clones with gh, which authenticates with `token` as GH_TOKEN (default the host's GH_TOKEN, read
+ * at each clone) or its own login; a failure's stderr is cut at `diagnosticChars`.
+ */
 const ghCloneWith =
-	(diagnosticChars?: number): CloneCommand =>
+	(diagnosticChars?: number, token?: () => string | undefined): CloneCommand =>
 	async (repo, dir) => {
 		checkRepoName(repo);
 		if (repo.startsWith("-"))
 			throw new AgentError("Repository owner cannot start with a dash.");
-		const { err, code } = await run([
-			"gh",
-			"repo",
-			"clone",
-			repo,
-			dir,
-			"--",
-			"--quiet",
-		]);
+		const { err, code } = await run(
+			["gh", "repo", "clone", repo, dir, "--", "--quiet"],
+			undefined,
+			gitEnv(token ? token() : process.env.GH_TOKEN),
+		);
 		if (code !== 0)
 			throw new AgentError(
 				`Cloning ${repo} failed: ${scrubDiagnostic(err, diagnosticChars) || `exit ${code}`}`,
@@ -211,14 +252,30 @@ export class RepoShelf {
 
 	readonly #diagnosticChars: number | undefined;
 
+	readonly #token: () => string | undefined;
+
 	constructor(
 		dir: string,
 		clone?: CloneCommand,
-		options: { diagnosticChars?: number | undefined } = {},
+		options: {
+			diagnosticChars?: number | undefined;
+			githubToken?: GithubToken | undefined;
+		} = {},
 	) {
 		this.dir = resolve(dir);
 		this.#diagnosticChars = options.diagnosticChars;
-		this.#clone = clone ?? ghCloneWith(options.diagnosticChars);
+		const { githubToken = process.env.GH_TOKEN } = options;
+		this.#token =
+			typeof githubToken === "function" ? githubToken : () => githubToken;
+		this.#clone = clone ?? ghCloneWith(options.diagnosticChars, this.#token);
+	}
+
+	/** A git or gh call with the shelf's token and no other host secret. */
+	#run(
+		command: string[],
+		cwd?: string,
+	): Promise<{ out: string; err: string; code: number }> {
+		return run(command, cwd, gitEnv(this.#token()));
 	}
 
 	/** Adopt an existing standalone clone at startup; an existing destination is never replaced. */
@@ -450,7 +507,7 @@ export class RepoShelf {
 			const taken =
 				existsSync(dir) ||
 				(
-					await run([
+					await this.#run([
 						"git",
 						"-C",
 						clone,
@@ -507,9 +564,16 @@ export class RepoShelf {
 				...kept,
 				reason: `the worker left uncommitted changes in its worktree:\n${treeDirty}`,
 			};
-		const rebase = await run(["git", "-C", treeDir, "rebase", "--quiet", head]);
+		const rebase = await this.#run([
+			"git",
+			"-C",
+			treeDir,
+			"rebase",
+			"--quiet",
+			head,
+		]);
 		if (rebase.code !== 0) {
-			const conflicted = await run([
+			const conflicted = await this.#run([
 				"git",
 				"-C",
 				treeDir,
@@ -517,14 +581,14 @@ export class RepoShelf {
 				"--name-only",
 				"--diff-filter=U",
 			]);
-			await run(["git", "-C", treeDir, "rebase", "--abort"]);
+			await this.#run(["git", "-C", treeDir, "rebase", "--abort"]);
 			return {
 				status: "conflict",
 				...kept,
 				files: conflicted.out ? conflicted.out.split("\n") : [],
 			};
 		}
-		const merge = await run([
+		const merge = await this.#run([
 			"git",
 			"-C",
 			clone,
@@ -581,11 +645,27 @@ export class RepoShelf {
 	async removeWorktree(tree: WorkerTree): Promise<void> {
 		const clone = this.dirOf(tree.repo);
 		this.#treeDir(tree, false);
-		await run(["git", "-C", clone, "worktree", "remove", "--force", tree.dir]);
+		await this.#run([
+			"git",
+			"-C",
+			clone,
+			"worktree",
+			"remove",
+			"--force",
+			tree.dir,
+		]);
 		if (existsSync(tree.dir))
 			rmSync(tree.dir, { recursive: true, force: true });
-		await run(["git", "-C", clone, "worktree", "prune"]);
-		await run(["git", "-C", clone, "branch", "-D", "--quiet", tree.branch]);
+		await this.#run(["git", "-C", clone, "worktree", "prune"]);
+		await this.#run([
+			"git",
+			"-C",
+			clone,
+			"branch",
+			"-D",
+			"--quiet",
+			tree.branch,
+		]);
 	}
 
 	/** A worktree path, refused unless it lies in this repository's worktree folder. */
@@ -614,7 +694,7 @@ export class RepoShelf {
 			if (fetch) await this.#git(dir, "fetch", "--quiet", "origin");
 			const branch = await this.#git(dir, "rev-parse", "--abbrev-ref", "HEAD");
 			const status = await this.#git(dir, "status", "--porcelain");
-			const last = await run([
+			const last = await this.#run([
 				"git",
 				"-C",
 				dir,
@@ -623,7 +703,7 @@ export class RepoShelf {
 				"--format=%h %s (%cs)",
 				"--abbrev=12",
 			]);
-			const counts = await run([
+			const counts = await this.#run([
 				"git",
 				"-C",
 				dir,
@@ -678,7 +758,7 @@ export class RepoShelf {
 	async #defaultBranch(dir: string): Promise<string> {
 		await this.#git(dir, "remote", "set-head", "origin", "--auto");
 		const read = () =>
-			run([
+			this.#run([
 				"git",
 				"-C",
 				dir,
@@ -693,7 +773,7 @@ export class RepoShelf {
 	}
 
 	async #git(dir: string, ...args: string[]): Promise<string> {
-		const { out, err, code } = await run(["git", "-C", dir, ...args]);
+		const { out, err, code } = await this.#run(["git", "-C", dir, ...args]);
 		if (code !== 0)
 			throw new AgentError(
 				`git ${args[0]} failed in ${dir}: ${scrubDiagnostic(err, this.#diagnosticChars) || `exit ${code}`}`,

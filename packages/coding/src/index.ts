@@ -23,11 +23,12 @@ export type {
 	RepoToolName,
 } from "./coding-plugin.ts";
 export { CODING, coding } from "./coding-plugin.ts";
-export type { PiCodingWorkerOptions } from "./pi-coding-worker.ts";
+export type { PiCodingWorkerOptions, WorkerEnv } from "./pi-coding-worker.ts";
 export { PiCodingWorker } from "./pi-coding-worker.ts";
 export type {
 	ChangeReport,
 	CloneCommand,
+	GithubToken,
 	Integration,
 	RepoState,
 	RepoSummary,

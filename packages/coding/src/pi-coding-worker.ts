@@ -1,9 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { HeldCall, HoldCheck } from "pi-roundtable";
+import type { HeldCall, HoldCheck, ShellEnv } from "pi-roundtable";
 import {
 	AgentError,
 	canonicalJson,
+	childEnv,
 	holdChain,
 	shellHoldRule,
 } from "pi-roundtable/kit";
@@ -38,6 +39,31 @@ export interface PiCodingWorkerOptions {
 	blockText?: (answer: "declined" | "held", action: string) => string;
 	/** Longest worker error text kept for the report, in characters; default 600. */
 	diagnosticChars?: number;
+	/**
+	 * What the worker process gets of the host's environment besides `SHELL_ENV_NAMES` and
+	 * `PI_CODING_AGENT_DIR`: the variables its model needs, such as the key a `models.json` `$VAR`
+	 * names or `CLAUDE_CODE_OAUTH_TOKEN`. Its shell never gets them.
+	 */
+	workerEnv?: WorkerEnv;
+	/** What the worker's shell gets besides `SHELL_ENV_NAMES`, as the agents' shell; default the host's `env.shellEnv`. */
+	shellEnv?: ShellEnv;
+}
+
+/** Host variables a coding worker's process gets for its model and Pi runtime, by name. */
+export interface WorkerEnv {
+	pass?: readonly string[];
+}
+
+/** The worker process's environment: the shell's whitelist, Pi's agent dir, `workerEnv.pass`, and TMPDIR. */
+export function workerProcessEnv(
+	source: Readonly<Record<string, string | undefined>>,
+	workerEnv: WorkerEnv = {},
+	scratchDir?: string,
+): Record<string, string> {
+	return childEnv(source, {
+		pass: ["PI_CODING_AGENT_DIR", ...(workerEnv.pass ?? [])],
+		...(scratchDir ? { set: { TMPDIR: scratchDir } } : {}),
+	});
 }
 interface WorkerMessage {
 	type: string;
@@ -107,9 +133,11 @@ export class PiCodingWorker implements CodingWorker {
 			],
 			{
 				cwd: job.dir,
-				...(this.#options.scratchDir
-					? { env: { ...process.env, TMPDIR: this.#options.scratchDir } }
-					: {}),
+				env: workerProcessEnv(
+					process.env,
+					this.#options.workerEnv,
+					this.#options.scratchDir,
+				),
 				stdin: "ignore",
 				stdout: "ignore",
 				stderr: "ignore",
@@ -127,6 +155,9 @@ export class PiCodingWorker implements CodingWorker {
 							progress: progress !== undefined,
 							...(this.#options.scratchDir
 								? { scratchDir: this.#options.scratchDir }
+								: {}),
+							...(this.#options.shellEnv
+								? { shellEnv: this.#options.shellEnv }
 								: {}),
 						});
 					} else if (
