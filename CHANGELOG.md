@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-04
+
+- Release in lockstep with pi-roundtable-web 0.32.1 (optimistic mark-as-read, a Home button at the foot of the room drawer, Discord's -# subtext and line breaks in messages, the shared prompt's description in zh-TW, and the push device list centred); no core behavior changes.
+
 ## [0.32.0] - 2026-11-03
 
 This is a minor release: `DiscordPoster` gains four required methods and `DiscordReason` three members, so an outside implementer of the poster or an exhaustive switch over the reasons must be updated.

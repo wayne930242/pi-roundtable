@@ -5,8 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-04
+
 ### Added
 
+- A message reads as Discord writes it: a line that starts with `-# ` is subtext, a small quiet line (a change report's closing note, for one), and a single line break inside a paragraph stays a line break. Code keeps `-# ` as written.
 - The room drawer on a phone has a Home button at its foot that stays in place while the rooms scroll. A tap closes the drawer and opens the home room, the way a row does. Inside the home room it is marked current and only closes the drawer; with no home room there is no button.
 
 ### Changed

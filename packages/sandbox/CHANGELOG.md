@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-04
+
+- Release in lockstep with pi-roundtable 0.32.1 (optimistic mark-as-read, a Home button at the foot of the room drawer, Discord's -# subtext and line breaks in messages, the shared prompt's description in zh-TW, and the push device list centred); no package-specific behavior changes.
+
 ## [0.32.0] - 2026-11-03
 
 - Release in lockstep with pi-roundtable 0.32.0 (plugins hear member joins and manage member roles on Discord); no package-specific behavior changes.
