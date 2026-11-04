@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The worker process no longer inherits the host's environment: it gets the shell's whitelist (`SHELL_ENV_NAMES`), `PI_CODING_AGENT_DIR`, `TMPDIR`, and the names the new option `workerEnv: { pass? }` lists (type `WorkerEnv`). Its `bash` gets only the whitelist and the host's `shellEnv`, never the model's credentials, and its tool results are masked like the host's. **Migration:** a worker whose model reads a key from the environment (a `models.json` `$VAR`, `CLAUDE_CODE_OAUTH_TOKEN`) needs it named, as in `workerEnv: { pass: ["CLAUDE_CODE_OAUTH_TOKEN"] }`; a worker on Pi's `auth.json` login needs nothing.
+- The shelf's git and gh calls (clone, fetch, push, `repo_list` fetch) get the whitelist, git's config, identity and ssh variables, and a GitHub token as `GH_TOKEN` from the new option `githubToken` (a string or a function; type `GithubToken`), by default the host's `GH_TOKEN` read when the plugin sets up, so existing hosts keep working. No other host secret reaches them.
+
 ## [0.32.1] - 2026-11-04
 
 - Release in lockstep with pi-roundtable 0.32.1 (optimistic mark-as-read, a Home button at the foot of the room drawer, Discord's -# subtext and line breaks in messages, the shared prompt's description in zh-TW, and the push device list centred); no package-specific behavior changes.

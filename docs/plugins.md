@@ -169,7 +169,7 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | Field | What it is |
 |---|---|
 | `logger` | The host's logger with `plugin: <your name>` on every line; each line is JSON on stdout. Its type is `Logger` (`debug`, `info`, `warn`, `error`, `fatal`, `child(fields)`), which a pino logger satisfies |
-| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)), and `agentTools`, `"full"` or `"chat-only"` ([chat-only agents](#chat-only-agents-no-shell-file-or-workspace-tools)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
+| `env` | The host's own environment for the run: `locale`, `timeZone` (an IANA zone), `now()`, `scratchDir` when the host has one, `characterSkins`, the six skin tones the host draws its agents with ([host skins](#host-skins-the-charactersskins-option)), `agentTools`, `"full"` or `"chat-only"` ([chat-only agents](#chat-only-agents-no-shell-file-or-workspace-tools)), and `shellEnv` when the host sets one ([the agents' shell environment](#the-agents-shell-environment)); read the zone from here rather than from the process, give `scratchDir` to a shell the plugin runs itself, and pass `characterSkins` to `composeSvg` when the plugin draws a character |
 | `database()` | The host's one PostgreSQL connection (a Bun `SQL`), already migrated |
 | `toolTiers` | What each tool needs; ask it when a tool is used, not during setup |
 | `events` | Where the core reports turns and team changes to every plugin's handlers |
@@ -1135,7 +1135,7 @@ The mode is read when the card is asked for, so a toggle applies to the next car
 
 #### The shell rule
 
-`shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write` and `edit` calls; the agent server links it, and a session without a workspace has no shell.
+`shellHoldRule` in `pi-roundtable/kit` judges the agents' `bash`, `write`, `edit` and `read` calls (a `read` only for a secret file); the agent server links it, and a session without a workspace has no shell.
 Its scratch roots are the shared workspace (`HoldContext.workspace`) and the scratch dir (`HoldContext.scratchDir`).
 The scratch dir is the config's `scratchDir`, by default `<os temp dir>/<discord.rootCommand>-scratch` (such as `/tmp/roundtable-scratch`); the agent server creates it with mode 0700 at startup and refuses one that is a symlink or another user's, and the agents' `bash` runs with `TMPDIR` pointing to it, so tools that read `TMPDIR` and GNU `mktemp` write there. macOS's BSD `mktemp` ignores `TMPDIR` for a bare `mktemp`; `mktemp -p "$TMPDIR"` works with both, and the agents' prompt tells them to use it.
 `AgentSessions.scratchDir` carries it to a runtime, and the agents' prompt tells them to write temporary files there, and to show a file with `attach_file` or a `discord_send_message` file `path` rather than reading an image or base64-encoding it.
@@ -1156,7 +1156,7 @@ The rule reports the class of **every** held command in the line, including thos
 | `shell.rm` | an `rm` outside the scratch roots, or one the line cannot resolve |
 | `shell.write` | a redirect, `tee`, `write` or `edit` outside the scratch roots |
 | `shell.service` | `systemctl` and `service` changes |
-| `shell.docker` | stopping, removing or pruning containers, images and volumes; `docker compose down` |
+| `shell.docker` | stopping, removing or pruning containers, images and volumes; `docker compose down`; `docker run`, `exec`, `create` and `cp` (also under `docker container` and `docker compose run`, `exec`, `cp`), which run commands or copy files as the daemon's root |
 | `shell.firewall` | `ufw`, `iptables`, `ip6tables`, `nft` changes |
 | `shell.packages` | `apt`, `apt-get`, `snap`, `dpkg` installs and removals |
 | `shell.push` | a plain `git push` the push policy holds |
@@ -1164,6 +1164,7 @@ The rule reports the class of **every** held command in the line, including thos
 | `shell.reset-hard` | `git reset --hard` |
 | `shell.gh` | `gh` writes |
 | `shell.crontab` | `crontab -r` |
+| `shell.secret-read` | printing the environment (`env` or `printenv` with no command to run, `export` or `export -p`, `declare -p`, `declare -x` and `typeset` with no names, `set` alone, `compgen -e`), a file reader (`cat`, `less`, `head`, `tail`, `grep`, `sed`, `awk`, `base64`, `xxd`, `cp`, `tar`, `zip`, `curl -d @`/`-F @`/`--data-binary @`/`-T`, and the like) or a `<` redirect of a secret file (`DEFAULT_SECRET_PATHS` and the rule's `secretPaths`), Pi's `read` tool on one, `gh auth token`, `gh auth status -t`/`--show-token`, `git credential`, and `git config` reading `credential.*` or listing everything |
 | `shell.unreadable` | a line the rule cannot read to the end, so it cannot rule out a destructive command: longer than 200,000 characters, nested deeper than 48 levels, a here-document or `case` it cannot place, a script built at run time (`eval`, `bash -c` of a variable or a substitution), a shell that reads a script the line does not show as a word (`echo x \| bash`, a here-document or here-string for a shell, `source <(…)`, `. /dev/stdin`, a file the line wrote earlier and then runs, anything `xargs` fills in), `env -S`, a builtin's subscript that runs a substitution (`declare 'a[$(x)]=1'`), `PS4`, `PROMPT_COMMAND` and the other variables that run a command, or a rule that failed while judging |
 
 The rule reads a line the way bash does, so text that only looks like a command stays unheld and text that runs is judged: quotes (`'…'`, `"…"`, `$'…'`, where a backslash escapes the next character), `$(…)` and backticks at any depth, `${…}`, comments (a `)` or a quote in one means nothing), here-document bodies up to their delimiter line (an unquoted body is still searched for substitutions, a quoted one is not), `case` patterns, arithmetic (`$((1<<2))` is a shift), line continuations, leading keywords (`then sudo ls`, `do rm -rf /x`), a descriptor before the command (`3>&1 sudo ls`), `eval`, `bash -c` (also `-ec`), and `find -exec`. Where it cannot tell, it holds the whole line as `shell.unreadable` instead of guessing; an error inside the rule also holds the call. So does a command whose name is a brace expansion, a pattern or a variable the line did not set to a literal (`{sudo,ls}`, `/usr/bin/su*`, `$cmd args`). The rule names programs it knows; a wrapper it does not list (`flock`, `chroot`, `ssh host`) runs its command unjudged. Known gaps: words in arithmetic (`$(( ))`, `(( ))`) are not commands, but a `$(` or backtick inside them is judged. A `bash -c` script is held whole only when the outer shell expands a substitution in it; a single-quoted script is judged like a line. `trap` scripts are judged. `alias NAME=…`, an assignment to `PROMPT_COMMAND`, `PS0`–`PS4`, `BASH_ENV`, `ENV` or `SHELLOPTS`, and `${x@P}` are held as `shell.unreadable`, because bash runs their value later. A line that evaluates arithmetic and also holds a literal `$(` or backtick (`x='a[$(cmd)]'; echo $((x))`) is held as `shell.unreadable`, so `echo '$(date)'; echo $((1 + 2))` is held too. Not followed: array subscripts and `printf -v` that evaluate a value, `source` of a file that defines aliases or traps, and a command run by a program the rule does not list.
@@ -1183,9 +1184,11 @@ ROUNDTABLE_SHELL_FUZZ=1 ROUNDTABLE_SHELL_FUZZ_BASE=<seed> bun test src/core/modu
 
 `ROUNDTABLE_SHELL_FUZZ` is the number of lines, `ROUNDTABLE_SHELL_FUZZ_BASE` the first seed (the others follow it) and `ROUNDTABLE_SHELL_FUZZ_JOBS` how many bash processes run at once (up to six by default; use `1` on a busy machine); a line is a function of its seed alone. Each line runs in a process group of its own, killed as a whole after 5 seconds or when the line ends, with a cap on the user's processes. A line the fuzz finds goes into the hand corpus, minimized, so the fix stays tested without the generator.
 
-Yolo mode never approves these unless `autonomy.yolo.allow` lists them: `YOLO_CARDED_SHELL_CLASSES` is every class above except `shell.write` and `shell.push`; that includes `shell.unreadable`.
+Yolo mode never approves these unless `autonomy.yolo.allow` lists them: `YOLO_CARDED_SHELL_CLASSES` is every class above except `shell.write` and `shell.push`; that includes `shell.unreadable` and `shell.secret-read`.
 
-`shellHoldRuleFor({ ownPushOwners?, heldPushRepos? })` (its options are the type `PushPolicy`) is the same rule with plain pushes to the owner's own repositories let through; `shellHoldRule` is `shellHoldRuleFor()`, which holds every push.
+`shellHoldRuleFor({ ownPushOwners?, heldPushRepos?, secretPaths? })` (its options are the type `ShellPolicy`, which extends `PushPolicy`) is the same rule with plain pushes to the owner's own repositories let through; `shellHoldRule` is `shellHoldRuleFor()`, which holds every push.
+`secretPaths` adds globs to `DEFAULT_SECRET_PATHS` (`/proc/*/environ`, `*.env`, `.env*` but `.env.example`, `.env.sample` and `.env.template`, `~/.ssh/**`, `~/.config/gh/**`, `.git-credentials`, `.netrc`, `.pgpass`, `~/.pi/**/auth.json`, and `auth.json` in `PI_CODING_AGENT_DIR`): a glob with no `/` matches a file name anywhere, `~/` is the home directory, `*` stays within a directory, `**` crosses them, a trailing `/**` takes the directory too, and a leading `!` lets a match run.
+The rule matches the paths a command line names; a program it does not list as a reader (`python3 -c 'open(".env")'`), a variable it cannot follow, or a glob in a directory part is not caught. See [the agents' shell environment](#the-agents-shell-environment) for what keeps secrets out of the shell in the first place.
 A push runs without a hold when all of these hold:
 
 - it does not force (`-f`, `--force*`, a `+` refspec), delete (`--delete`, `-d`, a `:ref` refspec), or push tags or more than its refs (`--tags`, `--follow-tags`, `--mirror`, `--all`, `--prune`), takes no other option than `-u`, `-q`, `-v`, `-n`, `--no-verify`, `--atomic`, `--porcelain`, `--progress` and `-o`, and names no `refs/tags/…` ref or local tag;
@@ -1202,6 +1205,26 @@ const shell = shellHoldRuleFor({
 	heldPushRepos: ["octocat/deployed-app"],
 });
 ```
+
+#### The agents' shell environment
+
+The agents' `bash` does not inherit the host process's environment.
+It gets the names in `SHELL_ENV_NAMES` (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TERM`, `TMPDIR`, the proxy variables in both cases, `SSL_CERT_FILE`, `SSL_CERT_DIR`, and Pi's `PI_*` session names), and what the host's `shellEnv` adds: `pass`, more host variables by name (a trailing `*` matches a prefix), and `set`, fixed values that win.
+A secret the host needs (a bot token, a model login, `DATABASE_URL`, `GH_TOKEN`) stays in the host process; give a shell one only by naming it:
+
+```ts
+export default {
+	// ...
+	shellEnv: { pass: ["GH_TOKEN"], set: { GIT_PAGER: "cat" } },
+} satisfies RoundtableConfig;
+```
+
+A host composed by hand sets the same object as `RoundtableOptions.environment.shellEnv` (type `ShellEnvConfig`); plugins read it as `context.env.shellEnv` and give it to the shells they run, as the coding plugin's workers do.
+`childEnv(source, { pass?, set? })` (`pi-roundtable/kit`) builds such an environment for any child process: a plugin that spawns a tool needing a secret passes that one secret, to that tool only.
+
+Before a tool's result enters the model's context, `maskSecrets` replaces each value of a host variable whose name `SECRET_NAME` matches (`TOKEN`, `SECRET`, `KEY`, `PASS`, `PASSWORD`, `DATABASE_URL`, `JWT`, `CREDENTIAL`, any case) and that is at least 8 characters with `****`; every session runs `secretMaskExtension()` after the other extensions' `tool_result` handlers.
+
+None of this is a sandbox. The shell runs as the host's user, so a determined command reads what that user can: `/proc/<host pid>/environ`, a file the rule does not know, a token in a program's memory. The whitelist, the `shell.secret-read` hold and the mask stop casual and accidental leaks. To keep secrets from the agents, run their shells under a dedicated account without the `docker` group (membership in it equals root), or use the sandbox package.
 
 ### `PROMPTS`: prompt texts the owner edits
 
@@ -4519,6 +4542,8 @@ Import from the entries listed below; source area files are internal.
 | `HoldRule` | `pi-roundtable` | type |
 | `HostEnv` | `pi-roundtable` | type |
 | `HostEnvironment` | `pi-roundtable` | type |
+| `ShellEnv` | `pi-roundtable` | type |
+| `ShellEnvConfig` | `pi-roundtable` | type |
 | `HostStoppingError` | `pi-roundtable` | value |
 | `HttpRoute` | `pi-roundtable` | type |
 | `IDENTITY` | `pi-roundtable` | value |
@@ -4857,6 +4882,10 @@ Import from the entries listed below; source area files are internal.
 | `PushPolicy` | `pi-roundtable/kit` | type |
 | `SCHEDULE_TOOLS` | `pi-roundtable/kit` | value |
 | `SHELL_TOOLS` | `pi-roundtable/kit` | value |
+| `SHELL_ENV_NAMES` | `pi-roundtable/kit` | value |
+| `DEFAULT_SECRET_PATHS` | `pi-roundtable/kit` | value |
+| `SECRET_NAME` | `pi-roundtable/kit` | value |
+| `ShellPolicy` | `pi-roundtable/kit` | type |
 | `SKILL_LIST_TOOL` | `pi-roundtable/kit` | value |
 | `createCodexImages` | `pi-roundtable/kit` | value |
 | `drawCodexImage` | `pi-roundtable/kit` | value |
@@ -4955,6 +4984,9 @@ Import from the entries listed below; source area files are internal.
 | `settleTurn` | `pi-roundtable/kit` | value |
 | `shellHoldRule` | `pi-roundtable/kit` | value |
 | `shellHoldRuleFor` | `pi-roundtable/kit` | value |
+| `childEnv` | `pi-roundtable/kit` | value |
+| `maskSecrets` | `pi-roundtable/kit` | value |
+| `secretMaskExtension` | `pi-roundtable/kit` | value |
 | `skillListExtension` | `pi-roundtable/kit` | value |
 | `splitReply` | `pi-roundtable/kit` | value |
 | `stringList` | `pi-roundtable/kit` | value |

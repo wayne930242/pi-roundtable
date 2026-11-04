@@ -56,6 +56,8 @@ export default {
 | `skipUnavailableCarriedSkills` | `false` | 明確開啟後，略過並告知載入失敗的 implicit skill；指定 skill 仍會拒絕。 |
 | `workerPackages` | `[]` | worker 載入的已安裝 Pi extension 絕對路徑。 |
 | `agentDir` | Pi host 目錄 | Pi 登入與 model 設定所在目錄。 |
+| `workerEnv` | `{}` | `{ pass? }`：worker process 為了 model 額外取得的 host 環境變數，例如 `CLAUDE_CODE_OAUTH_TOKEN`；它的 shell 永遠拿不到。 |
+| `githubToken` | setup 時讀取的 host `GH_TOKEN` | 字串或函式，只以 `GH_TOKEN` 交給 shelf 的 git 與 gh 呼叫。 |
 | `timeoutMs` | `3600000` | 工作時間上限；等待 owner 核准的時間不計入。 |
 | `holds` | 無 | 額外的 worker hold check。 |
 | `clone` | `ghClone` | 替代的 Git host clone 實作。 |
@@ -70,7 +72,8 @@ clone 路徑仍是 `shelfDir/owner/repo`，不需要資料庫遷移。
 ## 安全模型
 
 這是 host 上的 coding desk，不是 sandbox。
-worker 會繼承 host 環境，能讀取 host 使用者可存取的檔案、執行 shell command、使用網路並建立 commit。
+worker process 只拿到 shell 的環境變數白名單、`PI_CODING_AGENT_DIR` 與 `workerEnv.pass` 列出的名稱；它的 shell 只拿到白名單與 host 的 `shellEnv`，永遠拿不到 model 的憑證。
+它仍能讀取 host 使用者可存取的檔案、執行 shell command、使用網路並建立 commit。
 hold rule 只會用 heuristic 偵測特定高風險 shell 操作，不是作業系統隔離。
 只對可信任的 repository 和程式碼使用，最好讓它在權限較低的專用 host 帳號下執行。
 如果不能接受它存取 host，請改用 container 或 VM。

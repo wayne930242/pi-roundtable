@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+This is a minor release with breaking defaults: the agents' shell and the coding plugin's workers no longer inherit the host's environment, and more shell commands are held. See the migration notes below.
+
+### Changed
+
+- The agents' `bash` gets only the names in `SHELL_ENV_NAMES` (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TERM`, `TMPDIR`, the proxy variables, `SSL_CERT_FILE`, `SSL_CERT_DIR`, and Pi's `PI_*` session names) instead of the whole host environment, so `env` no longer prints the bot tokens, model logins, `GH_TOKEN`, `DATABASE_URL` and keys the host holds. The new config key and `HostEnvironment` field `shellEnv: { pass?, set? }` (types `ShellEnv` and `ShellEnvConfig`, main entry) names more host variables to pass and fixed values to set; plugins read it as `context.env.shellEnv`. A session without a scratch dir now gets the same whitelisted `bash`.
+- The shell rule holds reading secrets as the new class `shell.secret-read`, which `YOLO_CARDED_SHELL_CLASSES` includes, so yolo mode cards it: `env` or `printenv` with no command to run, `export`/`export -p`, `declare -p`, `declare -x` and `typeset` with no names, `set` alone, `compgen -e`; a file reader (`cat`, `less`, `head`, `tail`, `grep`, `sed`, `awk`, `base64`, `xxd`, `cp`, `tar`, `zip`, `curl -d @`/`-F @`/`--data-binary @`/`-T`, and the like) or a `<` redirect of a secret file; Pi's `read` tool on one; `gh auth token`, `gh auth status -t`/`--show-token`; `git credential`; and `git config` reading `credential.*` or listing everything. Secret files are `DEFAULT_SECRET_PATHS` (`/proc/*/environ`, `*.env`, `.env*` except `.env.example`, `.env.sample`, `.env.template`, `~/.ssh/**`, `~/.config/gh/**`, `.git-credentials`, `.netrc`, `.pgpass`, Pi's `auth.json`) plus the globs of the new `shellHoldRuleFor` option `secretPaths` (its options are now the type `ShellPolicy`, which extends `PushPolicy`). `env FOO=1 cmd` is still judged as `cmd`.
+- `docker run`, `exec`, `create` and `cp`, also under `docker container` and as `docker compose run`, `exec` and `cp`, are held as `shell.docker`: they run commands or copy files as the daemon's root.
+- Tool output is masked before it enters the model's context: each value of a host variable whose name matches `SECRET_NAME` (`TOKEN`, `SECRET`, `KEY`, `PASS`, `PASSWORD`, `DATABASE_URL`, `JWT`, `CREDENTIAL`) and that is at least 8 characters becomes `****`, in every tool's result, by the core's `secretMaskExtension()`.
+
+### Added
+
+- In `pi-roundtable/kit`, for a plugin that spawns a child process or runs a session of its own: `childEnv` (`childEnv(source, { pass?, set? })`, the environment of a child process), `SHELL_ENV_NAMES`, `ShellPolicy`, `DEFAULT_SECRET_PATHS`, `maskSecrets`, `SECRET_NAME` and `secretMaskExtension`. `ShellEnv` and `ShellEnvConfig` are exported from the main entry.
+- README and site: a threat model of the host shell. It runs as the host's user; holds are not a sandbox; the whitelist, the secret-read hold and the mask stop casual and accidental leaks, not a determined read by the same user. Run agent shells under a dedicated account without the `docker` group, which equals root, or use pi-roundtable-sandbox.
+
+### Migration
+
+- A command in the agents' shell that relied on a host variable now misses it. A `git push` whose credential helper reads `GH_TOKEN`, or a CLI that reads an API key, needs it named: `shellEnv: { pass: ["GH_TOKEN"] }`. Prefer a fixed, narrower value in `set`, or a credential the tool reads from its own config, to passing a host secret.
+- A yolo conversation now asks on a card for `env`, `printenv`, reading `.env` files and the other `shell.secret-read` commands, and for `docker run`/`exec`/`create`/`cp`; list the class in `autonomy.yolo.allow` to approve it without a card. A hold rule built with `shellHoldRuleFor` takes `secretPaths` to add files.
+- An exhaustive switch over the shell classes gains `shell.secret-read`.
+
 ## [0.32.1] - 2026-11-04
 
 - Release in lockstep with pi-roundtable-web 0.32.1 (optimistic mark-as-read, a Home button at the foot of the room drawer, Discord's -# subtext and line breaks in messages, the shared prompt's description in zh-TW, and the push device list centred); no core behavior changes.

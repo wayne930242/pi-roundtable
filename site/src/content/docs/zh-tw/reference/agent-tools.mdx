@@ -83,8 +83,17 @@ agent session 帶有 Pi 的 shell 和檔案工具。
 | `edit` | 編輯檔案。 | `owner` |
 | `write` | 寫入檔案。 | `owner` |
 
-讀取一律直接執行。
+讀取直接執行，祕密檔案除外。
 具破壞性或會改變系統的 shell 指令，以及工作區之外的寫入或編輯，會被擱置，等 owner 在卡片上核准。
+讀取祕密也一樣：印出環境變數（`env`、`printenv`）、讀取 `.env`、`~/.ssh/*`、`/proc/*/environ` 這類祕密檔案、`gh auth token`、git 存下的憑證（類別 `shell.secret-read`，yolo 模式一律出卡片）；`docker run`、`exec`、`create`、`cp` 也是。
+
+shell 只拿到 host 環境的一部分：路徑、使用者、語系、終端機、`TMPDIR` 與 proxy，再加上[設定](/zh-tw/configure/settings/)裡 `shellEnv` 額外給的。
+bot token、model 登入、`DATABASE_URL` 等 host 持有的祕密留在 host process 裡；工具輸出若印出它們的值，model 讀到前會換成 `****`。
+
+這些擱置不是沙箱。
+shell 以 host 的使用者身分執行，所以刻意的指令仍讀得到那個使用者讀得到的東西，例如 `/proc/<host pid>/environ` 或規則不認得的檔案。
+環境變數白名單和祕密讀取的擱置，擋的是隨手和意外的外洩。
+要讓 agent 碰不到祕密，請讓它們的 shell 以不在 `docker` 群組裡的專用帳號執行（這個群組等同 root），或改用 [sandbox 套件](/zh-tw/plugins/sandbox-package/)。
 
 ## Discord 管理
 
