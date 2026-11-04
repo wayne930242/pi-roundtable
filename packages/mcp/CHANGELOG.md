@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-04
+
+- Release in lockstep with pi-roundtable 0.33.0 (the agents' shell gets a whitelisted environment, secret reads and docker run/exec are held even in yolo, and tool output masks secrets); peer range `>=0.33.0 <0.34.0`, no package-specific behavior changes.
+
 ## [0.32.1] - 2026-11-04
 
 - Release in lockstep with pi-roundtable 0.32.1 (optimistic mark-as-read, a Home button at the foot of the room drawer, Discord's -# subtext and line breaks in messages, the shared prompt's description in zh-TW, and the push device list centred); no package-specific behavior changes.

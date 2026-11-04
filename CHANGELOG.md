@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-04
+
 This is a minor release with breaking defaults: the agents' shell and the coding plugin's workers no longer inherit the host's environment, and more shell commands are held. See the migration notes below.
 
 ### Changed

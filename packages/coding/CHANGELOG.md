@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-04
+
 ### Changed
 
 - The worker process no longer inherits the host's environment: it gets the shell's whitelist (`SHELL_ENV_NAMES`), `PI_CODING_AGENT_DIR`, `TMPDIR`, the variables its model may read, found by the new `modelEnvNames(agentDir)` (each `$VAR` a `models.json` in Pi's agent dir names, and `CLAUDE_*` and `ANTHROPIC_*`), and the names the new option `workerEnv: { pass? }` lists (type `WorkerEnv`). Its `bash` gets only the whitelist and the host's `shellEnv`, never the model's credentials, and its tool results are masked like the host's. **Migration:** a worker on Pi's `auth.json` login, a `models.json` `$VAR` key, or a Claude Code or Anthropic variable needs nothing; a model that reads another variable needs it named, as in `workerEnv: { pass: ["OPENAI_API_KEY"] }`.
