@@ -43,10 +43,12 @@ test("the page builds with relative URLs only, and every file it names is in the
  * room chat view and the table's fold state together left the entry 110 bytes over; the cards, the
  * fold bar and the table's chat mode are lazy chunks. The 100 bytes after that are the knight
  * menu's Skills entry, which the long-press menu builder in the entry carries; the skills sheet and
- * the delete confirm are lazy.
+ * the delete confirm are lazy. The 100 bytes after that are the message Markdown's Discord pass
+ * (`-# ` subtext and kept line breaks), which every message row in the entry renders through, with
+ * the optimistic read and the drawer's Home together 14 bytes over.
  */
 const FIRST_LOAD_BASELINE =
-	145_612 + 8_707 + 2_000 + 200 + 260 + 300 + 150 + 100;
+	145_612 + 8_707 + 2_000 + 200 + 260 + 300 + 150 + 100 + 100;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
