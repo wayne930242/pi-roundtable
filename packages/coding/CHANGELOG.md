@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-04
+
 ### Changed
 
 - A worker's `bash` follows the core's empty `DEFAULT_SHELL_PASS`: it gets no `GH_TOKEN` unless the host's `shellEnv.pass` names it. The shelf's git and gh calls keep getting `githubToken` as `GH_TOKEN`.
