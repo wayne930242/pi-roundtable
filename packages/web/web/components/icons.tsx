@@ -6,6 +6,7 @@ import type { LayoutIconName } from "../lib/layout-icons.ts";
 const PATHS = {
 	rooms: "M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.7A8 8 0 1 1 21 12Z",
 	schedules: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+	home: "M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4Z",
 	settings: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4v6M9 14v6",
 	// Dots with a body: a zero-length stroke is a dot as thin as the lines, lighter than the plus beside it.
 	more: "M3.9 12a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0ZM10.9 12a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0ZM17.9 12a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0-2.2 0Z",

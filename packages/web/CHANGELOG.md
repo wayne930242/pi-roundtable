@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The room drawer on a phone has a Home button at its foot that stays in place while the rooms scroll. A tap closes the drawer and opens the home room, the way a row does. Inside the home room it is marked current and only closes the drawer; with no home room there is no button.
+
 ### Changed
 
 - Marking rooms read clears their unread counts at once, before the server answers, for every way to it: a row's swipe right, the room menu's "Mark as read", and "Mark all as read" on the page or a folder. A swiped row's badge is gone in the same frame the finger lets go. A refusal puts back the counts it cleared, except where a newer message has counted a room up meanwhile, and says why; Undo works as before.

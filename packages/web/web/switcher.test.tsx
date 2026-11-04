@@ -629,3 +629,51 @@ test("the pinned list and a folder with no room are places to drop, hidden until
 	expect(page.container.querySelectorAll("[data-empty]").length).toBe(0);
 	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
 });
+
+const homeButton = () =>
+	page.container.querySelector<HTMLButtonElement>(".switcher-home");
+
+test("Home sits at the foot of the drawer, outside the rows that scroll, and only when there is a home room", async () => {
+	await page.render(<Room current={SCOUT} />);
+	await page.click(element("avatar"));
+	await settle(60);
+	const button = homeButton();
+	expect(button?.textContent).toBe("Home");
+	expect(button?.querySelector("svg")).not.toBeNull();
+	expect(button?.closest(".switcher-scroll")).toBeNull();
+	expect(button?.closest(".switcher-panel")).not.toBeNull();
+	await page.act(() =>
+		store.dispatch({
+			type: "rooms_loaded",
+			rooms: [view(GUIDE, { home: false }), view(SCOUT), view(BUILD)],
+		}),
+	);
+	expect(homeButton() === null).toBe(true);
+});
+
+test("a tap on Home closes the drawer and goes to the home room", async () => {
+	window.location.hash = `#/room/${encodeURIComponent(SCOUT)}`;
+	await page.render(<Room current={SCOUT} />);
+	await page.click(element("avatar"));
+	await settle(60);
+	expect(homeButton()?.hasAttribute("aria-current")).toBe(false);
+	await page.act(async () => {
+		homeButton()?.click();
+		await settle(60);
+	});
+	expect(drawer()).toBe("closed");
+	expect(location.hash).toBe(`#/room/${encodeURIComponent(GUIDE)}`);
+});
+
+test("inside the home room Home is marked current, and a tap only closes the drawer", async () => {
+	await page.render(<Room current={GUIDE} />);
+	await page.click(element("avatar"));
+	await settle(60);
+	expect(homeButton()?.getAttribute("aria-current")).toBe("page");
+	await page.act(async () => {
+		homeButton()?.click();
+		await settle(60);
+	});
+	expect(drawer()).toBe("closed");
+	expect(location.hash).toBe(`#/room/${encodeURIComponent(GUIDE)}`);
+});

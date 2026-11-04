@@ -268,6 +268,10 @@ test("the swiped row's badge is gone the moment it is let go, before the server 
 	);
 	await show();
 	const row = rowOf(SCOUT);
+	await page.act(() => seedUnread({ [SCOUT]: 4 }));
+	// The badge's drawing is a lazy chunk.
+	for (let i = 0; i < 80 && !row.querySelector(".unread-mark"); i += 1)
+		await page.act(() => settle(25));
 	expect(row.querySelector(".unread-mark")).not.toBeNull();
 	await drag(row, 60, 260);
 	await page.act(() => touch(row, "pointerup", 260, 102));

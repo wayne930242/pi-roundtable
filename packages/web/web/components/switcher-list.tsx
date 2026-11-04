@@ -226,6 +226,13 @@ export function SwitcherList(props: {
 		props.close(
 			key === props.current ? undefined : () => navigate("room", key),
 		);
+	// The home room, from the drawer's own rows: under Home, or among the waiting ones.
+	const home = useSelector(
+		(state) =>
+			groups
+				.flatMap((group) => group.entries)
+				.find((entry) => state.rooms[entry.key]?.view?.home)?.key,
+	);
 	// Once rooms are pinned or in folders, the rest is the "Ungrouped" the room list calls it.
 	// The pinned list is always there to drop a room in; it counts once it holds one.
 	const restTitle = groups.some(
@@ -336,6 +343,19 @@ export function SwitcherList(props: {
 					);
 				})}
 			</div>
+			{home ? (
+				<div className="switcher-foot">
+					<button
+						type="button"
+						className="menu-item switcher-home"
+						aria-current={home === props.current ? "page" : undefined}
+						onClick={() => pick(home)}
+					>
+						<Icon name="home" />
+						{t("Home")}
+					</button>
+				</div>
+			) : null}
 		</>
 	);
 }

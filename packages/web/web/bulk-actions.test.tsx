@@ -250,7 +250,9 @@ test("the counts clear before the server answers", async () => {
 	);
 	await show(ROOMS, {}, { [SCOUT]: 3, [BUILD]: 1 });
 	await openPageMenu();
-	const item = menuItems().find((one) => one.textContent === "Mark all as read");
+	const item = menuItems().find(
+		(one) => one.textContent === "Mark all as read",
+	);
 	await page.act(() => item?.click());
 	expect(unreadCounts()).toEqual({});
 	expect(text()).not.toContain("Marked 2 rooms as read");
