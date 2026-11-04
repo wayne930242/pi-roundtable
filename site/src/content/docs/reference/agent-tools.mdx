@@ -87,7 +87,7 @@ Reading runs, except a secret file.
 A shell command that is destructive or changes the system, and a write or edit outside the workspace, is held until the owner approves it on a card.
 So is reading a secret: printing the environment (`env`, `printenv`), reading a secret file such as `.env`, `~/.ssh/*` or `/proc/*/environ`, `gh auth token`, and git's stored credentials (the class `shell.secret-read`, which yolo mode always cards); and `docker run`, `exec`, `create` and `cp`.
 
-The shell gets only part of the host's environment: the paths, the user, the locale, the terminal, `TMPDIR` and the proxies, plus `GH_TOKEN` and what `shellEnv` adds in the [settings](/configure/settings/).
+The shell gets only part of the host's environment: the paths, the user, the locale, the terminal, `TMPDIR` and the proxies, plus what `shellEnv` adds in the [settings](/configure/settings/).
 Bot tokens, model logins, `DATABASE_URL` and the other secrets the host holds stay in the host process, and any of their values a tool prints is replaced with `****` before the model reads it.
 
 These holds are not a sandbox.

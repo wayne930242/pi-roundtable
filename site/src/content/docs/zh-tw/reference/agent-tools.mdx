@@ -87,7 +87,7 @@ agent session 帶有 Pi 的 shell 和檔案工具。
 具破壞性或會改變系統的 shell 指令，以及工作區之外的寫入或編輯，會被擱置，等 owner 在卡片上核准。
 讀取祕密也一樣：印出環境變數（`env`、`printenv`）、讀取 `.env`、`~/.ssh/*`、`/proc/*/environ` 這類祕密檔案、`gh auth token`、git 存下的憑證（類別 `shell.secret-read`，yolo 模式一律出卡片）；`docker run`、`exec`、`create`、`cp` 也是。
 
-shell 只拿到 host 環境的一部分：路徑、使用者、語系、終端機、`TMPDIR` 與 proxy，再加上 `GH_TOKEN` 和[設定](/zh-tw/configure/settings/)裡 `shellEnv` 額外給的。
+shell 只拿到 host 環境的一部分：路徑、使用者、語系、終端機、`TMPDIR` 與 proxy，再加上[設定](/zh-tw/configure/settings/)裡 `shellEnv` 額外給的。
 bot token、model 登入、`DATABASE_URL` 等 host 持有的祕密留在 host process 裡；工具輸出若印出它們的值，model 讀到前會換成 `****`。
 
 這些擱置不是沙箱。

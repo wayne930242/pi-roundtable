@@ -1210,8 +1210,8 @@ const shell = shellHoldRuleFor({
 
 The agents' `bash` does not inherit the host process's environment.
 It gets the names in `SHELL_ENV_NAMES` (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TERM`, `TMPDIR`, the proxy variables in both cases, `SSL_CERT_FILE`, `SSL_CERT_DIR`, and Pi's `PI_*` session names), and what the host's `shellEnv` adds: `pass`, more host variables by name (a trailing `*` matches a prefix), and `set`, fixed values that win.
-Without `pass` it is `DEFAULT_SHELL_PASS`, `["GH_TOKEN"]`, so `gh` and a `git push` through `gh auth git-credential` work in the shell; `pass: []` keeps it out.
-Any other secret the host needs (a bot token, a model login, `DATABASE_URL`) stays in the host process; give a shell one only by naming it:
+Without `pass` it is `DEFAULT_SHELL_PASS`, empty: no host secret reaches the shell, `GH_TOKEN` included.
+A secret the host needs (a bot token, a model login, `DATABASE_URL`, `GH_TOKEN`) stays in the host process; give a shell one only by naming it, for example a token for `gh` and a `git push` through `gh auth git-credential`, preferably a narrower one than the host's in `set`:
 
 ```ts
 export default {

@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+This is a minor release with a breaking default: an agent's shell no longer gets `GH_TOKEN`.
+
+### Changed
+
+- `DEFAULT_SHELL_PASS` is empty: without `shellEnv.pass` no host secret reaches an agent's shell or a coding worker's `bash`, `GH_TOKEN` included. A public host's token is often broad, and 0.33.0 handed it to every agent's shell without the host asking. The coding shelf's git and gh calls (`repo_add`, fetch, `repo_push`) still get the token through the coding plugin's `githubToken`, which is unaffected.
+
+### Migration
+
+- A host whose agents run `gh`, or `git push` through `gh auth git-credential`, in their shell names the token: `shellEnv: { pass: ["GH_TOKEN"] }`, or better a narrower token given in `set` as `GH_TOKEN`.
+
 ## [0.33.0] - 2026-11-04
 
 This is a minor release with breaking defaults: the agents' shell and the coding plugin's workers no longer inherit the host's environment, and more shell commands are held. See the migration notes below.

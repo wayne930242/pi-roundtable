@@ -68,11 +68,13 @@ describe("childEnv", () => {
 });
 
 describe("shellChildEnv", () => {
-	test("an agent's shell keeps GH_TOKEN unless shellEnv.pass says otherwise", () => {
-		expect(DEFAULT_SHELL_PASS).toEqual(["GH_TOKEN"]);
-		expect(shellChildEnv(HOST).GH_TOKEN).toBe("ghp_fake");
+	test("an agent's shell gets no host secret, GH_TOKEN included, unless shellEnv.pass names it", () => {
+		expect(DEFAULT_SHELL_PASS).toEqual([]);
+		expect(shellChildEnv(HOST).GH_TOKEN).toBeUndefined();
 		expect(shellChildEnv(HOST).DISCORD_TOKEN).toBeUndefined();
-		expect(shellChildEnv(HOST, { pass: [] }).GH_TOKEN).toBeUndefined();
+		expect(shellChildEnv(HOST, { pass: ["GH_TOKEN"] }).GH_TOKEN).toBe(
+			"ghp_fake",
+		);
 		expect(shellChildEnv(HOST, { pass: ["PLAIN"] })).toMatchObject({
 			PLAIN: "plain",
 		});
