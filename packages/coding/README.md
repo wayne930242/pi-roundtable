@@ -12,14 +12,14 @@ This package is a reference for the plugin guide's [Helpers for a Pi session of 
   A core-only host still pinned to Pi 0.99.x must update its Pi dependencies before adding coding, so cross-package extension and session types resolve to one Pi version.
 - Git, plus GitHub CLI (`gh`) for the default clone implementation.
 - A Git host token with read access to repositories being cloned and write access to those being pushed, or a host login holding that token.
-- Pi model credentials available through the host's Pi login, or the provider's environment variables named in `workerEnv.pass`.
+- Pi model credentials available through the host's Pi login, a `models.json` `$VAR`, a `CLAUDE_*` or `ANTHROPIC_*` variable, or another variable named in `workerEnv.pass`.
 
 The default clone uses `gh repo clone owner/repo`, which authenticates with `githubToken` given to it as `GH_TOKEN` (by default the host's `GH_TOKEN`, read when the plugin sets up) or with the host's `gh auth login` credentials.
 Configure Git's credential helper for later `git fetch` and `git push` (for GitHub, `gh auth setup-git`); those git calls get the same `GH_TOKEN`.
 The shelf's git and gh calls get the shell's environment whitelist (`SHELL_ENV_NAMES`), git's own config, identity and ssh variables, and that token, and no other host secret.
 Use a least-privilege token and restrict its repositories; tokens are never tool arguments or remote URLs, and prefer a `githubToken` function that reads it from where you keep it to a literal string.
 The package does not print subprocess output or Git authentication diagnostics and never logs credentials.
-The coding worker process gets the shell's whitelist, `PI_CODING_AGENT_DIR` and the names in `workerEnv.pass` (what its model needs, such as `CLAUDE_CODE_OAUTH_TOKEN` or the key a `models.json` `$VAR` names); its `bash` gets only the whitelist and the host's `shellEnv`, never the model's credentials. It can still read files accessible to that host user: do not give it credentials you would not give a trusted coding agent.
+The coding worker process gets the shell's whitelist, `PI_CODING_AGENT_DIR`, the variables its model may read (`modelEnvNames`: each `$VAR` its agent dir's `models.json` names, `CLAUDE_*` and `ANTHROPIC_*`) and the names in `workerEnv.pass`; its `bash` gets only the whitelist and the host's `shellEnv`, never the model's credentials. It can still read files accessible to that host user: do not give it credentials you would not give a trusted coding agent.
 A custom `clone(repo, destination)` can use another Git host's CLI, credential helper or SSH login, and must create a Git clone with an `origin` remote.
 No network calls are needed by the offline test suite.
 
@@ -219,7 +219,7 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `skipUnavailableCarriedSkills` | `false` | Skip and disclose unavailable implicit skills; explicit skill requests still refuse them. |
 | `workerPackages` | `[]` | Absolute installed extension paths. |
 | `agentDir` | Pi host directory | Pi credentials and model configuration. |
-| `workerEnv` | `{}` | `{ pass? }`: host variables the worker process gets for its model and Pi runtime, such as `CLAUDE_CODE_OAUTH_TOKEN` or the key a `models.json` `$VAR` names; the worker's shell never gets them. |
+| `workerEnv` | `{}` | `{ pass? }`: more host variables the worker process gets for its model, beyond its `models.json` `$VAR`s, `CLAUDE_*` and `ANTHROPIC_*`; the worker's shell never gets them. |
 | `githubToken` | host `GH_TOKEN`, read at setup | A string, or a function read at each call, given as `GH_TOKEN` to the shelf's git and gh calls only (clone, fetch, push); a function returning undefined leaves gh to its own login. |
 | `timeoutMs` | `3600000` | Work-time limit in ms, excluding owner wait; 0 < value <= 2147483647. |
 | `maxWorkers` | `4` | Workers running at once on the host; a whole number of at least 1. |

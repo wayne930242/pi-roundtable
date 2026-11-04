@@ -12,10 +12,10 @@ import {
 import type { ShellEnv } from "pi-roundtable";
 import {
 	activeToolsExtension,
-	childEnv,
 	runWorkerTask,
 	SHELL_TOOLS,
 	secretMaskExtension,
+	shellChildEnv,
 	textOf,
 } from "pi-roundtable/kit";
 import type { CodingJob, HeldCallAnswer } from "./coding-desk.ts";
@@ -48,7 +48,7 @@ export function workerBash(
 		spawnHook: (context) => ({
 			...context,
 			env: {
-				...childEnv(context.env, shellEnv),
+				...shellChildEnv(context.env, shellEnv),
 				...(scratchDir === undefined ? {} : { TMPDIR: scratchDir }),
 			},
 		}),

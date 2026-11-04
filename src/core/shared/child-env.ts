@@ -19,8 +19,9 @@ export interface ShellEnvConfig {
 	/**
 	 * What the agents' shell gets of the host's environment besides `SHELL_ENV_NAMES` (the user,
 	 * locale, terminal, paths and proxies): host variables to `pass` by name and fixed values to
-	 * `set`. Plugins read it as `env.shellEnv` for shells of their own. Default: nothing more, so a
-	 * secret of the host reaches no shell unless it is listed here.
+	 * `set`. Plugins read it as `env.shellEnv` for shells of their own. Default: `pass` is
+	 * `DEFAULT_SHELL_PASS` (GH_TOKEN, so gh and git in the shell keep working); give `pass` to
+	 * replace it, `pass: []` for no host secret in the shell at all.
 	 */
 	shellEnv?: ShellEnv;
 }
@@ -94,5 +95,21 @@ export function frozenShellEnv(shellEnv: ShellEnv): Readonly<ShellEnv> {
 	return Object.freeze({
 		...(shellEnv.pass ? { pass: Object.freeze([...shellEnv.pass]) } : {}),
 		...(shellEnv.set ? { set: Object.freeze({ ...shellEnv.set }) } : {}),
+	});
+}
+
+/** The host variables an agent's shell gets beyond `SHELL_ENV_NAMES` when `shellEnv.pass` is not given. */
+export const DEFAULT_SHELL_PASS: readonly string[] = Object.freeze([
+	"GH_TOKEN",
+]);
+
+/** The environment of an agent's shell: `childEnv` with `shellEnv`, whose `pass` defaults to `DEFAULT_SHELL_PASS`. */
+export function shellChildEnv(
+	source: Readonly<Record<string, string | undefined>>,
+	shellEnv: ShellEnv = {},
+): Record<string, string> {
+	return childEnv(source, {
+		...shellEnv,
+		pass: shellEnv.pass ?? DEFAULT_SHELL_PASS,
 	});
 }

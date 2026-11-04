@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { HeldCall, HoldCheck, ShellEnv } from "pi-roundtable";
@@ -40,9 +42,9 @@ export interface PiCodingWorkerOptions {
 	/** Longest worker error text kept for the report, in characters; default 600. */
 	diagnosticChars?: number;
 	/**
-	 * What the worker process gets of the host's environment besides `SHELL_ENV_NAMES` and
-	 * `PI_CODING_AGENT_DIR`: the variables its model needs, such as the key a `models.json` `$VAR`
-	 * names or `CLAUDE_CODE_OAUTH_TOKEN`. Its shell never gets them.
+	 * Host variables the worker process gets besides `SHELL_ENV_NAMES`, `PI_CODING_AGENT_DIR` and
+	 * `modelEnvNames` (its `models.json` `$VAR`s, `CLAUDE_*`, `ANTHROPIC_*`), for a model reading
+	 * another name. Its shell never gets them.
 	 */
 	workerEnv?: WorkerEnv;
 	/** What the worker's shell gets besides `SHELL_ENV_NAMES`, as the agents' shell; default the host's `env.shellEnv`. */
@@ -54,14 +56,40 @@ export interface WorkerEnv {
 	pass?: readonly string[];
 }
 
-/** The worker process's environment: the shell's whitelist, Pi's agent dir, `workerEnv.pass`, and TMPDIR. */
+/**
+ * The host variables a worker's model may read, found without the host listing them: the names a
+ * `models.json` in Pi's agent dir writes as `$NAME` (an API key a custom provider resolves), and
+ * the Claude Code and Anthropic families (`CLAUDE_*`, `ANTHROPIC_*`) that Anthropic providers and
+ * Claude Code bridges read. A missing or unreadable `models.json` adds nothing.
+ */
+export function modelEnvNames(agentDir: string): string[] {
+	const names = ["CLAUDE_*", "ANTHROPIC_*"];
+	try {
+		const text = readFileSync(join(agentDir, "models.json"), "utf8");
+		for (const match of text.matchAll(/"\$([A-Za-z_][A-Za-z0-9_]*)"/g))
+			if (match[1] && !names.includes(match[1])) names.push(match[1]);
+	} catch {
+		// No models.json: the providers' own variables above are all.
+	}
+	return names;
+}
+
+/**
+ * The worker process's environment: the shell's whitelist, Pi's agent dir, the variables its model
+ * may read (`modelEnvNames`), `workerEnv.pass`, and TMPDIR. Its bash cuts this again to the shell's.
+ */
 export function workerProcessEnv(
 	source: Readonly<Record<string, string | undefined>>,
 	workerEnv: WorkerEnv = {},
 	scratchDir?: string,
+	agentDir: string = getAgentDir(),
 ): Record<string, string> {
 	return childEnv(source, {
-		pass: ["PI_CODING_AGENT_DIR", ...(workerEnv.pass ?? [])],
+		pass: [
+			"PI_CODING_AGENT_DIR",
+			...modelEnvNames(agentDir),
+			...(workerEnv.pass ?? []),
+		],
 		...(scratchDir ? { set: { TMPDIR: scratchDir } } : {}),
 	});
 }
@@ -137,6 +165,7 @@ export class PiCodingWorker implements CodingWorker {
 					process.env,
 					this.#options.workerEnv,
 					this.#options.scratchDir,
+					this.#options.agentDir ?? getAgentDir(),
 				),
 				stdin: "ignore",
 				stdout: "ignore",

@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workerProcessEnv } from "./pi-coding-worker.ts";
+import { modelEnvNames, workerProcessEnv } from "./pi-coding-worker.ts";
 import { RepoShelf } from "./repo-shelf.ts";
 import { workerBash } from "./worker-entry.ts";
 
@@ -70,6 +70,7 @@ test("the worker process gets the whitelist, Pi's agent dir and workerEnv.pass o
 		},
 		{ pass: ["CLAUDE_CODE_OAUTH_TOKEN"] },
 		"/tmp/scratch",
+		"/nonexistent-agent-dir",
 	);
 	expect(env).toEqual({
 		PATH: "/usr/bin",
@@ -150,4 +151,36 @@ test("git calls of the shelf get githubToken as GH_TOKEN, and no other secret", 
 		expect(env.GH_TOKEN).toBe("option-token");
 		expect(env.FAKE_SECRET_KEY).toBeUndefined();
 	}
+});
+
+test("the worker process finds its model's variables itself: models.json's $VARs, CLAUDE_* and ANTHROPIC_*", () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "worker-agent-"));
+	writeFileSync(
+		join(agentDir, "models.json"),
+		JSON.stringify({ providers: { lab: { apiKey: "$LAB_LLM_KEY" } } }),
+	);
+	const env = workerProcessEnv(
+		{
+			PATH: "/usr/bin",
+			CLAUDE_CODE_OAUTH_TOKEN: "oauth-fake",
+			ANTHROPIC_API_KEY: "anthropic-fake",
+			LAB_LLM_KEY: "lab-fake",
+			DISCORD_TOKEN: "discord-fake",
+			GH_TOKEN: "gh-fake",
+			DATABASE_URL: "postgres://fake",
+		},
+		{},
+		undefined,
+		agentDir,
+	);
+	expect(env).toEqual({
+		PATH: "/usr/bin",
+		CLAUDE_CODE_OAUTH_TOKEN: "oauth-fake",
+		ANTHROPIC_API_KEY: "anthropic-fake",
+		LAB_LLM_KEY: "lab-fake",
+	});
+	expect(modelEnvNames("/nonexistent-agent-dir")).toEqual([
+		"CLAUDE_*",
+		"ANTHROPIC_*",
+	]);
 });

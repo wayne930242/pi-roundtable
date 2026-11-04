@@ -1210,12 +1210,13 @@ const shell = shellHoldRuleFor({
 
 The agents' `bash` does not inherit the host process's environment.
 It gets the names in `SHELL_ENV_NAMES` (`PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TERM`, `TMPDIR`, the proxy variables in both cases, `SSL_CERT_FILE`, `SSL_CERT_DIR`, and Pi's `PI_*` session names), and what the host's `shellEnv` adds: `pass`, more host variables by name (a trailing `*` matches a prefix), and `set`, fixed values that win.
-A secret the host needs (a bot token, a model login, `DATABASE_URL`, `GH_TOKEN`) stays in the host process; give a shell one only by naming it:
+Without `pass` it is `DEFAULT_SHELL_PASS`, `["GH_TOKEN"]`, so `gh` and a `git push` through `gh auth git-credential` work in the shell; `pass: []` keeps it out.
+Any other secret the host needs (a bot token, a model login, `DATABASE_URL`) stays in the host process; give a shell one only by naming it:
 
 ```ts
 export default {
 	// ...
-	shellEnv: { pass: ["GH_TOKEN"], set: { GIT_PAGER: "cat" } },
+	shellEnv: { pass: ["GH_TOKEN", "SOME_CLI_KEY"], set: { GIT_PAGER: "cat" } },
 } satisfies RoundtableConfig;
 ```
 
@@ -4883,6 +4884,7 @@ Import from the entries listed below; source area files are internal.
 | `SCHEDULE_TOOLS` | `pi-roundtable/kit` | value |
 | `SHELL_TOOLS` | `pi-roundtable/kit` | value |
 | `SHELL_ENV_NAMES` | `pi-roundtable/kit` | value |
+| `DEFAULT_SHELL_PASS` | `pi-roundtable/kit` | value |
 | `DEFAULT_SECRET_PATHS` | `pi-roundtable/kit` | value |
 | `SECRET_NAME` | `pi-roundtable/kit` | value |
 | `ShellPolicy` | `pi-roundtable/kit` | type |
@@ -4985,6 +4987,7 @@ Import from the entries listed below; source area files are internal.
 | `shellHoldRule` | `pi-roundtable/kit` | value |
 | `shellHoldRuleFor` | `pi-roundtable/kit` | value |
 | `childEnv` | `pi-roundtable/kit` | value |
+| `shellChildEnv` | `pi-roundtable/kit` | value |
 | `maskSecrets` | `pi-roundtable/kit` | value |
 | `secretMaskExtension` | `pi-roundtable/kit` | value |
 | `skillListExtension` | `pi-roundtable/kit` | value |

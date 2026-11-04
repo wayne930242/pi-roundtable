@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { ConfigError } from "../domain/errors.ts";
-import { childEnv, frozenShellEnv } from "./child-env.ts";
+import {
+	childEnv,
+	DEFAULT_SHELL_PASS,
+	frozenShellEnv,
+	shellChildEnv,
+} from "./child-env.ts";
 
 const HOST = {
 	PATH: "/usr/bin",
@@ -59,5 +64,18 @@ describe("childEnv", () => {
 		expect(frozen.pass).toEqual(["A"]);
 		expect(() => frozenShellEnv({ pass: ["A B"] })).toThrow(ConfigError);
 		expect(() => frozenShellEnv({ set: { "1X": "v" } })).toThrow(ConfigError);
+	});
+});
+
+describe("shellChildEnv", () => {
+	test("an agent's shell keeps GH_TOKEN unless shellEnv.pass says otherwise", () => {
+		expect(DEFAULT_SHELL_PASS).toEqual(["GH_TOKEN"]);
+		expect(shellChildEnv(HOST).GH_TOKEN).toBe("ghp_fake");
+		expect(shellChildEnv(HOST).DISCORD_TOKEN).toBeUndefined();
+		expect(shellChildEnv(HOST, { pass: [] }).GH_TOKEN).toBeUndefined();
+		expect(shellChildEnv(HOST, { pass: ["PLAIN"] })).toMatchObject({
+			PLAIN: "plain",
+		});
+		expect(shellChildEnv(HOST, { pass: ["PLAIN"] }).GH_TOKEN).toBeUndefined();
 	});
 });

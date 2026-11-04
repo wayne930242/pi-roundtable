@@ -11,7 +11,12 @@ export {
 	YOLO_CARDED_SHELL_CLASSES,
 } from "../core/modules/host-shell/shell-policy.ts";
 // What child processes get of the host's environment, and the mask of secret values in tool output.
-export { childEnv, SHELL_ENV_NAMES } from "../core/shared/child-env.ts";
+export {
+	childEnv,
+	DEFAULT_SHELL_PASS,
+	SHELL_ENV_NAMES,
+	shellChildEnv,
+} from "../core/shared/child-env.ts";
 export {
 	maskSecrets,
 	SECRET_NAME,

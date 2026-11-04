@@ -139,6 +139,7 @@ export { packageDir, serveUnix } from "./process.ts";
 export {
 	childEnv,
 	DEFAULT_SECRET_PATHS,
+	DEFAULT_SHELL_PASS,
 	maskSecrets,
 	type PushPolicy,
 	SECRET_NAME,
@@ -146,6 +147,7 @@ export {
 	SHELL_TOOLS,
 	type ShellPolicy,
 	secretMaskExtension,
+	shellChildEnv,
 	shellHoldRule,
 	shellHoldRuleFor,
 	YOLO_CARDED_SHELL_CLASSES,

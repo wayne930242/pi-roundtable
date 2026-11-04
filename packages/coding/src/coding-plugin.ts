@@ -131,9 +131,9 @@ export interface CodingOptions {
 	workerPackages?: string[];
 	agentDir?: string;
 	/**
-	 * Host variables the worker process gets for its model and Pi runtime, such as the key its
-	 * `models.json` `$VAR` names or `CLAUDE_CODE_OAUTH_TOKEN`; its shell never gets them. Default:
-	 * the shell's whitelist and `PI_CODING_AGENT_DIR` only.
+	 * More host variables the worker process gets for its model, by name; its shell never gets them.
+	 * Without it the worker already gets the shell's whitelist, `PI_CODING_AGENT_DIR`, the `$VAR`s
+	 * its agent dir's `models.json` names, and `CLAUDE_*` and `ANTHROPIC_*`.
 	 */
 	workerEnv?: WorkerEnv;
 	/**

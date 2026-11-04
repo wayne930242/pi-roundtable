@@ -3,7 +3,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { ImageDrawer } from "../contract/providers.ts";
-import { childEnv, type ShellEnv } from "../shared/child-env.ts";
+import { type ShellEnv, shellChildEnv } from "../shared/child-env.ts";
 import { generateImageExtension } from "../shared/generate-image-tool.ts";
 import type { WorkspaceRoots } from "../shared/workspace-files.ts";
 import type { CoreExtensions } from "./runtime-types.ts";
@@ -17,7 +17,7 @@ export function imageTools(
 }
 
 /**
- * Pi's bash tool with the host's environment cut to `SHELL_ENV_NAMES` and `shellEnv`, and TMPDIR
+ * Pi's bash tool with the host's environment cut to `SHELL_ENV_NAMES` and `shellEnv` (see `shellChildEnv`), and TMPDIR
  * set to `scratchDir` when there is one, so tools that read TMPDIR and GNU `mktemp` write there
  * (BSD `mktemp` needs `-p "$TMPDIR"`).
  */
@@ -31,7 +31,7 @@ export function scratchBash(
 		spawnHook: (context) => ({
 			...context,
 			env: {
-				...childEnv(context.env, shellEnv),
+				...shellChildEnv(context.env, shellEnv),
 				...(scratchDir === undefined ? {} : { TMPDIR: scratchDir }),
 			},
 		}),
