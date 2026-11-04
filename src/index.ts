@@ -433,6 +433,7 @@ export type {
 	TransientTask,
 	TurnSelection,
 } from "./core/sessions.ts";
+export type { ShellEnv, ShellEnvConfig } from "./core/shared/child-env.ts";
 export type { Speaker, Tier } from "./core/speakers.ts";
 export { THE_SPEAKER, TIERS } from "./core/speakers.ts";
 export type { ToolTiers, ToolTierTable } from "./core/tool-tiers.ts";

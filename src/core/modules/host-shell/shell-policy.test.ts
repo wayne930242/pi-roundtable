@@ -655,6 +655,7 @@ describe("YOLO_CARDED_SHELL_CLASSES", () => {
 				"shell.privilege",
 				"shell.reset-hard",
 				"shell.rm",
+				"shell.secret-read",
 				"shell.service",
 				"shell.unreadable",
 			].sort(),

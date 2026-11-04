@@ -141,6 +141,9 @@ export const configSchema = shape({
 	avatar: optional(text),
 	workDir: optional(text),
 	scratchDir: optional(text),
+	shellEnv: optional(
+		shape({ pass: optional(list(text)), set: optional(record(text)) }),
+	),
 	skills: optional(skillsField),
 	memory: optional(bool),
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),

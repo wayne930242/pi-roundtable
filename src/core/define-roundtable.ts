@@ -326,6 +326,7 @@ export async function defineRoundtable(
 				rootCommand: config.slug,
 				agentDir: config.agentDir,
 				scratchDir: config.scratchDir,
+				...(input.shellEnv ? { shellEnv: input.shellEnv } : {}),
 				characterSkins: config.characters.skins,
 				agentTools: config.agentTools,
 			},

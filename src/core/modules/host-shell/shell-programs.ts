@@ -1,13 +1,19 @@
 import { assistantName } from "../../i18n/index.ts";
-import { ownPush, type PushPolicy } from "./git-push.ts";
+import { ownPush } from "./git-push.ts";
 import { deviceTarget, type LineState, writable } from "./shell-paths.ts";
+import {
+	ghTokenPrinted,
+	gitCredentialRead,
+	type ShellPolicy,
+} from "./shell-secrets.ts";
 
 /**
  * The hold classes of the shell rule, as `shell.<class>` ids that `HoldRule.holdClasses` lists for
  * every command a call holds. Yolo mode approves `shell.write` (a write outside the scratch roots)
  * and `shell.push` (a plain `git push` the push policy holds), and cards the rest unless
  * `autonomy.yolo.allow` lists them. `shell.unreadable` is a line the rule could not read to the
- * end, so it holds what it cannot tell apart from a destructive command.
+ * end, so it holds what it cannot tell apart from a destructive command. `shell.secret-read` prints
+ * the environment or reads a file that holds a secret.
  */
 export const SHELL_CLASSES = Object.freeze([
 	"shell.privilege",
@@ -25,6 +31,7 @@ export const SHELL_CLASSES = Object.freeze([
 	"shell.reset-hard",
 	"shell.gh",
 	"shell.crontab",
+	"shell.secret-read",
 	"shell.unreadable",
 ] as const);
 
@@ -59,7 +66,19 @@ const SYSTEMD_VERBS = new Set([
 	"kill",
 	"isolate",
 ]);
-const DOCKER_VERBS = new Set(["stop", "kill", "restart", "rm", "rmi", "prune"]);
+/** Docker verbs that stop or remove, and those that run a command or copy files as the daemon's root. */
+const DOCKER_VERBS = new Set([
+	"stop",
+	"kill",
+	"restart",
+	"rm",
+	"rmi",
+	"prune",
+	"run",
+	"exec",
+	"create",
+	"cp",
+]);
 const DOCKER_OBJECTS = new Set([
 	"container",
 	"image",
@@ -68,7 +87,16 @@ const DOCKER_OBJECTS = new Set([
 	"system",
 	"builder",
 ]);
-const COMPOSE_VERBS = new Set(["down", "stop", "kill", "restart", "rm"]);
+const COMPOSE_VERBS = new Set([
+	"down",
+	"stop",
+	"kill",
+	"restart",
+	"rm",
+	"run",
+	"exec",
+	"cp",
+]);
 const PACKAGE_VERBS = new Set([
 	"install",
 	"reinstall",
@@ -98,7 +126,7 @@ export function verbHeld(
 	args: string[],
 	prefix: string[],
 	state: LineState,
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): Held | undefined {
 	const verbs = args.filter((a) => !a.startsWith("-"));
 	const because = (
@@ -177,6 +205,8 @@ export function verbHeld(
 		case "git":
 			return gitHeld(args, prefix, state, policy);
 		case "gh": {
+			const token = ghTokenPrinted(args);
+			if (token) return token;
 			const reason = ghHeld(args);
 			return reason ? { reason, class: "shell.gh" } : undefined;
 		}
@@ -203,9 +233,11 @@ function gitHeld(
 	args: string[],
 	prefix: string[],
 	state: LineState,
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): Held | undefined {
 	const [globals, [verb, ...rest]] = gitCommand(args);
+	const credential = gitCredentialRead(verb, rest);
+	if (credential) return credential;
 	if (verb === "push") {
 		const plain = !prefix.some((w) => w.startsWith("GIT_"));
 		if (plain && ownPush(globals, rest, state, policy)) return undefined;

@@ -1,6 +1,5 @@
 import { basename } from "node:path";
 import type { HoldContext, HoldRule } from "../../holds.ts";
-import type { PushPolicy } from "./git-push.ts";
 import { COMMAND_PREFIX_WORDS, EXPANDED, lexShell } from "./shell-lexer.ts";
 import {
 	bindingCounts,
@@ -23,6 +22,14 @@ import {
 	teeOperands,
 } from "./shell-scripts.ts";
 import {
+	ENV_PRINTED,
+	type ShellPolicy,
+	secretFileRead,
+	secretPrinted,
+	secretReadHeld,
+	secretRedirect,
+} from "./shell-secrets.ts";
+import {
 	ASSIGNMENT_WORD,
 	program,
 	replaceString,
@@ -32,6 +39,7 @@ import {
 export type { PushPolicy } from "./git-push.ts";
 export { simpleCommands } from "./shell-lexer.ts";
 export { YOLO_CARDED_SHELL_CLASSES } from "./shell-programs.ts";
+export { DEFAULT_SECRET_PATHS, type ShellPolicy } from "./shell-secrets.ts";
 
 const MAX_SHOWN_COMMAND = 120;
 
@@ -173,7 +181,7 @@ const ALWAYS_HELD_CLASS: ReadonlyMap<string, ShellClass> = new Map([
 function heldReasons(
 	words: string[],
 	state: LineState,
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): Held[] {
 	const found: Held[] = [];
 	for (let i = 0; i < words.length; i++) {
@@ -186,6 +194,9 @@ function heldReasons(
 					class: deviceTarget(target, state) ? "shell.disk" : "shell.write",
 				});
 		}
+		const secret =
+			op === "<" ? secretRedirect(words[i + 1], state, policy) : undefined;
+		if (secret) found.push(secret);
 	}
 	return [...found, ...programHeld(words, state, policy)];
 }
@@ -194,7 +205,7 @@ function heldReasons(
 function programHeld(
 	words: string[],
 	state: LineState,
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): Held[] {
 	const prefix: string[] = [];
 	// A redirection is no part of the command: not its operator nor its target.
@@ -207,11 +218,12 @@ function programHeld(
 	if (setsSelfRunningVariable(own) || prefix.includes("env -S"))
 		return [DYNAMIC_SCRIPT];
 	const [word, ...args] = argv;
-	// `xargs env` runs what its input says.
-	if (!word)
-		return prefix.includes("xargs") && prefix.at(-1) !== "xargs"
-			? [DYNAMIC_SCRIPT]
-			: [];
+	// `xargs env` runs what its input says, and an `env` with no command prints the environment.
+	if (!word) {
+		if (prefix.includes("xargs") && prefix.at(-1) !== "xargs")
+			return [DYNAMIC_SCRIPT];
+		return prefix.includes("env") ? [ENV_PRINTED] : [];
+	}
 	const head = commandName(word, state);
 	if (head === undefined) {
 		// A variable the line binds may be empty when bash gets there, so the name is unknown; what
@@ -277,6 +289,9 @@ function programHeld(
 		const exec = findExec(args);
 		if (exec) return programHeld(exec, state, policy);
 	}
+	const secret =
+		secretPrinted(name, args) ?? secretFileRead(name, args, state, policy);
+	if (secret) return [secret];
 	const held = verbHeld(name, args, prefix, state, policy);
 	return held ? [held] : [];
 }
@@ -307,7 +322,7 @@ const UNREADABLE: Held = {
 function scriptHeld(
 	script: string,
 	state: LineState,
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): Held[] {
 	if (script.includes(EXPANDED)) return [DYNAMIC_SCRIPT];
 	if (script.trimStart().startsWith("$")) {
@@ -328,7 +343,7 @@ const DYNAMIC_SCRIPT: Held = {
 function commandHeld(
 	command: string,
 	outer: LineState,
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): Held[] {
 	const state: LineState = {
 		...lineState(command, outer.workspace, undefined),
@@ -368,13 +383,13 @@ function commandHeld(
 /**
  * Pi's shell and file tools: a bash command that is destructive or reaches outside the scratch
  * roots (the shared workspace and the scratch dir), and a write or edit outside them, wait for the
- * owner. Reading always runs.
+ * owner. Reading runs, but for a file that holds a secret (`shell.secret-read`).
  */
 export function shellActionNeedingConfirmation(
 	toolName: string,
 	input: Record<string, unknown>,
 	context: HoldContext & { workspace: string },
-	policy: PushPolicy = {},
+	policy: ShellPolicy = {},
 ): string | undefined {
 	return shellHold(toolName, input, context, policy)?.action;
 }
@@ -387,7 +402,7 @@ function shellHold(
 	toolName: string,
 	input: Record<string, unknown>,
 	context: HoldContext & { workspace: string },
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): { action: string; classes: ShellClass[] } | undefined {
 	try {
 		return judge(toolName, input, context, policy);
@@ -412,7 +427,7 @@ function judge(
 	toolName: string,
 	input: Record<string, unknown>,
 	context: HoldContext & { workspace: string },
-	policy: PushPolicy,
+	policy: ShellPolicy,
 ): { action: string; classes: ShellClass[] } | undefined {
 	const state = lineState(
 		typeof input.command === "string" ? input.command : "",
@@ -439,17 +454,18 @@ function judge(
 					classes: ["shell.write"],
 				};
 	}
-	return undefined;
+	return toolName === "read" ? secretReadHeld(input, state, policy) : undefined;
 }
 
 /**
  * The shell rule with a push policy: a plain push to a repository of `ownPushOwners`, other than
- * `heldPushRepos`, runs without a hold. Shell calls of a session without a workspace have no shell.
+ * `heldPushRepos`, runs without a hold; `secretPaths` adds files whose reading is held. Shell calls of a session without a workspace have no shell.
  */
-export function shellHoldRuleFor(policy: PushPolicy = {}): Readonly<HoldRule> {
-	const frozen: PushPolicy = {
+export function shellHoldRuleFor(policy: ShellPolicy = {}): Readonly<HoldRule> {
+	const frozen: ShellPolicy = {
 		ownPushOwners: [...(policy.ownPushOwners ?? [])],
 		heldPushRepos: [...(policy.heldPushRepos ?? [])],
+		...(policy.secretPaths ? { secretPaths: [...policy.secretPaths] } : {}),
 	};
 	return Object.freeze<HoldRule>({
 		name: "shell",

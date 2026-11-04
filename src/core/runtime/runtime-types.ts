@@ -24,6 +24,8 @@ import {
 	type SessionPlan,
 	type SessionTool,
 } from "../sessions.ts";
+import type { ShellEnv } from "../shared/child-env.ts";
+import { secretMaskExtension } from "../shared/secret-mask.ts";
 import type { ToolTiers } from "../tool-tiers.ts";
 import type { MemoryDraws } from "./extensions/private-memory.ts";
 import type { PendingConfirmationStore } from "./pending-confirmation-store.ts";
@@ -77,6 +79,8 @@ export interface PiAgentRuntimeOptions {
 	agents?: AgentSessions;
 	/** "chat-only": no turn carries the shell and file tools, and agent sessions have no workspace; default "full". */
 	agentTools?: AgentTools;
+	/** What the sessions' shell gets of the host's environment besides `SHELL_ENV_NAMES`; see `HostEnvironment.shellEnv`. */
+	shellEnv?: ShellEnv;
 	/**
 	 * The prompts of a channel for an interactive turn's scope, made from its speaker and its
 	 * conversation's visibility; undefined for a channel that cannot show them. Without it every
@@ -171,7 +175,7 @@ export interface CoreExtensions {
  * A session's extensions in load order: the tools phase, the core's attachment, gate, ask-user,
  * and compact guard, the compactor, the MCP phase, the memory projection, so each request is
  * projected after every other extension changed it, the surface's formatting guidance, so it follows
- * the persona and everything appended before it, and active-tools last, so its
+ * the persona and everything appended before it, the secret mask, and active-tools last, so its
  * before_agent_start handler runs after every other extension's.
  */
 export function sessionExtensions(
@@ -202,6 +206,8 @@ export function sessionExtensions(
 		...contributed(plan.mcp),
 		{ name: "private-memory", factory: core.privateMemory },
 		{ name: "surface-formatting", factory: core.surfaceFormatting },
+		// After every other tool_result handler, so what they add is masked too.
+		{ name: "secret-mask", factory: secretMaskExtension() },
 		{ name: "active-tools", factory: core.activeTools },
 	];
 }

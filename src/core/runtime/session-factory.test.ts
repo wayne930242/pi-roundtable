@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { ensureScratchDir } from "../builtin/agent-server.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { LinkedSessions } from "../plugin.ts";
+import { SHELL_ENV_NAMES, type ShellEnv } from "../shared/child-env.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { SessionFactory, scratchBash } from "./session-factory.ts";
 
@@ -135,12 +136,12 @@ describe("the tools of a task and of startup, by their names before 0.9 too", ()
 
 describe("the agents' scratch dir", () => {
 	/** What the agents' bash prints for `command`, one line per entry, with `scratch` as its TMPDIR. */
-	async function runInScratchBash(command: string) {
+	async function runInScratchBash(command: string, shellEnv?: ShellEnv) {
 		const root = realpathSync(mkdtempSync(join(tmpdir(), "scratch-bash-")));
 		try {
 			const scratch = ensureScratchDir(join(root, "roundtable-scratch"));
 			expect(statSync(scratch).mode & 0o777).toBe(0o700);
-			const bash = scratchBash(root, scratch);
+			const bash = scratchBash(root, scratch, shellEnv);
 			expect(bash.name).toBe("bash");
 			// SAFETY: the bash tool reads no context.
 			const result = await bash.execute(
@@ -158,6 +159,47 @@ describe("the agents' scratch dir", () => {
 			rmSync(root, { recursive: true, force: true });
 		}
 	}
+
+	test("the agents' bash gets the whitelist, shellEnv's names and values, and no host secret", async () => {
+		const saved = { ...process.env };
+		Object.assign(process.env, {
+			FAKE_TOKEN: "fake-token-value",
+			FAKE_DATABASE_URL: "postgres://u:p@h/db",
+			OPTED_IN: "yes",
+			LC_TIME: "C",
+		});
+		try {
+			const { lines } = await runInScratchBash("env | cut -d= -f1", {
+				pass: ["OPTED_IN"],
+				set: { FIXED: "1" },
+			});
+			const names = lines.filter(Boolean);
+			expect(names).toContain("PATH");
+			expect(names).toContain("TMPDIR");
+			expect(names).toContain("LC_TIME");
+			expect(names).toContain("OPTED_IN");
+			expect(names).toContain("FIXED");
+			expect(names).not.toContain("FAKE_TOKEN");
+			expect(names).not.toContain("FAKE_DATABASE_URL");
+			const allowed = new Set([
+				...SHELL_ENV_NAMES,
+				"OPTED_IN",
+				"FIXED",
+				// bash sets these itself.
+				"PWD",
+				"SHLVL",
+				"_",
+				"OLDPWD",
+			]);
+			expect(
+				names.filter((n) => !allowed.has(n) && !n.startsWith("LC_")),
+			).toEqual([]);
+		} finally {
+			for (const name of Object.keys(process.env))
+				if (!(name in saved)) delete process.env[name];
+			Object.assign(process.env, saved);
+		}
+	});
 
 	test("the agents' bash runs with TMPDIR at the scratch dir, and mktemp -p $TMPDIR lands there", async () => {
 		const { scratch, lines } = await runInScratchBash(

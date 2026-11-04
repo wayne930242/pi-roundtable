@@ -462,10 +462,10 @@ export class SessionFactory {
 		const { session } = await createAgentSession({
 			cwd,
 			agentDir,
-			// Pi's bash under its own name, run with TMPDIR at the agents' scratch dir.
-			...(agents?.scratchDir && !this.chatOnly
-				? { customTools: [scratchBash(cwd, agents.scratchDir)] }
-				: {}),
+			// Pi's bash under its own name, with the shell's environment and TMPDIR at the agents' scratch dir.
+			customTools: this.chatOnly
+				? []
+				: [scratchBash(cwd, agents?.scratchDir, this.#options.shellEnv)],
 			thinkingLevel: thinking,
 			modelRuntime: this.#modelRuntime,
 			resourceLoader,

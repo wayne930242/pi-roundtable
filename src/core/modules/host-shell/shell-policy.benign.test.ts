@@ -112,7 +112,6 @@ const BENIGN: readonly string[] = [
 	"pwd",
 	"date +%s",
 	"uname -a",
-	"env | sort",
 	"echo $PATH | tr ':' '\\n'",
 	"stat -f %z file.txt",
 	"file image.png",

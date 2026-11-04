@@ -3,6 +3,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { ImageDrawer } from "../contract/providers.ts";
+import { childEnv, type ShellEnv } from "../shared/child-env.ts";
 import { generateImageExtension } from "../shared/generate-image-tool.ts";
 import type { WorkspaceRoots } from "../shared/workspace-files.ts";
 import type { CoreExtensions } from "./runtime-types.ts";
@@ -15,13 +16,24 @@ export function imageTools(
 	return images ? { generateImage: generateImageExtension(images, roots) } : {};
 }
 
-/** Pi's bash tool with TMPDIR set to `scratchDir`, so tools that read TMPDIR and GNU `mktemp` write there (BSD `mktemp` needs `-p "$TMPDIR"`). */
-export function scratchBash(cwd: string, scratchDir: string): ToolDefinition {
+/**
+ * Pi's bash tool with the host's environment cut to `SHELL_ENV_NAMES` and `shellEnv`, and TMPDIR
+ * set to `scratchDir` when there is one, so tools that read TMPDIR and GNU `mktemp` write there
+ * (BSD `mktemp` needs `-p "$TMPDIR"`).
+ */
+export function scratchBash(
+	cwd: string,
+	scratchDir: string | undefined,
+	shellEnv: ShellEnv = {},
+): ToolDefinition {
 	// SAFETY: Pi's bash definition is a ToolDefinition typed by its own parameter schema, which the session takes as any custom tool.
 	return createBashToolDefinition(cwd, {
 		spawnHook: (context) => ({
 			...context,
-			env: { ...context.env, TMPDIR: scratchDir },
+			env: {
+				...childEnv(context.env, shellEnv),
+				...(scratchDir === undefined ? {} : { TMPDIR: scratchDir }),
+			},
 		}),
 	}) as unknown as ToolDefinition;
 }

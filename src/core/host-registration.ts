@@ -44,6 +44,7 @@ import { PeerBots } from "./routing/peer-bots.ts";
 import { surfacePort } from "./routing/surface-port.ts";
 import { refuseHostAccess } from "./runtime/chat-only.ts";
 import { CONVERSATIONS, IDENTITY, RUNTIME } from "./services.ts";
+import { frozenShellEnv } from "./shared/child-env.ts";
 import { setTimeZone } from "./time.ts";
 import { type ToolTierTable, toolTiers } from "./tool-tiers.ts";
 
@@ -133,6 +134,7 @@ export class Linkage {
 			scratchDir,
 			characterSkins,
 			agentTools = "full",
+			shellEnv,
 		} = this.#options.environment ?? {};
 		// Checked before anything is applied, so a bad set stops the start with the process untouched.
 		const skins = characterSkinsOf(characterSkins);
@@ -147,6 +149,7 @@ export class Linkage {
 			...(scratchDir !== undefined ? { scratchDir } : {}),
 			characterSkins: skins,
 			agentTools,
+			...(shellEnv ? { shellEnv: frozenShellEnv(shellEnv) } : {}),
 		};
 	}
 

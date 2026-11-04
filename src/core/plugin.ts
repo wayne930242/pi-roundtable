@@ -35,6 +35,7 @@ import type {
 	SessionTool,
 	ToolSelection,
 } from "./sessions.ts";
+import type { ShellEnv } from "./shared/child-env.ts";
 import type { Speaker, Tier } from "./speakers.ts";
 import type { ToolTiers } from "./tool-tiers.ts";
 
@@ -323,6 +324,8 @@ export interface HostEnv {
 	 * plugin that declares `hostAccess`.
 	 */
 	readonly agentTools: AgentTools;
+	/** What the agents' shell gets of the host's environment besides `SHELL_ENV_NAMES`; plugins that run shells of their own (coding workers) give them the same. */
+	readonly shellEnv?: ShellEnv;
 }
 
 /** What the host gives every plugin. */

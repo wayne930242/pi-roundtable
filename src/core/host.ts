@@ -15,6 +15,7 @@ import type { AgentTools, RoundtablePlugin, Service } from "./plugin.ts";
 import type { PeerBotsConfig } from "./routing/peer-bots.ts";
 import { RUNTIME } from "./services.ts";
 import type { ChannelKey } from "./sessions.ts";
+import type { ShellEnvConfig } from "./shared/child-env.ts";
 import type { ToolTierTable } from "./tool-tiers.ts";
 
 /**
@@ -22,7 +23,7 @@ import type { ToolTierTable } from "./tool-tiers.ts";
  * directory its packages read. `run()` applies them to the process when the host starts, and
  * plugins read the locale and zone from `PluginContext.env`.
  */
-export interface HostEnvironment {
+export interface HostEnvironment extends ShellEnvConfig {
 	/** The language of the Discord text; default en. */
 	locale?: Locale;
 	/** An IANA time zone; default UTC. */

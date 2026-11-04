@@ -18,6 +18,7 @@ import {
 import type { PerPrincipalLimits } from "../modules/background/personal-target.ts";
 import type { AgentTools, RoundtablePlugin } from "../plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
+import type { ShellEnvConfig } from "../shared/child-env.ts";
 import type { Tier, TierMembers } from "../speakers.ts";
 import { type AccessConfig, accessOf } from "./access.ts";
 import {
@@ -77,7 +78,7 @@ export interface BackgroundConfig {
 }
 
 /** What `roundtable.config.ts` gives `defineRoundtable`. */
-export interface RoundtableConfig extends LimitsConfig {
+export interface RoundtableConfig extends LimitsConfig, ShellEnvConfig {
 	/** The assistant's display name; default "Roundtable". */
 	name?: string;
 	/**
