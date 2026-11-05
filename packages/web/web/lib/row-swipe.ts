@@ -12,6 +12,13 @@ const INTENT = 12;
 /** The most (px) a row that cannot act gives to a finger that pulls it, before it pulls back. */
 const RUBBER_MAX = 24;
 const SLIDE_MS = 180;
+/** A row that springs back moves this share of the finger's distance: a pull, not a slide. */
+const PULL_DAMPING = 0.5;
+/** The travel (px) past which a pull that springs back meets rubber, and the most it ever travels. */
+const PULL_SOFT = 64;
+const PULL_CAP = 80;
+/** The travel (px) past which a pull that springs back acts when it is let go. */
+export const PULL_ARM = 56;
 /** The last stretch of the drag (ms) that the finger's speed is read from. */
 const SPEED_WINDOW_MS = 100;
 
@@ -56,7 +63,17 @@ interface Finger {
 	swipes: boolean;
 	state: "wait" | "drag" | "reject";
 	offset: number;
+	/** How far (px) the finger has pulled past the intent, before damping. */
+	pulled: number;
 	samples: { x: number; t: number }[];
+}
+
+/** How far (px) a row that springs back travels under a finger that pulled it `pulled` px. */
+export function pullTravel(pulled: number): number {
+	const damped = Math.max(0, pulled) * PULL_DAMPING;
+	if (damped <= PULL_SOFT) return damped;
+	const room = PULL_CAP - PULL_SOFT;
+	return PULL_SOFT + room * (1 - Math.exp(-(damped - PULL_SOFT) / room));
 }
 
 const keepScroll = (event: TouchEvent) => {
@@ -73,9 +90,10 @@ function speedOf(samples: Finger["samples"], at: number): number {
 }
 
 /**
- * Gives the rows inside `root` the swipe of `spec`. A row that can act follows a finger to the right
- * and acts when it is let go past 40 % of its width, or flicked; one that cannot only gives a little
- * and comes back. A swipe to the left, a scroll, an edge swipe and a hold are not the swipe.
+ * Gives the rows inside `root` the swipe of `spec`. A row that can act and leaves follows a finger to
+ * the right and acts when it is let go past 40 % of its width, or flicked. One that springs back is
+ * pulled: it moves half the finger's way up to `PULL_CAP`, arms past `PULL_ARM` of travel, and acts
+ * when let go armed, or flicked. One that cannot act only gives a little and comes back. A swipe to the left, a scroll, an edge swipe and a hold are not the swipe.
  */
 export function attachRowSwipe(
 	root: HTMLElement,
@@ -92,6 +110,8 @@ export function attachRowSwipe(
 	const showReveal = (row: HTMLElement, shown: boolean) => {
 		const reveal = spec.reveal?.(row);
 		if (!reveal) return;
+		if ("armed" in row.dataset) reveal.dataset.armed = "";
+		else delete reveal.dataset.armed;
 		if (!shown) {
 			delete reveal.dataset.shown;
 			return;
@@ -144,6 +164,7 @@ export function attachRowSwipe(
 			swipes: !atScreenEdge(origin.x, window.innerWidth),
 			state: "wait",
 			offset: 0,
+			pulled: 0,
 			samples: [{ x: origin.x, t: event.timeStamp }],
 		};
 	};
@@ -176,21 +197,27 @@ export function attachRowSwipe(
 		const can = spec.can(row);
 		const pulled = Math.max(0, dx - INTENT);
 		const width = row.offsetWidth || 1;
-		finger.offset = can
-			? Math.min(pulled, width)
-			: Math.min(RUBBER_MAX, pulled * 0.3);
+		finger.pulled = pulled;
+		finger.offset = !can
+			? Math.min(RUBBER_MAX, pulled * 0.3)
+			: spec.leaves
+				? Math.min(pulled, width)
+				: pullTravel(pulled);
 		finger.samples.push({ x: event.clientX, t: event.timeStamp });
 		row.style.transform = `translate3d(${finger.offset}px, 0, 0)`;
 		if (can) {
-			showReveal(row, true);
-			if (settles(finger.offset / width, 0)) row.dataset.armed = "";
+			const armed = spec.leaves
+				? settles(finger.offset / width, 0)
+				: finger.offset >= PULL_ARM;
+			if (armed) row.dataset.armed = "";
 			else delete row.dataset.armed;
+			showReveal(row, true);
 		}
 	};
 
 	const onUp = (event: PointerEvent) => {
 		if (!finger || finger.id !== event.pointerId) return;
-		const { row, state, offset, samples } = finger;
+		const { row, state, offset, pulled, samples } = finger;
 		const fired = finger.press.end();
 		end();
 		if (fired && spec.hold) swallow = true;
@@ -199,7 +226,11 @@ export function attachRowSwipe(
 		const width = row.offsetWidth || 1;
 		const velocity = speedOf(samples, event.timeStamp);
 		const acts =
-			spec.can(row) && offset > INTENT && settles(offset / width, velocity);
+			spec.can(row) &&
+			pulled > INTENT &&
+			(spec.leaves
+				? settles(offset / width, velocity)
+				: offset >= PULL_ARM || settles(0, velocity));
 		if (!acts || !spec.leaves) resetPull(row);
 		if (acts) spec.act(row);
 	};

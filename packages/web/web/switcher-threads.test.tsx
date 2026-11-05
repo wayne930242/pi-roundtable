@@ -348,3 +348,33 @@ test("a room row with threads still swipes to read, and a hold still opens its m
 		)[0],
 	).toBe("Mark as read");
 });
+
+test("a temp knight's row marks its own room read, not its knight's, and leaves the drawer open", async () => {
+	const send = track(spyOn(bulkApi, "readAll")).mockResolvedValue({
+		moved: [{ room: TEMP, from: 1, to: 2 }],
+	});
+	seedUnread({ [SCOUT]: 3, [TEMP]: 2 });
+	await openDrawer(SCOUT);
+	await cardsLoad();
+	const helper = document.querySelector<HTMLElement>(
+		`a.helper-link[data-room="${TEMP}"]`,
+	) as HTMLElement;
+	const reveal = helper.parentElement?.querySelector(":scope > .read-reveal");
+	expect(reveal).not.toBeNull();
+	await swipe(helper, 60, 260);
+	expect(send).toHaveBeenCalledTimes(1);
+	expect(send.mock.calls[0]?.[0]).toEqual([TEMP]);
+	expect(unreadCounts()[TEMP]).toBeUndefined();
+	expect(unreadCounts()[SCOUT]).toBe(3);
+	expect(drawer()).toBe("open");
+	expect(helper.style.transform).toBe("");
+	const knight = document.querySelector<HTMLElement>(
+		`a.switcher-row[data-room="${SCOUT}"]`,
+	) as HTMLElement;
+	expect(knight.style.transform).toBe("");
+	expect(knight.hasAttribute("data-swiping")).toBe(false);
+	// Nothing unread left: the row only gives a little.
+	await swipe(helper, 60, 260);
+	expect(send).toHaveBeenCalledTimes(1);
+	expect(drawer()).toBe("open");
+});

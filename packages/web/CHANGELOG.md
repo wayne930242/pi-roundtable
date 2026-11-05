@@ -8,10 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - The room drawer shows a room's dispatch threads and temp knights: a row that has any carries a toggle with their count, which opens the rooms page's own thread list under it. The open room starts open and the choice is kept per room on the device; a tap on a thread or temp knight goes there and closes the drawer, and a thread card's swipe is its own, apart from the row's swipe to read and the drawer's swipe to close.
+- A temp knight's row marks its room read when swiped right, on the rooms page and in the drawer, the way a room's row does, finished or not; only its own room is marked, not its knight's.
 
 ### Changed
 
 - Home at the foot of the room drawer goes to the room list, the level above the rooms, instead of the home room; it is there in every room, with or without a home room.
+- Swiping a row right to mark it read is a short pull that springs back, not a slide that looks like the row is leaving: the row follows half the finger's way and stops at 80 px, the check turns green and grows a little once letting go will mark it read (56 px of travel, or a flick), and it disarms if pulled back. On release the row springs back in 180 ms (at once with reduced motion) and the Read mark fades as it does. A thread card's swipe to clear still slides out.
 
 ## [0.34.0] - 2026-11-04
 

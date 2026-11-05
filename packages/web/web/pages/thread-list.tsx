@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import type { RoomView } from "../../src/api-types.ts";
 import { Icon } from "../components/icons.tsx";
+import { ReadReveal } from "../components/read-swipe.tsx";
 import { RoomPicture } from "../components/room-picture.tsx";
 import { Unread } from "../components/unread.tsx";
 import { useSelector } from "../lib/app-store.ts";
@@ -34,10 +35,12 @@ const HelperRow = memo(function HelperRow(
 	const finished = view.helper?.finished === true;
 	return (
 		<li>
+			<ReadReveal />
 			<a
 				className="helper-link"
 				href={hrefFor("room", view.key)}
 				data-link-room={view.key}
+				data-room={view.key}
 				data-helper={view.name}
 				data-finished={finished ? "" : undefined}
 				aria-current={props.active ? "page" : undefined}

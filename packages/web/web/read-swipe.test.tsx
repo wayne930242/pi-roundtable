@@ -32,6 +32,7 @@ const HOME = "app:agent.rs-guide";
 const SCOUT = "app:agent.rs-scout";
 const BUILD = "app:agent.rs-build";
 const DONE = "app:thread.0b5e7c1a-0000-4000-8000-0000000000a1";
+const TEMP = "app:agent.rs-temp";
 const FOLDER = "folder.00000000-0000-4000-8000-0000000000a1";
 
 const config: ConfigView = {
@@ -67,6 +68,9 @@ const ROOMS = [
 		parent: SCOUT,
 		readOnly: true,
 		closed: true,
+	}),
+	view(TEMP, {
+		helper: { parent: BUILD, parentName: "build", finished: true },
 	}),
 ];
 
@@ -455,4 +459,29 @@ test("a row in the open drawer marks its room read, and the drawer stays where i
 	expect(send.mock.calls[0]?.[0]).toEqual([SCOUT]);
 	expect(drawer()).toBe("open");
 	expect(row.style.transform).toBe("");
+});
+
+test("a finished temp knight's row marks its own room read on the rooms page, not its knight's", async () => {
+	const send = readAll();
+	await show({ [BUILD]: 2, [TEMP]: 1 });
+	const head = document.querySelector<HTMLElement>(
+		`.helper-group[data-parent="${BUILD}"] .helper-head`,
+	);
+	if (head?.getAttribute("aria-expanded") === "false") await page.click(head);
+	const helper = rowOf(TEMP, "a.helper-link");
+	await drag(helper, 60, 260);
+	expect(helper.hasAttribute("data-armed")).toBe(true);
+	expect(revealOf(helper)?.hasAttribute("data-shown")).toBe(true);
+	expect(rowOf(BUILD).style.transform).toBe("");
+	await lift(helper, 260);
+	expect(send).toHaveBeenCalledTimes(1);
+	expect(send.mock.calls[0]?.[0]).toEqual([TEMP]);
+	expect(unreadCounts()[BUILD]).toBe(2);
+	expect(helper.style.transform).toBe("");
+	// Nothing unread left: it only gives a little, and the click it brings is still swallowed.
+	await drag(helper, 60, 300);
+	expect(helper.hasAttribute("data-armed")).toBe(false);
+	expect(revealOf(helper)?.hasAttribute("data-shown")).toBe(false);
+	await lift(helper, 300);
+	expect(send).toHaveBeenCalledTimes(1);
 });

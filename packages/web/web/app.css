@@ -302,7 +302,14 @@ li:has(> .read-reveal[data-shown]) {
 	position: absolute;
 	right: 0;
 	left: 0;
-	display: none;
+	display: flex;
+	visibility: hidden;
+	opacity: 0;
+	pointer-events: none;
+	/* It fades as the row springs back over it. */
+	transition:
+		opacity var(--dur) var(--ease-out),
+		visibility 0s linear var(--dur);
 	align-items: center;
 	gap: var(--space-2);
 	padding-left: var(--space-4);
@@ -314,7 +321,25 @@ li:has(> .read-reveal[data-shown]) {
 }
 
 .read-reveal[data-shown] {
-	display: flex;
+	visibility: visible;
+	opacity: 1;
+	transition: none;
+}
+
+.read-reveal svg {
+	transition:
+		transform var(--dur-fast) var(--ease-out),
+		color var(--dur-fast) var(--ease-out);
+}
+
+/* Pulled far enough: letting go marks the room read. */
+.read-reveal[data-armed] {
+	color: var(--text);
+}
+
+.read-reveal[data-armed] svg {
+	color: var(--success);
+	transform: scale(1.1);
 }
 
 .switcher-list .read-reveal {
@@ -323,12 +348,14 @@ li:has(> .read-reveal[data-shown]) {
 }
 
 .room-row,
-.switcher-row {
+.switcher-row,
+.helper-link {
 	/* The page scrolls up and down; the row is swiped sideways. */
 	touch-action: pan-y;
 }
 
-.switcher-row[data-swiping] {
+.switcher-row[data-swiping],
+.helper-link[data-swiping] {
 	background: var(--surface);
 }
 

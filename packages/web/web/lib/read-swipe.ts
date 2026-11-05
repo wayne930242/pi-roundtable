@@ -1,12 +1,13 @@
-// A room's row marks the room read when it is swiped to the right, on the rooms page and in the
-// drawer. The swipe is a shortcut for the room menu's "Mark as read"; it loads with the first list.
+// A room's row, or a temp knight's, marks the room read when it is swiped to the right, on the rooms
+// page and in the drawer. The swipe is a shortcut for the room menu's "Mark as read"; it loads with the first list.
 
 import { markAllRead } from "./bulk-actions.ts";
 import { unreadIn } from "./bulk-items.ts";
 import { attachRowSwipe } from "./row-swipe.ts";
 
-/** A room's row: the rooms page's and the drawer's. A thread card nested under a row is not one. */
-const ROW = "a.room-row[data-room], a.switcher-row[data-room]";
+/** A room's row, the rooms page's and the drawer's, and a temp knight's under it. A thread card is not one. */
+const ROW =
+	"a.room-row[data-room], a.switcher-row[data-room], a.helper-link[data-room]";
 
 const keyOf = (row: HTMLElement): string => row.dataset.room ?? "";
 
