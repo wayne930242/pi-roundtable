@@ -24,6 +24,7 @@ import { seedUnread, unreadCounts } from "./lib/host-state.ts";
 import { loadKit } from "./lib/kit.ts";
 import { HOLD_MS } from "./lib/long-press.ts";
 import { roomMenu } from "./lib/menu-items.ts";
+import { clearRoomConfirm } from "./lib/room-confirm.ts";
 import { setRouting } from "./lib/router.ts";
 import { RoomsPage } from "./pages/rooms.tsx";
 
@@ -131,6 +132,8 @@ beforeEach(() => {
 afterEach(async () => {
 	for (const spy of spies.splice(0)) spy.mockRestore();
 	await page.act(() => closeMenu());
+	// The menu's yolo question is the page's, not the test's: left open, it would hold the next file's sheets.
+	await page.act(() => clearRoomConfirm());
 	for (const dismiss of document.querySelectorAll<HTMLElement>(
 		'.toaster [aria-label="Dismiss"]',
 	))
