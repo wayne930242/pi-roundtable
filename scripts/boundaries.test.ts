@@ -8,7 +8,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { boundaryViolations, importsOf, type Violation } from "./boundaries.ts";
+import {
+	boundaryViolations,
+	coreCycles,
+	importsOf,
+	type Violation,
+} from "./boundaries.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 
@@ -39,6 +44,10 @@ test("the checkout breaks no boundary beyond the recorded baseline, which only s
 		baseline.map(() => "discord-area"),
 	);
 	expect(baseline.length).toBeLessThanOrEqual(5);
+});
+
+test("no two directories of the core depend on each other at run time", () => {
+	expect(coreCycles(ROOT)).toEqual([]);
 });
 
 test("only the Discord area imports a Discord package; tests may", () => {
@@ -134,4 +143,71 @@ test("every way of naming a module is read", () => {
 			].join("\n"),
 		),
 	).toEqual(["a", "b", "c", "d", "e", "f", "g"]);
+});
+
+test("the kernel imports nothing else of the core, and only the host and the test helpers import the host", () => {
+	const root = tree({
+		"src/core/kernel/time.ts": 'import { log } from "./log.ts";',
+		"src/core/kernel/log.ts":
+			'import type { Speaker } from "../identity/speakers.ts";',
+		"src/core/kernel/freeze.ts":
+			'import { CATALOG } from "../../characters/index.ts";',
+		"src/core/agents/agent.ts": 'import { Roundtable } from "../host/host.ts";',
+		"src/core/agents/agent.test.ts":
+			'import { Roundtable } from "../host/host.ts";',
+		"src/core/host/drain.ts": 'import { Roundtable } from "./host.ts";',
+		"src/core/testing/test-host.ts":
+			'import { Roundtable } from "../host/host.ts";',
+		"src/cli/run.ts": 'import { Roundtable } from "../core/host/host.ts";',
+	});
+	expect(boundaryViolations(root)).toEqual([
+		{
+			rule: "core-host",
+			file: "src/core/agents/agent.ts",
+			specifier: "../host/host.ts",
+		},
+		{
+			rule: "core-kernel",
+			file: "src/core/kernel/log.ts",
+			specifier: "../identity/speakers.ts",
+		},
+	]);
+});
+
+test("a cycle between core directories counts imports that run, and skips tests and the test helpers", () => {
+	const root = tree({
+		"src/core/agents/agent.ts": 'import { route } from "../routing/route.ts";',
+		"src/core/routing/route.ts": 'export { agent } from "../agents/agent.ts";',
+		"src/core/config/config.ts":
+			'import type { Who } from "../identity/who.ts";',
+		"src/core/identity/who.ts": 'import { config } from "../config/config.ts";',
+		"src/core/modules/memory/memory.ts":
+			'const skills = await import("../skills/skills.ts");',
+		"src/core/modules/skills/skills.ts": 'import "../memory/memory.ts";',
+		"src/core/testing/fake.ts": 'import { agent } from "../agents/agent.ts";',
+		"src/core/agents/fake.test.ts":
+			'import { fake } from "../testing/fake.ts";',
+		"src/core/kernel/log.ts": "export const log = 1;",
+	});
+	expect(coreCycles(root)).toEqual([
+		["agents", "routing"],
+		["modules/memory", "modules/skills"],
+	]);
+});
+
+test("the imports that run leave out the type-only ones", () => {
+	expect(
+		importsOf(
+			[
+				'import a from "a";',
+				'import type { B } from "b";',
+				'export type { C } from "c";',
+				'import { type D, d } from "d";',
+				'export * from "e";',
+				'const f = await import("f");',
+			].join("\n"),
+			"source.ts",
+			true,
+		),
+	).toEqual(["a", "d", "e", "f"]);
 });

@@ -22,6 +22,15 @@ function localImports(file: string): string[] {
 }
 
 describe("core boundary", () => {
+	test("the core's own directory holds no source file; each lives in its layer's directory", () => {
+		// kernel/ holds what every layer builds on, host/ assembles the host, and the other
+		// directories each hold one area; scripts/boundaries.ts checks the direction between them.
+		const loose = readdirSync(CORE).filter(
+			(name) => name.endsWith(".ts") && !name.endsWith(".test.ts"),
+		);
+		expect(loose).toEqual([]);
+	});
+
 	test("the core imports only itself", () => {
 		const outside = coreFiles(CORE).flatMap((file) =>
 			localImports(file)

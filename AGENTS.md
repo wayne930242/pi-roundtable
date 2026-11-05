@@ -2,6 +2,10 @@
 
 Release steps live in `.github/PACKAGE-RELEASES.md`; read it before bumping versions or pushing a tag.
 
+## Layout
+
+- `src/core` holds no source file of its own; a new file goes into its layer's directory. `kernel/` imports nothing else of the core, the area directories (`agents/`, `routing/`, `identity/`, `modules/*`, ...) build on it, `plugin-api/` is what a plugin is written against, and `host/` assembles the host: only `host/` and `testing/` import it. `scripts/boundaries.ts` checks these directions, and that no two core directories import each other at run time; break a new cycle by moving the shared name down a layer.
+
 ## Tests
 
 - `servicePair` in `pi-roundtable/testing` wraps a service in a Proxy, so a class with `#private` fields (for example `PgScheduleStore`) throws "Cannot access invalid private field" through it. Pass bound methods or a closure-based object.
