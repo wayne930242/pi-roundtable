@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Home at the foot of the room drawer goes to the room list, the level above the rooms, instead of the home room; it is there in every room, with or without a home room.
+
 ## [0.34.0] - 2026-11-04
 
 - Release in lockstep with pi-roundtable 0.34.0 (an agent's shell gets no host secret by default, GH_TOKEN included); peer range `>=0.34.0 <0.35.0`, no package-specific behavior changes.

@@ -669,15 +669,11 @@ button.room-picture:hover:not(:disabled) {
 	padding: 0 var(--space-2) var(--space-3);
 }
 
-/* Home stays under the rows while they scroll; the panel's own padding keeps it off the home indicator. */
+/* Home (the room list) stays under the rows while they scroll; the panel's own padding keeps it off the home indicator. */
 .switcher-foot {
 	flex: none;
 	padding: var(--space-2);
 	border-top: 1px solid var(--border);
-}
-
-.switcher-home[aria-current="page"] {
-	color: var(--muted);
 }
 
 .switcher-heading {

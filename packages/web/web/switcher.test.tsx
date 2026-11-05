@@ -15,7 +15,7 @@ import { closeMenu } from "./lib/action-menu.ts";
 import { store } from "./lib/app-store.ts";
 import { clearDrafts, draftOf } from "./lib/drafts.ts";
 import { loadKit } from "./lib/kit.ts";
-import { setRouting } from "./lib/router.ts";
+import { hrefFor, setRouting } from "./lib/router.ts";
 import { closeTeamSheet, currentTeamSheet } from "./lib/team-sheet.ts";
 
 // Rooms of this file's own: the store is shared by the files of a run, and a room another file left
@@ -633,7 +633,7 @@ test("the pinned list and a folder with no room are places to drop, hidden until
 const homeButton = () =>
 	page.container.querySelector<HTMLButtonElement>(".switcher-home");
 
-test("Home sits at the foot of the drawer, outside the rows that scroll, and only when there is a home room", async () => {
+test("Home sits at the foot of the drawer, outside the rows that scroll, with or without a home room", async () => {
 	await page.render(<Room current={SCOUT} />);
 	await page.click(element("avatar"));
 	await settle(60);
@@ -648,32 +648,21 @@ test("Home sits at the foot of the drawer, outside the rows that scroll, and onl
 			rooms: [view(GUIDE, { home: false }), view(SCOUT), view(BUILD)],
 		}),
 	);
-	expect(homeButton() === null).toBe(true);
+	expect(homeButton() === null).toBe(false);
 });
 
-test("a tap on Home closes the drawer and goes to the home room", async () => {
-	window.location.hash = `#/room/${encodeURIComponent(SCOUT)}`;
-	await page.render(<Room current={SCOUT} />);
-	await page.click(element("avatar"));
-	await settle(60);
-	expect(homeButton()?.hasAttribute("aria-current")).toBe(false);
-	await page.act(async () => {
-		homeButton()?.click();
+test("a tap on Home closes the drawer and goes to the room list, from any room", async () => {
+	for (const current of [SCOUT, GUIDE]) {
+		window.location.hash = `#/room/${encodeURIComponent(current)}`;
+		await page.render(<Room current={current} />);
+		await page.click(element("avatar"));
 		await settle(60);
-	});
-	expect(drawer()).toBe("closed");
-	expect(location.hash).toBe(`#/room/${encodeURIComponent(GUIDE)}`);
-});
-
-test("inside the home room Home is marked current, and a tap only closes the drawer", async () => {
-	await page.render(<Room current={GUIDE} />);
-	await page.click(element("avatar"));
-	await settle(60);
-	expect(homeButton()?.getAttribute("aria-current")).toBe("page");
-	await page.act(async () => {
-		homeButton()?.click();
-		await settle(60);
-	});
-	expect(drawer()).toBe("closed");
-	expect(location.hash).toBe(`#/room/${encodeURIComponent(GUIDE)}`);
+		expect(homeButton()?.hasAttribute("aria-current")).toBe(false);
+		await page.act(async () => {
+			homeButton()?.click();
+			await settle(60);
+		});
+		expect(drawer()).toBe("closed");
+		expect(location.hash).toBe(hrefFor("rooms"));
+	}
 });
