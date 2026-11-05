@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { type MouseEvent, useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { installArrangedStyle } from "../lib/arranged-style.ts";
 import { useAccentStyle } from "../lib/characters.ts";
@@ -10,10 +10,13 @@ import { roomLifting } from "../lib/layout.ts";
 import { useLifting } from "../lib/lifting.ts";
 import { openAddMenu, roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
+import { roomChoices } from "../lib/room-choices.ts";
 import { activityAt, waitingCards } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
 import { useRowPress } from "../lib/row-press.ts";
-import { drawerGroups } from "../lib/sections.ts";
+import { drawerGroups, sections, type ThreadKeys } from "../lib/sections.ts";
+import { installSwitcherThreadsStyle } from "../lib/switcher-threads-style.ts";
+import { ThreadList } from "../pages/rooms.tsx";
 import { Icon } from "./icons.tsx";
 import { ReadReveal, useReadSwipe } from "./read-swipe.tsx";
 import { RoomPicture } from "./room-picture.tsx";
@@ -21,6 +24,44 @@ import { FoldToggle } from "./section-fold.tsx";
 import { Unread } from "./unread.tsx";
 
 installArrangedStyle();
+installSwitcherThreadsStyle();
+
+/** Whether the person opened or closed a room's threads in the drawer, per room. */
+export const DRAWER_THREADS_KEY = "roundtable-console:drawer-threads-open";
+export const drawerThreads = roomChoices(DRAWER_THREADS_KEY);
+
+/** The dispatch threads and temp knights of each room, as the rooms page nests them. */
+function useThreads(): Record<string, ThreadKeys> {
+	const shape = useSelector((state) =>
+		JSON.stringify(sections(state, (key) => activityAt(state, key)).threads),
+	);
+	return useMemo(
+		() => JSON.parse(shape) as Record<string, ThreadKeys>,
+		[shape],
+	);
+}
+
+/**
+ * A tap on a thread card or a temp knight under a row goes there as a tap on the row does: the
+ * drawer closes first. A swipe or hold that already took the click has prevented it.
+ */
+function goInside(event: MouseEvent, go: (key: string) => void): void {
+	if (
+		event.defaultPrevented ||
+		event.button !== 0 ||
+		event.metaKey ||
+		event.ctrlKey ||
+		event.shiftKey ||
+		event.altKey ||
+		!(event.target instanceof Element)
+	)
+		return;
+	const key =
+		event.target.closest<HTMLElement>("a[data-link-room]")?.dataset.linkRoom;
+	if (!key) return;
+	event.preventDefault();
+	go(key);
+}
 
 /** What the drawer lists of a room: key, name, and whether a card waits there. */
 interface Entry {
@@ -79,6 +120,8 @@ function Row(props: {
 	onLeave(go: () => void): void;
 	/** The row can be lifted and dropped in another list. */
 	liftable: boolean;
+	/** The room's dispatch threads and temp knights, shown under it on request. */
+	threads: ThreadKeys | undefined;
 }) {
 	const { key, name } = props.entry;
 	const room = useSelector((state) => state.rooms[key]);
@@ -89,12 +132,22 @@ function Row(props: {
 		() => roomMenuOf(key, props.onLeave),
 		props.liftable && !view?.home ? roomLifting(key) : undefined,
 	);
+	const threads = props.threads;
+	const count = threads ? threads.open.length + threads.closed.length : 0;
+	const inside =
+		threads?.open.includes(props.current) ||
+		threads?.closed.includes(props.current);
+	// The open room, or the one whose thread is open, shows its threads until the person closes them.
+	const open =
+		drawerThreads.use(key) ?? (key === props.current || Boolean(inside));
 	if (!view) return null;
+	const body = `switcher-threads-${key}`;
 	return (
 		<li
 			{...(props.liftable && !view.home
 				? { "data-drop-item": "", "data-key": key }
 				: {})}
+			{...(count ? { "data-threads": "" } : {})}
 		>
 			<ReadReveal />
 			<a
@@ -171,6 +224,35 @@ function Row(props: {
 					</span>
 				) : null}
 			</a>
+			{threads && count ? (
+				<button
+					type="button"
+					className="switcher-threads-toggle"
+					aria-expanded={open}
+					aria-controls={open ? body : undefined}
+					aria-label={open ? t("Hide threads") : t("Show threads")}
+					onClick={() => drawerThreads.set(key, !open)}
+				>
+					<Icon name="chevron" size={14} />
+					<span aria-hidden="true">{count}</span>
+				</button>
+			) : null}
+			{threads && count && open ? (
+				// biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: the links inside take the keys; this only closes the drawer on their way out
+				<div
+					id={body}
+					className="switcher-threads"
+					data-swipe-ignore=""
+					onClick={(event) => goInside(event, props.onPick)}
+				>
+					<ThreadList
+						open={threads.open}
+						closed={threads.closed}
+						active={props.current}
+						parent={key}
+					/>
+				</div>
+			) : null}
 		</li>
 	);
 }
@@ -184,6 +266,7 @@ export function SwitcherList(props: {
 	const scroll = useRef<HTMLDivElement>(null);
 	useReadSwipe(scroll);
 	const groups = useGroups();
+	const threads = useThreads();
 	const collapsed = useCollapsed();
 	const unread = useHost((state) => state.unread);
 	const matching = groups
@@ -329,6 +412,7 @@ export function SwitcherList(props: {
 										onPick={pick}
 										onLeave={props.close}
 										liftable={!waiting && group.id !== "home"}
+										threads={threads[entry.key]}
 									/>
 								))}
 							</ul>

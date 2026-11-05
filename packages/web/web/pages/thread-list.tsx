@@ -37,6 +37,7 @@ const HelperRow = memo(function HelperRow(
 			<a
 				className="helper-link"
 				href={hrefFor("room", view.key)}
+				data-link-room={view.key}
 				data-helper={view.name}
 				data-finished={finished ? "" : undefined}
 				aria-current={props.active ? "page" : undefined}
@@ -140,6 +141,7 @@ const ThreadCard = memo(function ThreadCard(
 				<a
 					className="thread-link"
 					href={hrefFor("room", view.key)}
+					data-link-room={view.key}
 					aria-current={props.active ? "page" : undefined}
 				>
 					{parent ? (

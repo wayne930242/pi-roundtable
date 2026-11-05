@@ -676,6 +676,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Dispatch threads": "派工討論串",
 	"Find a room": "尋找聊天室",
 	"Switch rooms": "切換聊天室",
+	"Show threads": "顯示串",
+	"Hide threads": "收起串",
 	"Keyboard shortcuts": "鍵盤快速鍵",
 	"Previous room": "上一個聊天室",
 	"Next room": "下一個聊天室",
@@ -1231,7 +1233,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Nothing changed for {name}.": "{name} 沒有變動。",
 	"{agent} will also carry: {skills}.": "{agent} 將會再攜帶：{skills}。",
 	"{agent} will no longer carry: {skills}.": "{agent} 將不再攜帶：{skills}。",
-	// 主要提示詞與技能內容的編輯：伺服器的拒絕訊息
 	"This host has no prompts to edit.": "這個主機沒有可編輯的提示詞。",
 	"There is no such prompt.": "沒有這份提示詞。",
 	"base must be the text the prompt was edited from.":
@@ -1295,7 +1296,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"New messages": "新訊息",
 	"Seen by {count}": "已讀 {count}",
 	"More settings": "更多設定",
-	// 主機聊天室與頁面：伺服器的拒絕訊息
 	"There is no such room.": "沒有這個聊天室。",
 	"There is no such page.": "沒有這個頁面。",
 	"input must be an object.": "input 必須是物件。",
