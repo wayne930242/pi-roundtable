@@ -1,5 +1,5 @@
-// The swipe to the right that a row of a list answers: a dispatch thread's card clears itself, a room's
-// row marks the room read. This holds how a finger is told from a scroll, a tap and a hold, how far the
+// The sideways swipe that a row of a list answers: a dispatch thread's card clears itself, a room's
+// row marks the room read to the right and turns its modes to the left. This holds how a finger is told from a scroll, a tap and a hold, how far the
 // row follows it, and when the swipe counts; what the row does is the caller's.
 
 import { LongPress, type Point } from "./long-press.ts";
@@ -22,8 +22,10 @@ export const PULL_ARM = 56;
 /** The last stretch of the drag (ms) that the finger's speed is read from. */
 const SPEED_WINDOW_MS = 100;
 
-/** What a list's rows do under a swipe to the right. */
+/** What a list's rows do under a sideways swipe. */
 export interface RowSwipeSpec {
+	/** The way the row follows the finger; right when unsaid. A row may carry one spec each way. */
+	direction?: "right" | "left";
 	/** The rows, as a selector: the element that follows the finger. */
 	row: string;
 	/** Parts of a row that are not the row, such as its menu button. */
@@ -80,25 +82,26 @@ const keepScroll = (event: TouchEvent) => {
 	if (event.cancelable) event.preventDefault();
 };
 
-/** How fast (px per ms) the finger was going to the right when it lifted at `at`. */
-function speedOf(samples: Finger["samples"], at: number): number {
+/** How fast (px per ms) the finger was going the swipe's way (`sign`) when it lifted at `at`. */
+function speedOf(samples: Finger["samples"], at: number, sign: number): number {
 	const last = samples.at(-1);
 	if (!last || at - last.t > SPEED_WINDOW_MS) return 0;
 	const first = samples.find((one) => last.t - one.t <= SPEED_WINDOW_MS);
 	if (!first || last.t <= first.t) return 0;
-	return (last.x - first.x) / (last.t - first.t);
+	return (sign * (last.x - first.x)) / (last.t - first.t);
 }
 
 /**
- * Gives the rows inside `root` the swipe of `spec`. A row that can act and leaves follows a finger to
- * the right and acts when it is let go past 40 % of its width, or flicked. One that springs back is
+ * Gives the rows inside `root` the swipe of `spec`. A row that can act and leaves follows a finger its
+ * way and acts when it is let go past 40 % of its width, or flicked. One that springs back is
  * pulled: it moves half the finger's way up to `PULL_CAP`, arms past `PULL_ARM` of travel, and acts
- * when let go armed, or flicked. One that cannot act only gives a little and comes back. A swipe to the left, a scroll, an edge swipe and a hold are not the swipe.
+ * when let go armed, or flicked. One that cannot act only gives a little and comes back. A swipe the other way, a scroll, an edge swipe and a hold are not the swipe.
  */
 export function attachRowSwipe(
 	root: HTMLElement,
 	spec: RowSwipeSpec,
 ): RowSwipe {
+	const sign = spec.direction === "left" ? -1 : 1;
 	const disarm = armTouches();
 	let finger: Finger | undefined;
 	/** A swipe or a hold happened: the click that follows the lift must not open the row. */
@@ -172,7 +175,7 @@ export function attachRowSwipe(
 	const onMove = (event: PointerEvent) => {
 		if (!finger || finger.id !== event.pointerId) return;
 		const { row } = finger;
-		const dx = event.clientX - finger.origin.x;
+		const dx = sign * (event.clientX - finger.origin.x);
 		const dy = event.clientY - finger.origin.y;
 		if (finger.state === "wait") {
 			// A finger that wanders off the hold gives it up by itself.
@@ -180,7 +183,7 @@ export function attachRowSwipe(
 			const across = Math.abs(dx);
 			if (!finger.swipes) return;
 			if (across >= INTENT && across > AXIS_RATIO * Math.abs(dy)) {
-				// The row follows a finger going right; one going left is not ours.
+				// The row follows a finger going its way; one going the other way is not ours.
 				finger.state = dx > 0 ? "drag" : "reject";
 				if (finger.state === "drag") {
 					finger.press.cancel();
@@ -204,7 +207,7 @@ export function attachRowSwipe(
 				? Math.min(pulled, width)
 				: pullTravel(pulled);
 		finger.samples.push({ x: event.clientX, t: event.timeStamp });
-		row.style.transform = `translate3d(${finger.offset}px, 0, 0)`;
+		row.style.transform = `translate3d(${sign * finger.offset}px, 0, 0)`;
 		if (can) {
 			const armed = spec.leaves
 				? settles(finger.offset / width, 0)
@@ -224,7 +227,7 @@ export function attachRowSwipe(
 		if (state !== "drag") return;
 		swallow = true;
 		const width = row.offsetWidth || 1;
-		const velocity = speedOf(samples, event.timeStamp);
+		const velocity = speedOf(samples, event.timeStamp, sign);
 		const acts =
 			spec.can(row) &&
 			pulled > INTENT &&

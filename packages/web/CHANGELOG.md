@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The room drawer shows a room's dispatch threads and temp knights: a row that has any carries a toggle with their count, which opens the rooms page's own thread list under it. The open room starts open and the choice is kept per room on the device; a tap on a thread or temp knight goes there and closes the drawer, and a thread card's swipe is its own, apart from the row's swipe to read and the drawer's swipe to close.
 - A temp knight's row marks its room read when swiped right, on the rooms page and in the drawer, the way a room's row does, finished or not; only its own room is marked, not its knight's.
+- Swiping a room's row left on the rooms page turns its modes, one step a swipe: none, yolo, yolo and long-running, none again (long-running alone goes to none). It is the same short pull that springs back as the read swipe, mirrored, and shows the modes it turns to. Yolo by swipe asks nothing; one notice names the new modes with an Undo that puts the old ones back. The badges change at once and come back if the server refuses. Read-only rooms, arrange mode, thread cards, temp knights' rows and the drawer are left as they were; the room menu's mode items stay, and still ask before yolo.
 
 ### Changed
 

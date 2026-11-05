@@ -258,6 +258,9 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Yolo mode is on: held actions are approved without asking.":
 		"Yolo 模式已開啟：保留的操作會直接核准，不再詢問。",
 	"Yolo mode on": "Yolo 模式已開啟",
+	"{name}: Yolo on": "{name}：已開 yolo",
+	"{name}: Yolo and long-running on": "{name}：已開 yolo 與長時間",
+	"{name}: modes off": "{name}：已關閉模式",
 
 	// 命令面板
 	"Find a room or page": "尋找聊天室或頁面",
@@ -1125,7 +1128,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.prop.anchor": "船錨",
 	"character.prop.marotte": "小丑權杖",
 	"character.prop.sword": "長劍",
-	// 髮型
 	"character.hair.none": "無頭髮",
 	"character.hair.short": "短髮",
 	"character.hair.bob": "鮑伯頭",
@@ -1134,12 +1136,10 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.hair.curly": "捲髮",
 	"character.hair.ponytail": "馬尾",
 	"character.hair.braid": "辮子",
-	// 鬍鬚
 	"character.beard.none": "無鬍鬚",
 	"character.beard.full": "落腮鬍",
 	"character.beard.mustache": "八字鬍",
 	"character.beard.goatee": "山羊鬍",
-	// 配件
 	"character.accessory.none": "無配件",
 	"character.accessory.glasses": "眼鏡",
 	"character.accessory.freckles": "雀斑",

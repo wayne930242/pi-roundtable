@@ -1,8 +1,9 @@
 // A room's row, or a temp knight's, marks the room read when it is swiped to the right, on the rooms
-// page and in the drawer. The swipe is a shortcut for the room menu's "Mark as read"; it loads with the first list.
+// page and in the drawer; the rooms page's room rows also take the mode swipe to the left. The swipe is a shortcut for the room menu's "Mark as read"; it loads with the first list.
 
 import { markAllRead } from "./bulk-actions.ts";
 import { unreadIn } from "./bulk-items.ts";
+import { attachModeSwipe } from "./mode-swipe.ts";
 import { attachRowSwipe } from "./row-swipe.ts";
 
 /** A room's row, the rooms page's and the drawer's, and a temp knight's under it. A thread card is not one. */
@@ -15,7 +16,10 @@ const keyOf = (row: HTMLElement): string => row.dataset.room ?? "";
 const hasUnread = (row: HTMLElement): boolean =>
 	Object.keys(unreadIn([keyOf(row)])).length > 0;
 
-/** Gives the room rows inside `root` the swipe that marks them read; returns what takes it off. */
+/**
+ * Gives the room rows inside `root` the swipe that marks them read, and the rooms page's rows the
+ * swipe to the left that turns their modes; returns what takes them off.
+ */
 export function attachReadSwipe(root: HTMLElement): () => void {
 	const swipe = attachRowSwipe(root, {
 		row: ROW,
@@ -28,5 +32,9 @@ export function attachReadSwipe(root: HTMLElement): () => void {
 			row.parentElement?.querySelector<HTMLElement>(":scope > .read-reveal") ??
 			null,
 	});
-	return swipe.detach;
+	const detachModes = attachModeSwipe(root);
+	return () => {
+		swipe.detach();
+		detachModes();
+	};
 }
