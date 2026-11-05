@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-06
+
 ### Added
 
 - The room drawer shows a room's dispatch threads and temp knights: a row that has any carries a toggle with their count, which opens the rooms page's own thread list under it. The open room starts open and the choice is kept per room on the device; a tap on a thread or temp knight goes there and closes the drawer, and a thread card's swipe is its own, apart from the row's swipe to read and the drawer's swipe to close.

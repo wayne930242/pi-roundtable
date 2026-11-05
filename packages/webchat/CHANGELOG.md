@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-06
+
+- Release in lockstep with pi-roundtable 0.35.0 (temp-knight presets; the room drawer shows threads, swipes read and the rooms page swipes modes); peer range `>=0.35.0 <0.36.0`, no package-specific behavior changes.
+
 ## [0.34.0] - 2026-11-04
 
 - Release in lockstep with pi-roundtable 0.34.0 (an agent's shell gets no host secret by default, GH_TOKEN included); peer range `>=0.34.0 <0.35.0`, no package-specific behavior changes.
