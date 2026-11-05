@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import type { Hex } from "../characters/index.ts";
 import type { AttachmentRetention } from "./attachments/attachment-retention.ts";
+import type { PeerBotsConfig } from "./config/peer-bots.ts";
 import { checkDatabase } from "./db/check-database.ts";
 import { openPool, runMigrations } from "./db/migrations.ts";
 import { type DrainOptions, drainWork, stopTurns } from "./drain.ts";
@@ -12,7 +13,6 @@ import type { Locale } from "./i18n/index.ts";
 import type { JudgeModel } from "./judging/model-judge.ts";
 import type { Logger } from "./log.ts";
 import type { AgentTools, RoundtablePlugin, Service } from "./plugin.ts";
-import type { PeerBotsConfig } from "./routing/peer-bots.ts";
 import { RUNTIME } from "./services.ts";
 import type { ChannelKey } from "./sessions.ts";
 import type { ShellEnvConfig } from "./shared/child-env.ts";

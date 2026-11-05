@@ -17,7 +17,9 @@ import {
 	toolOutput,
 } from "./shared/tool-result.ts";
 import { type Speaker, TIERS, type Tier } from "./speakers.ts";
-import { toolTurn } from "./tool-turn.ts";
+import { ToolRefusal, toolTurn } from "./tool-turn.ts";
+
+export { ToolRefusal };
 
 /** Tool names are lowercase words joined by underscores, like every tool the core ships. */
 const TOOL_NAME = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
@@ -89,14 +91,6 @@ export interface ToolTurn {
 	 * always have it; code that builds a turn by hand may leave it out.
 	 */
 	attachments?(): Promise<readonly ToolAttachmentInfo[]>;
-}
-
-/**
- * Thrown by a tool's `run` for a call the model should correct: the message becomes the tool's
- * error result, which the model reads. Any other error fails the call.
- */
-export class ToolRefusal extends Error {
-	override name = "ToolRefusal";
 }
 
 export interface ToolSpec<Schema extends TObject> {

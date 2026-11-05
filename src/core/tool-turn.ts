@@ -4,10 +4,17 @@ import {
 	openAttachment,
 } from "./attachments/tool-attachment.ts";
 import type { ToolTurn } from "./define.ts";
-import { ToolRefusal } from "./define.ts";
 import type { ClientPort } from "./domain/client.ts";
 import { attachReplyFile } from "./reply-files.ts";
 import type { SessionContext } from "./sessions.ts";
+
+/**
+ * Thrown by a tool's `run` for a call the model should correct: the message becomes the tool's
+ * error result, which the model reads. Any other error fails the call.
+ */
+export class ToolRefusal extends Error {
+	override name = "ToolRefusal";
+}
 
 /**
  * `port` as a tool sees it in a turn: every call carries the turn's `signal` beside the caller's,

@@ -7,6 +7,7 @@ import { agentClaim } from "./core/agents/agent-claim.ts";
 import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
 import { attachmentPort } from "./core/attachments/attachment-port.ts";
 import { DISCORD, type DiscordServices } from "./core/builtin/discord.ts";
+import type { PeerBotsConfig } from "./core/config/peer-bots.ts";
 import type {
 	ConversationPort,
 	InboundMessage,
@@ -69,7 +70,7 @@ import {
 	conversationTurns,
 } from "./core/routing/conversation-turns.ts";
 import { MessageObservers } from "./core/routing/message-observers.ts";
-import { PeerBots, type PeerBotsConfig } from "./core/routing/peer-bots.ts";
+import { PeerBots } from "./core/routing/peer-bots.ts";
 import { surfacePort } from "./core/routing/surface-port.ts";
 import {
 	AGENTS,

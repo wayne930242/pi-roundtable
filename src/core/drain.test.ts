@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-	DRAIN_LIMIT_MS,
-	drainWork,
-	stopTurns,
-	waitUntilIdle,
-} from "./drain.ts";
+import { DRAIN_LIMIT_MS } from "./config/config.ts";
+import { drainWork, stopTurns, waitUntilIdle } from "./drain.ts";
 import { silentLogger } from "./log.ts";
 import { ChannelQueue } from "./routing/channel-queue.ts";
 

@@ -2,7 +2,9 @@ import type { InboundMessage } from "../contract/channels.ts";
 import type { ChannelKey } from "../sessions.ts";
 import type { Tier } from "../speakers.ts";
 
-export { QUEUED_MARK, STEERED_MARK } from "../contract/channels.ts";
+/** Reactions on a message sent during a turn: added to that turn, or waiting for its own. */
+export const STEERED_MARK = "↪️";
+export const QUEUED_MARK = "⏳";
 export type { ChannelKey, InboundMessage };
 
 export interface TranscriptEntry {

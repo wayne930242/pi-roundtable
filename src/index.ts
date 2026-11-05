@@ -56,6 +56,10 @@ export type {
 export type { ConversationsConfig } from "./core/config/conversations.ts";
 export type { HelpersConfig } from "./core/config/helpers.ts";
 export type { LimitsConfig } from "./core/config/limits.ts";
+export type {
+	PeerBotEntry,
+	PeerBotsConfig,
+} from "./core/config/peer-bots.ts";
 export type { ProfilesConfig } from "./core/config/profiles.ts";
 export type {
 	AgentRoutes,
@@ -380,10 +384,6 @@ export type {
 	ConversationTurnInput,
 	ConversationTurns,
 } from "./core/routing/conversation-turns.ts";
-export type {
-	PeerBotEntry,
-	PeerBotsConfig,
-} from "./core/routing/peer-bots.ts";
 export type {
 	AgentChange,
 	AgentDirectory,

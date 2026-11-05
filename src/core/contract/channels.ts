@@ -120,9 +120,7 @@ export interface InboundMessage {
 	};
 }
 
-/** Reactions on a message sent during a turn: added to that turn, or waiting for its own. */
-export const STEERED_MARK = "↪️";
-export const QUEUED_MARK = "⏳";
+export { QUEUED_MARK, STEERED_MARK } from "../domain/conversation.ts";
 
 /** A message waiting in a channel's queue for its own turn (`ConversationPort.queued`). */
 export interface QueuedMessage {

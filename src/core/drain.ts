@@ -1,10 +1,5 @@
+import { DRAIN_LIMIT_MS } from "./config/config.ts";
 import type { Logger } from "./log.ts";
-
-/**
- * How long a shutdown waits for running work before aborting it: long enough for a usual turn to
- * answer, short enough that a hung one never holds a restart for an hour.
- */
-export const DRAIN_LIMIT_MS = 3 * 60_000;
 
 /** How long work that was told to stop gets to end before the shutdown goes on without it. */
 const ABORT_GRACE_MS = 10_000;

@@ -1,6 +1,6 @@
 import type { ChannelContextOptions } from "../contract/channel-context.ts";
 import { ConfigError } from "../domain/errors.ts";
-import { type PeerBotsConfig, peerBotsShape } from "../routing/peer-bots.ts";
+import { type PeerBotsConfig, peerBotsShape } from "./peer-bots.ts";
 import {
 	bool,
 	guarded,

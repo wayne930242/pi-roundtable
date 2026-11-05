@@ -4,7 +4,6 @@ import { CATALOG, type Hex } from "../../characters/index.ts";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
-import { DRAIN_LIMIT_MS } from "../drain.ts";
 import type { Locale } from "../i18n/index.ts";
 import type { AccessRules } from "../identity/access-policy.ts";
 import type { ProfileRules } from "../identity/profiles.ts";
@@ -45,6 +44,12 @@ import {
 	routingOf,
 } from "./routing.ts";
 import type { SkillsConfig } from "./skills-config.ts";
+
+/**
+ * How long a shutdown waits for running work before aborting it: long enough for a usual turn to
+ * answer, short enough that a hung one never holds a restart for an hour.
+ */
+export const DRAIN_LIMIT_MS = 3 * 60_000;
 
 export type { DiscordConfig };
 

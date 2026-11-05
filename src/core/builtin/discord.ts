@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import type { PeerBotsConfig } from "../config/peer-bots.ts";
 import type {
 	ChannelContext,
 	ChannelContextOptions,
@@ -24,7 +25,7 @@ import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { RoundtablePlugin } from "../plugin.ts";
-import { PeerBots, type PeerBotsConfig } from "../routing/peer-bots.ts";
+import { PeerBots } from "../routing/peer-bots.ts";
 import { IDENTITY, THREADS } from "../services.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 

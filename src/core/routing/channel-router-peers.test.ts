@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { PeerBotsConfig } from "../config/peer-bots.ts";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { factsTier } from "../identity/access-policy.ts";
@@ -8,7 +9,7 @@ import { recordingLogger } from "../testing/recording-logger.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";
 import { MessageObservers } from "./message-observers.ts";
-import { answersAuthor, PeerBots, type PeerBotsConfig } from "./peer-bots.ts";
+import { answersAuthor, PeerBots } from "./peer-bots.ts";
 
 const PEER = "800000000000000001";
 const STRANGER = "800000000000000002";
