@@ -1,12 +1,16 @@
 import type { CharacterInput } from "../../characters/index.ts";
-import { helpersOf } from "../config/helpers.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { Speaker } from "../identity/speakers.ts";
-import { toolTiers } from "../runtime/tool-tiers.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import { followOrigin } from "./helper-modes.ts";
+import {
+	checkHelperGrant,
+	type HelperFields,
+	helperMaker,
+	withPreset,
+} from "./helper-preset-ops.ts";
 import type { TeamContext } from "./team-options.ts";
 
 /** The team's way of making an agent, which `createHelper` uses to make a temp knight. */
@@ -40,46 +44,26 @@ export async function createHelper(
 	ctx: TeamContext,
 	make: MakeAgent,
 	caller: AgentTurnScope,
-	input: {
-		name?: string;
-		displayName: string;
-		prompt: string;
-		task: string;
-		character?: CharacterInput;
-		skills?: string[];
-		model?: string;
-		thinking?: string;
-	},
+	input: HelperFields & { name?: string; task: string },
 ): Promise<string> {
 	const { store, logger } = ctx.options;
-	const limits = helpersOf(ctx.options.helpers);
-	if (!limits)
-		throw new AgentError("Temp knights are switched off on this host.");
-	const speaker = ctx.turns.speakerOf(caller);
-	if (!speaker)
+	const { speaker, parent, limits } = helperMaker(ctx, caller, "helper_create");
+	// A preset saved earlier is checked again now, merged with the call.
+	const merged = await withPreset(ctx, parent, input);
+	const {
+		task,
+		name: given,
+		model,
+		thinking,
+		preset: _preset,
+		...rest
+	} = merged;
+	const { displayName, prompt } = rest;
+	if (!displayName || !prompt)
 		throw new AgentError(
-			"helper_create can only be used during an agent turn.",
+			"Give display_name and prompt, or a preset (from helper_preset_list) that has them.",
 		);
-	const parent = store.activeAgent(caller.name);
-	if (isHelper(parent))
-		throw new AgentError(
-			`You are a temp knight of "${parent.parent}" and cannot make temp knights; ask it to.`,
-		);
-	const { task, name: given, model, thinking, ...rest } = input;
-	// A temp knight never gets more than its parent unless the speaker could grant it by hand.
-	const tiers = ctx.options.toolTiers ?? toolTiers();
-	if (!tiers.allows(speaker.tier, "agent_update") && (model || thinking))
-		throw new AgentError(
-			"A temp knight runs your model and thinking level; choosing others needs a higher tier.",
-		);
-	if (rest.skills?.length && !tiers.allows(speaker.tier, "agent_skills")) {
-		const own = new Set(ctx.options.skills?.carriedNames(parent.name) ?? []);
-		const extra = rest.skills.filter((skill) => !own.has(skill));
-		if (extra.length > 0)
-			throw new AgentError(
-				`A temp knight can carry only skills you carry; not allowed: ${extra.join(", ")}.`,
-			);
-	}
+	checkHelperGrant(ctx, speaker, parent, merged);
 	const name = given ?? nextName(ctx, parent.name);
 	// Everything that can be refused is checked before anything is made or archived.
 	store.checkNewName(name);
@@ -92,7 +76,7 @@ export async function createHelper(
 			parent,
 			origin: ctx.turns.turnChannel(caller),
 		},
-		{ ...rest, name },
+		{ ...rest, displayName, prompt, name },
 		{ model, thinking },
 	);
 	const helper = made.agent;

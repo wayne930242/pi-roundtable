@@ -24,6 +24,7 @@ import {
 	PARTS,
 	PROMPT,
 } from "./agent-tool-schema.ts";
+import type { HelperFields, PresetAction } from "./helper-preset-ops.ts";
 import { helperToolDefs } from "./helper-tools.ts";
 
 /** The tool that hands a request to another agent; a group seat has none. */
@@ -32,8 +33,14 @@ export const MESSAGE_AGENT_TOOL = "message_agent";
 /** The tool that changes an agent's look; every host offers it. */
 export const AVATAR_TOOL = "agent_avatar";
 
-/** The tools that make and end temp knights; `helpers: false` leaves them out. */
-export const HELPER_TOOLS = ["helper_create", "helper_end"] as const;
+/** The tools that make and end temp knights and keep their presets; `helpers: false` leaves them out. */
+export const HELPER_TOOLS = [
+	"helper_create",
+	"helper_end",
+	"helper_preset_set",
+	"helper_preset_list",
+	"helper_preset_delete",
+] as const;
 
 export const AGENT_TOOLS = [
 	"agent_list",
@@ -103,17 +110,10 @@ export interface AgentOps {
 	/** Makes a temp knight of the caller for one task; the answer returns to the caller's conversation. */
 	helperCreate(
 		caller: AgentTurnScope,
-		input: {
-			name?: string;
-			displayName: string;
-			prompt: string;
-			task: string;
-			character?: CharacterInput;
-			skills?: string[];
-			model?: string;
-			thinking?: string;
-		},
+		input: HelperFields & { name?: string; task: string },
 	): Promise<string>;
+	/** Saves, lists, or deletes the caller's own temp-knight presets. */
+	helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string>;
 	/** Archives the caller's own temp knights: the named ones, or every one that is finished. */
 	helperEnd(
 		caller: AgentTurnScope,

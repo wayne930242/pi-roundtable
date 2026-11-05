@@ -759,11 +759,14 @@
 		"src/core/agents/agent-rules.d.ts#GroupMessage": "interface GroupMessage {\n    id: number;\n    \n    author: string;\n    authorName: string;\n    text: string;\n    at: Date;\n}",
 		"src/core/agents/agent-rules.d.ts#helperSurface": "declare const helperSurface: (agent: Pick<Agent, \"parent\" | \"origin\"> | undefined) => string | undefined;",
 		"src/core/agents/agent-rules.d.ts#isHelper": "declare const isHelper: (agent: Pick<Agent, \"parent\"> | undefined) => boolean;",
-		"src/core/agents/agent-tools.d.ts#AgentOps": "interface AgentOps {\n    list(): Promise<string>;\n    get(name: string): string;\n    update(name: string, change: {\n        displayName?: string;\n        prompt?: string;\n        model?: string;\n        thinking?: string;\n    }, \n    \n    by?: string): Promise<string>;\n    create(caller: AgentTurnScope, input: {\n        name: string;\n        displayName: string;\n        prompt: string;\n        \n        character?: CharacterInput;\n        task: string;\n        category?: string;\n        skills?: string[];\n        \n        longRunning?: boolean;\n    }): Promise<string>;\n    \n    helperCreate(caller: AgentTurnScope, input: {\n        name?: string;\n        displayName: string;\n        prompt: string;\n        task: string;\n        character?: CharacterInput;\n        skills?: string[];\n        model?: string;\n        thinking?: string;\n    }): Promise<string>;\n    \n    helperEnd(caller: AgentTurnScope, names: readonly string[] | \"finished\"): Promise<string>;\n    \n    avatar(name: string, look: CharacterInput): Promise<string>;\n    \n    \n    message(caller: AgentTurnScope, to: string, text: string, conversation?: string): string;\n    \n    reach?(caller: AgentTurnScope, to: string, conversation?: string): Promise<void>;\n    createGroup(input: {\n        name: string;\n        displayName: string;\n        members: string[];\n        host?: string;\n        category?: string;\n    }): Promise<string>;\n    updateGroup(name: string, change: {\n        displayName?: string;\n        members?: string[];\n        host?: string;\n    }): Promise<string>;\n    archive(caller: AgentTurnScope, name: string): Promise<string>;\n    arrange(entries: {\n        category: string;\n        names: string[];\n    }[]): Promise<string>;\n    read(channel: string, around: string | undefined, limit: number | undefined): Promise<string>;\n}",
+		"src/core/agents/agent-tools.d.ts#AgentOps": "interface AgentOps {\n    list(): Promise<string>;\n    get(name: string): string;\n    update(name: string, change: {\n        displayName?: string;\n        prompt?: string;\n        model?: string;\n        thinking?: string;\n    }, \n    \n    by?: string): Promise<string>;\n    create(caller: AgentTurnScope, input: {\n        name: string;\n        displayName: string;\n        prompt: string;\n        \n        character?: CharacterInput;\n        task: string;\n        category?: string;\n        skills?: string[];\n        \n        longRunning?: boolean;\n    }): Promise<string>;\n    \n    helperCreate(caller: AgentTurnScope, input: HelperFields & {\n        name?: string;\n        task: string;\n    }): Promise<string>;\n    \n    helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string>;\n    \n    helperEnd(caller: AgentTurnScope, names: readonly string[] | \"finished\"): Promise<string>;\n    \n    avatar(name: string, look: CharacterInput): Promise<string>;\n    \n    \n    message(caller: AgentTurnScope, to: string, text: string, conversation?: string): string;\n    \n    reach?(caller: AgentTurnScope, to: string, conversation?: string): Promise<void>;\n    createGroup(input: {\n        name: string;\n        displayName: string;\n        members: string[];\n        host?: string;\n        category?: string;\n    }): Promise<string>;\n    updateGroup(name: string, change: {\n        displayName?: string;\n        members?: string[];\n        host?: string;\n    }): Promise<string>;\n    archive(caller: AgentTurnScope, name: string): Promise<string>;\n    arrange(entries: {\n        category: string;\n        names: string[];\n    }[]): Promise<string>;\n    read(channel: string, around: string | undefined, limit: number | undefined): Promise<string>;\n}",
 		"src/core/agents/agent-tools.d.ts#AvatarMode": "type AvatarMode = \"redraw\" | \"new_prompt\" | \"edit\";",
 		"src/core/agents/character-png.d.ts#characterPng": "declare function characterPng(spec: CharacterSpec, options?: ComposeOptions): Promise<Uint8Array>;",
 		"src/core/agents/helper-ops.d.ts#HelpersEnded": "interface HelpersEnded {\n    \n    parent: string;\n    \n    names: string[];\n}",
 		"src/core/agents/helper-ops.d.ts#HelperTeam": "interface HelperTeam {\n    \n    helpersOf(parent: string): Agent[];\n    \n    finishedHelpers(parents?: readonly string[]): Agent[];\n    \n    archiveHelpers(names: readonly string[], by: string): Promise<string[]>;\n    \n    restoreHelpers(names: readonly string[]): Promise<string[]>;\n    \n    onHelpersEnded(listener: (event: HelpersEnded) => void): void;\n}",
+		"src/core/agents/helper-preset-ops.d.ts#HelperFields": "interface HelperFields {\n    preset?: string;\n    displayName?: string;\n    prompt?: string;\n    character?: CharacterInput;\n    skills?: string[];\n    model?: string;\n    thinking?: string;\n}",
+		"src/core/agents/helper-preset-ops.d.ts#PresetAction": "type PresetAction = {\n    kind: \"set\";\n    preset: HelperPreset;\n} | {\n    kind: \"list\";\n    name?: string;\n} | {\n    kind: \"delete\";\n    name: string;\n};",
+		"src/core/agents/helper-presets.d.ts#HelperPreset": "interface HelperPreset {\n    name: string;\n    displayName: string;\n    prompt: string;\n    skills: string[];\n    character?: CharacterInput;\n    model?: string;\n    thinking?: string;\n}",
 		"src/core/agents/routes.d.ts#RouteKind": "type RouteKind = \"integration\" | \"agentMessage\" | \"opening\";",
 		"src/core/agents/routes.d.ts#RoutingTable": "interface RoutingTable {\n    \n    primary(agent: string): ChannelKey | undefined;\n    \n    placeOn(agent: string, surface: string): ChannelKey | undefined;\n    \n    of(agent: string, kind: \"integration\", origin: ChannelKey): ChannelKey;\n    of(agent: string, kind: \"agentMessage\", origin: ChannelKey): ChannelKey;\n    of(agent: string, kind: RouteKind, origin?: ChannelKey): ChannelKey | undefined;\n    \n    place(name: string): ChannelKey | undefined;\n}",
 		"src/core/agents/team-keys.d.ts#agentRoomKey": "declare const agentRoomKey: (surface: string, agent: string) => ChannelKey;",
@@ -1409,6 +1412,24 @@
 		"src/testing.d.ts#TestPluginResult": "interface TestPluginResult {\n    contribution: Contribution;\n    \n    holds: HoldCheck;\n    \n    conversations: ConversationPort;\n    \n    turns: ConversationTurns;\n    \n    surfaces: SurfacePort;\n    \n    runtime: AgentRuntime | undefined;\n    tools: readonly string[];\n    tiers: ToolTierTable;\n    events: RecordedEvent[];\n    \n    files: {\n        channel: ChannelKey;\n        file: ReplyFile;\n    }[];\n    \n    images: {\n        channel: ChannelKey;\n        image: ClientPart;\n    }[];\n    runTool(name: string, args: Record<string, unknown>, \n    \n    options?: {\n        speaker?: Speaker;\n        \n        origin?: string;\n        \n        client?: ClientPort;\n        channel?: ChannelKey;\n        workspace?: SessionContext[\"workspace\"];\n    }): Promise<string>;\n    stop(): Promise<void>;\n}"
 	},
 	"leaks": [
+		{
+			"id": "src/core/agents/helper-preset-ops.d.ts#HelperFields",
+			"references": [
+				"kit:AgentOps via src/core/agents/agent-tools.d.ts#AgentOps"
+			]
+		},
+		{
+			"id": "src/core/agents/helper-preset-ops.d.ts#PresetAction",
+			"references": [
+				"kit:AgentOps via src/core/agents/agent-tools.d.ts#AgentOps"
+			]
+		},
+		{
+			"id": "src/core/agents/helper-presets.d.ts#HelperPreset",
+			"references": [
+				"kit:AgentOps via src/core/agents/helper-preset-ops.d.ts#PresetAction"
+			]
+		},
 		{
 			"id": "src/core/modules/prompts/prompt-history.d.ts#PromptAction",
 			"references": [

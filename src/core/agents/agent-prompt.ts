@@ -58,7 +58,7 @@ export function agentSystemPrompt(input: {
 		);
 	else if (input.helpers)
 		parts.push(
-			"A task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with.",
+			"A task that stands on its own, such as one of several things to look up or compare, can go to a temp knight: helper_create makes one of yours that works in parallel, its answer comes back to you as a new turn, and helper_end clears the ones you are done with. A temp knight you make often can be saved as a preset (helper_preset_set), then made with helper_create and preset.",
 		);
 	if (group) {
 		const others = group.members

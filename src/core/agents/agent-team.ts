@@ -17,6 +17,7 @@ import {
 	agentToolsExtension,
 } from "./agent-tools.ts";
 import type { HelperTeam } from "./helper-ops.ts";
+import { type PresetAction, presetAction } from "./helper-preset-ops.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import type { TeamHelpers } from "./team-helpers.ts";
@@ -257,19 +258,9 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/** The owner's message in an agent's channel; call inside its queue. `text` has the reference, `replyText` what they typed. */
 	answerOwner(
-		channel: ChannelKey,
-		speaker: Speaker,
-		text: string,
-		replyText: string,
-		attachments: TurnAttachments,
+		...args: Parameters<TeamTurns["answerOwner"]>
 	): Promise<TurnResult> {
-		return this.#turns.answerOwner(
-			channel,
-			speaker,
-			text,
-			replyText,
-			attachments,
-		);
+		return this.#turns.answerOwner(...args);
 	}
 
 	/**
@@ -420,6 +411,11 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		input: Parameters<TeamEditing["createHelper"]>[1],
 	): Promise<string> {
 		return this.#editing.createHelper(caller, input);
+	}
+
+	/** A knight keeps its own temp-knight presets; see `AgentOps.helperPreset`. */
+	helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string> {
+		return presetAction(this.#context, caller, action);
 	}
 
 	/** A knight archives its own temp knights; the pages that show the parent are told. */

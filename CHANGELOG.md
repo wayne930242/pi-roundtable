@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Temp-knight presets: an agent saves the role prompt, skills, look, and model of a temp knight it makes often with `helper_preset_set`, reads them with `helper_preset_list`, removes one with `helper_preset_delete`, and makes it with `helper_create` and `preset`. Fields given in the call replace the preset's, and skills given are added to the preset's. A preset belongs to the agent that saved it, at most 20 each, and is checked at save and again when used, with the tier and skill rules `helper_create` applies. The tools are offered with `helper_create` at the member tier, never to a temp knight or with `helpers: false`. The presets live in a new `helper_presets` table, created by the agent server's migrations.
+- `AgentOps.helperPreset`; `AgentOps.helperCreate` takes `preset`, and its `displayName` and `prompt` are optional when a preset gives them.
+
 ## [0.34.0] - 2026-11-04
 
 This is a minor release with a breaking default: an agent's shell no longer gets `GH_TOKEN`.

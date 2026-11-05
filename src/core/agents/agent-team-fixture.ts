@@ -305,6 +305,7 @@ export function useTeamFixture(
 			"skill_versions",
 			"skill_groups",
 			"agent_skills",
+			"helper_presets",
 		])
 			await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
 		await admin.close();

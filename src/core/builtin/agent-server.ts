@@ -161,6 +161,9 @@ const AGENT_TIERS: Readonly<Record<string, Tier>> = {
 	// A knight may make temp knights for whoever is talking to it; the limits hold the cost.
 	helper_create: "member",
 	helper_end: "member",
+	helper_preset_set: "member",
+	helper_preset_list: "member",
+	helper_preset_delete: "member",
 };
 
 /** The tables the agent server keeps: its agents and groups. */

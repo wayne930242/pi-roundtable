@@ -1,5 +1,4 @@
 import { Type } from "typebox";
-import { THINKING_LEVELS } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import {
 	optionalString,
@@ -7,23 +6,49 @@ import {
 	stringList,
 	type TextToolDef,
 } from "../runtime/text-tools.ts";
-import { CLASS, COLOR, DISPLAY, lookOf, PROMPT } from "./agent-tool-schema.ts";
-import type { AgentOps } from "./agent-tools.ts";
+import { MAX_PROMPT_CHARS } from "./agent-rules.ts";
+import { CLASS, COLOR, lookOf } from "./agent-tool-schema.ts";
+import type { AgentOps, HELPER_TOOLS } from "./agent-tools.ts";
+import {
+	helperPresetToolDefs,
+	MODEL,
+	THINKING,
+} from "./helper-preset-tools.ts";
 
 /** The tools that make and end a knight's temp knights. */
 export function helperToolDefs(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	skillsOn: boolean,
-): TextToolDef<"helper_create" | "helper_end">[] {
+): TextToolDef<(typeof HELPER_TOOLS)[number]>[] {
 	return [
 		{
 			name: "helper_create",
 			label: "Create temp knight",
-			description: `Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room.`,
+			description: `Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room. A temp knight you make often can be saved as a preset (helper_preset_set) and made by its name: what you give in the call replaces the preset's, and skills you give are added to the preset's.`,
 			parameters: Type.Object({
-				display_name: DISPLAY,
-				prompt: PROMPT,
+				preset: Type.Optional(
+					Type.String({
+						description:
+							"A preset of yours, from helper_preset_list, that gives what you leave out here.",
+					}),
+				),
+				display_name: Type.Optional(
+					Type.String({
+						minLength: 1,
+						maxLength: 32,
+						description:
+							"The name shown on its messages; any language. Required unless a preset gives it; given, it replaces the preset's.",
+					}),
+				),
+				prompt: Type.Optional(
+					Type.String({
+						minLength: 1,
+						maxLength: MAX_PROMPT_CHARS,
+						description:
+							"Its role prompt, in English: its job, sources, boundaries, and how it reports. Required unless a preset gives it; given, it replaces the preset's.",
+					}),
+				),
 				task: Type.String({
 					minLength: 1,
 					maxLength: 4000,
@@ -39,24 +64,14 @@ export function helperToolDefs(
 				),
 				class: Type.Optional(CLASS),
 				color: Type.Optional(COLOR),
-				model: Type.Optional(
-					Type.String({
-						description:
-							"The model to run on, as <provider>/<model>; left out, yours. An unusable one is refused with the usable list.",
-					}),
-				),
-				thinking: Type.Optional(
-					Type.Union(
-						[...THINKING_LEVELS, "default"].map((level) => Type.Literal(level)),
-						{ description: "Its thinking level; left out, yours." },
-					),
-				),
+				model: Type.Optional(MODEL),
+				thinking: Type.Optional(THINKING),
 				...(skillsOn
 					? {
 							skills: Type.Optional(
 								Type.Array(Type.String(), {
 									description:
-										"Skills it carries, from skill_list; pick those the task needs.",
+										"Skills it carries, from skill_list; pick those the task needs. With a preset, added to the preset's.",
 								}),
 							),
 						}
@@ -68,9 +83,13 @@ export function helperToolDefs(
 				const thinking = optionalString(i, "thinking");
 				const skills = stringList(i, "skills");
 				const look = lookOf(i);
+				const preset = optionalString(i, "preset");
+				const displayName = optionalString(i, "display_name");
+				const prompt = optionalString(i, "prompt");
 				return ops.helperCreate(scope, {
-					displayName: requiredString(i, "display_name"),
-					prompt: requiredString(i, "prompt"),
+					...(preset ? { preset } : {}),
+					...(displayName ? { displayName } : {}),
+					...(prompt ? { prompt } : {}),
 					task: requiredString(i, "task"),
 					...(name ? { name } : {}),
 					...(Object.keys(look).length > 0 ? { character: look } : {}),
@@ -100,5 +119,6 @@ export function helperToolDefs(
 					i.names === "finished" ? "finished" : (stringList(i, "names") ?? []),
 				),
 		},
+		...helperPresetToolDefs(ops, scope, skillsOn),
 	];
 }

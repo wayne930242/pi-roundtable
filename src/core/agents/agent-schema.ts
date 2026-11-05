@@ -6,6 +6,7 @@ import { promptHistoryMigration } from "../modules/prompts/prompt-history.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import { outboxMigration } from "./agent-outbox.ts";
 import type { Agent, AgentGroup, AgentStatus } from "./agent-rules.ts";
+import { HelperPresets } from "./helper-presets.ts";
 
 export interface AgentRow {
 	name: string;
@@ -164,5 +165,7 @@ export function agentMigrations(guildId: string): Migration[] {
 		outboxMigration(),
 		// Where each agent last ran a turn, so a message to it finds that conversation after a restart.
 		AgentConversations.migration,
+		// The temp-knight presets each agent saved; kept when the agent is archived.
+		HelperPresets.migration,
 	];
 }

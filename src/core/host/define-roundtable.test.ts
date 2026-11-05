@@ -336,6 +336,7 @@ describe("defineRoundtable", () => {
 			"agent-prompt-history",
 			"agent-outbox",
 			"agent-latest-conversation",
+			"helper-presets",
 		]);
 	});
 

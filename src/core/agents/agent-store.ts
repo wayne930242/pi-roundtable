@@ -15,7 +15,6 @@ import {
 	type Agent,
 	type AgentGroup,
 	type AgentSeed,
-	type AgentStatus,
 	type Backlog,
 	checkAgentName,
 	checkAvatarPrompt,
@@ -35,6 +34,7 @@ import {
 } from "./agent-schema.ts";
 import { AgentStatements } from "./agent-statements.ts";
 import { GroupMessages } from "./group-messages.ts";
+import { HelperPresets } from "./helper-presets.ts";
 
 export {
 	type Agent,
@@ -74,6 +74,8 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	readonly outbox: AgentOutbox;
 	/** The conversation each agent last ran a turn in. */
 	readonly conversations: AgentConversations;
+	/** The temp-knight presets each agent saved. */
+	readonly presets: HelperPresets;
 
 	private constructor(
 		sql: SQL,
@@ -88,6 +90,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		this.#messages = new GroupMessages(sql, guildId);
 		this.#prompts = new PromptHistory(sql, guildId);
 		this.outbox = new AgentOutbox(sql, guildId);
+		this.presets = new HelperPresets(sql, guildId);
 	}
 
 	/** The store's tables; the host runs this before any store attaches. */
@@ -454,12 +457,9 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 
 	async #writeGroup(
 		name: string,
-		change: {
-			displayName?: string;
-			members?: string[];
-			host?: string;
-			status?: AgentStatus;
-		},
+		change: Partial<
+			Pick<AgentGroup, "displayName" | "members" | "host" | "status">
+		>,
 	): Promise<AgentGroup> {
 		const current = this.groupMap.get(name);
 		if (!current) throw new AgentError(`There is no group "${name}".`);
