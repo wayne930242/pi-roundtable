@@ -1,5 +1,5 @@
 import { messages, setLocale } from "../i18n/index.ts";
-import { setTimeZone } from "../time.ts";
+import { setTimeZone } from "../kernel/time.ts";
 
 const EAGER = "EAGER:";
 

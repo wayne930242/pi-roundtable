@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ScheduledOutcome } from "../contract/channels.ts";
-import type { LogEntry, Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { LogEntry, Logger } from "../kernel/log.ts";
 import { AlertThrottle } from "./alert-throttle.ts";
 
 /** Errors that are expected and never reported, matched against the message and the error's. */

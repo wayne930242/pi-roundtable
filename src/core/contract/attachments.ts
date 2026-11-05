@@ -2,7 +2,7 @@ import type {
 	StoredAttachment,
 	TurnAttachments,
 } from "../domain/attachment.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 
 /** A file a plugin hands the core to keep for a conversation. */
 export interface AttachmentUpload {

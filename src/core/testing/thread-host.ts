@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { InterimMessage } from "../domain/interim.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { surfacePort } from "../routing/surface-port.ts";
 import {
 	DispatchThreads,

@@ -11,11 +11,15 @@ import {
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { ChatSurface } from "./core/contract/surface.ts";
-import { definePlugin, defineTool, type ToolTurn } from "./core/define.ts";
 import type { PendingConfirmation } from "./core/domain/conversation.ts";
 import { messages } from "./core/i18n/index.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
+import {
+	definePlugin,
+	defineTool,
+	type ToolTurn,
+} from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
 const MEMBER: Speaker = {

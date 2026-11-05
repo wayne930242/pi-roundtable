@@ -2,9 +2,9 @@ import type {
 	BackgroundRunsAs,
 	ScheduledOutcome,
 } from "../../contract/channels.ts";
-import type { HoldCheck } from "../../holds.ts";
-import type { Logger } from "../../log.ts";
-import type { ScheduleStore } from "../../services.ts";
+import type { Logger } from "../../kernel/log.ts";
+import type { HoldCheck } from "../../plugin-api/holds.ts";
+import type { ScheduleStore } from "../../plugin-api/services.ts";
 import {
 	type PrecheckFinding,
 	type PrecheckRegistry,

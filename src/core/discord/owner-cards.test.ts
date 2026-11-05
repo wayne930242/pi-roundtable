@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { messages } from "../i18n/index.ts";
 import { type OwnerQuestion, promptScope } from "../interactions/prompts.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import {
 	CARD_PREFIX,

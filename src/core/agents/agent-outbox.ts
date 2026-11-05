@@ -1,7 +1,7 @@
 import type { SQL } from "bun";
 import type { Migration } from "../db/migrations.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 
 /**
  * An agent message the host stopped before it could deliver. `message` is the request to the

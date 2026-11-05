@@ -11,7 +11,7 @@ import type {
 	ScoreQuestion,
 	YesNoQuestion,
 } from "../contract/providers.ts";
-import { JudgeError } from "../errors.ts";
+import { JudgeError } from "../kernel/errors.ts";
 
 /** One completion: a system prompt and a user message in, the model's text out. */
 export type JudgeModel = (system: string, prompt: string) => Promise<string>;

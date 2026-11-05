@@ -1,6 +1,6 @@
 import { type Client, Events, GatewayIntentBits } from "discord.js";
-import type { MemberJoinedEvent } from "../event-types.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { MemberJoinedEvent } from "../plugin-api/event-types.ts";
 
 /** The privileged Server Members intent, asked for only when the host turns `discord.memberEvents` on. */
 export function memberIntents(

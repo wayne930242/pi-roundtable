@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SQL } from "bun";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { PersonDirectory } from "./person-profiles.ts";
 import { PRINCIPAL_PROFILE_CHOICES } from "./principal-tables.ts";
 import { cleanName } from "./profile-memory.ts";

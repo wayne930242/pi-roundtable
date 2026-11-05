@@ -1,4 +1,4 @@
-import { freeze } from "../freeze.ts";
+import { freeze } from "../kernel/freeze.ts";
 import type { ContactAssessor } from "./contact.ts";
 import type { IdentityService } from "./identity-service.ts";
 

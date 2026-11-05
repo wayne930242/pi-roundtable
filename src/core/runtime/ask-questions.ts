@@ -1,5 +1,5 @@
 import { messages } from "../i18n/index.ts";
-import type { OwnerIdentity } from "../identity.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
 import type { OwnerAnswer, Prompts } from "../interactions/prompts.ts";
 import {
 	type Questionnaire,

@@ -12,7 +12,7 @@ import {
 	type RoleGrant,
 } from "../core/identity/principal-store.ts";
 import { chosenProfileSource } from "../core/identity/profile-choices.ts";
-import type { Tier } from "../core/speakers.ts";
+import type { Tier } from "../core/identity/speakers.ts";
 import { CONFIG_FILE } from "./project.ts";
 
 export const PRINCIPAL_USAGE = `  roundtable principal list    every principal, with its roles and its identities written as

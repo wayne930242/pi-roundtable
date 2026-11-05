@@ -8,10 +8,10 @@ import type { ChatSurface } from "../core/contract/surface.ts";
 import {
 	type DefinedRoundtable,
 	defineRoundtable,
-} from "../core/define-roundtable.ts";
-import { Roundtable } from "../core/host.ts";
-import { silentLogger } from "../core/log.ts";
-import type { RoundtablePlugin } from "../core/plugin.ts";
+} from "../core/host/define-roundtable.ts";
+import { Roundtable } from "../core/host/host.ts";
+import { silentLogger } from "../core/kernel/log.ts";
+import type { RoundtablePlugin } from "../core/plugin-api/plugin.ts";
 import { describeDb, testDatabaseUrl } from "../core/testing/database.ts";
 import { checkPlugins } from "./checks/configuration.ts";
 import { loadConfigFile, Project } from "./project.ts";

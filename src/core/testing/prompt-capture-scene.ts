@@ -5,8 +5,8 @@ import {
 	type ContextSourceMessage,
 } from "../discord/channel-context.ts";
 import type { ChannelKey, InboundMessage } from "../domain/conversation.ts";
-import { silentLogger } from "../log.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
 
 /** The owner of the capture hosts; ids scan-public lets through, kept apart from other tests' rows. */
 export const CAPTURE_OWNER = {

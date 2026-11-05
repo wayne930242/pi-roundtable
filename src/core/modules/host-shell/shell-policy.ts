@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { HoldContext, HoldRule } from "../../holds.ts";
+import type { HoldContext, HoldRule } from "../../plugin-api/holds.ts";
 import { COMMAND_PREFIX_WORDS, EXPANDED, lexShell } from "./shell-lexer.ts";
 import {
 	bindingCounts,

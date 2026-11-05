@@ -1,5 +1,5 @@
 import type { ChatSurface } from "../contract/surface.ts";
-import type { PluginContext, Service } from "../plugin.ts";
+import type { PluginContext, Service } from "../plugin-api/plugin.ts";
 
 /**
  * The surface as a service: it starts with the router's `handle` as its delivery, which drops

@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import type { Tier } from "../identity/speakers.ts";
 import { discoverPackageSkills } from "../modules/skills/package-skills.ts";
 import { StoredSkillRegistry } from "../modules/skills/skill-registry.ts";
 import { SkillStore } from "../modules/skills/skill-store.ts";
@@ -8,9 +9,8 @@ import {
 	skillListExtension,
 	skillToolsExtension,
 } from "../modules/skills/skill-tools.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
-import { AGENTS, SKILLS } from "../services.ts";
-import type { Tier } from "../speakers.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { AGENTS, SKILLS } from "../plugin-api/services.ts";
 import { agentOnly } from "./session-tool.ts";
 
 export interface SkillsOptions {

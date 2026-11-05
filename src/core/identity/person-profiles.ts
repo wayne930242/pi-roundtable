@@ -1,6 +1,6 @@
 import type { SQL } from "bun";
 import { IdentityError } from "../domain/errors.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { ProfileChoices } from "./profile-choices.ts";
 import { cleanName, ExpiringMap } from "./profile-memory.ts";
 import {

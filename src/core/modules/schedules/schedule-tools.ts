@@ -1,13 +1,13 @@
 import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
-import type { HoldCheck } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
-import type { ScheduleStore } from "../../services.ts";
+import { type Tier, tierAtLeast } from "../../identity/speakers.ts";
+import { timeZone, zonedStamp } from "../../kernel/time.ts";
+import type { HoldCheck } from "../../plugin-api/holds.ts";
+import type { ScheduleStore } from "../../plugin-api/services.ts";
 import type { ScheduleToolName } from "../../shared/schedule-tools.ts";
-import { type Tier, tierAtLeast } from "../../speakers.ts";
-import { timeZone, zonedStamp } from "../../time.ts";
 import { precheckCatalog } from "./precheck-catalog.ts";
 import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
 import { PRECHECK_SCRIPT_CHARS, type PrecheckRegistry } from "./prechecks.ts";

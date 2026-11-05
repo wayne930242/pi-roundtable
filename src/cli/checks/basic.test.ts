@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { RoundtablePlugin } from "../../core/plugin.ts";
+import type { RoundtablePlugin } from "../../core/plugin-api/plugin.ts";
 import { Project } from "../project.ts";
 import type { Result } from "../report.ts";
 import {

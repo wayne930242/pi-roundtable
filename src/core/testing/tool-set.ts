@@ -1,9 +1,9 @@
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { AgentTurnScope } from "../domain/sessions.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { AGENTS } from "../plugin-api/services.ts";
 import { ASK_USER_TOOL } from "../runtime/extensions/ask-user.ts";
 import { COMPACT_TOOL } from "../runtime/extensions/self-compact-guard.ts";
-import { AGENTS } from "../services.ts";
-import type { AgentTurnScope } from "../sessions.ts";
 import type { TestHost } from "./test-host.ts";
 
 export const scout: AgentTurnScope = {

@@ -4,10 +4,10 @@ import {
 	formatModelRef,
 	type ModelRef,
 	type ThinkingLevel,
-} from "../models.ts";
+} from "../domain/models.ts";
 import { workerSessions } from "../modules/delegation/worker-session.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
-import { WORKER_SESSIONS } from "../services.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { WORKER_SESSIONS } from "../plugin-api/services.ts";
 
 export interface WorkerSessionsPluginOptions {
 	/** Shared with the rest of the host, so logins refresh in one place. */

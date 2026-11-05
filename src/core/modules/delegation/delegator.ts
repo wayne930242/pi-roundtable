@@ -2,14 +2,14 @@ import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
-import type { Logger } from "../../log.ts";
-import type { Delegator } from "../../services.ts";
-import type { Tier } from "../../speakers.ts";
+import type { Tier } from "../../identity/speakers.ts";
+import type { Logger } from "../../kernel/log.ts";
+import { timeZone } from "../../kernel/time.ts";
+import type { Delegator } from "../../plugin-api/services.ts";
 import type {
 	DispatchThread,
 	DispatchThreads,
 } from "../../threads/dispatch-threads.ts";
-import { timeZone } from "../../time.ts";
 
 export interface DelegationJob {
 	id: number;

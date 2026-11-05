@@ -4,7 +4,7 @@ import {
 	attachReplyFile,
 	REPLY_FILE_LIMITS,
 	ReplyFileError,
-} from "../reply-files.ts";
+} from "./reply-files.ts";
 import { toolError, toolText } from "./tool-result.ts";
 import {
 	findWorkspaceFile,

@@ -1,7 +1,7 @@
 import type { PendingConfirmation } from "../domain/conversation.ts";
+import { type Speaker, tierAtLeast } from "../identity/speakers.ts";
 import { mayApproveNamed } from "../runtime/extensions/held-calls.ts";
-import { type Speaker, tierAtLeast } from "../speakers.ts";
-import type { ToolTiers } from "../tool-tiers.ts";
+import type { ToolTiers } from "../runtime/tool-tiers.ts";
 
 /**
  * Whether the speaker may approve the held actions by a message, call by call: an owner, as the

@@ -1,10 +1,13 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { messages } from "../../i18n/index.ts";
-import { addresseeWords, type OwnerIdentity } from "../../identity.ts";
-import type { MemoryStore } from "../../services.ts";
+import {
+	addresseeWords,
+	type OwnerIdentity,
+} from "../../identity/owner-identity.ts";
+import { timeZone, zonedToday } from "../../kernel/time.ts";
+import type { MemoryStore } from "../../plugin-api/services.ts";
 import { toolError, toolText } from "../../shared/tool-result.ts";
-import { timeZone, zonedToday } from "../../time.ts";
 import type { Memory, PromptMemory } from "./owner-memory-store.ts";
 
 function line(memory: Memory): string {

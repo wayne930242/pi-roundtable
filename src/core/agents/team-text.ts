@@ -1,9 +1,9 @@
 import { CATALOG, type CharacterSpec } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
+import type { ThinkingSetting } from "../domain/models.ts";
 import { assistantName } from "../i18n/index.ts";
-import type { ThinkingSetting } from "../models.ts";
-import type { AgentDirectory } from "../services.ts";
-import { zonedStamp } from "../time.ts";
+import { zonedStamp } from "../kernel/time.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import type { ChannelMessage } from "./agent-ports.ts";
 import { characterOf, isHelper } from "./agent-rules.ts";
 import { describeThinking } from "./agent-settings.ts";

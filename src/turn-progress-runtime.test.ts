@@ -12,9 +12,9 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin, defineTool } from "./core/define.ts";
 import type { Approval } from "./core/interactions/prompts.ts";
-import type { TurnProgressEvent } from "./core/plugin.ts";
+import { definePlugin, defineTool } from "./core/plugin-api/define.ts";
+import type { TurnProgressEvent } from "./core/plugin-api/plugin.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 

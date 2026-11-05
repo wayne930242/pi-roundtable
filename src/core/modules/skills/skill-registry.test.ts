@@ -14,8 +14,8 @@ import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
 import pino from "pino";
 import { AgentError } from "../../domain/errors.ts";
-import { PluginError } from "../../errors.ts";
-import { silentLogger } from "../../log.ts";
+import { PluginError } from "../../kernel/errors.ts";
+import { silentLogger } from "../../kernel/log.ts";
 import {
 	describeDb,
 	openTestStore,

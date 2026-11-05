@@ -1,6 +1,6 @@
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { agentChannel, fx, settle } from "./agent-team-fixture.ts";
 

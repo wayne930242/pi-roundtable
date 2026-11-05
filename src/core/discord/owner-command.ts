@@ -8,7 +8,7 @@ import {
 } from "discord.js";
 import { messages } from "../i18n/index.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	type DiscordActor,
 	DiscordOwners,

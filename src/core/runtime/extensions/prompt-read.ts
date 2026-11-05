@@ -1,4 +1,4 @@
-import type { Logger } from "../../log.ts";
+import type { Logger } from "../../kernel/log.ts";
 
 /**
  * Reads a prompt for the run that is starting. Pi swallows what a `before_agent_start` handler

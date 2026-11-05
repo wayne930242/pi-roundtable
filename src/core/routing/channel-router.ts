@@ -14,12 +14,12 @@ import {
 	STEERED_MARK,
 } from "../contract/channels.ts";
 import type { SurfacePort } from "../contract/surface.ts";
-import { HostStoppingError, PluginError } from "../errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { messages } from "../i18n/index.ts";
 import type { Contact, ContactAssessor } from "../identity/contact.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
-import type { Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import { HostStoppingError, PluginError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
 import { actorOf } from "./actor-of.ts";
 import { speakerOf } from "./background-speaker.ts";
 import type { ChannelQueue } from "./channel-queue.ts";

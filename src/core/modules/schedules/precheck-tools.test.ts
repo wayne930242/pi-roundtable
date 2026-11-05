@@ -8,12 +8,18 @@ import {
 } from "bun:test";
 import { SQL } from "bun";
 import type { BackgroundTarget } from "../../contract/channels.ts";
-import type { ToolTurn } from "../../define.ts";
-import { type HoldCheck, type HoldRule, holdChain } from "../../holds.ts";
+import { tierAtLeast } from "../../identity/speakers.ts";
 import type { OwnerPrompts } from "../../interactions/prompts.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
+import { setTimeZone } from "../../kernel/time.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
+import {
+	type HoldCheck,
+	type HoldRule,
+	holdChain,
+} from "../../plugin-api/holds.ts";
 import { ConfirmationGate } from "../../runtime/extensions/confirmation-gate.ts";
-import { tierAtLeast } from "../../speakers.ts";
+import type { ToolTiers } from "../../runtime/tool-tiers.ts";
 import { runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
@@ -24,8 +30,6 @@ import {
 import { useTestLocale } from "../../testing/locale.ts";
 import { TEST_OWNER } from "../../testing/owner.ts";
 import { fakePrechecks, fakeScriptRunner } from "../../testing/prechecks.ts";
-import { setTimeZone } from "../../time.ts";
-import type { ToolTiers } from "../../tool-tiers.ts";
 import {
 	precheckScriptHoldRule,
 	precheckScriptTools,

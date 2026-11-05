@@ -1,6 +1,6 @@
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
-import type { Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /** Tells the claim a message in its channel was deleted; a claim without the hook, or none, is skipped. Never rejects. */
 export async function tellDeleted(

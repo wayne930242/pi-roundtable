@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
 import { AgentError } from "../../domain/errors.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
 import { TEST_GUILD } from "../../testing/database.ts";
 import { discoverPackageSkills } from "./package-skills.ts";
 import { installPackage, packageDirIn } from "./package-skills-fixture.ts";

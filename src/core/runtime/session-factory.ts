@@ -12,7 +12,6 @@ import type { ClientPort } from "../domain/client.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
 	type SessionContext,
@@ -20,7 +19,10 @@ import {
 	type SessionPlan,
 	type ToolSelection,
 	type TransientTask,
-} from "../sessions.ts";
+} from "../domain/sessions.ts";
+import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
+import type { LinkedSessions } from "../plugin-api/plugin.ts";
+import { toolTurn } from "../plugin-api/tool-turn.ts";
 import { activeToolsExtension } from "../shared/active-tools.ts";
 import {
 	ATTACH_FILE_TOOL,
@@ -29,9 +31,6 @@ import {
 import { GENERATE_IMAGE_TOOL } from "../shared/generate-image-tool.ts";
 import { packageDir } from "../shared/package-dir.ts";
 import { readAttachmentExtension } from "../shared/read-attachment-tool.ts";
-import { type Speaker, THE_SPEAKER } from "../speakers.ts";
-import { currentToolNames } from "../tool-tiers.ts";
-import { toolTurn } from "../tool-turn.ts";
 import { refuseShellTools } from "./chat-only.ts";
 import {
 	CompactionTiers,
@@ -72,6 +71,7 @@ import {
 	turnAddressee,
 } from "./session-conversation.ts";
 import { imageTools, scratchBash } from "./session-helpers.ts";
+import { currentToolNames } from "./tool-tiers.ts";
 
 export { imageTools, scratchBash };
 

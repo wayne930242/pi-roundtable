@@ -1,8 +1,8 @@
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { ModeOrigins } from "../modes/mode-inheritance.ts";
-import type { AgentDirectory } from "../services.ts";
-import type { Speaker } from "../speakers.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import { agentOfChannel, groupOfChannel, keysOf } from "./team-keys.ts";

@@ -5,7 +5,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { OWNER_TARGET } from "./agents/agent-claim.ts";
 import type { BackgroundTurn } from "./contract/channels.ts";
 import { SYSTEM_PRINCIPAL } from "./identity/principal-store.ts";
-import { silentLogger } from "./log.ts";
+import type { Speaker } from "./identity/speakers.ts";
+import { silentLogger } from "./kernel/log.ts";
 import { ConversationBackgroundTurns } from "./modules/background/background-turns.ts";
 import { delegateExtension } from "./modules/delegation/delegate.ts";
 import type { DelegationJob } from "./modules/delegation/delegator.ts";
@@ -15,9 +16,8 @@ import {
 	type ScheduleToolContext,
 } from "./modules/schedules/schedule-tools.ts";
 import { schedulesExtension } from "./modules/schedules/schedules.ts";
+import type { ScheduleStore } from "./plugin-api/services.ts";
 import { isSystemTurn } from "./routing/system-turns.ts";
-import type { ScheduleStore } from "./services.ts";
-import type { Speaker } from "./speakers.ts";
 import { runsAsAuthor } from "./testing/background.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");

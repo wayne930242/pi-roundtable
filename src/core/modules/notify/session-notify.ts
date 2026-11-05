@@ -1,14 +1,14 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { ChannelKey } from "../../domain/conversation.ts";
+import type { SessionContext } from "../../domain/sessions.ts";
+import type { OwnerIdentity } from "../../identity/owner-identity.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
-import type { OwnerIdentity } from "../../identity.ts";
-import type { Logger } from "../../log.ts";
+import type { Logger } from "../../kernel/log.ts";
 import { providerSurface, surfaceOf } from "../../presence/delivery-router.ts";
 import type {
 	DirectChannelProvider,
 	DirectChannels,
 } from "../../presence/direct-channels.ts";
-import type { SessionContext } from "../../sessions.ts";
 import { notifyExtension } from "./notify.ts";
 
 export interface SessionNotifyDeps {

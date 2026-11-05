@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import { silentLogger } from "../log.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import { agentClaim } from "./agent-claim.ts";
 

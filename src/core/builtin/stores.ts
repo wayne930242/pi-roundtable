@@ -1,13 +1,18 @@
-import type { OwnerIdentity } from "../identity.ts";
+import type { SessionContext, SessionTool } from "../domain/sessions.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { Tier } from "../identity/speakers.ts";
 import { ownerMemoryExtension } from "../modules/memory/owner-memory.ts";
 import { PgMemoryStore } from "../modules/memory/owner-memory-store.ts";
 import { memoryPrecheckRegistry } from "../modules/schedules/prechecks.ts";
 import { PgScheduleStore } from "../modules/schedules/schedule-store.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import {
+	MEMORY,
+	type MemoryStore,
+	PRECHECKS,
+	SCHEDULES,
+} from "../plugin-api/services.ts";
 import { memoryReader } from "../runtime/session-conversation.ts";
-import { MEMORY, type MemoryStore, PRECHECKS, SCHEDULES } from "../services.ts";
-import type { SessionContext, SessionTool } from "../sessions.ts";
-import type { Tier } from "../speakers.ts";
 import { fixed } from "./session-tool.ts";
 
 export interface MemoryOptions {

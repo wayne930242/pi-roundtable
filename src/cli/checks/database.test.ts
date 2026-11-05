@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Migration } from "../../core/db/migrations.ts";
-import { MigrationError } from "../../core/errors.ts";
+import { MigrationError } from "../../core/kernel/errors.ts";
 import { describeDb, testDatabaseUrl } from "../../core/testing/database.ts";
 import { Project } from "../project.ts";
 import { fakePorts, validConfig } from "../testing/fixtures.ts";

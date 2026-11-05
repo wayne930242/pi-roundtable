@@ -1,5 +1,5 @@
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /**
  * What became of one `send`: written to the connection, `"queued"` behind a client that reads

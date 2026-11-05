@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureScratchDir } from "../builtin/agent-server.ts";
 import { ConfigError } from "../domain/errors.ts";
-import type { LinkedSessions } from "../plugin.ts";
+import type { LinkedSessions } from "../plugin-api/plugin.ts";
 import { SHELL_ENV_NAMES, type ShellEnv } from "../shared/child-env.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { SessionFactory, scratchBash } from "./session-factory.ts";

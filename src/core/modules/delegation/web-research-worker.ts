@@ -1,10 +1,10 @@
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { PluginError } from "../../errors.ts";
 import {
 	formatModelRef,
 	type ModelRef,
 	type ThinkingLevel,
-} from "../../models.ts";
+} from "../../domain/models.ts";
+import { PluginError } from "../../kernel/errors.ts";
 import { packageDir } from "../../shared/package-dir.ts";
 import { runWorkerSession } from "./worker-session.ts";
 

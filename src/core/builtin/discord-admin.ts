@@ -1,9 +1,9 @@
-import type { OwnerIdentity } from "../identity.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
 import {
 	DISCORD_ADMIN_TOOLS,
 	discordAdminExtension,
 } from "../modules/discord-admin/discord-admin.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { DISCORD } from "./discord.ts";
 import { fixed } from "./session-tool.ts";
 

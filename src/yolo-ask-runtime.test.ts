@@ -10,8 +10,8 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin } from "./core/define.ts";
 import type { Prompts, PromptWait } from "./core/interactions/prompts.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 

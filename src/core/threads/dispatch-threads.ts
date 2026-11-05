@@ -15,7 +15,7 @@ import {
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { threadsOfHost } from "./host-threads.ts";
 
 /** The only surface a `ThreadHost` serves. */

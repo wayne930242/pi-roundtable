@@ -9,10 +9,10 @@ import {
 	ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { silentLogger } from "../../log.ts";
+import type { Speaker } from "../../identity/speakers.ts";
+import { silentLogger } from "../../kernel/log.ts";
 import { ownerMemoryExtension } from "../../modules/memory/owner-memory.ts";
-import type { MemoryStore, SpeakerMemory } from "../../services.ts";
-import type { Speaker } from "../../speakers.ts";
+import type { MemoryStore, SpeakerMemory } from "../../plugin-api/services.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../../testing/owner.ts";
 import { agentPromptExtension } from "./agent-prompt.ts";
 import { personaPromptExtension } from "./persona-prompt.ts";

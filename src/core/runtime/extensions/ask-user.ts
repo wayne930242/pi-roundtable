@@ -1,6 +1,9 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
-import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import {
+	type OwnerIdentity,
+	ownerWords,
+} from "../../identity/owner-identity.ts";
 import type { OwnerQuestion } from "../../interactions/prompts.ts";
 import { QUESTIONNAIRE_LIMITS as L } from "../../interactions/questionnaire.ts";
 import { DEFAULT_YOLO_QUESTION_GRACE_MS } from "../../modes/autonomy.ts";

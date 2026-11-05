@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { identityPlugin } from "../../core/builtin/identity.ts";
 import { resolveConfig } from "../../core/config/config.ts";
 import { runMigrations } from "../../core/db/migrations.ts";
-import { identityPlugin } from "../../core/identity/identity-plugin.ts";
 import { PgPrincipalStore } from "../../core/identity/principal-store.ts";
-import type { PluginContext, RoundtablePlugin } from "../../core/plugin.ts";
+import type {
+	PluginContext,
+	RoundtablePlugin,
+} from "../../core/plugin-api/plugin.ts";
 import { describeDb } from "../../core/testing/database.ts";
 import {
 	type ScratchDatabase,

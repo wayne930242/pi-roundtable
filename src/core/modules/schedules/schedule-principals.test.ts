@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
+import { setTimeZone } from "../../kernel/time.ts";
 import { useTestLocale } from "../../testing/locale.ts";
-import { setTimeZone } from "../../time.ts";
 import type { NewSchedule, Schedule } from "./schedule-store.ts";
 import {
 	callScheduleTool,

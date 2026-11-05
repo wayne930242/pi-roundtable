@@ -14,8 +14,8 @@ import type {
 	StoredAttachment,
 	TurnAttachments,
 } from "../domain/attachment.ts";
-import type { Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	channelSegment,
 	listDir,

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import { silentLogger } from "../log.ts";
-import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
+import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import { agentClaim } from "./agent-claim.ts";
 

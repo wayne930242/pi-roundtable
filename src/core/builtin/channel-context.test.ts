@@ -10,10 +10,10 @@ import {
 	type ContextSourceMessage,
 } from "../discord/channel-context.ts";
 import { DiscordSurface } from "../discord/discord-surface.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext } from "../plugin.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { PluginContext } from "../plugin-api/plugin.ts";
+import { CHANNEL_CONTEXT } from "../plugin-api/services.ts";
 import { surfacePort } from "../routing/surface-port.ts";
-import { CHANNEL_CONTEXT } from "../services.ts";
 import { channelContextPlugin } from "./channel-context.ts";
 
 const OWNER = "100";

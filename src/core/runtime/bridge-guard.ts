@@ -6,16 +6,16 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { AgentSessions } from "../contract/runtime.ts";
 import { AgentRunError, ConfigError } from "../domain/errors.ts";
-import type { AccessRules, AccessTier } from "../identity/access-policy.ts";
-import type { IdentityService } from "../identity/identity-service.ts";
-import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import {
 	formatModelRef,
 	type ModelRef,
 	parseModelRef,
 	type ThinkingSetting,
-} from "../models.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+} from "../domain/models.ts";
+import type { AccessRules, AccessTier } from "../identity/access-policy.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
+import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { guardHidesPrivateExchange } from "./extensions/private-memory.ts";
 import { bridgeHistoryHidesMemoryFor } from "./reader-history.ts";
 

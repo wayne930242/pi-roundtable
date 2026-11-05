@@ -1,5 +1,5 @@
 import type { Pronouns } from "../config/config.ts";
-import type { Tier } from "../speakers.ts";
+import type { Tier } from "./speakers.ts";
 
 export type { Pronouns };
 

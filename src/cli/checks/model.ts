@@ -1,4 +1,4 @@
-import { parseModelRef } from "../../core/models.ts";
+import { parseModelRef } from "../../core/domain/models.ts";
 import {
 	BRIDGE_MEMORY_FIX,
 	bridgeMemoryProblem,

@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { holdChain } from "../../holds.ts";
 import { messages } from "../../i18n/index.ts";
 import type { Approval, Prompts } from "../../interactions/prompts.ts";
+import { holdChain } from "../../plugin-api/holds.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { promptSlot } from "../prompt-slot.ts";

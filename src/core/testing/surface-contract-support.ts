@@ -1,11 +1,11 @@
 import type { InboundMessage } from "../contract/channels.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import {
 	type Approval,
 	type ApprovedBy,
 	type PromptScope,
 	promptScope,
 } from "../interactions/prompts.ts";
-import type { Speaker } from "../speakers.ts";
 import type {
 	SurfaceContractAnswerer,
 	SurfaceContractSubject,

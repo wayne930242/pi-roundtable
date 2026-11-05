@@ -1,6 +1,6 @@
 import { AgentError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
-import type { AgentDirectory } from "../services.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import type { CategoryLayout } from "./agent-ports.ts";
 import type { AgentGroup } from "./agent-store.ts";
 

@@ -4,7 +4,7 @@ import type {
 	ChannelClaim,
 	InboundMessage,
 } from "../contract/channels.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";

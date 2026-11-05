@@ -1,6 +1,6 @@
 import type { QueuePort } from "../contract/channels.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { AgentTurnRunner } from "./agent-ports.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { PgAgentStore } from "./agent-store.ts";

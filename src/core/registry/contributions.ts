@@ -3,10 +3,16 @@ import type { AgentSeed } from "../agents/agent-store.ts";
 import type { BackgroundTarget, ChannelClaim } from "../contract/channels.ts";
 import type { ChatCommand } from "../contract/chat-command.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import type { ToolContribution } from "../define.ts";
-import { NotLinkedError, PluginError } from "../errors.ts";
-import { type HoldRule, holdChain } from "../holds.ts";
+import {
+	compileSessionPlan,
+	type SessionTool,
+	type ToolSelection,
+} from "../domain/sessions.ts";
 import type { HttpRoute } from "../http/listeners.ts";
+import { TIERS } from "../identity/speakers.ts";
+import { NotLinkedError, PluginError } from "../kernel/errors.ts";
+import type { ToolContribution } from "../plugin-api/define.ts";
+import { type HoldRule, holdChain } from "../plugin-api/holds.ts";
 import {
 	CONTRIBUTION_KEYS,
 	type Contribution,
@@ -21,19 +27,13 @@ import {
 	refuseRemovedParts,
 	refuseRemovedSurfaceMethods,
 	type Service,
-} from "../plugin.ts";
+} from "../plugin-api/plugin.ts";
 import {
 	type DirectChannelProvider,
 	directChannelsPort,
 } from "../presence/direct-channels.ts";
 import { refuseShellTools } from "../runtime/chat-only.ts";
-import {
-	compileSessionPlan,
-	type SessionTool,
-	type ToolSelection,
-} from "../sessions.ts";
-import { TIERS } from "../speakers.ts";
-import type { ToolTierTable } from "../tool-tiers.ts";
+import type { ToolTierTable } from "../runtime/tool-tiers.ts";
 import { ChatCommandSources, claimChatCommand } from "./chat-commands.ts";
 import { ServiceRegistry } from "./services.ts";
 import { surfaceService } from "./surface-service.ts";

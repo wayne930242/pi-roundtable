@@ -11,7 +11,7 @@ import {
 	type OwnerIdentity,
 	type OwnerWords,
 	ownerWords,
-} from "../../identity.ts";
+} from "../../identity/owner-identity.ts";
 import { textToolsExtension } from "../../runtime/text-tools.ts";
 import type { WorkspaceRoots } from "../../shared/workspace-files.ts";
 

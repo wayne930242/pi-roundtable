@@ -26,7 +26,7 @@ import {
 	toJevTranscript,
 } from "pi-jev-compaction";
 import type { ChannelKey } from "../core/domain/conversation.ts";
-import type { Logger } from "../core/log.ts";
+import type { Logger } from "../core/kernel/log.ts";
 
 /** The engine Jev's compactions record in their details, as pi-jev-compaction's own extension does. */
 export const JEV_COMPACTION_ENGINE = PACKAGE_NAME;

@@ -1,8 +1,8 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "../../domain/errors.ts";
-import { PluginError } from "../../errors.ts";
-import type { SkillRegistry } from "../../services.ts";
+import { PluginError } from "../../kernel/errors.ts";
+import type { SkillRegistry } from "../../plugin-api/services.ts";
 import { WarnedMissing } from "./missing-warning.ts";
 import {
 	readSkillDocument,

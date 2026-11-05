@@ -1,6 +1,6 @@
 import { ConfigError } from "../domain/errors.ts";
 import { SHELL_TOOLS } from "../modules/host-shell/shell-policy.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 
 const CHAT_ONLY = 'agentServer: { tools: "chat-only" }';
 

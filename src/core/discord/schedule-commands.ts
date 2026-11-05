@@ -6,7 +6,7 @@ import type {
 import { messages } from "../i18n/index.ts";
 import { describeRecurrence } from "../modules/schedules/recurrence.ts";
 import type { Schedule } from "../modules/schedules/schedule-store.ts";
-import type { ScheduleStore } from "../services.ts";
+import type { ScheduleStore } from "../plugin-api/services.ts";
 import type {
 	CommandGuard,
 	InteractionContribution,

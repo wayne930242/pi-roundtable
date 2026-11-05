@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { defineTool, type ToolTurn } from "../define.ts";
-import { silentLogger } from "../log.ts";
-import type { SessionContext } from "../sessions.ts";
+import type { SessionContext } from "../domain/sessions.ts";
+import { silentLogger } from "../kernel/log.ts";
+import { defineTool, type ToolTurn } from "../plugin-api/define.ts";
 import { AttachmentStore } from "./attachment-store.ts";
 import { listAttachments, openAttachment } from "./tool-attachment.ts";
 

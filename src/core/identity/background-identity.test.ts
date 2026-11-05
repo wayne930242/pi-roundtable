@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import type { ScheduledOutcome } from "../contract/channels.ts";
 import { runMigrations } from "../db/migrations.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
 import type { Schedule } from "../modules/schedules/schedule-store.ts";
 import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
-import type { Speaker } from "../speakers.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -19,6 +18,7 @@ import { identityMigrations } from "./identity-schema.ts";
 import { PgIdentityService } from "./identity-service.ts";
 import { identityView, legacyPrincipalsOf } from "./identity-view.ts";
 import { PgPrincipalStore } from "./principal-store.ts";
+import type { Speaker } from "./speakers.ts";
 
 const ADA = "966666600000000001";
 const DAY_MS = 24 * 60 * 60 * 1000;

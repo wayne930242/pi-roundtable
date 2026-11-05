@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import pino from "pino";
 import type { ScheduledOutcome } from "../contract/channels.ts";
-import { createLogger, type LogEntry } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import { createLogger, type LogEntry } from "../kernel/log.ts";
 import { ErrorReporter, fingerprint, reportText } from "./error-reporter.ts";
 
 const HOUR = 3_600_000;

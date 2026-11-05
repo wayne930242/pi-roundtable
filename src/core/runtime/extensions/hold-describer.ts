@@ -1,12 +1,12 @@
-import type { ToolTurn } from "../../define.ts";
+import { messages } from "../../i18n/index.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
 import {
 	type ClassedHold,
 	type HoldCheck,
 	type HoldContext,
 	type HoldDescription,
 	isPromise,
-} from "../../holds.ts";
-import { messages } from "../../i18n/index.ts";
+} from "../../plugin-api/holds.ts";
 import {
 	awaited,
 	type Described,

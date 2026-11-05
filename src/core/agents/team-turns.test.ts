@@ -7,11 +7,11 @@ import type {
 import { AgentRunError } from "../domain/errors.ts";
 import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
-import { silentLogger } from "../log.ts";
-import { attachReplyFile } from "../reply-files.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
+import { toolTiers } from "../runtime/tool-tiers.ts";
+import { attachReplyFile } from "../shared/reply-files.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
-import { toolTiers } from "../tool-tiers.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, AgentGroup, PgAgentStore } from "./agent-store.ts";

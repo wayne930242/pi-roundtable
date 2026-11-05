@@ -1,10 +1,10 @@
 import { AgentError } from "../domain/errors.ts";
-import { assistantName } from "../i18n/index.ts";
 import {
 	AUTO_THINKING,
 	type ThinkingLevel,
 	type ThinkingSetting,
-} from "../models.ts";
+} from "../domain/models.ts";
+import { assistantName } from "../i18n/index.ts";
 import { checkModelRef, checkThinking } from "./agent-store.ts";
 
 /** Resets a model or thinking setting to the assistant's. */

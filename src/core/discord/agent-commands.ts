@@ -30,8 +30,8 @@ import {
 import { characterOf } from "../agents/agent-rules.ts";
 import { type Agent, MAX_PROMPT_CHARS } from "../agents/agent-store.ts";
 import { AgentError } from "../domain/errors.ts";
+import { THINKING_LEVELS, thinkingLabel } from "../domain/models.ts";
 import { messages } from "../i18n/index.ts";
-import { THINKING_LEVELS, thinkingLabel } from "../models.ts";
 import {
 	BUILTIN_SKILLS,
 	type SkillSet,
@@ -41,7 +41,7 @@ import type {
 	AgentTeam,
 	AvatarStudio,
 	SkillRegistry,
-} from "../services.ts";
+} from "../plugin-api/services.ts";
 import { OwnerFacingError, ownerPanel } from "./owner-panel.ts";
 
 /** The custom-id prefixes of the panel's buttons and forms; posted panels carry them, so they never change. */

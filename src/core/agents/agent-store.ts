@@ -2,12 +2,12 @@ import type { SQL } from "bun";
 import type { CharacterSpec } from "../../characters/index.ts";
 import type { Migration } from "../db/migrations.ts";
 import { AgentError } from "../domain/errors.ts";
-import type { ThinkingLevel } from "../models.ts";
+import type { ThinkingLevel } from "../domain/models.ts";
 import {
 	PromptHistory,
 	type PromptVersion,
 } from "../modules/prompts/prompt-history.ts";
-import type { AgentDirectory } from "../services.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import { AgentBook } from "./agent-book.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import { AgentOutbox } from "./agent-outbox.ts";

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { SQL } from "bun";
 import type { Migration } from "../../db/migrations.ts";
 import { AgentError } from "../../domain/errors.ts";
-import { type Logger, silentLogger } from "../../log.ts";
+import { type Logger, silentLogger } from "../../kernel/log.ts";
 import {
 	describeDb,
 	openTestStore,

@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { runMigrations } from "../db/migrations.ts";
 import { ConfigError, IdentityError } from "../domain/errors.ts";
-import { silentLogger } from "../log.ts";
-import type { Speaker } from "../speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -20,6 +19,7 @@ import {
 	type RoleGrant,
 	SYSTEM_PRINCIPAL,
 } from "./principal-store.ts";
+import type { Speaker } from "./speakers.ts";
 
 const ADA = "966666600000000001";
 const KAI = "966666600000000003";

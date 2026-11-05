@@ -1,7 +1,7 @@
 import { type TSchema, Type } from "typebox";
 import Value from "typebox/value";
-import { freeze } from "../freeze.ts";
 import { type Messages, messages } from "../i18n/index.ts";
+import { freeze } from "../kernel/freeze.ts";
 
 /** What a call may do in one channel, with the owner-facing label; grants and permission checks name these. */
 export const CHANNEL_OPERATIONS = Object.freeze([

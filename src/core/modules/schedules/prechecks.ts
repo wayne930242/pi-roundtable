@@ -1,6 +1,6 @@
 import type { ChannelKey } from "../../domain/conversation.ts";
-import { PluginError } from "../../errors.ts";
-import type { Tier } from "../../speakers.ts";
+import type { Tier } from "../../identity/speakers.ts";
+import { PluginError } from "../../kernel/errors.ts";
 import type { Schedule } from "./schedule-store.ts";
 
 /** How long a precheck may run before it counts as failed, unless it sets its own `timeoutMs`. */

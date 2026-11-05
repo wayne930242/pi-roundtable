@@ -1,7 +1,7 @@
 import type { SQL } from "bun";
 import { nested, openPool, runMigrations } from "../../core/db/migrations.ts";
-import { MigrationError } from "../../core/errors.ts";
-import type { RoundtablePlugin } from "../../core/plugin.ts";
+import { MigrationError } from "../../core/kernel/errors.ts";
+import type { RoundtablePlugin } from "../../core/plugin-api/plugin.ts";
 import type { Project } from "../project.ts";
 import { fail, ok, type Result, skipped } from "../report.ts";
 

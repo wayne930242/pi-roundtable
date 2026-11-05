@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { ChannelManager } from "discord.js";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { DiscordSurface } from "./discord-surface.ts";
 
 const PEER = "800000000000000001";

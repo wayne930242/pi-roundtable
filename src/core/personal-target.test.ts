@@ -4,10 +4,10 @@ import type {
 	ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import type { BackgroundTurn } from "./contract/channels.ts";
-import type { RoundtablePlugin } from "./plugin.ts";
-import { BACKGROUND_TURNS, SCHEDULES } from "./services.ts";
-import type { SessionContext } from "./sessions.ts";
-import type { Speaker } from "./speakers.ts";
+import type { SessionContext } from "./domain/sessions.ts";
+import type { Speaker } from "./identity/speakers.ts";
+import type { RoundtablePlugin } from "./plugin-api/plugin.ts";
+import { BACKGROUND_TURNS, SCHEDULES } from "./plugin-api/services.ts";
 import { describeDb } from "./testing/database.ts";
 import { type TestHost, testHost } from "./testing/test-host.ts";
 

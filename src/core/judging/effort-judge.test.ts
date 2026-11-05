@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Judge, ScoreQuestion } from "../contract/providers.ts";
-import { JudgeError } from "../errors.ts";
-import { silentLogger } from "../log.ts";
+import { JudgeError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
 import {
 	AGENT_BRIEF,
 	EffortJudge,

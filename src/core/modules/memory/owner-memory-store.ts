@@ -1,7 +1,7 @@
 import type { SQL } from "bun";
 import type { Migration } from "../../db/migrations.ts";
 import { MemoryError } from "../../domain/errors.ts";
-import type { MemoryStore, SpeakerMemory } from "../../services.ts";
+import type { MemoryStore, SpeakerMemory } from "../../plugin-api/services.ts";
 
 /** The kinds of memory: a core fact shown every turn, a searchable note, a dated event. */
 export const MEMORY_KINDS = Object.freeze(["core", "note", "event"] as const);

@@ -75,11 +75,11 @@ describe("core boundary", () => {
 			"src/core/config/config.ts",
 			"src/core/config/profiles.test.ts",
 			"src/core/config/profiles.ts",
-			"src/core/define-roundtable.test.ts",
-			"src/core/define-roundtable.ts",
-			"src/core/host-services.test.ts",
+			"src/core/host/define-roundtable.test.ts",
+			"src/core/host/define-roundtable.ts",
+			"src/core/host/host-services.test.ts",
 			"src/core/identity/identity-links.test.ts",
-			"src/core/identity/identity-plugin.ts",
+			"src/core/builtin/identity.ts",
 			"src/core/identity/identity-profiles.test.ts",
 			"src/core/identity/identity-schema.ts",
 			"src/core/identity/identity-service.ts",
@@ -89,7 +89,7 @@ describe("core boundary", () => {
 			"src/core/identity/profile-choices.ts",
 			"src/core/identity/profiles-view.ts",
 			"src/core/identity/profiles.ts",
-			"src/core/services.ts",
+			"src/core/plugin-api/services.ts",
 		]);
 		const otherConcept = /(?<![a-z])(party|connector|sol-?worker)/i;
 		const panelCommand = /`?\/\$\{[^}]+\} profile`?|\/<root> profile/;

@@ -1,5 +1,5 @@
-import type { RoundtablePlugin } from "../plugin.ts";
-import { CHANNEL_CONTEXT } from "../services.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { CHANNEL_CONTEXT } from "../plugin-api/services.ts";
 
 /**
  * The channel context of every surface that reads it. The plugin provides one `CHANNEL_CONTEXT`

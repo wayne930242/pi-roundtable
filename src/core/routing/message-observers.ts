@@ -4,7 +4,7 @@ import type {
 	ObserveFilter,
 } from "../contract/channels.ts";
 import { parseChannelKey } from "../contract/surface.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 interface Registered {
 	filter: Readonly<ObserveFilter>;

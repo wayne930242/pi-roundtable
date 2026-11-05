@@ -1,11 +1,11 @@
 import type { HeldCall } from "../../domain/conversation.ts";
 import type { TurnRequest } from "../../domain/ports.ts";
+import type { ChannelKey } from "../../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
 import type { ApprovedBy } from "../../interactions/prompts.ts";
 import { type Autonomy, DEFAULT_AUTONOMY } from "../../modes/autonomy.ts";
 import type { ConversationModes } from "../../modes/conversation-modes.ts";
 import { YOLO_CARDED_SHELL_CLASSES } from "../../modules/host-shell/shell-policy.ts";
-import type { ChannelKey } from "../../sessions.ts";
 import type { PiAgentRuntimeOptions } from "../runtime-types.ts";
 import type { AutoApprover } from "./confirmation-gate.ts";
 import type { SpeakerRef } from "./gate-refusals.ts";

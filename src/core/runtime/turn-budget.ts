@@ -1,3 +1,4 @@
+import type { ChannelKey } from "../domain/sessions.ts";
 import type {
 	TurnLimit,
 	TurnTimeout,
@@ -6,7 +7,6 @@ import type {
 import { messages } from "../i18n/index.ts";
 import type { Approval } from "../interactions/prompts.ts";
 import { DEFAULT_YOLO_TIMEOUT_CARD_GRACE_MS } from "../modes/autonomy.ts";
-import type { ChannelKey } from "../sessions.ts";
 import type { PromptSlot } from "./prompt-slot.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 import type { ActivityTracker } from "./turn-activity.ts";

@@ -3,7 +3,7 @@ import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
 import { fakeThreads } from "../../testing/thread-host.ts";
 import {
 	DefaultDelegator,

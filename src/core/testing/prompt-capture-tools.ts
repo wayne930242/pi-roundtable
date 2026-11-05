@@ -1,5 +1,5 @@
 import type { ChatSurface } from "../contract/surface.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
 
 /**
  * Every built-in tool a deployment may select for its conversations, as an app's selection

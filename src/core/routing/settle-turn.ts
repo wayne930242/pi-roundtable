@@ -1,7 +1,7 @@
 import type { ScheduledOutcome } from "../contract/channels.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
-import type { TurnEndEvent } from "../plugin.ts";
+import type { TurnEndEvent } from "../plugin-api/plugin.ts";
 
 /** Runs a turn; a thrown error becomes its failed result, labelled `<what> crashed`. */
 export async function settleTurn<R>(

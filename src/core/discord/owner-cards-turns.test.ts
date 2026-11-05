@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { holdChain } from "../holds.ts";
 import { messages } from "../i18n/index.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
+import { holdChain } from "../plugin-api/holds.ts";
 import {
 	ASK_USER_TOOL,
 	askUserExtension,

@@ -5,7 +5,7 @@ import {
 	type Questionnaire,
 	validateQuestionnaire,
 } from "../interactions/questionnaire.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import {
 	messageViolations,
 	modalViolations,

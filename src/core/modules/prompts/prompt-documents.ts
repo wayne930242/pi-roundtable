@@ -2,7 +2,7 @@ import type { SQL } from "bun";
 import { isCheckDatabase } from "../../db/check-database.ts";
 import type { Migration } from "../../db/migrations.ts";
 import { AgentError } from "../../domain/errors.ts";
-import { type Logger, silentLogger } from "../../log.ts";
+import { type Logger, silentLogger } from "../../kernel/log.ts";
 import {
 	PromptHistory,
 	type PromptVersion,

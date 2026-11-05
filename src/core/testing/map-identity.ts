@@ -3,7 +3,11 @@ import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { ContactAssessor } from "../identity/contact.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { IdentityLink, Principal } from "../identity/principal-store.ts";
-import { type SpeakerMap, speakerPolicy, tierAtLeast } from "../speakers.ts";
+import {
+	type SpeakerMap,
+	speakerPolicy,
+	tierAtLeast,
+} from "../identity/speakers.ts";
 
 /**
  * Who a 0.8 speaker map serves, for a test without a database: each person their own principal,

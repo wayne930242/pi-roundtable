@@ -503,11 +503,11 @@ const ACCEPTANCE: readonly Item[] = [
 				"OWNER_TARGET is PERSONAL_TARGET, and OwnerPrompts is Prompts, from the public entry",
 			),
 			t(
-				"src/core/tool-tiers.test.ts",
+				"src/core/runtime/tool-tiers.test.ts",
 				"a tool renamed since 0.8 > warns once per host logger when an old name is used in tiers or selections, and never for the new name",
 			),
 			t(
-				"src/core/tool-tiers.test.ts",
+				"src/core/runtime/tool-tiers.test.ts",
 				"a tool renamed since 0.8 > the operator's tier under its old name, such as notify_owner, is the new name's, unless the new name has its own",
 			),
 		],
@@ -555,7 +555,7 @@ const ACCEPTANCE: readonly Item[] = [
 				"the runtime plugin's preflight of claude-bridge with memory > warns without stopping boot when stored roles admit someone besides the owner",
 			),
 			t(
-				"src/core/define-roundtable-bridge.test.ts",
+				"src/core/host/define-roundtable-bridge.test.ts",
 				"claude-bridge in a host whose shared conversations several people speak in > boots with a warning that says why shared bridge history remains risky",
 			),
 			t(

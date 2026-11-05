@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ChatSurface } from "../contract/surface.ts";
-import { PluginError } from "../errors.ts";
 import { promptScope } from "../interactions/prompts.ts";
+import { PluginError } from "../kernel/errors.ts";
 import { surfacePort } from "./surface-port.ts";
 
 /** A surface that records every call; `with` gives it only some of the optional methods. */

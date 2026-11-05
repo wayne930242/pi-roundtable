@@ -1,4 +1,8 @@
-import { type OwnerIdentity, ownerWords, PRONOUNS } from "../../identity.ts";
+import {
+	type OwnerIdentity,
+	ownerWords,
+	PRONOUNS,
+} from "../../identity/owner-identity.ts";
 import type {
 	OwnerAnswer,
 	OwnerQuestion,

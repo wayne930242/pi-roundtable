@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { AgentError } from "../domain/errors.ts";
+import type { AgentTurnScope, ChannelKey } from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { ConversationMode } from "../modes/conversation-modes.ts";
-import type { AgentTurnScope, ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import type { Agent } from "./agent-store.ts";
 import { TeamEditing } from "./team-editing.ts";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
 import { runsAsCreator } from "../../testing/background.ts";
 import type { Schedule } from "./schedule-store.ts";
 import { Scheduler } from "./scheduler.ts";

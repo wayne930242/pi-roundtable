@@ -1,10 +1,10 @@
-import type { AgentTurnScope, TurnSelection } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { TurnAttachments } from "./attachment.ts";
 import type { ClientPort } from "./client.ts";
 import type { ChannelKey } from "./conversation.ts";
 import type { InterimPosts } from "./interim.ts";
 import type { TurnProgress } from "./progress.ts";
+import type { AgentTurnScope, TurnSelection } from "./sessions.ts";
 
 export type { AgentTurnScope };
 

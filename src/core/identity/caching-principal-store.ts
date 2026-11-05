@@ -1,4 +1,3 @@
-import type { Tier } from "../speakers.ts";
 import type {
 	IdentityRef,
 	LinkSource,
@@ -7,6 +6,7 @@ import type {
 	Pronouns,
 	RoleSource,
 } from "./principal-store.ts";
+import type { Tier } from "./speakers.ts";
 
 /** How long a read of the store is reused; a change another process makes is seen after it. */
 export const CACHE_MS = 30_000;

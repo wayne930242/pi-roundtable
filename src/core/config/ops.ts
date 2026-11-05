@@ -1,5 +1,5 @@
 import { ConfigError } from "../domain/errors.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 
 /** Where the errors go: one agent, or one conversation. */
 export type ResolvedOps = { agent: string } | { conversation: ChannelKey };

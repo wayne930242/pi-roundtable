@@ -1,6 +1,6 @@
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
-import type { AgentDirectory } from "../services.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import type { Agent } from "./agent-store.ts";
 import { Routes } from "./routes.ts";
 import { agentRoomKey, keysOf } from "./team-keys.ts";

@@ -1,7 +1,7 @@
 import type { SurfacePort } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import type {
 	DirectChannelProvider,

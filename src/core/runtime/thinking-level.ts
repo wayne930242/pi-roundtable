@@ -3,12 +3,12 @@ import type {
 	ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { TurnRequest } from "../domain/ports.ts";
 import {
 	AUTO_THINKING,
 	type EffortPolicy,
 	type ThinkingLevel,
-} from "../models.ts";
+} from "../domain/models.ts";
+import type { TurnRequest } from "../domain/ports.ts";
 import {
 	type AgentModelSettings,
 	useChosenAgentModel,

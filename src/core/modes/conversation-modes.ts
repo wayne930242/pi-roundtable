@@ -1,10 +1,10 @@
 import type { SQL } from "bun";
 import type { Migration } from "../db/migrations.ts";
-import { PluginError } from "../errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import type { Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { PluginError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	followersOf,
 	type ModeOrigins,

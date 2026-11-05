@@ -1,6 +1,11 @@
 import { ScheduleError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
-import { timeZone, zonedDate, zonedInstant, zonedStamp } from "../../time.ts";
+import {
+	timeZone,
+	zonedDate,
+	zonedInstant,
+	zonedStamp,
+} from "../../kernel/time.ts";
 
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 

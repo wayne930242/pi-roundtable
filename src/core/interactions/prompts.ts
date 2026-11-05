@@ -1,6 +1,6 @@
 import type { ConversationVisibility } from "../conversations/conversation-registry.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import type { Speaker, Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../identity/speakers.ts";
 import type {
 	AskSupport,
 	OwnerAnswer,

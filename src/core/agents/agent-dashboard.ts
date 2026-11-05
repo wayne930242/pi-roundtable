@@ -1,7 +1,7 @@
+import { thinkingLabel } from "../domain/models.ts";
 import { messages } from "../i18n/index.ts";
-import type { Logger } from "../log.ts";
-import { thinkingLabel } from "../models.ts";
-import { zonedDate, zonedStamp } from "../time.ts";
+import type { Logger } from "../kernel/log.ts";
+import { zonedDate, zonedStamp } from "../kernel/time.ts";
 import type { ContextUse, DashboardBoard } from "./agent-ports.ts";
 import type { AgentStatus, GroupStatus, TeamStatus } from "./agent-team.ts";
 

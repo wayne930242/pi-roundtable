@@ -12,7 +12,7 @@ import {
 import type { InboundMessage } from "../contract/channels.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import { MAX_TURN_IMAGES } from "../domain/attachment.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { contextImages, type SkippedImage } from "./context-images.ts";
 import { embedText } from "./embed-text.ts";
 import type { BotIdentity } from "./inbound-message.ts";

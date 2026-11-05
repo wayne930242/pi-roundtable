@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PluginError } from "../errors.ts";
-import { type Logger, silentLogger } from "../log.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { type Logger, silentLogger } from "../kernel/log.ts";
 import {
 	DEFAULT_MAX_REQUEST_BODY_BYTES,
 	HttpListeners,

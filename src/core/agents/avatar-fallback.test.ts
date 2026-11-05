@@ -3,8 +3,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import pino from "pino";
 import { resolveCharacter } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
-import { silentLogger } from "../log.ts";
-import type { AgentTurnScope } from "../sessions.ts";
+import type { AgentTurnScope } from "../domain/sessions.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent } from "./agent-store.ts";
@@ -235,7 +235,7 @@ describe("agent_create and avatars", () => {
 	test("the deprecation is stated in the source, the changelog and the plugin guide", async () => {
 		const root = new URL("../../../", import.meta.url);
 		const read = (path: string) => Bun.file(new URL(path, root)).text();
-		const services = await read("src/core/services.ts");
+		const services = await read("src/core/plugin-api/services.ts");
 		expect(services).toMatch(/@deprecated[\s\S]*?\n\tredrawAvatar\(/);
 		expect(await read("src/core/agents/agent-tools.ts")).toMatch(
 			/@deprecated[\s\S]*?export type AvatarMode/,

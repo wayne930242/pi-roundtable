@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { OpsAlerts, type OpsAlertsOptions } from "./ops-alerts.ts";
 
 const HOUR = 3_600_000;

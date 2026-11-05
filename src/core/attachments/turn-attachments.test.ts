@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InboundMessage } from "../domain/conversation.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { attachmentsOf, DEFAULT_DEADLINE_MS } from "./turn-attachments.ts";
 
 const dirs: string[] = [];

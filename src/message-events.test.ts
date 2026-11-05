@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { InboundMessage } from "./core/contract/channels.ts";
 import type { SurfaceMessageEvents } from "./core/contract/surface.ts";
-import type { RoundtablePlugin } from "./core/plugin.ts";
+import type { RoundtablePlugin } from "./core/plugin-api/plugin.ts";
 import { testPlugin } from "./testing.ts";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));

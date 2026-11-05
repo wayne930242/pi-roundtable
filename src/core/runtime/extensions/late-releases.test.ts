@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
-import type { ToolTurn } from "../../define.ts";
-import { holdChain } from "../../holds.ts";
 import type {
 	Approval,
 	ApprovedBy,
 	Prompts,
 	PromptWait,
 } from "../../interactions/prompts.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
+import { holdChain } from "../../plugin-api/holds.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";
 import { ConfirmationGate } from "./confirmation-gate.ts";

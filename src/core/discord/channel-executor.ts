@@ -11,7 +11,7 @@ import {
 	type PermissionResolvable,
 	type TextChannel,
 } from "discord.js";
-import { freeze } from "../freeze.ts";
+import { freeze } from "../kernel/freeze.ts";
 import type { ChannelOperation } from "./channel-operations.ts";
 import {
 	type ChannelExecutor,

@@ -3,9 +3,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { defineRoundtable } from "../define-roundtable.ts";
 import { ConfigError } from "../domain/errors.ts";
-import { silentLogger } from "../log.ts";
+import { defineRoundtable } from "../host/define-roundtable.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { type RoundtableConfig, resolveConfig } from "./config.ts";
 
 const PEER = "800000000000000001";

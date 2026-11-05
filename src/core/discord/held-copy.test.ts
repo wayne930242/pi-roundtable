@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { defineTool, type ToolTurn } from "../define.ts";
-import { holdChain } from "../holds.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
+import { defineTool, type ToolTurn } from "../plugin-api/define.ts";
+import { holdChain } from "../plugin-api/holds.ts";
 import { ConfirmationGate } from "../runtime/extensions/confirmation-gate.ts";
 import { confirmationGateExtension } from "../runtime/extensions/confirmation-gate-extension.ts";
 import { promptSlot } from "../runtime/prompt-slot.ts";

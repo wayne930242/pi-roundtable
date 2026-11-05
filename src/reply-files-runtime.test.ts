@@ -10,10 +10,10 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin, defineTool } from "./core/define.ts";
 import type { OutboundReply } from "./core/domain/conversation.ts";
-import { attachReplyFile } from "./core/reply-files.ts";
+import { definePlugin, defineTool } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
+import { attachReplyFile } from "./core/shared/reply-files.ts";
 import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 
 const file = { name: "image.png", data: new Uint8Array([1, 2, 3]) };

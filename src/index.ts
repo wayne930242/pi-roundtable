@@ -139,18 +139,6 @@ export type {
 export type { Migration, MigrationReport } from "./core/db/migrations.ts";
 export { migrateDatabase } from "./core/db/migrations.ts";
 export type {
-	ToolContribution,
-	ToolOutput,
-	ToolSpec,
-	ToolTurn,
-} from "./core/define.ts";
-export { definePlugin, defineTool, ToolRefusal } from "./core/define.ts";
-export type {
-	DefinedRoundtable,
-	DefineOverrides,
-} from "./core/define-roundtable.ts";
-export { defineRoundtable } from "./core/define-roundtable.ts";
-export type {
 	AttachmentFailure,
 	ModelImage,
 	StoredAttachment,
@@ -187,34 +175,37 @@ export type {
 	InterimPosts,
 	InterimTextMode,
 } from "./core/domain/interim.ts";
+export type { ThinkingLevel, ThinkingSetting } from "./core/domain/models.ts";
 export type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
 export type { HoldRefusal, TurnProgress } from "./core/domain/progress.ts";
 export type { RoundEnd, RoundProgress } from "./core/domain/round.ts";
+export type {
+	AgentTurnScope,
+	ChannelKey,
+	SessionContext,
+	SessionConversation,
+	SessionPlan,
+	SessionTool,
+	SessionToolSnapshot,
+	ToolSelection,
+	TransientTask,
+	TurnSelection,
+} from "./core/domain/sessions.ts";
 export {
 	type TurnLimit,
 	type TurnTimeout,
 	type TurnTimeoutEnd,
 	TurnTimeoutError,
 } from "./core/domain/turn-timeout.ts";
-export type { DrainOptions } from "./core/drain.ts";
-export {
-	HostStoppingError,
-	JudgeError,
-	MigrationError,
-	NotLinkedError,
-	PluginError,
-	ProviderError,
-} from "./core/errors.ts";
 export type {
-	ClassedHold,
-	HoldCheck,
-	HoldContext,
-	HoldDescription,
-	HoldRule,
-} from "./core/holds.ts";
-export type { HostEnvironment, RoundtableOptions } from "./core/host.ts";
-export { Roundtable } from "./core/host.ts";
-export type { RegistrationReport } from "./core/host-registration.ts";
+	DefinedRoundtable,
+	DefineOverrides,
+} from "./core/host/define-roundtable.ts";
+export { defineRoundtable } from "./core/host/define-roundtable.ts";
+export type { DrainOptions } from "./core/host/drain.ts";
+export type { HostEnvironment, RoundtableOptions } from "./core/host/host.ts";
+export { Roundtable } from "./core/host/host.ts";
+export type { RegistrationReport } from "./core/host/host-registration.ts";
 export type {
 	HttpRoute,
 	ListenerAddress,
@@ -254,6 +245,8 @@ export type {
 	ProfileRules,
 	ProfileSource,
 } from "./core/identity/profiles.ts";
+export type { Speaker, Tier } from "./core/identity/speakers.ts";
+export { THE_SPEAKER, TIERS } from "./core/identity/speakers.ts";
 export type {
 	Approval,
 	ApprovalDetails,
@@ -283,18 +276,21 @@ export {
 	validateQuestionnaire,
 } from "./core/interactions/questionnaire.ts";
 export type { JudgeModel } from "./core/judging/model-judge.ts";
-export type { LogEntry, LogFn, Logger } from "./core/log.ts";
-export type { ThinkingLevel, ThinkingSetting } from "./core/models.ts";
+export {
+	HostStoppingError,
+	JudgeError,
+	MigrationError,
+	NotLinkedError,
+	PluginError,
+	ProviderError,
+} from "./core/kernel/errors.ts";
+export type { LogEntry, LogFn, Logger } from "./core/kernel/log.ts";
 export type {
 	AutoApproval,
 	ConversationMode,
 	ConversationModes,
 	ModeChange,
 } from "./core/modes/conversation-modes.ts";
-export {
-	PERSONAL_TARGET,
-	type PerPrincipalLimits,
-} from "./core/modules/background/personal-target.ts";
 export type {
 	DelegationJob,
 	DelegationOutcome,
@@ -348,6 +344,24 @@ export type {
 export { SkillConflictError } from "./core/modules/skills/skill-rules.ts";
 export type { SkillGroup } from "./core/modules/skills/skill-store.ts";
 export type {
+	ToolContribution,
+	ToolOutput,
+	ToolSpec,
+	ToolTurn,
+} from "./core/plugin-api/define.ts";
+export {
+	definePlugin,
+	defineTool,
+	ToolRefusal,
+} from "./core/plugin-api/define.ts";
+export type {
+	ClassedHold,
+	HoldCheck,
+	HoldContext,
+	HoldDescription,
+	HoldRule,
+} from "./core/plugin-api/holds.ts";
+export type {
 	ActionEvent,
 	AgentTools,
 	Contribution,
@@ -368,22 +382,7 @@ export type {
 	TurnEndEvent,
 	TurnEvent,
 	TurnProgressEvent,
-} from "./core/plugin.ts";
-export type {
-	DirectChannelProvider,
-	DirectChannels,
-	DirectReach,
-} from "./core/presence/direct-channels.ts";
-export {
-	attachReplyFile,
-	REPLY_FILE_LIMITS,
-	ReplyFileError,
-	withReplyFiles,
-} from "./core/reply-files.ts";
-export type {
-	ConversationTurnInput,
-	ConversationTurns,
-} from "./core/routing/conversation-turns.ts";
+} from "./core/plugin-api/plugin.ts";
 export type {
 	AgentChange,
 	AgentDirectory,
@@ -401,7 +400,7 @@ export type {
 	SpeakerMemory,
 	WorkerSessionRequest,
 	WorkerSessions,
-} from "./core/services.ts";
+} from "./core/plugin-api/services.ts";
 export {
 	AGENTS,
 	BACKGROUND_TURNS,
@@ -420,20 +419,25 @@ export {
 	SKILLS,
 	THREADS,
 	WORKER_SESSIONS,
-} from "./core/services.ts";
+} from "./core/plugin-api/services.ts";
 export type {
-	AgentTurnScope,
-	ChannelKey,
-	SessionContext,
-	SessionConversation,
-	SessionPlan,
-	SessionTool,
-	SessionToolSnapshot,
-	ToolSelection,
-	TransientTask,
-	TurnSelection,
-} from "./core/sessions.ts";
+	DirectChannelProvider,
+	DirectChannels,
+	DirectReach,
+} from "./core/presence/direct-channels.ts";
+export type {
+	ConversationTurnInput,
+	ConversationTurns,
+} from "./core/routing/conversation-turns.ts";
+export type { ToolTiers, ToolTierTable } from "./core/runtime/tool-tiers.ts";
 export type { ShellEnv, ShellEnvConfig } from "./core/shared/child-env.ts";
-export type { Speaker, Tier } from "./core/speakers.ts";
-export { THE_SPEAKER, TIERS } from "./core/speakers.ts";
-export type { ToolTiers, ToolTierTable } from "./core/tool-tiers.ts";
+export {
+	PERSONAL_TARGET,
+	type PerPrincipalLimits,
+} from "./core/shared/personal-target.ts";
+export {
+	attachReplyFile,
+	REPLY_FILE_LIMITS,
+	ReplyFileError,
+	withReplyFiles,
+} from "./core/shared/reply-files.ts";

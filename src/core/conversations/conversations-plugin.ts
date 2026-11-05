@@ -1,6 +1,6 @@
 import type { SQL } from "bun";
-import type { RoundtablePlugin } from "../plugin.ts";
-import { CONVERSATIONS } from "../services.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { CONVERSATIONS } from "../plugin-api/services.ts";
 import type { ConversationRegistry } from "./conversation-registry.ts";
 import {
 	type ConversationRetentionOptions,

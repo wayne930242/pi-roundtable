@@ -1,4 +1,4 @@
-import type { Tier } from "../speakers.ts";
+import type { Tier } from "./speakers.ts";
 
 /** How often being seen is written for one principal, unless the tier changes. */
 const TOUCH_MS = 5 * 60_000;

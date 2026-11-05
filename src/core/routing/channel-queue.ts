@@ -1,5 +1,5 @@
-import { HostStoppingError } from "../errors.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import { HostStoppingError } from "../kernel/errors.ts";
 
 /** Runs tasks one at a time per channel, in arrival order; different channels run independently. */
 export class ChannelQueue {

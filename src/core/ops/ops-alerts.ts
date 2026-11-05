@@ -1,4 +1,4 @@
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { AlertThrottle } from "./alert-throttle.ts";
 
 const DEFAULT_WINDOW_MS = 60 * 60_000;

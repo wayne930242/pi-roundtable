@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { OWNER_TARGET } from "../agents/agent-claim.ts";
 import type { ConversationRecord } from "../conversations/conversation-registry.ts";
-import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
+import {
+	type ChannelKey,
+	compileSessionPlan,
+	type SessionContext,
+} from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { ErrorReporter } from "../ops/error-reporter.ts";
 import {
 	BACKGROUND_TURNS,
 	DELEGATION,
 	type ScheduleStore,
-} from "../services.ts";
-import {
-	type ChannelKey,
-	compileSessionPlan,
-	type SessionContext,
-} from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+} from "../plugin-api/services.ts";
+import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import {
 	ANN,
 	context,

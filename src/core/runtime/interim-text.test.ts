@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { InterimPosts } from "../domain/interim.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	InterimPoster,
 	isPrimaryText,

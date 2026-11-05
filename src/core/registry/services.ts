@@ -1,6 +1,6 @@
 import type { ServiceKey, Services } from "../contract/services.ts";
-import { NotLinkedError, PluginError } from "../errors.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { NotLinkedError, PluginError } from "../kernel/errors.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 
 /** The host's words for reading a service no plugin declares; `testPlugin` says how to give one instead. */
 const HOST_ADVICE =

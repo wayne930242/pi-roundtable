@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { createCanvas } from "canvas";
 import { AttachmentRefusal } from "../contract/attachments.ts";
 import type { ConversationRecord } from "../conversations/conversation-registry.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { readAttachment } from "../shared/attachment-reader.ts";
 import {
 	discardConversationFiles,

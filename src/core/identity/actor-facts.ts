@@ -1,5 +1,5 @@
 import { parseChannelKey } from "../contract/surface.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import type { IdentityRef } from "./principal-store.ts";
 
 /**

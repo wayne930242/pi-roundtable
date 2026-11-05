@@ -3,7 +3,7 @@ import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { AttachmentBuilder, MessageFlags } from "discord.js";
 import { messages } from "../i18n/index.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /** The most characters of one card's copy text; a longer one gets no copy button. */
 export const COPY_TEXT_LIMIT = 20_000;

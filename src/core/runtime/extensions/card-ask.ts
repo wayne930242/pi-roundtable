@@ -1,3 +1,4 @@
+import type { Tier } from "../../identity/speakers.ts";
 import type {
 	Approval,
 	ApprovalDetails,
@@ -6,7 +7,6 @@ import type {
 	Prompts,
 	PromptWait,
 } from "../../interactions/prompts.ts";
-import type { Tier } from "../../speakers.ts";
 import type { Watch } from "./withdrawals.ts";
 
 /** What a held call's card is opened with. */

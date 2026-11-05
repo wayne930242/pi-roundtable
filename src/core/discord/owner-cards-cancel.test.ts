@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { messages } from "../i18n/index.ts";
-import { PRONOUNS } from "../identity.ts";
+import { PRONOUNS } from "../identity/owner-identity.ts";
 import type { LateAnswer, OwnerQuestion } from "../interactions/prompts.ts";
 import type { Questionnaire } from "../interactions/questionnaire.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { askQuestions } from "../runtime/ask-questions.ts";
 import { messageViolations } from "../testing/discord-limits.ts";
 import { CARD_PREFIX, type LateTurn, OwnerCards } from "./owner-cards.ts";

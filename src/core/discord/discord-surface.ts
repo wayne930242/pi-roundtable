@@ -25,11 +25,11 @@ import type {
 } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import type { OwnerNotifier } from "../domain/ports.ts";
-import type { MemberJoinedEvent } from "../event-types.ts";
 import { messages } from "../i18n/index.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
+import type { MemberJoinedEvent } from "../plugin-api/event-types.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { threadsOfHost } from "../threads/host-threads.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";

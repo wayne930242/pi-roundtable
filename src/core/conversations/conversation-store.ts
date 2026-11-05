@@ -1,7 +1,7 @@
 import type { SQL } from "bun";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { Migration } from "../db/migrations.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import type {
 	ConversationRecord,
 	ConversationRegistration,

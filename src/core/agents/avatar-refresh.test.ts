@@ -3,7 +3,7 @@ import {
 	type CharacterSpec,
 	resolveCharacter,
 } from "../../characters/index.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import type { Agent } from "./agent-store.ts";
 import { refreshAvatars } from "./avatar-refresh.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";

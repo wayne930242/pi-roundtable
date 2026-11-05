@@ -8,9 +8,9 @@ import {
 	rulesOfSpeakerMap,
 } from "../identity/access-policy.ts";
 import { parseIdentity } from "../identity/actor-facts.ts";
-import { PRONOUNS } from "../identity.ts";
-import type { Logger } from "../log.ts";
-import type { TierMembers } from "../speakers.ts";
+import { PRONOUNS } from "../identity/owner-identity.ts";
+import type { TierMembers } from "../identity/speakers.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { Pronouns, ResolvedConfig, RoundtableConfig } from "./config.ts";
 import {
 	either,

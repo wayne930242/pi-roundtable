@@ -2,7 +2,7 @@ import { type Client, Events } from "discord.js";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { SurfaceMessageEvents } from "../contract/surface.ts";
 import { channelKey } from "../contract/surface.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { toInbound } from "./inbound-message.ts";
 
 /** Hands every message the client sees to `deliver` as the neutral message; the bot's own are left out. */

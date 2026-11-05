@@ -11,9 +11,9 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin } from "./core/define.ts";
 import type { TurnResult } from "./core/domain/conversation.ts";
 import { TurnTimeoutError } from "./core/domain/turn-timeout.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 

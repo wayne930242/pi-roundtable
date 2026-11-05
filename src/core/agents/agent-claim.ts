@@ -14,14 +14,14 @@ import type {
 import type { AgentRuntime } from "../contract/runtime.ts";
 import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { OwnerIdentity } from "../identity.ts";
-import type { Logger } from "../log.ts";
-import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import { addressee, attributed, type Speaker } from "../identity/speakers.ts";
+import type { Logger } from "../kernel/log.ts";
 import { withReference } from "../routing/message-text.ts";
 import { answersAuthor } from "../routing/peer-bots.ts";
 import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
-import { addressee, attributed, type Speaker } from "../speakers.ts";
+import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import type { DiscordAgentTeam } from "./agent-team.ts";
 import { discordIdOf, roomOf } from "./team-keys.ts";
 

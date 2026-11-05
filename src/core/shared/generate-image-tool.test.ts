@@ -15,15 +15,15 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ImageDrawer, ReferenceImage } from "../contract/providers.ts";
 import type { ReplyFile } from "../domain/conversation.ts";
-import { withReplyFiles } from "../reply-files.ts";
 import { sessionExtensions } from "../runtime/runtime-types.ts";
 import { imageTools } from "../runtime/session-factory.ts";
-import { CORE_TOOL_TIERS, toolTiers } from "../tool-tiers.ts";
+import { CORE_TOOL_TIERS, toolTiers } from "../runtime/tool-tiers.ts";
 import {
 	GENERATE_IMAGE_TOOL,
 	generateImageExtension,
 	REFERENCE_IMAGE_LIMITS,
 } from "./generate-image-tool.ts";
+import { withReplyFiles } from "./reply-files.ts";
 
 const PNG = new Uint8Array([
 	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3,

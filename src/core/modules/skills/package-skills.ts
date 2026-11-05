@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, relative as relativePath, resolve } from "node:path";
-import { PluginError } from "../../errors.ts";
+import { PluginError } from "../../kernel/errors.ts";
 import { packageDir } from "../../shared/package-dir.ts";
 import {
 	BUILTIN_SKILLS,

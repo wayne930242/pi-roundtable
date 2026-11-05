@@ -1,6 +1,6 @@
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey, InboundMessage } from "../domain/conversation.ts";
-import type { OwnerIdentity } from "../identity.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
 
 /** How the model is told where a forward came from: a Discord channel as its mention, another surface's as its key. */
 function sourceLabel(source: ChannelKey): string {

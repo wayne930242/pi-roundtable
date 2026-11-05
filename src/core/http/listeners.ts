@@ -1,7 +1,7 @@
 import { chmodSync } from "node:fs";
 import type { Server, WebSocketHandler } from "bun";
-import { PluginError } from "../errors.ts";
-import type { Logger } from "../log.ts";
+import { PluginError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
 import { serveUnix } from "../shared/unix-server.ts";
 import {
 	type Connection,

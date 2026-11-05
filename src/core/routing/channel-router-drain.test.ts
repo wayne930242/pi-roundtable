@@ -6,8 +6,8 @@ import type {
 	InboundMessage,
 } from "../contract/channels.ts";
 import type { SurfacePort } from "../contract/surface.ts";
-import { silentLogger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";

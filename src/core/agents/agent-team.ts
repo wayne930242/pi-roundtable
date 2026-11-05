@@ -3,13 +3,13 @@ import type { CharacterInput } from "../../characters/index.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
+import type { ThinkingSetting } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { ThinkingSetting } from "../models.ts";
+import type { TurnSelection } from "../domain/sessions.ts";
+import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import type { PromptVersion } from "../modules/prompts/prompt-history.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
-import type { AgentChange, AgentTeam } from "../services.ts";
-import type { TurnSelection } from "../sessions.ts";
-import { type Speaker, THE_SPEAKER } from "../speakers.ts";
+import type { AgentChange, AgentTeam } from "../plugin-api/services.ts";
 import type { Agent } from "./agent-store.ts";
 import {
 	type AgentOps,

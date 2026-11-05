@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Type } from "typebox";
-import { definePlugin, defineTool, ToolRefusal } from "../define.ts";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { definePlugin, defineTool, ToolRefusal } from "../plugin-api/define.ts";
 import { describeDb } from "./database.ts";
 import { hasWebAccess, type TestHost, testHost } from "./test-host.ts";
 

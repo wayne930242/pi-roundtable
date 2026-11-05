@@ -1,12 +1,12 @@
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { TurnConversation, TurnRequest } from "../domain/ports.ts";
+import type { SessionConversation } from "../domain/sessions.ts";
+import { addresseeOf, type OwnerIdentity } from "../identity/owner-identity.ts";
 import {
 	type Principal,
 	SYSTEM_PRINCIPAL,
 } from "../identity/principal-store.ts";
-import { addresseeOf, type OwnerIdentity } from "../identity.ts";
-import type { SessionConversation } from "../sessions.ts";
-import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
+import { addressee, type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 
 /**

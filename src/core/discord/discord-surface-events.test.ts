@@ -1,8 +1,8 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { Client, Collection, Events, GatewayIntentBits } from "discord.js";
 import type { InboundMessage } from "../domain/conversation.ts";
-import type { MemberJoinedEvent } from "../event-types.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { MemberJoinedEvent } from "../plugin-api/event-types.ts";
 import { DiscordSurface } from "./discord-surface.ts";
 
 const BOT = "900000000000000001";

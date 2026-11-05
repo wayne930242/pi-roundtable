@@ -3,8 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { connect as connectTcp } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PluginError } from "../errors.ts";
-import { silentLogger } from "../log.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { HttpListeners, type HttpRoute } from "./listeners.ts";
 import type {

@@ -9,7 +9,7 @@ import {
 	resolveCharacter,
 } from "../../characters/index.ts";
 import { ConfigError } from "../domain/errors.ts";
-import { ProviderError } from "../errors.ts";
+import { ProviderError } from "../kernel/errors.ts";
 import { FileAvatarStudio, type ImageDrawer } from "./avatar-studio.ts";
 
 const REFERENCE = join(import.meta.dir, "..", "assets", "neutral.png");

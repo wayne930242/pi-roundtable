@@ -3,7 +3,7 @@ import type {
 	ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import { AgentRunError, ConfigError } from "../domain/errors.ts";
-import { parseModelRef } from "../models.ts";
+import { parseModelRef } from "../domain/models.ts";
 import { lastAssistant, textOf } from "../shared/session-messages.ts";
 
 export const MAX_REPORT_CHARS = 20_000;

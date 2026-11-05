@@ -1,7 +1,7 @@
-import type { HoldCheck } from "../../holds.ts";
-import type { Logger } from "../../log.ts";
-import type { Tier } from "../../speakers.ts";
-import { timeZone, zonedStamp } from "../../time.ts";
+import type { Tier } from "../../identity/speakers.ts";
+import type { Logger } from "../../kernel/log.ts";
+import { timeZone, zonedStamp } from "../../kernel/time.ts";
+import type { HoldCheck } from "../../plugin-api/holds.ts";
 import { type PrecheckTool, precheckScriptTools } from "./precheck-tools.ts";
 import {
 	type Precheck,

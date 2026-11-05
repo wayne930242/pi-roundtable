@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { SQL } from "bun";
+import { identityPlugin } from "../builtin/identity.ts";
 import { runMigrations } from "../db/migrations.ts";
 import { IdentityError } from "../domain/errors.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext } from "../plugin.ts";
-import { IDENTITY, PROFILES } from "../services.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { PluginContext } from "../plugin-api/plugin.ts";
+import { IDENTITY, PROFILES } from "../plugin-api/services.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -12,7 +13,6 @@ import {
 } from "../testing/fixture-database.ts";
 import type { AccessRules } from "./access-policy.ts";
 import type { ActorFacts } from "./actor-facts.ts";
-import { identityPlugin } from "./identity-plugin.ts";
 import type { IdentityService } from "./identity-service.ts";
 import { PgIdentityService } from "./identity-service.ts";
 import { PgPrincipalStore } from "./principal-store.ts";

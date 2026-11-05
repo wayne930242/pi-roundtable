@@ -4,7 +4,7 @@ import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AttachmentRefusal } from "../contract/attachments.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { readAttachment } from "../shared/attachment-reader.ts";
 import {
 	discardConversationFiles,

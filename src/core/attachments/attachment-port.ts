@@ -1,6 +1,6 @@
 import type { AttachmentPort } from "../contract/attachments.ts";
-import { PluginError } from "../errors.ts";
-import type { Logger } from "../log.ts";
+import { PluginError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	AttachmentStore,
 	type AttachmentStoreOptions,

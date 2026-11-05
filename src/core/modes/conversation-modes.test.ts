@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { SQL } from "bun";
-import { PluginError } from "../errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import { silentLogger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { describeDb, migratedPool } from "../testing/database.ts";
 import {
 	type AutoApproval,

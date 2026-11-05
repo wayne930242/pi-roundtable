@@ -9,8 +9,9 @@ import {
 import { SQL } from "bun";
 import type { TSchema } from "typebox";
 import type { BackgroundTarget } from "../../contract/channels.ts";
-import { PluginError } from "../../errors.ts";
-import { silentLogger } from "../../log.ts";
+import { PluginError } from "../../kernel/errors.ts";
+import { silentLogger } from "../../kernel/log.ts";
+import { setTimeZone } from "../../kernel/time.ts";
 import { scheduleToolSpecs } from "../../shared/schedule-tools.ts";
 import { runsAsCreator } from "../../testing/background.ts";
 import {
@@ -25,7 +26,6 @@ import {
 	fakePrechecks,
 	fakeScriptRunner,
 } from "../../testing/prechecks.ts";
-import { setTimeZone } from "../../time.ts";
 import {
 	checkPrecheckScript,
 	PRECHECK_SCRIPT_CHARS,

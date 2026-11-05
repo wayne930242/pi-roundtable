@@ -12,11 +12,12 @@ import type {
 } from "../domain/conversation.ts";
 import type { RoundProgress } from "../domain/round.ts";
 import type { IdentityService } from "../identity/identity-port.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { StoredSkillRegistry as SkillRegistry } from "../modules/skills/skill-registry.ts";
 import { SkillStore } from "../modules/skills/skill-store.ts";
-import type { PromptSection } from "../plugin.ts";
+import type { PromptSection } from "../plugin-api/plugin.ts";
 import { type ChannelQueue, channelQueue } from "../routing/channel-queue.ts";
+import { toolTiers } from "../runtime/tool-tiers.ts";
 import {
 	openTestStore,
 	TEST_GUILD,
@@ -25,7 +26,6 @@ import {
 } from "../testing/database.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { OWNER_SPEAKER, TEST_OWNER } from "../testing/owner.ts";
-import { toolTiers } from "../tool-tiers.ts";
 import type {
 	AgentCategory,
 	AgentChannels,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { EffortPolicy, ThinkingLevel } from "../domain/models.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import type { EffortPolicy, ThinkingLevel } from "../models.ts";
 import { thinkingLevel } from "./thinking-level.ts";
 
 const session = { messages: [] } as unknown as AgentSession;

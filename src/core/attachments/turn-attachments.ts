@@ -1,7 +1,7 @@
 import type { AttachmentContent } from "../contract/channels.ts";
 import type { AttachmentRef, TurnAttachments } from "../domain/attachment.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { fetchAttachments } from "./attachment-fetcher.ts";
 import { modelImagesOf } from "./model-images.ts";
 

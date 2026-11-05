@@ -1,6 +1,6 @@
 import type { TranscriptEntry, TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
-import { hasReplyFiles } from "../reply-files.ts";
+import { hasReplyFiles } from "../shared/reply-files.ts";
 import { lastAssistant, textOf } from "../shared/session-messages.ts";
 import { TRANSCRIPT_ENTRY_CHARS } from "./runtime-types.ts";
 

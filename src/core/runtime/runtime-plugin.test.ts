@@ -11,25 +11,24 @@ import type {
 	HeldActionStore,
 	RuntimeDeps,
 } from "../contract/runtime.ts";
-import { PluginError } from "../errors.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Principal } from "../identity/principal-store.ts";
-import { type Logger, silentLogger } from "../log.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { type Logger, silentLogger } from "../kernel/log.ts";
 import type {
 	LinkedSessions,
 	PluginContext,
 	RoundtablePlugin,
-} from "../plugin.ts";
+} from "../plugin-api/plugin.ts";
+import { IDENTITY, RUNTIME } from "../plugin-api/services.ts";
 import {
 	collectContributions,
 	linkSessions,
 } from "../registry/contributions.ts";
 import { resolveProviders } from "../registry/providers.ts";
 import { ServiceRegistry } from "../registry/services.ts";
-import { IDENTITY, RUNTIME } from "../services.ts";
-import type { Speaker } from "../speakers.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
-import { toolTiers } from "../tool-tiers.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
 import {
 	agentSessionsSlot,
@@ -38,6 +37,7 @@ import {
 	runtimePlugin,
 	turnPolicy,
 } from "./runtime-plugin.ts";
+import { toolTiers } from "./tool-tiers.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

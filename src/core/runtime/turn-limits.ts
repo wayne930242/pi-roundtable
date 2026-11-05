@@ -1,10 +1,10 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { type TurnTimeout, TurnTimeoutError } from "../domain/turn-timeout.ts";
 import { catalogFor } from "../i18n/index.ts";
 import { DEFAULT_AUTONOMY } from "../modes/autonomy.ts";
-import type { ChannelKey } from "../sessions.ts";
 import type { PromptSlot } from "./prompt-slot.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 import { activityTracker } from "./turn-activity.ts";

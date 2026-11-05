@@ -1,13 +1,13 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { AgentError } from "../../domain/errors.ts";
+import type { SkillRegistry } from "../../plugin-api/services.ts";
 import {
 	optionalString,
 	requiredString,
 	stringList,
 	textToolsExtension,
 } from "../../runtime/text-tools.ts";
-import type { SkillRegistry } from "../../services.ts";
 import {
 	MAX_SKILL_BODY_CHARS,
 	type StoredSkillRegistry,

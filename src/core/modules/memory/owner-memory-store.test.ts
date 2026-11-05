@@ -8,6 +8,7 @@ import {
 } from "bun:test";
 import { SQL } from "bun";
 import { MemoryError } from "../../domain/errors.ts";
+import { setTimeZone, zonedDate } from "../../kernel/time.ts";
 import {
 	describeDb,
 	TEST_GUILD as OWNER_ID,
@@ -16,7 +17,6 @@ import {
 	testDatabaseUrl,
 } from "../../testing/database.ts";
 import { useTestLocale } from "../../testing/locale.ts";
-import { setTimeZone, zonedDate } from "../../time.ts";
 import { PgMemoryStore, searchTerms } from "./owner-memory-store.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.

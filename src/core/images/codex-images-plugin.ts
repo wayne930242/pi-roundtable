@@ -1,8 +1,8 @@
 // The codex-images plugin: fills the images slot with drawCodexImage.
 
-import { definePlugin } from "../define.ts";
-import { PluginError } from "../errors.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { definePlugin } from "../plugin-api/define.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	CODEX_IMAGE_MODEL,
 	CODEX_IMAGES_PROVIDER,

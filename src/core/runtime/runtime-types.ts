@@ -8,28 +8,32 @@ import type { ImageDrawer } from "../contract/providers.ts";
 import type { AgentSessions, LoadedSkill } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
+import type {
+	EffortPolicy,
+	ThinkingLevel,
+	ThinkingPicker,
+} from "../domain/models.ts";
 import type { TurnConversation } from "../domain/ports.ts";
-import type { Principal } from "../identity/principal-store.ts";
-import type { OwnerIdentity } from "../identity.ts";
-import type { PromptScope, Prompts } from "../interactions/prompts.ts";
-import type { Logger } from "../log.ts";
-import type { EffortPolicy, ThinkingLevel, ThinkingPicker } from "../models.ts";
-import type { Autonomy } from "../modes/autonomy.ts";
-import type { ConversationModes } from "../modes/conversation-modes.ts";
-import type { AgentTools, LinkedSessions } from "../plugin.ts";
 import {
 	planOrder,
 	type SessionContext,
 	type SessionConversation,
 	type SessionPlan,
 	type SessionTool,
-} from "../sessions.ts";
+} from "../domain/sessions.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { Principal } from "../identity/principal-store.ts";
+import type { PromptScope, Prompts } from "../interactions/prompts.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { Autonomy } from "../modes/autonomy.ts";
+import type { ConversationModes } from "../modes/conversation-modes.ts";
+import type { AgentTools, LinkedSessions } from "../plugin-api/plugin.ts";
 import type { ShellEnv } from "../shared/child-env.ts";
 import { secretMaskExtension } from "../shared/secret-mask.ts";
-import type { ToolTiers } from "../tool-tiers.ts";
 import type { MemoryDraws } from "./extensions/private-memory.ts";
 import type { PendingConfirmationStore } from "./pending-confirmation-store.ts";
 import { scopedCalls } from "./tool-call-scope.ts";
+import type { ToolTiers } from "./tool-tiers.ts";
 
 export type TurnMessage = Extract<
 	AgentSessionEvent,

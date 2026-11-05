@@ -1,14 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { agentClaim } from "../../agents/agent-claim.ts";
-import { silentLogger } from "../../log.ts";
+import {
+	type Speaker,
+	type Tier,
+	tierAtLeast,
+} from "../../identity/speakers.ts";
+import { silentLogger } from "../../kernel/log.ts";
 import { ChannelQueue } from "../../routing/channel-queue.ts";
 import { ChannelRouter } from "../../routing/channel-router.ts";
-import { type Speaker, type Tier, tierAtLeast } from "../../speakers.ts";
+import { PERSONAL_TARGET } from "../../shared/personal-target.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { TEST_OWNER } from "../../testing/owner.ts";
 import { fakePrecheck, fakePrechecks } from "../../testing/prechecks.ts";
 import { ConversationBackgroundTurns } from "../background/background-turns.ts";
-import { PERSONAL_TARGET } from "../background/personal-target.ts";
 import type { Schedule } from "./schedule-store.ts";
 import { Scheduler } from "./scheduler.ts";
 

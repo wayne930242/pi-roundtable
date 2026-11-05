@@ -1,6 +1,6 @@
 import type { SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { deliveryRouter } from "./delivery-router.ts";
 
 /**

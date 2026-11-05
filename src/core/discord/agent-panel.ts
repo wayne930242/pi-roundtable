@@ -1,5 +1,5 @@
 import { type Interaction, MessageFlags } from "discord.js";
-import type { AgentServer, SkillRegistry } from "../services.ts";
+import type { AgentServer, SkillRegistry } from "../plugin-api/services.ts";
 import {
 	AGENT_BUTTON_PREFIX,
 	AGENT_MODAL_PREFIX,

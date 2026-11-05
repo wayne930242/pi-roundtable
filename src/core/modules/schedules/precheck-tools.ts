@@ -1,15 +1,15 @@
 import { parse } from "@babel/parser";
 import type { Node, Program } from "@babel/types";
 import { ScheduleError } from "../../domain/errors.ts";
+import { messages } from "../../i18n/index.ts";
+import type { Tier } from "../../identity/speakers.ts";
 import {
 	type HoldCheck,
 	type HoldContext,
 	type HoldRule,
 	higherTier,
-} from "../../holds.ts";
-import { messages } from "../../i18n/index.ts";
-import type { Tier } from "../../speakers.ts";
-import type { ToolTiers } from "../../tool-tiers.ts";
+} from "../../plugin-api/holds.ts";
+import type { ToolTiers } from "../../runtime/tool-tiers.ts";
 import type { PrecheckRegistry } from "./prechecks.ts";
 
 /**

@@ -1,7 +1,7 @@
 import { readCharacter } from "../../characters/index.ts";
 import { scopeToGuild } from "../db/guild-scope.ts";
 import type { Migration } from "../db/migrations.ts";
-import type { ThinkingLevel } from "../models.ts";
+import type { ThinkingLevel } from "../domain/models.ts";
 import { promptHistoryMigration } from "../modules/prompts/prompt-history.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import { outboxMigration } from "./agent-outbox.ts";

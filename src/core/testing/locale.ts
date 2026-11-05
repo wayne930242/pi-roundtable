@@ -1,5 +1,5 @@
 import { type Locale, setLocale } from "../i18n/index.ts";
-import { setTimeZone } from "../time.ts";
+import { setTimeZone } from "../kernel/time.ts";
 
 /** What a test file runs under; the core's own suite uses the neutral defaults. */
 export interface TestLocale {

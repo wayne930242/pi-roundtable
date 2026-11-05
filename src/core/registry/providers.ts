@@ -3,9 +3,9 @@ import type {
 	Providers,
 	ResolvedProviders,
 } from "../contract/providers.ts";
-import { PluginError, ProviderError } from "../errors.ts";
 import { type JudgeModel, ModelJudge } from "../judging/model-judge.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { PluginError, ProviderError } from "../kernel/errors.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { nearest } from "./contributions.ts";
 
 const SLOTS = [

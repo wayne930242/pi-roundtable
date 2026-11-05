@@ -1,6 +1,6 @@
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
 import type { Principal } from "../identity/principal-store.ts";
-import type { OwnerIdentity } from "../identity.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 
 /** The owner tests speak for; its words match the texts the tests expect. */
 export const TEST_OWNER: OwnerIdentity = {

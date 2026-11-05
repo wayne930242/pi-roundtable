@@ -1,4 +1,4 @@
-import type { DefinedRoundtable } from "../core/define-roundtable.ts";
+import type { DefinedRoundtable } from "../core/host/define-roundtable.ts";
 import { buildChecks, type DoctorInputs } from "./doctor.ts";
 import { Project } from "./project.ts";
 import { failed, type Outcome, runChecks } from "./report.ts";

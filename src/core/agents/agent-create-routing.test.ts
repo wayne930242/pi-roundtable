@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
-import type { AgentTurnScope } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import type { AgentTurnScope } from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import type { Agent } from "./agent-store.ts";
 import { Routes } from "./routes.ts";

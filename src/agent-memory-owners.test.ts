@@ -13,15 +13,15 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { MEMORY_TIERS, memorySessionTool } from "./core/builtin/stores.ts";
 import type { AgentSessions } from "./core/contract/runtime.ts";
-import { definePlugin } from "./core/define.ts";
+import type { AgentTurnScope } from "./core/domain/sessions.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
 import type {
 	Memory,
 	MemoryKind,
 } from "./core/modules/memory/owner-memory-store.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
+import type { MemoryStore, SpeakerMemory } from "./core/plugin-api/services.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import type { MemoryStore, SpeakerMemory } from "./core/services.ts";
-import type { AgentTurnScope } from "./core/sessions.ts";
-import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
 // The agent server's memory option, end to end over the real Pi runtime: with "owners" a

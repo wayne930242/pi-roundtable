@@ -1,7 +1,10 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Notifier } from "../../domain/ports.ts";
-import { addresseeWords, type OwnerIdentity } from "../../identity.ts";
+import {
+	addresseeWords,
+	type OwnerIdentity,
+} from "../../identity/owner-identity.ts";
 import { toolError, toolText } from "../../shared/tool-result.ts";
 
 /** What notify needs in one session. */

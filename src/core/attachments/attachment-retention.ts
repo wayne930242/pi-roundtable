@@ -1,7 +1,7 @@
 import type { AttachmentPort } from "../contract/attachments.ts";
-import { PluginError } from "../errors.ts";
-import type { Logger } from "../log.ts";
-import type { Service } from "../plugin.ts";
+import { PluginError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { Service } from "../plugin-api/plugin.ts";
 
 /** How long used files are kept, and how often the host looks for the ones past it. */
 export interface AttachmentRetention {

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SQL } from "bun";
-import { MigrationError, PluginError } from "../errors.ts";
-import { Roundtable } from "../host.ts";
-import { type Logger, silentLogger } from "../log.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { Roundtable } from "../host/host.ts";
+import { MigrationError, PluginError } from "../kernel/errors.ts";
+import { type Logger, silentLogger } from "../kernel/log.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	type Migration,
 	migrate,

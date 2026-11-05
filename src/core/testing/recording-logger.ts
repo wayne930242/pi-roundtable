@@ -1,4 +1,4 @@
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /** One line a recording logger kept. */
 export interface RecordedLog {

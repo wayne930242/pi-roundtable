@@ -5,10 +5,11 @@ import type {
 	ScheduledOutcome,
 } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
-import type { Logger } from "../../log.ts";
+import type { Logger } from "../../kernel/log.ts";
+import { zonedStamp } from "../../kernel/time.ts";
+import type { BackgroundTurns } from "../../plugin-api/services.ts";
 import { systemTurn } from "../../routing/system-turns.ts";
-import type { BackgroundTurns } from "../../services.ts";
-import { zonedStamp } from "../../time.ts";
+import { PERSONAL_TARGET } from "../../shared/personal-target.ts";
 import {
 	type DelegationJob,
 	type DelegationOutcome,
@@ -17,7 +18,6 @@ import {
 import type { PrecheckFinding } from "../schedules/prechecks.ts";
 import type { Schedule } from "../schedules/schedule-store.ts";
 import { scheduledTurnText } from "../schedules/schedule-tools.ts";
-import { PERSONAL_TARGET } from "./personal-target.ts";
 
 export interface BackgroundTurnsOptions {
 	conversations: Pick<ConversationPort, "background" | "runsAs">;

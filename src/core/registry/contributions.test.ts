@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { Type } from "typebox";
 import { serviceKey } from "../contract/services.ts";
-import { defineTool } from "../define.ts";
-import { NotLinkedError, PluginError } from "../errors.ts";
-import { type Logger, silentLogger } from "../log.ts";
+import { NotLinkedError, PluginError } from "../kernel/errors.ts";
+import { type Logger, silentLogger } from "../kernel/log.ts";
+import { defineTool } from "../plugin-api/define.ts";
 import type {
 	Contribution,
 	PluginContext,
 	RoundtablePlugin,
-} from "../plugin.ts";
-import { toolTiers } from "../tool-tiers.ts";
+} from "../plugin-api/plugin.ts";
+import { toolTiers } from "../runtime/tool-tiers.ts";
 import {
 	collectContributions,
 	linkSessions,

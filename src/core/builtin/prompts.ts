@@ -1,8 +1,8 @@
 import type { SQL } from "bun";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { PgPromptDocuments } from "../modules/prompts/prompt-documents.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
-import { PROMPTS } from "../services.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { PROMPTS } from "../plugin-api/services.ts";
 
 export interface PromptsOptions {
 	/** The guild whose overrides the documents keep, or the local team's id. */

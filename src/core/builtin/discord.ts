@@ -24,9 +24,9 @@ import type { DiscordPoster } from "../discord/poster/poster.ts";
 import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { IDENTITY, THREADS } from "../plugin-api/services.ts";
 import { PeerBots } from "../routing/peer-bots.ts";
-import { IDENTITY, THREADS } from "../services.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 
 /** The Discord connection and what stands on it, as plugins use it. Provided by the Discord plugin. */

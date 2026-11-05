@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { JudgeError } from "../errors.ts";
+import { JudgeError } from "../kernel/errors.ts";
 import { type JudgeModel, ModelJudge } from "./model-judge.ts";
 
 /** A model that answers each prompt with the next scripted text and records the prompts. */

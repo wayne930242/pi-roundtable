@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { THE_SPEAKER } from "../speakers.ts";
+import { THE_SPEAKER } from "../identity/speakers.ts";
 import { OWNER_SPEAKER, TEST_OWNER } from "../testing/owner.ts";
 import {
 	conversationChanged,

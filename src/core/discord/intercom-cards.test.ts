@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import type { IntercomCard } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { DiscordAgentChannels } from "./agent-discord.ts";
 import { CardCopies } from "./card-copies.ts";

@@ -8,7 +8,7 @@ import type {
 	PromptScope,
 	Prompts,
 } from "../interactions/prompts.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { type CardAudienceOptions, CardAudiences } from "./card-audience.ts";
 import { CardCopies, copyReply, offeredCopy } from "./card-copies.ts";
 import { DiscordOwners, discordUser } from "./discord-owners.ts";

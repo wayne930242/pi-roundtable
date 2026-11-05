@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { RoundtablePlugin } from "../core/plugin.ts";
+import type { RoundtablePlugin } from "../core/plugin-api/plugin.ts";
 import { COMPACT_TOOL } from "../core/runtime/extensions/self-compact-guard.ts";
 import { testPlugin } from "../testing.ts";
 import { postgres } from "./checks/database.ts";

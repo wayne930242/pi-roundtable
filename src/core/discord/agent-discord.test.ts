@@ -5,7 +5,7 @@ import {
 	DiscordAPIError,
 	MessageFlags,
 } from "discord.js";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { DiscordDashboard } from "./agent-discord.ts";
 
 const BOT = "900";

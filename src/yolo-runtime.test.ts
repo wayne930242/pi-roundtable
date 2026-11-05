@@ -10,13 +10,13 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin } from "./core/define.ts";
 import type { ChannelKey, TurnResult } from "./core/domain/conversation.ts";
 import { SYSTEM_PRINCIPAL } from "./core/identity/principal-store.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
 import type { Approval, Prompts } from "./core/interactions/prompts.ts";
 import type { AutoApproval } from "./core/modes/conversation-modes.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import type { Speaker } from "./core/speakers.ts";
 import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 
 /**

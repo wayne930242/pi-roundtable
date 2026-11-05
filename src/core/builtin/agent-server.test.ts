@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntime } from "../contract/runtime.ts";
-import { PluginError } from "../errors.ts";
-import { silentLogger } from "../log.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
 import type {
 	PromptDocumentSpec,
 	PromptDocuments,
@@ -15,14 +15,7 @@ import type {
 	LinkedSessions,
 	PluginContext,
 	RoundtablePlugin,
-} from "../plugin.ts";
-import {
-	collectContributions,
-	linkSessions,
-} from "../registry/contributions.ts";
-import { resolveProviders } from "../registry/providers.ts";
-import { ServiceRegistry } from "../registry/services.ts";
-import { agentSessionsSlot } from "../runtime/runtime-plugin.ts";
+} from "../plugin-api/plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
@@ -31,8 +24,15 @@ import {
 	RUNTIME,
 	SCHEDULES,
 	type ScheduleStore,
-} from "../services.ts";
-import { toolTiers } from "../tool-tiers.ts";
+} from "../plugin-api/services.ts";
+import {
+	collectContributions,
+	linkSessions,
+} from "../registry/contributions.ts";
+import { resolveProviders } from "../registry/providers.ts";
+import { ServiceRegistry } from "../registry/services.ts";
+import { agentSessionsSlot } from "../runtime/runtime-plugin.ts";
+import { toolTiers } from "../runtime/tool-tiers.ts";
 import {
 	type AgentServerOptions,
 	type AgentServerStores,

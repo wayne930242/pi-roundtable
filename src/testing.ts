@@ -37,16 +37,17 @@ import type {
 	PendingConfirmation,
 	ReplyFile,
 } from "./core/domain/conversation.ts";
-import { NotLinkedError, PluginError } from "./core/errors.ts";
-import { EventBus } from "./core/events.ts";
-import type { HoldCheck } from "./core/holds.ts";
+import type { ChannelKey, SessionContext } from "./core/domain/sessions.ts";
+import { EventBus } from "./core/host/events.ts";
 import { type ListenerConfig, listenerAddress } from "./core/http/listeners.ts";
 import { contactsOf } from "./core/identity/identity-view.ts";
-import type { OwnerIdentity } from "./core/identity.ts";
+import type { OwnerIdentity } from "./core/identity/owner-identity.ts";
+import { type Speaker, THE_SPEAKER } from "./core/identity/speakers.ts";
 import { ConfirmationJudge } from "./core/judging/confirmation-judge.ts";
-import { silentLogger } from "./core/log.ts";
+import { NotLinkedError, PluginError } from "./core/kernel/errors.ts";
+import { silentLogger } from "./core/kernel/log.ts";
 import { ConversationBackgroundTurns } from "./core/modules/background/background-turns.ts";
-import { PERSONAL_TARGET } from "./core/modules/background/personal-target.ts";
+import type { HoldCheck } from "./core/plugin-api/holds.ts";
 import type {
 	Contribution,
 	HostEnv,
@@ -56,7 +57,15 @@ import type {
 	TurnEndEvent,
 	TurnEvent,
 	TurnProgressEvent,
-} from "./core/plugin.ts";
+} from "./core/plugin-api/plugin.ts";
+import {
+	AGENTS,
+	type AgentServer,
+	BACKGROUND_TURNS,
+	CONVERSATIONS,
+	IDENTITY,
+	RUNTIME,
+} from "./core/plugin-api/services.ts";
 import {
 	collectContributions,
 	linkSessions,
@@ -72,27 +81,18 @@ import {
 import { MessageObservers } from "./core/routing/message-observers.ts";
 import { PeerBots } from "./core/routing/peer-bots.ts";
 import { surfacePort } from "./core/routing/surface-port.ts";
-import {
-	AGENTS,
-	type AgentServer,
-	BACKGROUND_TURNS,
-	CONVERSATIONS,
-	IDENTITY,
-	RUNTIME,
-} from "./core/services.ts";
-import type { ChannelKey, SessionContext } from "./core/sessions.ts";
-import { type Speaker, THE_SPEAKER } from "./core/speakers.ts";
+import { type ToolTierTable, toolTiers } from "./core/runtime/tool-tiers.ts";
+import { PERSONAL_TARGET } from "./core/shared/personal-target.ts";
 import { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
 import {
 	callRegisteredTool,
 	registeredTools,
 } from "./core/testing/run-tool.ts";
-import { type ToolTierTable, toolTiers } from "./core/tool-tiers.ts";
 
 // Fixtures for plugin tests.
 
-export { silentLogger } from "./core/log.ts";
+export { silentLogger } from "./core/kernel/log.ts";
 export type { TestStore } from "./core/testing/database.ts";
 export {
 	describeDb,

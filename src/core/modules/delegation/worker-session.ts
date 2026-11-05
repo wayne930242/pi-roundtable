@@ -7,9 +7,12 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import type { ThinkingLevel } from "../../models.ts";
+import type { ThinkingLevel } from "../../domain/models.ts";
+import type {
+	WorkerSessionRequest,
+	WorkerSessions,
+} from "../../plugin-api/services.ts";
 import { runWorkerTask } from "../../runtime/worker-task.ts";
-import type { WorkerSessionRequest, WorkerSessions } from "../../services.ts";
 import { activeToolsExtension } from "../../shared/active-tools.ts";
 
 export interface WorkerSessionOptions {

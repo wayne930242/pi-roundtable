@@ -4,12 +4,12 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { ClientPart } from "../domain/client.ts";
 import type { ReplyFile } from "../domain/conversation.ts";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import {
 	attachReplyFile,
 	hasReplyFileScope,
 	withReplyFiles,
-} from "../reply-files.ts";
+} from "../shared/reply-files.ts";
 
 /** What a session registers of a tool: the call the model's tool call reaches. */
 export interface RegisteredTool {

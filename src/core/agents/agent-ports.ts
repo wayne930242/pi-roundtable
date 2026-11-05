@@ -1,7 +1,7 @@
 import type { AgentRuntime, ContextUse } from "../contract/runtime.ts";
 import type { IntercomCard } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
-import type { ThinkingSetting } from "../models.ts";
+import type { ThinkingSetting } from "../domain/models.ts";
 
 export type { ContextUse };
 

@@ -1,6 +1,6 @@
 import type { AgentTurnScope } from "../domain/ports.ts";
+import type { TurnSelection } from "../domain/sessions.ts";
 import { SHELL_TOOLS } from "../modules/host-shell/shell-policy.ts";
-import type { TurnSelection } from "../sessions.ts";
 import { isHelper } from "./agent-rules.ts";
 import {
 	AGENT_TOOLS,

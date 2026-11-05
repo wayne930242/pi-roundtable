@@ -1,6 +1,6 @@
 import { IdentityError } from "../domain/errors.ts";
-import { freeze } from "../freeze.ts";
-import type { Logger } from "../log.ts";
+import { freeze } from "../kernel/freeze.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { SelfLinkRules } from "./access-policy.ts";
 import { identityOf, parseIdentity } from "./actor-facts.ts";
 import {

@@ -7,8 +7,8 @@ import {
 	type QueuedChange,
 	type QueuedMessage,
 } from "../contract/channels.ts";
-import type { Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Logger } from "../kernel/log.ts";
 
 type TurnAdmission = Extract<Admission, { kind: "turn" }>;
 

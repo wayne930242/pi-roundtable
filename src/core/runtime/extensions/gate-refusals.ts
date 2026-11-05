@@ -3,12 +3,15 @@ import type {
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
 import type { HoldRefusal } from "../../domain/progress.ts";
-import { type OwnerIdentity, ownerWords } from "../../identity.ts";
+import {
+	type OwnerIdentity,
+	ownerWords,
+} from "../../identity/owner-identity.ts";
+import type { Speaker } from "../../identity/speakers.ts";
 import type {
 	ApprovalDetails,
 	ApprovedBy,
 } from "../../interactions/prompts.ts";
-import type { Speaker } from "../../speakers.ts";
 import { mayApproveNamed } from "./held-calls.ts";
 
 /**

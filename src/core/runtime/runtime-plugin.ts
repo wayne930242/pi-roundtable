@@ -7,20 +7,25 @@ import type {
 } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
-import type { IdentityService } from "../identity/identity-service.ts";
-import type { OwnerIdentity } from "../identity.ts";
-import type { PromptScope } from "../interactions/prompts.ts";
-import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
 import {
 	type EffortPolicy,
 	formatModelRef,
 	type ModelRef,
 	type ThinkingLevel,
-} from "../models.ts";
+} from "../domain/models.ts";
+import type { IdentityService } from "../identity/identity-service.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import type { PromptScope } from "../interactions/prompts.ts";
+import { AGENT_BRIEF, EffortJudge } from "../judging/effort-judge.ts";
 import type { Autonomy } from "../modes/autonomy.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { CONVERSATIONS, IDENTITY, MODES, RUNTIME } from "../services.ts";
-import type { Speaker } from "../speakers.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
+import {
+	CONVERSATIONS,
+	IDENTITY,
+	MODES,
+	RUNTIME,
+} from "../plugin-api/services.ts";
 import {
 	BRIDGE_MEMORY_FIX,
 	bridgeMemoryProblem,

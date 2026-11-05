@@ -1,4 +1,4 @@
-import type { Logger } from "../../log.ts";
+import type { Logger } from "../../kernel/log.ts";
 
 /**
  * Warns of a carried skill that is missing once per agent and name. The registry is asked what an

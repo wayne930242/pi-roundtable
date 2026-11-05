@@ -1,7 +1,7 @@
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker, Tier } from "../speakers.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import type { ActorFacts } from "./actor-facts.ts";
 import type { IdentityLink, Principal, RoleGrant } from "./principal-store.ts";
+import type { Speaker, Tier } from "./speakers.ts";
 
 /**
  * Who the host serves: its principals, their identities, and their roles, read-only. Provided as

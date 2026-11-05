@@ -1,4 +1,4 @@
-import type { ThinkingSetting } from "../models.ts";
+import type { ThinkingSetting } from "../domain/models.ts";
 import type { ContextUse } from "./agent-ports.ts";
 import { discordIdOf, keysOf } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";

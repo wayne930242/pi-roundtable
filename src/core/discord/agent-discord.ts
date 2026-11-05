@@ -27,7 +27,7 @@ import type {
 import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { type IntercomTexts, intercomPost } from "./intercom-cards.ts";
 
 const DASHBOARD_NAME = "dashboard";

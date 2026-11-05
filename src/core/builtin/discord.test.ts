@@ -13,12 +13,12 @@ import type {
 } from "../discord/interaction-module.ts";
 import { fakeChannel } from "../discord/owner-cards-fixture.ts";
 import { STOP_BUTTON_ID } from "../discord/stop-button.ts";
-import { PluginError } from "../errors.ts";
 import { messages } from "../i18n/index.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext } from "../plugin.ts";
-import { IDENTITY, THREADS } from "../services.ts";
-import { speakerPolicy } from "../speakers.ts";
+import { speakerPolicy } from "../identity/speakers.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { PluginContext } from "../plugin-api/plugin.ts";
+import { IDENTITY, THREADS } from "../plugin-api/services.ts";
 import { DiscordEmulator } from "../testing/discord-api-emulator.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";

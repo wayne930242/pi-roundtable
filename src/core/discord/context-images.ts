@@ -5,7 +5,7 @@ import {
 } from "../attachments/image-prep.ts";
 import type { ChannelContextAttachment } from "../contract/channel-context.ts";
 import type { ModelImage } from "../domain/attachment.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /** Why an image of a channel message was not attached to the turn; fixed words, never an error's text. */
 export type SkippedReason =

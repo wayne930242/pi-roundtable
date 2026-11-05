@@ -1,5 +1,5 @@
 import type { CharacterSpec } from "../../characters/index.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { Agent } from "./agent-store.ts";
 
 /** What the refresh needs of the team: the agents, a render, and a way to set the picture. */

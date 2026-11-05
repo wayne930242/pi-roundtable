@@ -3,7 +3,7 @@ import type {
 	AgentTurnScope,
 	SessionTool,
 	SessionToolSnapshot,
-} from "../sessions.ts";
+} from "../domain/sessions.ts";
 
 /** A session tool whose extension never changes. */
 export function fixed(

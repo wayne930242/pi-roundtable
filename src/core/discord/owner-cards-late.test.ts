@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { cardsEn, cardsZhTW } from "../i18n/cards.ts";
 import { messages } from "../i18n/index.ts";
 import type { LateAnswer, OwnerQuestion } from "../interactions/prompts.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { CARD_PREFIX, type LateTurn, OwnerCards } from "./owner-cards.ts";
 import {
 	fakeChannel,

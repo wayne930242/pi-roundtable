@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import type { RoundtablePlugin } from "../plugin.ts";
-import { THREADS } from "../services.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { THREADS } from "../plugin-api/services.ts";
 import { DispatchThreads } from "../threads/dispatch-threads.ts";
 
 export interface ThreadsOptions {

@@ -1,6 +1,6 @@
 import type { Judge } from "../contract/providers.ts";
-import type { Logger } from "../log.ts";
-import type { ThinkingLevel } from "../models.ts";
+import type { ThinkingLevel } from "../domain/models.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /** The levels the judge chooses between, lowest first; criterion i of a brief asks for level i. */
 export type EffortLevel = "low" | "medium" | "high" | "xhigh";

@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { InboundMessage } from "../domain/conversation.ts";
-import type { OwnerIdentity } from "../identity.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import { addressee, type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import { withReference } from "../routing/message-text.ts";
 import {
 	answerText,
@@ -12,7 +13,6 @@ import {
 	confirmedTurnText,
 } from "../runtime/extensions/confirmation-gate.ts";
 import { PromptSlot } from "../runtime/prompt-slot.ts";
-import { addressee, type Speaker, THE_SPEAKER } from "../speakers.ts";
 import {
 	agentFailureText,
 	agentMessageText,

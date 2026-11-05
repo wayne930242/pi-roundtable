@@ -1,9 +1,9 @@
 import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
-import { type OwnerIdentity, ownerWords } from "../identity.ts";
-import type { AgentTools } from "../plugin.ts";
-import { addressee, type Speaker } from "../speakers.ts";
+import { type OwnerIdentity, ownerWords } from "../identity/owner-identity.ts";
+import { addressee, type Speaker } from "../identity/speakers.ts";
+import type { AgentTools } from "../plugin-api/plugin.ts";
 import type { Agent, AgentGroup, Backlog } from "./agent-store.ts";
 
 /**

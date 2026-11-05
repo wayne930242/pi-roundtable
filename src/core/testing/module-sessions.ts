@@ -2,13 +2,13 @@ import type {
 	ExtensionAPI,
 	ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
-import type { OwnerIdentity } from "../identity.ts";
 import type {
 	AgentTurnScope,
 	ChannelKey,
 	SessionContext,
-} from "../sessions.ts";
-import { type Speaker, THE_SPEAKER } from "../speakers.ts";
+} from "../domain/sessions.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import { OWNER_CHANNEL, type setUpModules } from "./modules.ts";
 import { OWNER_SPEAKER } from "./owner.ts";
 

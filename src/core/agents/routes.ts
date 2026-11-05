@@ -6,7 +6,7 @@ import { ROUTE_WORDS } from "../config/routing.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError, ConfigError } from "../domain/errors.ts";
-import type { AgentDirectory } from "../services.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import {
 	agentRoomKey,
 	discordKey,

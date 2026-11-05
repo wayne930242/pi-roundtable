@@ -1,5 +1,5 @@
 import { messages } from "../../i18n/index.ts";
-import { timeZone, zonedStamp } from "../../time.ts";
+import { timeZone, zonedStamp } from "../../kernel/time.ts";
 import type { PrecheckFinding } from "./prechecks.ts";
 import { describeRecurrence } from "./recurrence.ts";
 import type { Schedule } from "./schedule-store.ts";

@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import { identityPlugin } from "../builtin/identity.ts";
 import { runMigrations } from "../db/migrations.ts";
 import { ConfigError, IdentityError } from "../domain/errors.ts";
-import type { Logger } from "../log.ts";
-import { IDENTITY, IDENTITY_LINKS, PROFILES } from "../services.ts";
+import type { Logger } from "../kernel/log.ts";
+import { IDENTITY, IDENTITY_LINKS, PROFILES } from "../plugin-api/services.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -12,7 +13,6 @@ import { type AccessRules, checkAccessRules } from "./access-policy.ts";
 import type { ActorFacts } from "./actor-facts.ts";
 import { CACHE_MS } from "./caching-principal-store.ts";
 import { identityLinks } from "./identity-links.ts";
-import { identityPlugin } from "./identity-plugin.ts";
 import { identityMigrations } from "./identity-schema.ts";
 import { PgIdentityService } from "./identity-service.ts";
 import { PgPrincipalStore, SYSTEM_PRINCIPAL } from "./principal-store.ts";

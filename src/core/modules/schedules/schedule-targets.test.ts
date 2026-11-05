@@ -8,7 +8,8 @@ import type {
 } from "../../contract/channels.ts";
 import { ScheduleCommands } from "../../discord/schedule-commands.ts";
 import { ScheduleError } from "../../domain/errors.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
+import { setTimeZone } from "../../kernel/time.ts";
 import { ChannelQueue } from "../../routing/channel-queue.ts";
 import { ChannelRouter } from "../../routing/channel-router.ts";
 import {
@@ -19,7 +20,6 @@ import {
 } from "../../testing/database.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { mapIdentity } from "../../testing/map-identity.ts";
-import { setTimeZone } from "../../time.ts";
 import { ConversationBackgroundTurns } from "../background/background-turns.ts";
 import { PgScheduleStore } from "./schedule-store.ts";
 import {

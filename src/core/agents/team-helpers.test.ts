@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import {

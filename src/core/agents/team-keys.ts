@@ -2,7 +2,7 @@ import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { AgentDirectory } from "../services.ts";
+import type { AgentDirectory } from "../plugin-api/services.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 
 /** The surface of the channels the agent server runs on. */

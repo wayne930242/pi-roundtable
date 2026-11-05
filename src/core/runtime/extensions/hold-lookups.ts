@@ -1,13 +1,13 @@
-import type { ToolTurn } from "../../define.ts";
 import type { HeldCall } from "../../domain/conversation.ts";
+import { messages } from "../../i18n/index.ts";
+import type { ApprovalDetails } from "../../interactions/prompts.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
 import {
 	type HoldCheck,
 	type HoldContext,
 	type HoldDescription,
 	isPromise,
-} from "../../holds.ts";
-import { messages } from "../../i18n/index.ts";
-import type { ApprovalDetails } from "../../interactions/prompts.ts";
+} from "../../plugin-api/holds.ts";
 import { canonicalJson } from "./held-calls.ts";
 
 /** The turn a hold that looks things up sees; see `HoldRule.describeInTurn`. */

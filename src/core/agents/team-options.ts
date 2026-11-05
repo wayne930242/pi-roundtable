@@ -1,10 +1,10 @@
 import type { ResolvedHelpers } from "../config/helpers.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import type { ThinkingSetting } from "../models.ts";
+import type { ThinkingSetting } from "../domain/models.ts";
+import type { ToolSelection } from "../domain/sessions.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
-import type { AgentTools, PromptSection } from "../plugin.ts";
-import type { AvatarStudio, SkillRegistry } from "../services.ts";
-import type { ToolSelection } from "../sessions.ts";
+import type { AgentTools, PromptSection } from "../plugin-api/plugin.ts";
+import type { AvatarStudio, SkillRegistry } from "../plugin-api/services.ts";
 import type { AgentChannels, AgentModels } from "./agent-ports.ts";
 import type { AgentGroup, AgentSeed } from "./agent-store.ts";
 import type { TeamTurns, TeamTurnsOptions } from "./team-turns.ts";

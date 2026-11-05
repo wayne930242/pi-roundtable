@@ -3,7 +3,7 @@ import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { AgentConversations } from "./agent-conversations.ts";

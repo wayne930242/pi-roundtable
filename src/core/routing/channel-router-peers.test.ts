@@ -4,7 +4,7 @@ import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { factsTier } from "../identity/access-policy.ts";
 import type { ContactAssessor } from "../identity/contact.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";

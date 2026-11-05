@@ -1,6 +1,6 @@
 import { SQL, type TransactionSQL } from "bun";
-import { MigrationError, PluginError } from "../errors.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { MigrationError, PluginError } from "../kernel/errors.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 
 /** A plugin's tables, as DDL its `up` runs. */
 export interface Migration {

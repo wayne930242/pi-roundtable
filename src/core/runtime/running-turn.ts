@@ -1,6 +1,6 @@
 import type { ClientPort } from "../domain/client.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import type { Speaker, Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../identity/speakers.ts";
 
 /** What the runtime keeps about a conversation's running turn, for its tools to read. */
 export interface RunningTurn {

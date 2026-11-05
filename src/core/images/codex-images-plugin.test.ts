@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { PluginError } from "../errors.ts";
-import type { PluginContext } from "../plugin.ts";
+import { PluginError } from "../kernel/errors.ts";
+import type { PluginContext } from "../plugin-api/plugin.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import type { CodexFetch } from "./codex-image.ts";
 import { createCodexImages } from "./codex-images-plugin.ts";

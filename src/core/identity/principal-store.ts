@@ -1,6 +1,5 @@
 import type { SQL } from "bun";
 import { IdentityError } from "../domain/errors.ts";
-import type { Tier } from "../speakers.ts";
 import type {
 	IdentityLink,
 	IdentityRef,
@@ -13,6 +12,7 @@ import type {
 	RoleHolder,
 	RoleSource,
 } from "./principal-types.ts";
+import type { Tier } from "./speakers.ts";
 import { isPrincipalId, newPrincipalId } from "./ulid.ts";
 
 export type {

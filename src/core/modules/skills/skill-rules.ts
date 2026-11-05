@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { AgentError } from "../../domain/errors.ts";
-import type { Logger } from "../../log.ts";
+import type { Logger } from "../../kernel/log.ts";
 import type { SkillStore } from "./skill-store.ts";
 
 /** Carried by every agent and worker, shipped in the release (behavior 20). */

@@ -5,9 +5,9 @@ import type {
 	ChannelClaim,
 	InboundMessage,
 } from "../contract/channels.ts";
-import { PluginError } from "../errors.ts";
-import { silentLogger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { ChannelQueue } from "./channel-queue.ts";

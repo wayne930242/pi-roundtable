@@ -1,7 +1,7 @@
 import type { InboundMessage } from "../contract/channels.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /**
  * Who wrote the message, as its surface reports them; a surface that reports no `actor` has it

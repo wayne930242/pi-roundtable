@@ -10,7 +10,7 @@ import {
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
 } from "../core/identity/principal-tables.ts";
-import { silentLogger } from "../core/log.ts";
+import { silentLogger } from "../core/kernel/log.ts";
 import { describeDb } from "../core/testing/database.ts";
 import {
 	type ScratchDatabase,

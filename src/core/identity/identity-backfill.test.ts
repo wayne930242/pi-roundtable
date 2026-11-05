@@ -4,19 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
+import { identityPlugin } from "../builtin/identity.ts";
 import type { RoundtableConfig } from "../config/config.ts";
 import { runMigrations } from "../db/migrations.ts";
-import { defineRoundtable } from "../define-roundtable.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext } from "../plugin.ts";
-import { IDENTITY } from "../services.ts";
+import { defineRoundtable } from "../host/define-roundtable.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { PluginContext } from "../plugin-api/plugin.ts";
+import { IDENTITY } from "../plugin-api/services.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
 	scratchDatabase,
 } from "../testing/fixture-database.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
-import { identityPlugin } from "./identity-plugin.ts";
 import { backfillPrincipals } from "./identity-schema.ts";
 import { type IdentityService, PgIdentityService } from "./identity-service.ts";
 import { PgPrincipalStore } from "./principal-store.ts";

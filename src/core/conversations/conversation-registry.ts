@@ -1,4 +1,4 @@
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 
 /** Who may take part: `private` belongs to one principal, `shared` to whoever its claim admits. */
 export type ConversationVisibility = "private" | "shared";

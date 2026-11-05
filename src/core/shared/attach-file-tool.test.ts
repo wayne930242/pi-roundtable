@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ReplyFile } from "../domain/conversation.ts";
-import { REPLY_FILE_LIMITS, withReplyFiles } from "../reply-files.ts";
 import { attachFileExtension } from "./attach-file-tool.ts";
+import { REPLY_FILE_LIMITS, withReplyFiles } from "./reply-files.ts";
 
 let root = "";
 let roots: { workspace: string; scratchDir: string };

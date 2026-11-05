@@ -7,8 +7,8 @@ import {
 	type RoundtableConfig,
 	resolveConfig,
 } from "../core/config/config.ts";
-import type { DefinedRoundtable } from "../core/define-roundtable.ts";
-import { type Logger, silentLogger } from "../core/log.ts";
+import type { DefinedRoundtable } from "../core/host/define-roundtable.ts";
+import { type Logger, silentLogger } from "../core/kernel/log.ts";
 import { fail, type Result } from "./report.ts";
 
 export const CONFIG_FILE = "roundtable.config.ts";

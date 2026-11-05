@@ -3,7 +3,7 @@ import type {
 	ModelImage,
 	StoredAttachment,
 } from "../domain/attachment.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	isModelImage,
 	MAX_IMAGES_PER_TURN,

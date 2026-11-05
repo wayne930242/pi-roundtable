@@ -2,7 +2,7 @@ import {
 	type RESTPostAPIChatInputApplicationCommandsJSONBody,
 	SlashCommandBuilder,
 } from "discord.js";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import type {
 	CommandRoot,
 	InteractionContribution,

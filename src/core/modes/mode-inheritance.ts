@@ -1,4 +1,4 @@
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import type { ConversationMode } from "./conversation-modes.ts";
 
 /**

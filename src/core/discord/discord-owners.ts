@@ -1,6 +1,6 @@
 import type { IdentityService } from "../identity/identity-service.ts";
-import type { Logger } from "../log.ts";
-import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
+import { type Speaker, type Tier, tierAtLeast } from "../identity/speakers.ts";
+import type { Logger } from "../kernel/log.ts";
 
 /** A Discord user who pressed or ran something; their roles are unknown where the interaction carries no member. */
 export interface DiscordUser {

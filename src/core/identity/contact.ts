@@ -1,6 +1,6 @@
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import type { ActorFacts } from "./actor-facts.ts";
+import type { Speaker } from "./speakers.ts";
 
 /**
  * A person a surface reports, assessed before any claim takes their message: who they would be,

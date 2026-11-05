@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { InteractionContextType } from "discord.js";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import { composeCommands } from "./compose-commands.ts";
 import type { InteractionModule, RootOption } from "./interaction-module.ts";
 

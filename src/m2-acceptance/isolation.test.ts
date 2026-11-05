@@ -17,11 +17,11 @@ import { identityMigrations } from "../core/identity/identity-schema.ts";
 import { PgIdentityService } from "../core/identity/identity-service.ts";
 import { contactsOf, identityView } from "../core/identity/identity-view.ts";
 import { PgPrincipalStore } from "../core/identity/principal-store.ts";
+import type { Speaker } from "../core/identity/speakers.ts";
 import { promptScope } from "../core/interactions/prompts.ts";
-import { silentLogger } from "../core/log.ts";
+import { silentLogger } from "../core/kernel/log.ts";
 import { ChannelQueue } from "../core/routing/channel-queue.ts";
 import { ChannelRouter } from "../core/routing/channel-router.ts";
-import type { Speaker } from "../core/speakers.ts";
 import { describeDb } from "../core/testing/database.ts";
 import {
 	type ScratchDatabase,

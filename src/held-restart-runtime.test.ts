@@ -14,18 +14,18 @@ import { Type } from "typebox";
 import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
 import { AttachmentStore } from "./core/attachments/attachment-store.ts";
 import type { HeldActionStore, RuntimeDeps } from "./core/contract/runtime.ts";
-import { definePlugin, defineTool } from "./core/define.ts";
 import type {
 	ChannelKey,
 	PendingConfirmation,
 } from "./core/domain/conversation.ts";
 import type { TurnConversation } from "./core/domain/ports.ts";
+import type { AgentTurnScope } from "./core/domain/sessions.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
 import type { ApprovedBy } from "./core/interactions/prompts.ts";
-import { silentLogger } from "./core/log.ts";
+import { silentLogger } from "./core/kernel/log.ts";
+import { definePlugin, defineTool } from "./core/plugin-api/define.ts";
 import { CONFIRMATION_TTL_MS } from "./core/runtime/extensions/confirmation-gate.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import type { AgentTurnScope } from "./core/sessions.ts";
-import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
 // A host restart, end to end over the real Pi runtime: held actions the store keeps are known to

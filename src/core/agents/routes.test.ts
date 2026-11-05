@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
 import { ConfigError } from "../domain/errors.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { Routes } from "./routes.ts";
 
 const agent = (name: string, channelId?: string, status = "active") => ({

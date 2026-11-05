@@ -5,7 +5,8 @@ import type {
 	BackgroundTurn,
 } from "../../contract/channels.ts";
 import { ScheduleError } from "../../domain/errors.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
+import { setTimeZone } from "../../kernel/time.ts";
 import {
 	describeDb,
 	openTestStore,
@@ -13,7 +14,6 @@ import {
 	testDatabaseUrl,
 } from "../../testing/database.ts";
 import { useTestLocale } from "../../testing/locale.ts";
-import { setTimeZone } from "../../time.ts";
 import { ConversationBackgroundTurns } from "../background/background-turns.ts";
 import { PgScheduleStore, type Schedule } from "./schedule-store.ts";
 import {

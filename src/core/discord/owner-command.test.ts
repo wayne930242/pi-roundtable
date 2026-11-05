@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Interaction } from "discord.js";
 import type { ActorFacts } from "../identity/actor-facts.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { commandGuard, ownerCommandModule } from "./owner-command.ts";
 import { STOP_BUTTON_ID, stopButtonModule } from "./stop-button.ts";

@@ -3,7 +3,7 @@ import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { RoundEnd, RoundProgress } from "../domain/round.ts";
 import { messages } from "../i18n/index.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { groupTurnText } from "./agent-prompt.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import {

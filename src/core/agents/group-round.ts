@@ -1,6 +1,6 @@
 import type { Judge } from "../contract/providers.ts";
-import { type OwnerIdentity, ownerWords } from "../identity.ts";
-import type { Logger } from "../log.ts";
+import { type OwnerIdentity, ownerWords } from "../identity/owner-identity.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { Agent, GroupMessage } from "./agent-store.ts";
 
 /** Members at or above this relevance answer an owner message nobody is named in; a message naming members is answered by them alone. */

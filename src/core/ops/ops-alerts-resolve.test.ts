@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	type OpsAlert,
 	OpsAlerts,

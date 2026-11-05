@@ -5,9 +5,8 @@ import type {
 	ChannelKey,
 	PendingConfirmation,
 } from "../domain/conversation.ts";
+import type { ThinkingLevel } from "../domain/models.ts";
 import type { TurnConversation, TurnRequest } from "../domain/ports.ts";
-import type { ThinkingLevel } from "../models.ts";
-import type { ToolTiers } from "../tool-tiers.ts";
 import { ConfirmationGate, unexpired } from "./extensions/confirmation-gate.ts";
 import { PromptSlot } from "./prompt-slot.ts";
 import type { ChannelSession, PiAgentRuntimeOptions } from "./runtime-types.ts";
@@ -23,6 +22,7 @@ import {
 	historyScope,
 	scopedHistory,
 } from "./session-scope.ts";
+import type { ToolTiers } from "./tool-tiers.ts";
 
 type AgentMessage = AgentSession["messages"][number];
 

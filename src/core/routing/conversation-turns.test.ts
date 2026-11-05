@@ -7,9 +7,17 @@ import type {
 } from "../conversations/conversation-registry.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import { HostStoppingError, NotLinkedError, PluginError } from "../errors.ts";
-import { silentLogger } from "../log.ts";
-import type { TurnEndEvent, TurnEvent, TurnProgressEvent } from "../plugin.ts";
+import {
+	HostStoppingError,
+	NotLinkedError,
+	PluginError,
+} from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type {
+	TurnEndEvent,
+	TurnEvent,
+	TurnProgressEvent,
+} from "../plugin-api/plugin.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { conversationTurns } from "./conversation-turns.ts";

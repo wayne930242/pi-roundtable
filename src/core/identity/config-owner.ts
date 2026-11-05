@@ -1,5 +1,5 @@
 import { ConfigError } from "../domain/errors.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { AccessOwner } from "./access-policy.ts";
 import { identityOf } from "./actor-facts.ts";
 import type { DeclaredIdentity } from "./plugin-identities.ts";

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { messages } from "../i18n/index.ts";
 import type { IdentityLink } from "../identity/principal-store.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import {
 	type ApprovedBy,
 	type LateAnswer,
 	promptScope,
 } from "../interactions/prompts.ts";
-import { silentLogger } from "../log.ts";
-import type { Speaker } from "../speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { CARD_PREFIX, OwnerCards } from "./owner-cards.ts";
 import {

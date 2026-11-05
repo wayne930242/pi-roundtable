@@ -5,7 +5,7 @@ import type {
 	ApprovalOptions,
 	Prompts,
 } from "../interactions/prompts.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	type BudgetClock,
 	runtimeTurnBudget,

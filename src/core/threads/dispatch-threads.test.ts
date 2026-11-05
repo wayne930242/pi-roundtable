@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ChatSurface, channelKey } from "../contract/surface.ts";
 import { messages } from "../i18n/index.ts";
-import { type Logger, silentLogger } from "../log.ts";
+import { type Logger, silentLogger } from "../kernel/log.ts";
 import { surfacePort } from "../routing/surface-port.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { FakeSurfaceThreads } from "../testing/surface-threads.ts";

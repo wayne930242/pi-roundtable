@@ -1,5 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { Logger } from "../../log.ts";
+import type { Logger } from "../../kernel/log.ts";
 import { readPromptOrStop } from "./prompt-read.ts";
 
 /**

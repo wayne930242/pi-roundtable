@@ -2,9 +2,9 @@ import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
-import type { OwnerIdentity } from "../../identity.ts";
+import type { OwnerIdentity } from "../../identity/owner-identity.ts";
+import type { Speaker } from "../../identity/speakers.ts";
 import type { ApprovedBy } from "../../interactions/prompts.ts";
-import type { Speaker } from "../../speakers.ts";
 
 /** Held actions older than this cannot be approved any more. */
 export const CONFIRMATION_TTL_MS = 24 * 3_600_000;

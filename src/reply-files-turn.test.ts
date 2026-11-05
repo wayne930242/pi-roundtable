@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { Type } from "typebox";
 import type { AgentRuntime } from "./core/contract/runtime.ts";
 import type { ChatSurface } from "./core/contract/surface.ts";
-import { definePlugin, defineTool } from "./core/define.ts";
 import type { OutboundReply } from "./core/domain/conversation.ts";
-import { AGENTS } from "./core/services.ts";
+import { definePlugin, defineTool } from "./core/plugin-api/define.ts";
+import { AGENTS } from "./core/plugin-api/services.ts";
 import { OWNER_SPEAKER, servicePair, testPlugin } from "./testing.ts";
 
 const file = { name: "drawing.png", data: new Uint8Array([1, 2, 3]) };

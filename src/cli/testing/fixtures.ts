@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { RoundtableConfig } from "../../core/config/config.ts";
-import type { DefinedRoundtable } from "../../core/define-roundtable.ts";
+import type { DefinedRoundtable } from "../../core/host/define-roundtable.ts";
 import type { Http, HttpResponse } from "../http.ts";
 import type { Ports } from "../project.ts";
 

@@ -4,7 +4,7 @@ import {
 	suggestCharacter,
 } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
-import { THINKING_LEVELS, type ThinkingLevel } from "../models.ts";
+import { THINKING_LEVELS, type ThinkingLevel } from "../domain/models.ts";
 
 export const MAX_PROMPT_CHARS = 4_000;
 export const MAX_AVATAR_PROMPT_CHARS = 1_000;

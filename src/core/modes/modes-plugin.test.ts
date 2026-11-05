@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { MODES } from "../services.ts";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { MODES } from "../plugin-api/services.ts";
 import { describeDb } from "../testing/database.ts";
 import { type TestHost, testHost } from "../testing/test-host.ts";
 

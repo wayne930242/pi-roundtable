@@ -12,16 +12,16 @@ import {
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { ChatSurface } from "./core/contract/surface.ts";
-import { definePlugin, defineTool } from "./core/define.ts";
 import type { PendingConfirmation } from "./core/domain/conversation.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
 import type {
 	ApprovalOptions,
 	ApprovedBy,
 	PromptScope,
 	PromptWait,
 } from "./core/interactions/prompts.ts";
+import { definePlugin, defineTool } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
 const MEMBER: Speaker = {

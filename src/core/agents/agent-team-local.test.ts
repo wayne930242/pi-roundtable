@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { describeDb, openTestStore, TEST_GUILD } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { PgAgentStore } from "./agent-store.ts";

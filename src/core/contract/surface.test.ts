@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import { channelKey, parseChannelKey } from "./surface.ts";
 
 test("a key splits at its first colon and rebuilds", () => {

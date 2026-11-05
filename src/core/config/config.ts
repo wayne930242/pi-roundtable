@@ -4,21 +4,21 @@ import { CATALOG, type Hex } from "../../characters/index.ts";
 import type { AgentSeed } from "../agents/agent-rules.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
-import type { Locale } from "../i18n/index.ts";
-import type { AccessRules } from "../identity/access-policy.ts";
-import type { ProfileRules } from "../identity/profiles.ts";
-import type { OwnerIdentity } from "../identity.ts";
 import {
 	type EffortPolicy,
 	type ModelRef,
 	parseModelRef,
 	type ThinkingLevel,
-} from "../models.ts";
-import type { PerPrincipalLimits } from "../modules/background/personal-target.ts";
-import type { AgentTools, RoundtablePlugin } from "../plugin.ts";
+} from "../domain/models.ts";
+import type { Locale } from "../i18n/index.ts";
+import type { AccessRules } from "../identity/access-policy.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { ProfileRules } from "../identity/profiles.ts";
+import type { Tier, TierMembers } from "../identity/speakers.ts";
+import type { AgentTools, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { PRIMARY_CHARS } from "../runtime/interim-text.ts";
 import type { ShellEnvConfig } from "../shared/child-env.ts";
-import type { Tier, TierMembers } from "../speakers.ts";
+import type { PerPrincipalLimits } from "../shared/personal-target.ts";
 import { type AccessConfig, accessOf } from "./access.ts";
 import {
 	type DiscordConfig,
@@ -28,7 +28,7 @@ import {
 } from "./adapters.ts";
 import { checkAgentServerOff, checkAgentTeamKeys } from "./agent-team.ts";
 import type { AttachmentsConfig } from "./attachments.ts";
-import { configSchema } from "./config-schema.ts";
+import { configSchema, DRAIN_LIMIT_MS } from "./config-schema.ts";
 import type { ConversationsConfig } from "./conversations.ts";
 import {
 	type HelpersConfig,
@@ -44,12 +44,6 @@ import {
 	routingOf,
 } from "./routing.ts";
 import type { SkillsConfig } from "./skills-config.ts";
-
-/**
- * How long a shutdown waits for running work before aborting it: long enough for a usual turn to
- * answer, short enough that a hung one never holds a restart for an hour.
- */
-export const DRAIN_LIMIT_MS = 3 * 60_000;
 
 export type { DiscordConfig };
 

@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { freeze } from "../freeze.ts";
+import { freeze } from "../kernel/freeze.ts";
 
 /** Hands web research to the cheaper worker model; shared by conversation sessions. */
 export const DELEGATE_TOOL = "delegate_task" as const;

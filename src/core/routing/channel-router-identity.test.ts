@@ -6,8 +6,8 @@ import type {
 } from "../contract/channels.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { ContactAssessor } from "../identity/contact.ts";
-import { silentLogger } from "../log.ts";
-import type { Speaker, Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../identity/speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { SessionContext } from "../domain/sessions.ts";
+import { addresseeOf } from "../identity/owner-identity.ts";
 import {
 	type Principal,
 	SYSTEM_PRINCIPAL,
 } from "../identity/principal-store.ts";
-import { addresseeOf } from "../identity.ts";
-import type { SessionContext } from "../sessions.ts";
-import type { Speaker, Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../identity/speakers.ts";
 import {
 	ANN,
 	context,

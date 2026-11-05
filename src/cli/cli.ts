@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveConfig } from "../core/config/config.ts";
-import type { DefinedRoundtable } from "../core/define-roundtable.ts";
-import { Roundtable } from "../core/host.ts";
+import type { DefinedRoundtable } from "../core/host/define-roundtable.ts";
+import { Roundtable } from "../core/host/host.ts";
 import { declaredIdentities } from "../core/identity/plugin-identities.ts";
 import { addPackage } from "./add-package.ts";
 import { addPlugin } from "./add-plugin.ts";

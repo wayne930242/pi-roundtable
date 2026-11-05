@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
-import type { AgentTeam } from "../services.ts";
+import type { AgentTeam } from "../plugin-api/services.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import {

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { followOrigin, modeOrigins } from "./helper-modes.ts";
 import type { TeamContext } from "./team-options.ts";

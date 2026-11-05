@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin } from "./core/define.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
 import { ChatCommandSources } from "./core/registry/chat-commands.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
 import type { ChatCommand } from "./index.ts";

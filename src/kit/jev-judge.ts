@@ -8,7 +8,7 @@ import type {
 	ScoreQuestion,
 	YesNoQuestion,
 } from "../core/contract/providers.ts";
-import { JudgeError } from "../core/errors.ts";
+import { JudgeError } from "../core/kernel/errors.ts";
 
 /** The service's name for the yes-or-no question and for its answer's probability. */
 const WIRE_YES_NO = "noul";

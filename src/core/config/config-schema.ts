@@ -1,8 +1,8 @@
 import type { InterimTextMode } from "../domain/interim.ts";
+import { type EffortPolicy, THINKING_LEVELS } from "../domain/models.ts";
 import { isLocale, type Locale } from "../i18n/index.ts";
-import { type EffortPolicy, THINKING_LEVELS } from "../models.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
-import type { Tier } from "../speakers.ts";
+import type { Tier } from "../identity/speakers.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { accessShape } from "./access.ts";
 import { discordShape } from "./adapters.ts";
 import { attachmentsShape } from "./attachments.ts";
@@ -59,6 +59,12 @@ const isPlugin = (value: unknown): value is RoundtablePlugin =>
 	value !== null &&
 	typeof (value as { name?: unknown }).name === "string" &&
 	typeof (value as { setup?: unknown }).setup === "function";
+
+/**
+ * How long a shutdown waits for running work before aborting it: long enough for a usual turn to
+ * answer, short enough that a hung one never holds a restart for an hour.
+ */
+export const DRAIN_LIMIT_MS = 3 * 60_000;
 
 export const configSchema = shape({
 	name: optional(text),

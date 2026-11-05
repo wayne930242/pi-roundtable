@@ -3,7 +3,7 @@ import type {
 	AttachmentPort,
 	ExpiredAttachments,
 } from "../contract/attachments.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	DEFAULT_SWEEP_EVERY_MS,
 	retentionService,

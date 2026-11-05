@@ -1,6 +1,6 @@
 import { messages } from "../i18n/index.ts";
+import { type Tier, tierAtLeast } from "../identity/speakers.ts";
 import type { ApprovedBy, PromptScope } from "../interactions/prompts.ts";
-import { type Tier, tierAtLeast } from "../speakers.ts";
 import type {
 	DiscordOwners,
 	DiscordOwnersOptions,

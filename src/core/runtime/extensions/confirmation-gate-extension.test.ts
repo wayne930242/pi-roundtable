@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { type HoldRule, holdChain } from "../../holds.ts";
+import { type HoldRule, holdChain } from "../../plugin-api/holds.ts";
 import { TEST_OWNER } from "../../testing/owner.ts";
 import { ConfirmationGate } from "./confirmation-gate.ts";
 import { confirmationGateExtension } from "./confirmation-gate-extension.ts";

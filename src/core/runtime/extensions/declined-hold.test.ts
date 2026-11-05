@@ -1,12 +1,12 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import type { ToolTurn } from "../../define.ts";
-import { type HoldRule, holdChain } from "../../holds.ts";
 import type {
 	Approval,
 	LateAnswer,
 	Prompts,
 	PromptWait,
 } from "../../interactions/prompts.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
+import { type HoldRule, holdChain } from "../../plugin-api/holds.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { MAIL } from "./confirmation-fixture.ts";

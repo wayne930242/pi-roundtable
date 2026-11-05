@@ -15,8 +15,8 @@ import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
 import { migrateDatabase } from "../src/core/db/migrations.ts";
-import { defineRoundtable } from "../src/core/define-roundtable.ts";
-import { silentLogger } from "../src/core/log.ts";
+import { defineRoundtable } from "../src/core/host/define-roundtable.ts";
+import { silentLogger } from "../src/core/kernel/log.ts";
 
 /** The people of the fixture, as 0.8 stored them. */
 export const FIXTURE = {

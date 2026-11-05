@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import type { ToolTurn } from "../../define.ts";
-import { type HoldCheck, type HoldRule, holdChain } from "../../holds.ts";
+import type { ChannelKey } from "../../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
+import type { Speaker } from "../../identity/speakers.ts";
 import type {
 	Approval,
 	ApprovedBy,
@@ -13,8 +13,12 @@ import type {
 } from "../../modes/conversation-modes.ts";
 import { shellHoldRule } from "../../modules/host-shell/shell-policy.ts";
 import { precheckScriptHoldRule } from "../../modules/schedules/precheck-tools.ts";
-import type { ChannelKey } from "../../sessions.ts";
-import type { Speaker } from "../../speakers.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
+import {
+	type HoldCheck,
+	type HoldRule,
+	holdChain,
+} from "../../plugin-api/holds.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../../testing/owner.ts";
 import { fakePrechecks, fakeScriptRunner } from "../../testing/prechecks.ts";
@@ -506,65 +510,6 @@ describe("yolo reads the mode when the call is made", () => {
 		expect(asked).toBe(1);
 		expect(result.refused).toBe("declined");
 		expect(mode.approvals).toEqual([]);
-	});
-});
-
-describe("yoloApprover", () => {
-	const approver = (speaker: Speaker = OWNER_SPEAKER) =>
-		yoloApprover({
-			modes: modes(),
-			autonomy: { yolo: { allow: [], card: [] } },
-			channel: ROOM,
-			speaker,
-		});
-	const call = (holdClasses?: string[]) => ({
-		tool: "bash",
-		input: "{}",
-		action: "run it",
-		...(holdClasses ? { holdClasses } : {}),
-	});
-
-	test("answers for classes it allows only", () => {
-		expect(approver()(call(["shell.push"]), { speakerOnly: false })?.auto).toBe(
-			"yolo",
-		);
-		expect(
-			approver()(call(["shell.rm"]), { speakerOnly: false }),
-		).toBeUndefined();
-	});
-
-	test("a call without classes, or with none, is unknown and never answered", () => {
-		expect(approver()(call(), { speakerOnly: false })).toBeUndefined();
-		expect(approver()(call([]), { speakerOnly: false })).toBeUndefined();
-	});
-
-	test("a bare rule name is unclassed: answered only when the config allows the rule", () => {
-		expect(approver()(call(["mc"]), { speakerOnly: false })).toBeUndefined();
-		const allowing = yoloApprover({
-			modes: modes(),
-			autonomy: { yolo: { allow: ["mc"], card: [] } },
-			channel: ROOM,
-			speaker: OWNER_SPEAKER,
-		});
-		expect(allowing(call(["mc"]), { speakerOnly: false })?.auto).toBe("yolo");
-		expect(
-			allowing(call(["mc", "shell.rm"]), { speakerOnly: false }),
-		).toBeUndefined();
-	});
-
-	test("a call that names approvers is never answered", () => {
-		expect(
-			approver()(
-				{ ...call(["shell.push"]), approverIds: ["p-someone"] },
-				{ speakerOnly: false },
-			),
-		).toBeUndefined();
-	});
-
-	test("a speaker's alone card is never answered", () => {
-		expect(
-			approver()(call(["shell.push"]), { speakerOnly: true }),
-		).toBeUndefined();
 	});
 });
 

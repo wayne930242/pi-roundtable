@@ -8,14 +8,14 @@ import type {
 	TurnResult,
 } from "../domain/conversation.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
+import type { TurnSelection } from "../domain/sessions.ts";
 import type { IdentityService } from "../identity/identity-port.ts";
-import type { OwnerIdentity } from "../identity.ts";
-import type { Logger } from "../log.ts";
-import type { EventSink } from "../plugin.ts";
-import type { AvatarStudio } from "../services.ts";
-import type { TurnSelection } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
-import type { ToolTiers } from "../tool-tiers.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { EventSink } from "../plugin-api/plugin.ts";
+import type { AvatarStudio } from "../plugin-api/services.ts";
+import type { ToolTiers } from "../runtime/tool-tiers.ts";
 import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import type { RelevanceScorer } from "./group-round.ts";

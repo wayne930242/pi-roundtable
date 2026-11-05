@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { runMigrations } from "../db/migrations.ts";
 import { ConfigError, IdentityError } from "../domain/errors.ts";
-import { silentLogger } from "../log.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,

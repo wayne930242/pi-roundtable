@@ -2,13 +2,13 @@ import { describe, test } from "bun:test";
 import type { ChatSurface } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { TurnProgress } from "../domain/progress.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { Approval } from "../interactions/prompts.ts";
 import type {
 	Questionnaire,
 	QuestionnaireAnswer,
 } from "../interactions/questionnaire.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
 import { QUESTIONNAIRE_CHECKS } from "./surface-contract-questionnaire.ts";
 import {
 	answeredOnlyByThem,

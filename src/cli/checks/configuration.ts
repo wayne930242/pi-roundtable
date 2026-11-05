@@ -1,5 +1,5 @@
-import { Roundtable } from "../../core/host.ts";
-import { silentLogger } from "../../core/log.ts";
+import { Roundtable } from "../../core/host/host.ts";
+import { silentLogger } from "../../core/kernel/log.ts";
 import { CONFIG_FILE, type Project } from "../project.ts";
 import { fail, ok, type Result } from "../report.ts";
 

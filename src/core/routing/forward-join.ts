@@ -1,5 +1,5 @@
 import type { InboundMessage } from "../contract/channels.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 
 /** Discord sends a forward's added text as a second message right after the forward. */
 export const FORWARD_JOIN_MS = 2_000;

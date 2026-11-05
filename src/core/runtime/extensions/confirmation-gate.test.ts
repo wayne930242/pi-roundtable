@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { holdChain } from "../../holds.ts";
 import { messages, setLocale } from "../../i18n/index.ts";
 import type {
 	Approval,
@@ -11,6 +10,7 @@ import type {
 	PromptWait,
 } from "../../interactions/prompts.ts";
 import { shellHoldRule } from "../../modules/host-shell/shell-policy.ts";
+import { holdChain } from "../../plugin-api/holds.ts";
 import { TEST_OWNER as OWNER } from "../../testing/owner.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
 import { MAIL, MAIL_RULE } from "./confirmation-fixture.ts";

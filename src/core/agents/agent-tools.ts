@@ -2,10 +2,11 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { CharacterInput } from "../../characters/index.ts";
 import { AgentError } from "../domain/errors.ts";
+import { THINKING_LEVELS } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { assistantName, messages } from "../i18n/index.ts";
-import { type OwnerIdentity, ownerWords } from "../identity.ts";
-import { THINKING_LEVELS } from "../models.ts";
+import { type OwnerIdentity, ownerWords } from "../identity/owner-identity.ts";
+import { timeZone } from "../kernel/time.ts";
 import {
 	optionalString,
 	requiredString,
@@ -13,7 +14,6 @@ import {
 	type TextToolDef,
 	textToolsExtension,
 } from "../runtime/text-tools.ts";
-import { timeZone } from "../time.ts";
 import { MAX_GROUP_MEMBERS, MIN_GROUP_MEMBERS } from "./agent-store.ts";
 import {
 	CLASS,

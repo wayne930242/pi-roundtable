@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { agentDetails } from "../agents/team-text.ts";
 import { serviceKey } from "../contract/services.ts";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import type { SkillStore } from "../modules/skills/skill-store.ts";
+import { MEMORY, SKILLS } from "../plugin-api/services.ts";
 import { ServiceRegistry } from "../registry/services.ts";
-import { MEMORY, SKILLS } from "../services.ts";
 import { setUpAddons } from "../testing/modules.ts";
 import { skillsPlugin } from "./skills.ts";
 

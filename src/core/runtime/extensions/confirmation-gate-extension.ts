@@ -1,5 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { ToolTurn } from "../../define.ts";
+import type { ToolTurn } from "../../plugin-api/define.ts";
 import type { PromptSlot } from "../prompt-slot.ts";
 import type { ConfirmationGate, HoldTurn } from "./confirmation-gate.ts";
 

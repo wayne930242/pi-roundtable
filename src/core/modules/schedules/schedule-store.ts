@@ -2,8 +2,8 @@ import type { SQL } from "bun";
 import type { Migration } from "../../db/migrations.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
-import type { ScheduleStore } from "../../services.ts";
-import type { Tier } from "../../speakers.ts";
+import type { Tier } from "../../identity/speakers.ts";
+import type { ScheduleStore } from "../../plugin-api/services.ts";
 import type { PrecheckTool } from "./precheck-tools.ts";
 import type { Recurrence } from "./recurrence.ts";
 

@@ -1,6 +1,5 @@
 import type { SQL } from "bun";
 import type { Migration } from "../db/migrations.ts";
-import { type Tier, tierAtLeast } from "../speakers.ts";
 import type { AccessRules, AccessTier } from "./access-policy.ts";
 import { parseIdentity } from "./actor-facts.ts";
 import {
@@ -15,6 +14,7 @@ import {
 	PRINCIPAL_TABLES,
 	PRINCIPALS_CLAIMABLE,
 } from "./principal-tables.ts";
+import { type Tier, tierAtLeast } from "./speakers.ts";
 
 /** Where the backfill finds the ids of people 0.8 stored: the configured owners, then four tables. */
 export type BackfillSource =

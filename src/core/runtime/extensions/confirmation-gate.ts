@@ -2,17 +2,17 @@ import type {
 	HeldCall,
 	PendingConfirmation,
 } from "../../domain/conversation.ts";
+import { messages } from "../../i18n/index.ts";
+import type { OwnerIdentity } from "../../identity/owner-identity.ts";
+import type { ApprovedBy, Prompts } from "../../interactions/prompts.ts";
 import {
 	HOLD_DESCRIBE_TIMEOUT_MS,
 	type HoldCheck,
 	type HoldContext,
 	higherTier,
 	isPromise,
-} from "../../holds.ts";
-import { messages } from "../../i18n/index.ts";
-import type { OwnerIdentity } from "../../identity.ts";
-import type { ApprovedBy, Prompts } from "../../interactions/prompts.ts";
-import type { ToolTiers } from "../../tool-tiers.ts";
+} from "../../plugin-api/holds.ts";
+import type { ToolTiers } from "../tool-tiers.ts";
 import { approvalCard, approvalDetails } from "./approval-card.ts";
 import { askOnCard } from "./card-ask.ts";
 import {

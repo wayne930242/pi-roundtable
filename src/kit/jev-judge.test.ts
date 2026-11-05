@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { JudgeError } from "../core/errors.ts";
+import { JudgeError } from "../core/kernel/errors.ts";
 import { jevJudge } from "./jev-judge.ts";
 
 type Sent = { url: string; init: RequestInit };

@@ -9,11 +9,14 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin } from "./core/define.ts";
-import { addresseeOf, type OwnerIdentity } from "./core/identity.ts";
+import {
+	addresseeOf,
+	type OwnerIdentity,
+} from "./core/identity/owner-identity.ts";
+import { THE_SPEAKER } from "./core/identity/speakers.ts";
 import { notifyExtension } from "./core/modules/notify/notify.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import { THE_SPEAKER } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
 // The Pi runtime sends the model a tool described anew before a turn of the same open session.

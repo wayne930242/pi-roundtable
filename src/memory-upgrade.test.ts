@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ChannelKey } from "./core/domain/conversation.ts";
-import { IDENTITY } from "./core/services.ts";
-import type { Speaker } from "./core/speakers.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
+import { IDENTITY } from "./core/plugin-api/services.ts";
 import { describeDb } from "./core/testing/database.ts";
 import { scratchDatabase } from "./core/testing/fixture-database.ts";
 import {

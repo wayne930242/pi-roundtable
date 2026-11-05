@@ -18,15 +18,18 @@ import type { ResolvedRouting } from "../config/routing.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
-import type { OwnerIdentity } from "../identity.ts";
+import {
+	AUTO_THINKING,
+	formatModelRef,
+	type ModelRef,
+} from "../domain/models.ts";
+import type { SessionTool } from "../domain/sessions.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { Tier } from "../identity/speakers.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
-import type { Logger } from "../log.ts";
-import { AUTO_THINKING, formatModelRef, type ModelRef } from "../models.ts";
+import type { Logger } from "../kernel/log.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
-import { agentPromptExtension } from "../runtime/extensions/agent-prompt.ts";
-import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
@@ -36,9 +39,10 @@ import {
 	RUNTIME,
 	SCHEDULES,
 	SKILLS,
-} from "../services.ts";
-import type { SessionTool } from "../sessions.ts";
-import type { Tier } from "../speakers.ts";
+} from "../plugin-api/services.ts";
+import { splitReply } from "../presentation/reply-splitter.ts";
+import { agentPromptExtension } from "../runtime/extensions/agent-prompt.ts";
+import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
 import { DISCORD } from "./discord.ts";
 import { agentOnly } from "./session-tool.ts";
 

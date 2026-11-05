@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { runMigrations } from "../db/migrations.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,

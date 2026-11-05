@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HostStoppingError } from "../errors.ts";
+import { HostStoppingError } from "../kernel/errors.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 
 describe("ChannelQueue", () => {

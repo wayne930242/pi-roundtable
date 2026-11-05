@@ -6,9 +6,9 @@ import { resolveCharacter } from "../../characters/index.ts";
 import { squarePng } from "../attachments/square-png.ts";
 import type { ImageDrawer } from "../contract/providers.ts";
 import { ConfigError } from "../domain/errors.ts";
-import { ProviderError } from "../errors.ts";
 import type { HttpRoute } from "../http/listeners.ts";
-import type { AvatarStudio } from "../services.ts";
+import { ProviderError } from "../kernel/errors.ts";
+import type { AvatarStudio } from "../plugin-api/services.ts";
 import { characterPng } from "./character-png.ts";
 import { fallbackAvatar } from "./fallback-avatar.ts";
 

@@ -3,7 +3,7 @@ import type {
 	Questionnaire,
 	QuestionnaireAnswer,
 } from "../interactions/questionnaire.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { partial } from "../testing/partial.ts";
 import type { SurfaceObservation } from "../testing/surface-contract.ts";
 import { describeQuestionnaireContract } from "../testing/surface-contract-questionnaire.ts";

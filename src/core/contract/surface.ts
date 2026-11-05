@@ -2,10 +2,10 @@ import type { OutboundReply, PostAuthor } from "../domain/conversation.ts";
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import type { RoundProgress } from "../domain/round.ts";
-import { PluginError } from "../errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import { PluginError } from "../kernel/errors.ts";
 import type {
 	ChannelContext,
 	ChannelContextOptions,

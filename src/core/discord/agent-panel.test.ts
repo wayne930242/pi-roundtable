@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Interaction } from "discord.js";
 import type { Agent } from "../agents/agent-store.ts";
-import { silentLogger } from "../log.ts";
-import type { AgentServer } from "../services.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { AgentServer } from "../plugin-api/services.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { agentPanel } from "./agent-panel.ts";
 import { commandGuard } from "./owner-command.ts";

@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import { runMigrations } from "../db/migrations.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
-import type { Speaker } from "../speakers.ts";
 import { describeDb } from "../testing/database.ts";
 import {
 	type ScratchDatabase,
@@ -15,6 +14,7 @@ import { identityMigrations } from "./identity-schema.ts";
 import { PgIdentityService } from "./identity-service.ts";
 import { contactsOf, identityView } from "./identity-view.ts";
 import { PgPrincipalStore } from "./principal-store.ts";
+import type { Speaker } from "./speakers.ts";
 
 const ADA = "966666600000000001";
 const KAI = "966666600000000003";

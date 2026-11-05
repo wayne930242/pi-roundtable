@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MessageFlags } from "discord.js";
 import { messages } from "../i18n/index.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { CardCopies, COPY_TEXT_LIMIT } from "./card-copies.ts";
 import {
 	CARD_PREFIX,

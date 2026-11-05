@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { backfillLine } from "../../core/builtin/identity.ts";
 import { LEGACY_ACCESS } from "../../core/config/access.ts";
 import type { ResolvedConfig } from "../../core/config/config.ts";
 import {
@@ -7,7 +8,6 @@ import {
 } from "../../core/identity/access-policy.ts";
 import { identityOf, parseIdentity } from "../../core/identity/actor-facts.ts";
 import { declaredConflict } from "../../core/identity/config-owner.ts";
-import { backfillLine } from "../../core/identity/identity-plugin.ts";
 import {
 	type BackfillSummary,
 	backfillPrincipals,

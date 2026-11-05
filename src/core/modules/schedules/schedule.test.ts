@@ -10,7 +10,8 @@ import { SQL } from "bun";
 import type { BackgroundTarget } from "../../contract/channels.ts";
 import { ScheduleError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
+import { setTimeZone, zonedStamp } from "../../kernel/time.ts";
 import { runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
@@ -19,7 +20,6 @@ import {
 	testDatabaseUrl,
 } from "../../testing/database.ts";
 import { useTestLocale } from "../../testing/locale.ts";
-import { setTimeZone, zonedStamp } from "../../time.ts";
 import { describeRecurrence, nextRun, parseRecurrence } from "./recurrence.ts";
 import { PgScheduleStore, type Schedule } from "./schedule-store.ts";
 import {

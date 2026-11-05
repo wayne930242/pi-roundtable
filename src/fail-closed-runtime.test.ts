@@ -11,12 +11,12 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { definePlugin } from "./core/define.ts";
 import { AgentRunError } from "./core/domain/errors.ts";
 import type { TurnConversation, TurnRequest } from "./core/domain/ports.ts";
+import type { SessionContext } from "./core/domain/sessions.ts";
+import type { Speaker } from "./core/identity/speakers.ts";
+import { definePlugin } from "./core/plugin-api/define.ts";
 import { PiAgentRuntime } from "./core/runtime/pi-agent-runtime.ts";
-import type { SessionContext } from "./core/sessions.ts";
-import type { Speaker } from "./core/speakers.ts";
 import { testPlugin } from "./testing.ts";
 
 const MEMBER: Speaker = {

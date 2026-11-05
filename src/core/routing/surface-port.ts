@@ -1,13 +1,13 @@
 import type { ChatSurface, SurfacePort } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
-import { PluginError } from "../errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import {
 	isPromptScope,
 	type PromptScope,
 	promptScope,
 } from "../interactions/prompts.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import { PluginError } from "../kernel/errors.ts";
 
 export interface SurfacePortOptions {
 	/** Told when a caller uses a form that goes away, such as `prompts(channel, speaker)`. */

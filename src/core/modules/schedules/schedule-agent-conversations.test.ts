@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ChannelKey } from "../../domain/conversation.ts";
-import type { ScheduleStore } from "../../services.ts";
-import type { Speaker } from "../../speakers.ts";
+import type { Speaker } from "../../identity/speakers.ts";
+import { setTimeZone } from "../../kernel/time.ts";
+import type { ScheduleStore } from "../../plugin-api/services.ts";
 import { useTestLocale } from "../../testing/locale.ts";
-import { setTimeZone } from "../../time.ts";
 import type { NewSchedule, Schedule } from "./schedule-store.ts";
 import { schedulesExtension } from "./schedules.ts";
 

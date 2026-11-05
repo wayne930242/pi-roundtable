@@ -1,4 +1,4 @@
-import type { HoldRule } from "../../holds.ts";
+import type { HoldRule } from "../../plugin-api/holds.ts";
 
 /** A tool that waits for the owner's confirmation in the gate's tests. */
 export const MAIL = "send-mail";

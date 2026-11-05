@@ -13,8 +13,9 @@ import type {
 } from "../../contract/channels.ts";
 import { migrate } from "../../db/migrations.ts";
 import { ScheduleError } from "../../domain/errors.ts";
-import { PluginError } from "../../errors.ts";
-import { type Logger, silentLogger } from "../../log.ts";
+import { PluginError } from "../../kernel/errors.ts";
+import { type Logger, silentLogger } from "../../kernel/log.ts";
+import { setTimeZone } from "../../kernel/time.ts";
 import { runsAsAuthor, runsAsCreator } from "../../testing/background.ts";
 import {
 	describeDb,
@@ -25,7 +26,6 @@ import {
 import { useTestLocale } from "../../testing/locale.ts";
 import { fakePrecheck, fakePrechecks } from "../../testing/prechecks.ts";
 import { recordingLogger } from "../../testing/recording-logger.ts";
-import { setTimeZone } from "../../time.ts";
 import { ConversationBackgroundTurns } from "../background/background-turns.ts";
 import {
 	memoryPrecheckRegistry,

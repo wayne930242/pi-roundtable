@@ -1,6 +1,6 @@
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	DISCORD_MESSAGE_LIMIT,
 	splitReply,

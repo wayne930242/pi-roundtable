@@ -7,7 +7,7 @@ import type {
 	AttachmentRef,
 	StoredAttachment,
 } from "../domain/attachment.ts";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import { plainText } from "./attachment-name.ts";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;

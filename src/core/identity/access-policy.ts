@@ -1,13 +1,6 @@
 import type { Pronouns } from "../config/config.ts";
 import { ConfigError } from "../domain/errors.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type {
-	SpeakerFacts,
-	SpeakerMap,
-	SpeakerPolicy,
-	Tier,
-	TierMembers,
-} from "../speakers.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import {
 	type ActorFacts,
 	identityOf,
@@ -15,6 +8,13 @@ import {
 	surfaceOf,
 } from "./actor-facts.ts";
 import { SYSTEM_PRINCIPAL } from "./principal-store.ts";
+import type {
+	SpeakerFacts,
+	SpeakerMap,
+	SpeakerPolicy,
+	Tier,
+	TierMembers,
+} from "./speakers.ts";
 
 /** One owner the configuration names: whom they are, and the identities that are theirs. */
 export interface AccessOwner {

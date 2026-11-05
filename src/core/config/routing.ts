@@ -1,5 +1,5 @@
 import { ConfigError } from "../domain/errors.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import {
 	either,
 	type Field,

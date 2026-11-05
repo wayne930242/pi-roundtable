@@ -1,0 +1,311 @@
+import type { Static, TObject } from "typebox";
+import type {
+	ToolAttachment,
+	ToolAttachmentInfo,
+} from "../attachments/tool-attachment.ts";
+import type { ClientPort } from "../domain/client.ts";
+import type { ReplyFile } from "../domain/conversation.ts";
+import type {
+	AgentTurnScope,
+	ChannelKey,
+	SessionTool,
+} from "../domain/sessions.ts";
+import { messages } from "../i18n/index.ts";
+import { type Speaker, TIERS, type Tier } from "../identity/speakers.ts";
+import type { ApprovedBy } from "../interactions/prompts.ts";
+import { PluginError } from "../kernel/errors.ts";
+import {
+	type ToolOutput,
+	toolError,
+	toolOutput,
+} from "../shared/tool-result.ts";
+import { type HoldDescription, type HoldRule, isPromise } from "./holds.ts";
+import { type RoundtablePlugin, refuseRemovedFields } from "./plugin.ts";
+import { ToolRefusal, toolTurn } from "./tool-turn.ts";
+
+export { ToolRefusal };
+
+/** Tool names are lowercase words joined by underscores, like every tool the core ships. */
+const TOOL_NAME = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
+/** Plugin names are lowercase words joined by dashes. */
+const PLUGIN_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+/** Tools the agents and the shell already have; a plugin's tool may not take their names. */
+const RESERVED_TOOLS = ["bash", "read", "edit", "write"];
+
+/** What a tool knows about the turn that calls it. */
+export interface ToolTurn {
+	/** Who the turn is for; undefined for a turn nobody spoke in. */
+	speaker: Speaker | undefined;
+	/** The channel the turn runs in. */
+	channel: ChannelKey;
+	/** The agent whose turn it is. */
+	agent: AgentTurnScope | undefined;
+	signal: AbortSignal | undefined;
+	/**
+	 * Where the turn's request came from, as its transport reported it, such as the browser origin
+	 * of a web chat connection (`https://chat.example.com`); undefined for a turn whose channel gives
+	 * none, such as a Discord message or a schedule. Only the transport sets it, never the message
+	 * text or the model, so a tool may label a record with it; a tool that needs one fails closed
+	 * when it is undefined.
+	 */
+	origin?: string;
+	/**
+	 * Who approved the call, for a call that was held: the person who pressed its card, or whose
+	 * message confirmed it, including a card answered after the turn stopped waiting. Undefined for
+	 * a call that ran without a hold, and for one a surface released without saying who; a tool
+	 * that must know the approver fails closed when it is undefined.
+	 */
+	approvedBy?: ApprovedBy;
+	/**
+	 * The id of the approval card that released this call, for a tool that must show a client which
+	 * approval it acts on (pass it as `ClientCallOptions.approval.prompt`). Set when the person
+	 * approved the held call on its card (Discord's card id, the web chat's `prompt` id), in the turn
+	 * that asked or, for a card answered after that turn stopped waiting, when a later turn makes
+	 * the identical call. Undefined for a call that ran without a hold, one a message confirmed
+	 * (including after a restart, which keeps no cards), one a surface released without a card id,
+	 * and in a turn that has no gate, such as a precheck script's call; a tool that needs it fails
+	 * closed. It is never from the model or the message text.
+	 */
+	approvedPrompt?: string;
+	/**
+	 * What the client that started the turn can do for this tool, such as run a function in the
+	 * browser the person chats from; undefined for a turn whose transport gives none, such as a
+	 * Discord message or a schedule, or whose client declared nothing. Every call carries this turn's
+	 * `signal`, so stopping the turn cancels a call in flight. A tool that needs one fails closed
+	 * when it is undefined.
+	 */
+	client?: ClientPort;
+	/**
+	 * The session's shared workspace and scratch dir, where a tool may save a file for the model to
+	 * pass on by path; undefined for a session without a workspace.
+	 */
+	workspace?: { workspace: string; scratchDir?: string };
+	/** Queues a file for this turn's successful reply; throws ReplyFileError when refused. */
+	attachFile(file: ReplyFile): void;
+	/**
+	 * Opens a file someone attached to this conversation, by the name `## Attachments` lists, to read
+	 * its bytes or pass it on. Only this conversation's files open; a path, a hidden name, or a file
+	 * that is not there throws a ToolRefusal the model reads. A session without an attachment store
+	 * refuses every call.
+	 */
+	attachment(file: string): Promise<ToolAttachment>;
+	/**
+	 * The files someone attached to this conversation, the newest first; only names that
+	 * `attachment` opens. A session without an attachment store lists none. The turns the core builds
+	 * always have it; code that builds a turn by hand may leave it out.
+	 */
+	attachments?(): Promise<readonly ToolAttachmentInfo[]>;
+}
+
+export interface ToolSpec<Schema extends TObject> {
+	/** Lowercase words joined by underscores; unique across every plugin. */
+	name: string;
+	/** What the model reads to decide when to call the tool. */
+	description: string;
+	/** The arguments, as a Typebox object; `run` receives them typed. */
+	parameters: Schema;
+	/** The lowest tier of speaker whose turns may call the tool; the operator's settings may change it. */
+	minTier: Tier;
+	/** Whether agents carry the tool in their turns; default true. */
+	agent?: boolean;
+	/**
+	 * A short description of what the call would do when it must wait for approval; undefined lets it
+	 * run. It may answer later, after looking something up as the turn's speaker, such as a name to
+	 * show instead of an id: `turn` is the turn `run` would get, and its `signal` aborts when the
+	 * turn stops or the wait ends. The owner's approval card waits for it up to
+	 * `HOLD_DESCRIBE_TIMEOUT_MS`; a rejection or a timeout holds the call under a generic
+	 * description, so a hold that fails never lets the call run. It must change nothing.
+	 *
+	 * A host that checks the hold with no turn, such as a precheck script's call, never calls a hold
+	 * that declares `turn`; it sees the generic description. A hold that declares only `args` and
+	 * answers at once is called there as it always was.
+	 *
+	 * Instead of the description alone it may answer `{ text, copy }`, where `copy` (`{ label?, text }`)
+	 * is a text the owner's approval card offers to copy, such as the whole message the call would
+	 * send; see `ApprovalDetails.copy` for what a surface does with it and its limits. It is the same
+	 * answer as the description, so it shares its wait and its failure: a hold that rejects or
+	 * outlasts the timeout holds the call with the generic description and no copy. A host with no
+	 * card, or that checks the hold with no turn, uses `text` and ignores `copy`.
+	 *
+	 * It may add `supersede`, an `AbortSignal` the plugin aborts to withdraw the call it held (a
+	 * newer request replaced it): the card closes, the held call is forgotten, and an approval after
+	 * that runs nothing; see `HoldDescription`.
+	 */
+	hold?: (
+		args: Static<Schema>,
+		turn: ToolTurn,
+	) => HoldDescription | undefined | Promise<HoldDescription | undefined>;
+	/**
+	 * The principal ids that may approve this call when it is held, instead of the speaker whose
+	 * turn makes it, looked up as that turn like `hold` (same wait, same `turn.signal`, and it
+	 * must change nothing). Each needs the call's tier when they answer, and the owners may still
+	 * approve it. An empty list leaves the owners alone. A rejection or a timeout leaves the owners
+	 * alone too. Only these and the owners approve the call, by a card or by a message that
+	 * confirms it, even after a restart: the speaker whose turn made it may not unless named, and in
+	 * a private conversation, whose person alone answers, the call is refused unless they are named
+	 * or an owner. The approver reaches `run` as `turn.approvedBy`.
+	 */
+	approvers?: (
+		args: Static<Schema>,
+		turn: ToolTurn,
+	) => Promise<readonly string[]>;
+	run(args: Static<Schema>, turn: ToolTurn): Promise<ToolOutput> | ToolOutput;
+}
+
+export type { ToolAttachmentInfo, ToolOutput };
+
+/** A tool a plugin adds, as `defineTool` builds it. */
+export interface ToolContribution {
+	readonly name: string;
+	readonly minTier: Tier;
+	readonly agent: boolean;
+	/** The extension that registers the tool in a session. */
+	readonly session: SessionTool;
+	/** The hold rule for the tool's `hold`, when it has one. */
+	readonly hold?: HoldRule;
+}
+
+/**
+ * Defines one tool: its name, what the model reads about it, its arguments, the tier that may
+ * use it, and what it does. A missing or unknown tier, or a name that is not a tool name, is
+ * refused here with the tool's name, before anything starts.
+ */
+export function defineTool<Schema extends TObject>(
+	spec: ToolSpec<Schema>,
+): ToolContribution {
+	const { name } = spec;
+	if (typeof name !== "string" || !TOOL_NAME.test(name))
+		throw new PluginError(
+			`tool ${JSON.stringify(name)}: the name must be lowercase words joined by underscores, such as note_add. Rename the tool.`,
+		);
+	if (RESERVED_TOOLS.includes(name))
+		throw new PluginError(
+			`tool ${name}: the agents already have a tool of this name. Rename the tool.`,
+		);
+	if (!TIERS.includes(spec.minTier))
+		throw new PluginError(
+			`tool ${name}: minTier must be one of ${TIERS.join(", ")}; got ${JSON.stringify(spec.minTier)}. Set the lowest tier that may use it.`,
+		);
+	if (typeof spec.description !== "string" || !spec.description.trim())
+		throw new PluginError(
+			`tool ${name}: the description is empty. Tell the model when to call the tool.`,
+		);
+	if (typeof spec.run !== "function")
+		throw new PluginError(
+			`tool ${name}: run is missing. Give the function the tool runs.`,
+		);
+	const session: SessionTool = {
+		name: `tool:${name}`,
+		phase: "tools",
+		snapshot: () => ({
+			revision: 0,
+			requiredTools: [name],
+			factory: (context) => (pi) => {
+				pi.registerTool({
+					name,
+					label: name,
+					description: spec.description,
+					parameters: spec.parameters,
+					execute: async (toolCallId, params, signal) => {
+						try {
+							return toolOutput(
+								await spec.run(
+									params as Static<Schema>,
+									toolTurn(context, signal, toolCallId),
+								),
+							);
+						} catch (error) {
+							if (error instanceof ToolRefusal) return toolError(error.message);
+							throw error;
+						}
+					},
+				});
+			},
+		}),
+	};
+	const { hold, approvers } = spec;
+	const contribution = {
+		name,
+		minTier: spec.minTier,
+		agent: spec.agent ?? true,
+		session,
+	};
+	if (!hold && !approvers) return contribution;
+	return {
+		...contribution,
+		hold: {
+			name: `tool:${name}`,
+			describe: (tool, input) =>
+				hold && tool === name ? holdWithoutTurn(name, hold, input) : undefined,
+			describeInTurn: (tool, input, _context, turn) =>
+				hold && tool === name ? hold(input as Static<Schema>, turn) : undefined,
+			...(approvers
+				? {
+						// The tool names approvers for its own calls only, so another tool's call with
+						// computed arguments in a precheck script is not made owner-only by it.
+						mayName: (tool: string) => tool === name,
+						approversInTurn: (
+							tool: string,
+							input: Record<string, unknown>,
+							_context: unknown,
+							turn: ToolTurn,
+						) =>
+							tool === name
+								? approvers(input as Static<Schema>, turn)
+								: undefined,
+					}
+				: {}),
+		},
+	};
+}
+
+/**
+ * A tool's hold as a host with no turn sees it: called with the arguments alone, unless it declares
+ * the turn, and described generically when it needs the turn or answers later.
+ */
+function holdWithoutTurn<Schema extends TObject>(
+	name: string,
+	hold: NonNullable<ToolSpec<Schema>["hold"]>,
+	input: Record<string, unknown>,
+): string | undefined {
+	if (hold.length >= 2) return messages().holdGeneric(name);
+	try {
+		const answer = (
+			hold as (
+				args: Static<Schema>,
+			) => HoldDescription | undefined | Promise<HoldDescription | undefined>
+		)(input as Static<Schema>);
+		if (!isPromise(answer)) {
+			if (answer === undefined || typeof answer === "string") return answer;
+			// An object without a non-empty text still holds the call, never lets it run.
+			return typeof answer === "object" &&
+				answer !== null &&
+				typeof answer.text === "string" &&
+				answer.text !== ""
+				? answer.text
+				: messages().holdGeneric(name);
+		}
+		// Its answer is not waited for here; a rejection must not surface on its own.
+		Promise.resolve(answer).catch(() => undefined);
+	} catch {
+		// A hold that needs the turn without declaring it, or that fails: it still counts as held.
+	}
+	return messages().holdGeneric(name);
+}
+
+/**
+ * Defines a plugin. It returns the plugin it was given, typed, after checking its name, so a
+ * mistake shows where the plugin is written.
+ */
+export function definePlugin(plugin: RoundtablePlugin): RoundtablePlugin {
+	if (typeof plugin.name !== "string" || !PLUGIN_NAME.test(plugin.name))
+		throw new PluginError(
+			`plugin ${JSON.stringify(plugin.name)}: the name must be lowercase words joined by dashes, such as my-notes. Rename the plugin.`,
+		);
+	if (typeof plugin.setup !== "function")
+		throw new PluginError(
+			`plugin ${plugin.name}: setup is missing. Give the function that returns what the plugin adds.`,
+		);
+	refuseRemovedFields(plugin);
+	return plugin;
+}

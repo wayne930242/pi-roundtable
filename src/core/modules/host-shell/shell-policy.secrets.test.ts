@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ChannelKey } from "../../domain/sessions.ts";
 import { yoloApprover } from "../../runtime/extensions/yolo.ts";
-import type { ChannelKey } from "../../sessions.ts";
 import { OWNER_SPEAKER } from "../../testing/owner.ts";
 import { shellHoldRule, shellHoldRuleFor } from "./shell-policy.ts";
 

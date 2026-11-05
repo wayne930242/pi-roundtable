@@ -1,6 +1,6 @@
 import type { ConversationPort } from "../contract/channels.ts";
-import type { Logger } from "../log.ts";
-import type { Service } from "../plugin.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { Service } from "../plugin-api/plugin.ts";
 import type {
 	ConversationRecord,
 	ConversationRegistry,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChannelKey } from "../domain/conversation.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import type {
 	ConversationRecord,
 	ConversationRegistry,

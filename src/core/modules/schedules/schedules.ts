@@ -3,20 +3,20 @@ import { Type } from "typebox";
 import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { ScheduleError } from "../../domain/errors.ts";
-import type { HoldCheck } from "../../holds.ts";
 import { activeLocale } from "../../i18n/index.ts";
+import type { Speaker } from "../../identity/speakers.ts";
+import { timeZone } from "../../kernel/time.ts";
+import type { HoldCheck } from "../../plugin-api/holds.ts";
+import type { ScheduleStore } from "../../plugin-api/services.ts";
 import {
 	type ToolInput,
 	textToolsExtension,
 } from "../../runtime/text-tools.ts";
-import type { ScheduleStore } from "../../services.ts";
+import { PERSONAL_TARGET } from "../../shared/personal-target.ts";
 import {
 	type ScheduleToolSpec,
 	scheduleToolSpecs,
 } from "../../shared/schedule-tools.ts";
-import type { Speaker } from "../../speakers.ts";
-import { timeZone } from "../../time.ts";
-import { PERSONAL_TARGET } from "../background/personal-target.ts";
 import type { PrecheckRegistry } from "./prechecks.ts";
 import { callScheduleTool } from "./schedule-tools.ts";
 

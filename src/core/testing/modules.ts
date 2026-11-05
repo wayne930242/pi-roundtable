@@ -9,22 +9,20 @@ import type { ConversationRegistry } from "../conversations/conversation-registr
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Principal } from "../identity/principal-store.ts";
-import { silentLogger } from "../log.ts";
-import { PERSONAL_TARGET } from "../modules/background/personal-target.ts";
+import type { Tier } from "../identity/speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
 import type { SkillStore } from "../modules/skills/skill-store.ts";
 import {
 	type Contribution,
 	type PluginContext,
 	pluginContext,
 	type RoundtablePlugin,
-} from "../plugin.ts";
-import {
-	type DirectChannelProvider,
-	directChannelsPort,
-} from "../presence/direct-channels.ts";
-import { ServiceRegistry } from "../registry/services.ts";
-import { surfacePort } from "../routing/surface-port.ts";
-import type { AgentServer, MemoryStore, ScheduleStore } from "../services.ts";
+} from "../plugin-api/plugin.ts";
+import type {
+	AgentServer,
+	MemoryStore,
+	ScheduleStore,
+} from "../plugin-api/services.ts";
 import {
 	AGENTS,
 	CONVERSATIONS,
@@ -32,10 +30,16 @@ import {
 	MEMORY,
 	SCHEDULES,
 	THREADS,
-} from "../services.ts";
-import type { Tier } from "../speakers.ts";
+} from "../plugin-api/services.ts";
+import {
+	type DirectChannelProvider,
+	directChannelsPort,
+} from "../presence/direct-channels.ts";
+import { ServiceRegistry } from "../registry/services.ts";
+import { surfacePort } from "../routing/surface-port.ts";
+import { toolTiers } from "../runtime/tool-tiers.ts";
+import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
-import { toolTiers } from "../tool-tiers.ts";
 
 /** What the modules' tools did, for a test to read. */
 export interface ModuleRecord {

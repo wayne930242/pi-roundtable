@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { DefinedRoundtable } from "../core/define-roundtable.ts";
+import type { DefinedRoundtable } from "../core/host/define-roundtable.ts";
 import type { DatabasePort } from "./checks/database.ts";
 import { INVITE_PERMISSIONS } from "./discord-api.ts";
 import { buildChecks, type DoctorInputs, doctor } from "./doctor.ts";

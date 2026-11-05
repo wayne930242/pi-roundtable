@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Credential, CredentialStore } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { DefinedRoundtable } from "../core/define-roundtable.ts";
-import { defineRoundtable } from "../core/define-roundtable.ts";
-import type { Logger } from "../core/log.ts";
+import type { DefinedRoundtable } from "../core/host/define-roundtable.ts";
+import { defineRoundtable } from "../core/host/define-roundtable.ts";
+import type { Logger } from "../core/kernel/log.ts";
 
 /** A credential store that holds nothing and refuses writes, so looking never creates `auth.json`. */
 const emptyCredentials: CredentialStore = {

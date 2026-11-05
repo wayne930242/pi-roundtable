@@ -5,14 +5,14 @@ import type {
 	TranscriptEntry,
 	TurnResult,
 } from "../domain/conversation.ts";
+import type { ThinkingSetting } from "../domain/models.ts";
 import type { TurnRequest } from "../domain/ports.ts";
+import type { AgentTurnScope } from "../domain/sessions.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import type { PromptScope, Prompts } from "../interactions/prompts.ts";
-import type { Logger } from "../log.ts";
-import type { ThinkingSetting } from "../models.ts";
-import type { HostEnv, LinkedSessions } from "../plugin.ts";
-import type { AgentTurnScope } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
-import type { ToolTiers } from "../tool-tiers.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { HostEnv, LinkedSessions } from "../plugin-api/plugin.ts";
+import type { ToolTiers } from "../runtime/tool-tiers.ts";
 import type { Judge } from "./providers.ts";
 
 /** A conversation's context use after its latest turn. */

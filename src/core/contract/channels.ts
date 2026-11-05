@@ -1,7 +1,7 @@
+import type { ChannelKey } from "../domain/sessions.ts";
 import type { Locale } from "../i18n/index.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Speaker, Tier } from "../speakers.ts";
+import type { Speaker, Tier } from "../identity/speakers.ts";
 
 /** A file attached to a chat message, as the surface reports it; nothing is downloaded yet. */
 export interface AttachmentRef {

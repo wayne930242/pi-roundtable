@@ -1,6 +1,6 @@
 import type { InboundMessage } from "../contract/channels.ts";
-import type { ChannelKey } from "../sessions.ts";
-import type { Tier } from "../speakers.ts";
+import type { Tier } from "../identity/speakers.ts";
+import type { ChannelKey } from "./sessions.ts";
 
 /** Reactions on a message sent during a turn: added to that turn, or waiting for its own. */
 export const STEERED_MARK = "↪️";

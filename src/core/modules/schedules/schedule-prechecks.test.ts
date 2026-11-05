@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { HoldCheck } from "../../holds.ts";
-import { silentLogger } from "../../log.ts";
+import { silentLogger } from "../../kernel/log.ts";
+import type { HoldCheck } from "../../plugin-api/holds.ts";
 import { runsAsCreator } from "../../testing/background.ts";
 import { useTestLocale } from "../../testing/locale.ts";
 import {

@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { defineRoundtable } from "../define-roundtable.ts";
+import { defineRoundtable } from "../host/define-roundtable.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import {
 	AVATAR_DEPRECATION,

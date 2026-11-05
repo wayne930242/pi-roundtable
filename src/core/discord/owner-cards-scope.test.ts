@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { messages } from "../i18n/index.ts";
 import type { ActorFacts } from "../identity/actor-facts.ts";
 import type { IdentityLink } from "../identity/principal-store.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { type PromptScope, promptScope } from "../interactions/prompts.ts";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
-import type { Speaker } from "../speakers.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
 import { CARD_PREFIX, OwnerCards } from "./owner-cards.ts";
 import {

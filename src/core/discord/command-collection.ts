@@ -1,4 +1,4 @@
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import { type ComposedCommands, composeCommands } from "./compose-commands.ts";
 import type {
 	CommandRegistrar,

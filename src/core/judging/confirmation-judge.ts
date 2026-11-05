@@ -1,6 +1,6 @@
 import type { Judge } from "../contract/providers.ts";
 import type { PendingConfirmation } from "../domain/conversation.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 
 export interface ConfirmationJudgeOptions {
 	judge: Judge;

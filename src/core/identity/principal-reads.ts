@@ -1,6 +1,6 @@
-import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
 import { type ActorFacts, identityOf } from "./actor-facts.ts";
 import type { Principal, PrincipalRecord } from "./principal-store.ts";
+import { type Speaker, type Tier, tierAtLeast } from "./speakers.ts";
 
 /** The speaker of a contact: the id the surface knows them by, their 0.8 id where they have one. */
 export const speakerOf = (

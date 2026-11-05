@@ -3,8 +3,8 @@ import type { InboundMessage } from "./core/contract/channels.ts";
 import type { AgentRuntime } from "./core/contract/runtime.ts";
 import type { ChatSurface } from "./core/contract/surface.ts";
 import type { OutboundReply } from "./core/domain/conversation.ts";
-import type { RoundtablePlugin } from "./core/plugin.ts";
-import { AGENTS } from "./core/services.ts";
+import type { RoundtablePlugin } from "./core/plugin-api/plugin.ts";
+import { AGENTS } from "./core/plugin-api/services.ts";
 import { describeDb } from "./core/testing/database.ts";
 import { type TestHost, testHost } from "./core/testing/test-host.ts";
 

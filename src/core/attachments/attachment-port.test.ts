@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AttachmentRefusal } from "../contract/attachments.ts";
 import type { ConversationRegistry } from "../conversations/conversation-registry.ts";
-import { PluginError } from "../errors.ts";
-import { Roundtable } from "../host.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { CONVERSATIONS } from "../services.ts";
+import { Roundtable } from "../host/host.ts";
+import { PluginError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { CONVERSATIONS } from "../plugin-api/services.ts";
 
 const hosts: Roundtable[] = [];
 const dirs: string[] = [];

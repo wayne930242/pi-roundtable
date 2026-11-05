@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import { type Tier, tierAtLeast } from "../identity/speakers.ts";
 import type { Approval, ApprovedBy } from "../interactions/prompts.ts";
 import type { QuestionnaireAnswer } from "../interactions/questionnaire.ts";
-import { type Tier, tierAtLeast } from "../speakers.ts";
 import {
 	checkSurfaceContract,
 	describeSurfaceContract,

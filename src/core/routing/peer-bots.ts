@@ -6,7 +6,7 @@ import {
 } from "../config/peer-bots.ts";
 import type { InboundMessage } from "../contract/channels.ts";
 import { parseChannelKey } from "../contract/surface.ts";
-import type { ChannelKey } from "../sessions.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 
 /**
  * The peer bots a host answers, and how many of their messages in a row a channel answers.

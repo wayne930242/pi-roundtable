@@ -1,7 +1,6 @@
 import { ConfigError, IdentityError } from "../domain/errors.ts";
-import type { Logger } from "../log.ts";
-import type { ChannelKey } from "../sessions.ts";
-import { type Speaker, type Tier, tierAtLeast } from "../speakers.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import type { Logger } from "../kernel/log.ts";
 import {
 	type AccessRules,
 	checkAccessRules,
@@ -34,6 +33,7 @@ import {
 	SYSTEM_PRINCIPAL,
 } from "./principal-store.ts";
 import { SeenThrottle } from "./seen-throttle.ts";
+import { type Speaker, type Tier, tierAtLeast } from "./speakers.ts";
 import { isPrincipalId, newPrincipalId } from "./ulid.ts";
 
 export type { IdentityService } from "./identity-port.ts";

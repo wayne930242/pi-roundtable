@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
-import type { Logger } from "../log.ts";
+import type { Logger } from "../kernel/log.ts";
 import { ChannelQueue } from "./channel-queue.ts";
 import { ChannelRouter } from "./channel-router.ts";
 import { MessageObservers } from "./message-observers.ts";

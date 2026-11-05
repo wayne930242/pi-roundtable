@@ -1,12 +1,12 @@
 import type { ChannelKey, IntercomCard } from "../domain/conversation.ts";
 import { AgentError, IdentityError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { HostStoppingError } from "../errors.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
+import { addressee, type Speaker } from "../identity/speakers.ts";
+import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
-import { addressee, type Speaker } from "../speakers.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,

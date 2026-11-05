@@ -1,7 +1,7 @@
 import type { HeldCall } from "../domain/conversation.ts";
+import type { Tier } from "../identity/speakers.ts";
 import { MEMORY_TOOLS } from "../modules/memory/owner-memory.ts";
-import type { Tier } from "../speakers.ts";
-import { type ToolTiers, toolsForTier } from "../tool-tiers.ts";
+import { type ToolTiers, toolsForTier } from "./tool-tiers.ts";
 
 const MEMORY = new Set<string>(MEMORY_TOOLS);
 

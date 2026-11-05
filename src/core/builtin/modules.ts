@@ -10,15 +10,13 @@ import {
 	DelegationError,
 	ScheduleError,
 } from "../domain/errors.ts";
+import type { ModelRef, ThinkingLevel } from "../domain/models.ts";
+import type { SessionContext } from "../domain/sessions.ts";
 import { messages } from "../i18n/index.ts";
 import { legacyPrincipalsOf } from "../identity/identity-view.ts";
-import type { OwnerIdentity } from "../identity.ts";
-import type { ModelRef, ThinkingLevel } from "../models.ts";
+import type { OwnerIdentity } from "../identity/owner-identity.ts";
+import type { Tier } from "../identity/speakers.ts";
 import { ConversationBackgroundTurns } from "../modules/background/background-turns.ts";
-import {
-	type PerPrincipalLimits,
-	personalTarget,
-} from "../modules/background/personal-target.ts";
 import { delegateExtension } from "../modules/delegation/delegate.ts";
 import {
 	DefaultDelegator,
@@ -30,9 +28,7 @@ import { precheckScriptHoldRule } from "../modules/schedules/precheck-tools.ts";
 import { Scheduler } from "../modules/schedules/scheduler.ts";
 import { schedulesExtension } from "../modules/schedules/schedules.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
-import { runChannelFor } from "../presence/delivery-router.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
@@ -41,11 +37,15 @@ import {
 	PRECHECKS,
 	SCHEDULES,
 	THREADS,
-} from "../services.ts";
-import type { SessionContext } from "../sessions.ts";
+} from "../plugin-api/services.ts";
+import { runChannelFor } from "../presence/delivery-router.ts";
+import { splitReply } from "../presentation/reply-splitter.ts";
 import { DELEGATE_TOOL } from "../shared/delegate-tool.ts";
+import {
+	type PerPrincipalLimits,
+	personalTarget,
+} from "../shared/personal-target.ts";
 import { SCHEDULE_TOOLS } from "../shared/schedule-tools.ts";
-import type { Tier } from "../speakers.ts";
 import { DISCORD } from "./discord.ts";
 import { fixed } from "./session-tool.ts";
 

@@ -1,6 +1,6 @@
 import { Type } from "typebox";
+import { THINKING_LEVELS } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { THINKING_LEVELS } from "../models.ts";
 import {
 	optionalString,
 	requiredString,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { silentLogger } from "../log.ts";
+import { silentLogger } from "../kernel/log.ts";
 import { AgentDashboard, dashboardSections } from "./agent-dashboard.ts";
 import type { TeamStatus } from "./agent-team.ts";
 

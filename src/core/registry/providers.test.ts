@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { Judge, Providers } from "../contract/providers.ts";
-import { PluginError, ProviderError } from "../errors.ts";
-import { Roundtable } from "../host.ts";
+import { Roundtable } from "../host/host.ts";
 import { ModelJudge } from "../judging/model-judge.ts";
-import { silentLogger } from "../log.ts";
-import type { RoundtablePlugin } from "../plugin.ts";
+import { PluginError, ProviderError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { fillsImages, resolveProviders } from "./providers.ts";
 
 /** What the promise rejected with; undefined when it resolved. */

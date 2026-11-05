@@ -1,6 +1,6 @@
 import { ConfigError } from "../domain/errors.ts";
-import type { Logger } from "../log.ts";
-import type { PluginIdentity, RoundtablePlugin } from "../plugin.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { PluginIdentity, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { identityOf, parseIdentity } from "./actor-facts.ts";
 import { type PrincipalStore, SYSTEM_PRINCIPAL } from "./principal-store.ts";
 

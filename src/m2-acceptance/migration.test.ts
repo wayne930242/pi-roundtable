@@ -1,13 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
 import type { SQL } from "bun";
+import { identityPlugin } from "../core/builtin/identity.ts";
 import { runMigrations } from "../core/db/migrations.ts";
 import type { AccessRules } from "../core/identity/access-policy.ts";
 import type { ActorFacts } from "../core/identity/actor-facts.ts";
-import { identityPlugin } from "../core/identity/identity-plugin.ts";
 import { PgIdentityService } from "../core/identity/identity-service.ts";
 import { PgPrincipalStore } from "../core/identity/principal-store.ts";
-import { silentLogger } from "../core/log.ts";
-import type { PluginContext, RoundtablePlugin } from "../core/plugin.ts";
+import { silentLogger } from "../core/kernel/log.ts";
+import type {
+	PluginContext,
+	RoundtablePlugin,
+} from "../core/plugin-api/plugin.ts";
 import { describeDb } from "../core/testing/database.ts";
 import {
 	type ScratchDatabase,

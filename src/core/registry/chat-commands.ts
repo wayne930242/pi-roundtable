@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ChatCommand } from "../contract/chat-command.ts";
-import { PluginError } from "../errors.ts";
+import { PluginError } from "../kernel/errors.ts";
 import { packageDir } from "../shared/package-dir.ts";
 
 const CHAT_COMMAND_NAME = /^[a-z][a-z0-9_-]*$/;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Speaker } from "../speakers.ts";
+import type { Speaker } from "../identity/speakers.ts";
 import { describeDb } from "../testing/database.ts";
 import { agentChannel, fx, useTeamFixture } from "./agent-team-fixture.ts";
 import {

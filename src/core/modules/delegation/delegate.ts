@@ -2,11 +2,11 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { SYSTEM_PRINCIPAL } from "../../identity/principal-store.ts";
+import type { Speaker } from "../../identity/speakers.ts";
+import type { Delegator } from "../../plugin-api/services.ts";
 import { textToolsExtension } from "../../runtime/text-tools.ts";
-import type { Delegator } from "../../services.ts";
 import { DELEGATE_TOOL_SPEC } from "../../shared/delegate-tool.ts";
-import type { Speaker } from "../../speakers.ts";
-import { PERSONAL_TARGET } from "../background/personal-target.ts";
+import { PERSONAL_TARGET } from "../../shared/personal-target.ts";
 
 export interface OwnerDelegation {
 	delegator: Pick<Delegator, "start">;

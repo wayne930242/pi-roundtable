@@ -11,7 +11,6 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import { defineRoundtable, discordOwnerOf } from "../define-roundtable.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -22,21 +21,22 @@ import type {
 } from "../discord/interaction-module.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import type { DiscordPoster } from "../discord/poster/poster.ts";
-import type { HoldDescription } from "../holds.ts";
-import { Roundtable } from "../host.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { CompactionTiers } from "../runtime/compaction-tiers.ts";
-import { privateCompaction } from "../runtime/extensions/private-memory.ts";
-import { sessionExtensions } from "../runtime/runtime-types.ts";
-import { IDENTITY } from "../services.ts";
 import type {
 	AgentTurnScope,
 	ChannelKey,
 	SessionContext,
-} from "../sessions.ts";
-import { type Speaker, THE_SPEAKER } from "../speakers.ts";
-import { toolTurn } from "../tool-turn.ts";
+} from "../domain/sessions.ts";
+import { defineRoundtable, discordOwnerOf } from "../host/define-roundtable.ts";
+import { Roundtable } from "../host/host.ts";
+import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { HoldDescription } from "../plugin-api/holds.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { IDENTITY } from "../plugin-api/services.ts";
+import { toolTurn } from "../plugin-api/tool-turn.ts";
+import { CompactionTiers } from "../runtime/compaction-tiers.ts";
+import { privateCompaction } from "../runtime/extensions/private-memory.ts";
+import { sessionExtensions } from "../runtime/runtime-types.ts";
 import { testDatabaseUrl } from "./database.ts";
 import { fakeDiscordPoster } from "./fake-poster.ts";
 import { callRegisteredTool, registeredTools, toolNamed } from "./run-tool.ts";

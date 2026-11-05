@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { type Logger, silentLogger } from "../../log.ts";
+import { type Logger, silentLogger } from "../../kernel/log.ts";
 import { agentPromptExtension } from "./agent-prompt.ts";
 import { personaPromptExtension } from "./persona-prompt.ts";
 

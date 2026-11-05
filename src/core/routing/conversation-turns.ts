@@ -9,14 +9,18 @@ import type { ClientPort } from "../domain/client.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnConversation } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
-import { HostStoppingError, PluginError } from "../errors.ts";
+import type {
+	ChannelKey,
+	ToolSelection,
+	TurnSelection,
+} from "../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
-import type { Logger } from "../log.ts";
-import type { EventSink } from "../plugin.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { HostStoppingError, PluginError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { EventSink } from "../plugin-api/plugin.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
-import { withReplyFiles } from "../reply-files.ts";
-import type { ChannelKey, ToolSelection, TurnSelection } from "../sessions.ts";
-import type { Speaker } from "../speakers.ts";
+import { withReplyFiles } from "../shared/reply-files.ts";
 import { endOf, settleTurn } from "./settle-turn.ts";
 
 /** One turn of a conversation, as a claim asks for it. */

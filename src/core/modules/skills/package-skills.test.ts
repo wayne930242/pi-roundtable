@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PluginError } from "../../errors.ts";
+import { PluginError } from "../../kernel/errors.ts";
 import { discoverPackageSkills } from "./package-skills.ts";
 import { installPackage, packageDirIn } from "./package-skills-fixture.ts";
 

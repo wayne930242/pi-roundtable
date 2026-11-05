@@ -1,5 +1,5 @@
-import type { RoundtablePlugin } from "../plugin.ts";
-import { MODES } from "../services.ts";
+import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { MODES } from "../plugin-api/services.ts";
 import { PgConversationModes } from "./conversation-modes.ts";
 
 /** The name of the modes' plugin, as the migration ledger names it. */

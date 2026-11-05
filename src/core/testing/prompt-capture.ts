@@ -12,18 +12,18 @@ import { FakeChannels } from "../agents/agent-team-fixture.ts";
 import { discordKey, groupRoomKey } from "../agents/team-keys.ts";
 import type { RoundtableConfig } from "../config/config.ts";
 import { openPool } from "../db/migrations.ts";
-import { defineRoundtable } from "../define-roundtable.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import { commandGuard } from "../discord/owner-command.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import type { TurnRequest } from "../domain/ports.ts";
-import { JudgeError } from "../errors.ts";
-import { Roundtable } from "../host.ts";
-import { silentLogger } from "../log.ts";
-import type { PluginContext, RoundtablePlugin } from "../plugin.ts";
-import { AGENTS, MEMORY, RUNTIME } from "../services.ts";
-import type { Speaker } from "../speakers.ts";
+import { defineRoundtable } from "../host/define-roundtable.ts";
+import { Roundtable } from "../host/host.ts";
+import type { Speaker } from "../identity/speakers.ts";
+import { JudgeError } from "../kernel/errors.ts";
+import { silentLogger } from "../kernel/log.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { AGENTS, MEMORY, RUNTIME } from "../plugin-api/services.ts";
 import { testDatabaseUrl } from "./database.ts";
 import {
 	appRooms,
