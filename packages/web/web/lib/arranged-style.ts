@@ -228,6 +228,16 @@ export const ARRANGED_CSS = `
 	touch-action: none;
 }
 
+/* Lifted and resting, the row wiggles; \`rotate\` leaves the inline transform that moves it alone. */
+[data-lifted][data-resting] {
+	animation: lift-wiggle 240ms ease-in-out infinite;
+}
+
+@keyframes lift-wiggle {
+	0%, 100% { rotate: -1.2deg; }
+	50% { rotate: 1.2deg; }
+}
+
 [data-reordering] {
 	-webkit-user-select: none;
 	user-select: none;
@@ -238,9 +248,9 @@ export const ARRANGED_CSS = `
 	transition: transform var(--dur-fast) var(--ease-out);
 }
 
+/* Another zone the finger has taken the row into: a quiet fill, not a frame. */
 [data-drop-target] {
-	outline: 2px dashed var(--accent);
-	outline-offset: 4px;
+	background: var(--surface-3);
 	border-radius: var(--radius-lg);
 }
 
@@ -260,6 +270,9 @@ export const ARRANGED_CSS = `
 	[data-reordering] [data-drop-item]:not([data-lifted]),
 	[data-reordering] [data-folder-block]:not([data-lifted]) {
 		transition: none;
+	}
+	[data-lifted][data-resting] {
+		animation: none;
 	}
 }
 `;

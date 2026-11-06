@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A room row or folder lifted by a long press wiggles while the finger rests on it, stops while it moves, and buzzes once where the phone can; with reduced motion it only lifts. The first 16 px of travel move it at 0.3× and it catches up with the finger by 48 px, so a resting finger no longer looks like it drags. The row's own list no longer shows the yellow dashed frame at lift; another list the row is taken into fills quietly instead of drawing a frame.
+
 ## [0.36.0] - 2026-11-06
 
 ### Fixed

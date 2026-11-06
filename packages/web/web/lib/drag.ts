@@ -4,6 +4,7 @@
 
 import { setLifting } from "./lifting.ts";
 import { MOVE_LIMIT } from "./long-press.ts";
+import { reducedMotion } from "./motion.ts";
 import {
 	HOVER_OPEN_MS,
 	type ItemBox,
@@ -39,6 +40,27 @@ export interface Lift {
 
 /** A finger that moves no more than the hold allows (px) and lifts did not drag. */
 const TAP = MOVE_LIMIT;
+
+/** How much of the finger's travel the row takes at first: a finger that rests does not look like it drags. */
+export const RESIST_DAMPING = 0.3;
+/** Finger travel (px) over which the row is held back; past it the row moves 1:1 and then catches up. */
+export const RESIST_PX = 16;
+/** Finger travel (px) by which the row has caught up with the finger, and from which it follows 1:1. */
+const RESIST_END = RESIST_PX * 3;
+/** How long (ms) a finger keeps still before the lifted row wiggles again. */
+export const REST_MS = 120;
+
+/**
+ * The row's offset for the finger's travel `dy`: a lag that starts at the damped rate, grows over
+ * the first `RESIST_PX` and shrinks smoothly to nothing at `RESIST_END`, so no step shows anywhere.
+ */
+export function resisted(dy: number): number {
+	const d = Math.abs(dy);
+	if (d >= RESIST_END) return dy;
+	const rest = 1 - d / RESIST_END;
+	const lag = (1 - RESIST_DAMPING) * d * rest * rest;
+	return Math.sign(dy) * (d - lag);
+}
 
 const scroller = (from: HTMLElement): HTMLElement => {
 	for (let el: HTMLElement | null = from; el; el = el.parentElement) {
@@ -132,6 +154,11 @@ export function lift(options: Lift): () => void {
 	const shownAt = item.getBoundingClientRect().top;
 	item.setAttribute("data-lifted", "");
 	root.setAttribute("data-reordering", "");
+	// Lifted and still, the row wiggles (styles in arranged-style.ts); a move stills it until the finger rests.
+	const wiggles = !reducedMotion();
+	if (wiggles) item.setAttribute("data-resting", "");
+	let rest: ReturnType<typeof setTimeout> | undefined;
+	if (typeof navigator.vibrate === "function") navigator.vibrate(10);
 	const pushed = item.getBoundingClientRect().top - shownAt;
 	if (pushed) view.scrollTop += pushed;
 	measure();
@@ -155,7 +182,7 @@ export function lift(options: Lift): () => void {
 		const y = content(at.y);
 		const dy = y - startContent;
 		if (Math.abs(dy) > TAP) moved = true;
-		item.style.transform = `translate3d(0, ${dy}px, 0)`;
+		item.style.transform = `translate3d(0, ${resisted(dy)}px, 0)`;
 		let lit: HTMLElement | undefined;
 		if (mode === "room") {
 			const drop = resolveRoomDrop(zones, key, y);
@@ -260,10 +287,12 @@ export function lift(options: Lift): () => void {
 					el.style.transform = move[i] ? `translate3d(0, ${move[i]}px, 0)` : "";
 			});
 		}
-		if (lit !== target) {
+		// The row's own zone is where it already is: only another zone lights as the place to drop.
+		const shown = mode === "room" && lit?.contains(item) ? undefined : lit;
+		if (shown !== target) {
 			target?.removeAttribute("data-drop-target");
-			lit?.setAttribute("data-drop-target", "");
-			target = lit;
+			shown?.setAttribute("data-drop-target", "");
+			target = shown;
 		}
 		// Near the top or bottom of the view it scrolls, and the lifted item keeps following the finger.
 		const step = scrollStep(at.y, viewTop(), viewTop() + viewHeight());
@@ -285,6 +314,13 @@ export function lift(options: Lift): () => void {
 		if (!mine(event)) return;
 		event.stopPropagation();
 		event.preventDefault();
+		if (event.clientX !== at.x || event.clientY !== at.y) {
+			if (wiggles) {
+				item.removeAttribute("data-resting");
+				if (rest) clearTimeout(rest);
+				rest = setTimeout(() => item.setAttribute("data-resting", ""), REST_MS);
+			}
+		}
 		at = { x: event.clientX, y: event.clientY };
 		schedule();
 	};
@@ -317,6 +353,8 @@ export function lift(options: Lift): () => void {
 		window.removeEventListener("contextmenu", hold, true);
 		if (frame) cancelAnimationFrame(frame);
 		if (dwell) clearTimeout(dwell.timer);
+		if (rest) clearTimeout(rest);
+		item.removeAttribute("data-resting");
 		target?.removeAttribute("data-drop-target");
 		line.remove();
 		item.removeAttribute("data-lifted");

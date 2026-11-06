@@ -1,6 +1,13 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
-import { type Lift, lift, type Outcome } from "./lib/drag.ts";
+import {
+	type Lift,
+	lift,
+	type Outcome,
+	RESIST_PX,
+	REST_MS,
+	resisted,
+} from "./lib/drag.ts";
 
 // happy-dom has no layout, so each element is given the box it would have; the driver's
 // measuring, painting and cleaning are checked against those.
@@ -121,9 +128,8 @@ test("a lifted row follows the finger, the others in its list move over, and a d
 	await frames();
 	expect(rows.A?.style.transform).toBe("translate3d(0, 80px, 0)");
 	expect(rows.B?.style.transform).toBe("translate3d(0, -60px, 0)");
-	expect(
-		root.querySelector("[data-drop-target]")?.getAttribute("data-zone-id"),
-	).toBe("pinned");
+	// Its own list is where it already is: the rows moving over show the place, nothing lights.
+	expect(root.querySelector("[data-drop-target]")).toBeNull();
 	pointer("pointerup", 200);
 	expect(run.done).toHaveLength(1);
 	const outcome = run.done[0];
@@ -343,4 +349,51 @@ test("a folder dragged by its header moves among the folder blocks", async () =>
 	pointer("pointerup", 240);
 	expect(done).toEqual([{ type: "folder", before: "f3" }]);
 	expect(blocks[1]?.style.transform).toBe("");
+});
+
+test("at lift the row's own zone does not light, and the row wiggles until the finger moves", async () => {
+	const { root, rows } = page5();
+	const run = start(rows.A as HTMLElement, root, 120);
+	await frames();
+	expect(root.querySelector("[data-drop-target]")).toBeNull();
+	expect(rows.A?.hasAttribute("data-resting")).toBe(true);
+	pointer("pointermove", 124);
+	expect(rows.A?.hasAttribute("data-resting")).toBe(false);
+	await new Promise((resolve) => setTimeout(resolve, REST_MS + 40));
+	expect(rows.A?.hasAttribute("data-resting")).toBe(true);
+	// Still a tap: the menu opens as before.
+	pointer("pointerup", 124);
+	expect(run.done).toEqual([{ type: "tap" }]);
+	expect(rows.A?.hasAttribute("data-resting")).toBe(false);
+});
+
+test("with reduced motion the lifted row does not wiggle", async () => {
+	const before = window.matchMedia;
+	window.matchMedia = ((query: string) => ({
+		matches: query.includes("reduce"),
+	})) as unknown as typeof window.matchMedia;
+	try {
+		const { root, rows } = page5();
+		const run = start(rows.A as HTMLElement, root, 120);
+		expect(rows.A?.hasAttribute("data-lifted")).toBe(true);
+		expect(rows.A?.hasAttribute("data-resting")).toBe(false);
+		run.stop();
+	} finally {
+		window.matchMedia = before;
+	}
+});
+
+test("the first pixels move the row damped, then it catches up with no jump and follows 1:1", () => {
+	expect(resisted(0)).toBe(0);
+	expect(resisted(1)).toBeLessThan(0.4);
+	expect(resisted(RESIST_PX)).toBeLessThan(RESIST_PX * 0.8);
+	expect(resisted(-4)).toBe(-resisted(4));
+	let last = 0;
+	for (let d = 0.5; d <= 120; d += 0.5) {
+		const now = resisted(d);
+		expect(now).toBeGreaterThan(last);
+		expect(now - last).toBeLessThan(0.75);
+		last = now;
+	}
+	expect(resisted(80)).toBe(80);
 });
