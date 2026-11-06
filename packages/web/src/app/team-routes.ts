@@ -36,6 +36,7 @@ import {
 } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import type { LayoutStore } from "./layout.ts";
+import { type PresetTeam, presetRoutes } from "./preset-routes.ts";
 import { promptVersionView } from "./prompt-routes.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
@@ -61,6 +62,7 @@ export interface TeamApiOptions {
 		| "remove"
 		| "createGroup"
 		| "updateGroup"
+		| keyof PresetTeam
 	>;
 	skills?:
 		| {
@@ -167,6 +169,8 @@ export class TeamApi {
 			this.#options.changed();
 			return json({ ok: true });
 		}
+		if (action === "presets" && parts.length <= 5)
+			return presetRoutes(request, name, parts[4], this.#options.team);
 		if (action === "skills" && parts.length === 4) {
 			if (method === "GET") return json(this.#skillsOf(name));
 			if (method === "PUT") return this.#carry(request, name, asOwner);
@@ -327,6 +331,7 @@ export class TeamApi {
 							parent: agentRoomKey(surface, agent.parent),
 							parentName:
 								directory.agent(agent.parent)?.displayName ?? agent.parent,
+							...(agent.preset ? { preset: agent.preset } : {}),
 						},
 					}
 				: {}),

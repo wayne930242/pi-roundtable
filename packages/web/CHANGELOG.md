@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Owner-only routes for a knight's temp-knight presets: `GET api/agents/<name>/presets` answers `{ presets, max }`, `PUT api/agents/<name>/presets/<preset>` saves one whole from `{ displayName, prompt, skills?, character?, model?, thinking? }` and answers `{ preset, replaced }`, and `DELETE` of the same path answers 204, or 404 when there is no such preset. A refusal by the team, such as an unknown skill or a 21st preset, is a 400 in its words. The session carries `helpers: true` when the host makes temp knights, and a temp knight's room and profile carry `helper.preset`, the preset it was made from.
+
 ## [0.35.0] - 2026-11-06
 
 ### Added

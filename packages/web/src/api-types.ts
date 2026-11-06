@@ -2,6 +2,8 @@
 
 import type { CharacterInput, CharacterSpec } from "pi-roundtable/characters";
 
+export type * from "./preset-types.ts";
+
 /** What an agent is doing in a room, while it works. */
 export type ActivityPhase = "thinking" | "working";
 
@@ -479,17 +481,11 @@ export interface RoomMessage {
 	picture?: PictureRef;
 	/** The text was changed after it was stored. */
 	edited?: true;
-	/**
-	 * An internal note: written for the humans who read the room, never handed to the agent. Only
-	 * an `owner` message of an agent or group room that has `notes` can be one.
-	 */
+	/** An internal note for the humans who read the room, never handed to the agent: an `owner` message of a room with `notes`. */
 	note?: true;
 	/** Files of the message that were deleted by retention. */
 	expiredFiles?: number;
-	/**
-	 * A message between two agents of the team, drawn as a small card that opens to `text`, the
-	 * whole request or answer, or why no answer came.
-	 */
+	/** A message between two agents, drawn as a small card that opens to `text`: the whole request or answer, or why none came. */
 	intercom?: RoomIntercom;
 	/**
 	 * An `owner` message sent while a turn ran: `steered` was added to that turn, `queued` waits for
@@ -608,14 +604,15 @@ export interface RoomView {
 	/**
 	 * A temp knight's room: `parent` is the room of the knight that made it, `origin` the room it was
 	 * made from (a group's, when the knight made it during the group's round; absent when that is no
-	 * room of this app), and `finished` is set when it has nothing running, queued or waiting. Absent
-	 * on every permanent knight.
+	 * room of this app), `finished` is set when it has nothing running, queued or waiting, and
+	 * `preset` names the preset it was made from. Absent on every permanent knight.
 	 */
 	helper?: {
 		parent: string;
 		parentName: string;
 		origin?: string;
 		finished?: true;
+		preset?: string;
 	};
 	/** A thread's room takes no messages from the page. */
 	readOnly: boolean;
@@ -784,6 +781,8 @@ export interface SessionView {
 	prompts?: true;
 	/** The host has the skills addon, so an agent-written skill's SKILL.md can be edited and made here (`api/skill-docs`). */
 	skillEdit?: true;
+	/** The host makes temp knights, so a knight's presets are kept here (`api/agents/<name>/presets`). */
+	helpers?: true;
 	/** When an agent's post and a notice are not pushed (a card still is); absent = at any hour. */
 	quietHours?: {
 		/** `HH:MM`, where the window begins. */
@@ -928,8 +927,8 @@ export interface AgentProfileView {
 	avatar: string;
 	character: CharacterSpec;
 	room: string;
-	/** A temp knight's profile: the room of the knight that made it, and its name. */
-	helper?: { parent: string; parentName: string };
+	/** A temp knight's profile: the room and name of the knight that made it, and the preset it was made from. */
+	helper?: { parent: string; parentName: string; preset?: string };
 }
 
 export interface ModelsView {

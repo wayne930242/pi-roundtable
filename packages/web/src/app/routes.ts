@@ -55,7 +55,7 @@ import { bad, bodyOf, HttpError, notFound } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import { CommandRoutes } from "./command-routes.ts";
 import { type FileDir, fileResponse, isFileId } from "./files.ts";
-import { HelperRoutes } from "./helper-routes.ts";
+import { HelperRoutes, type HelperRoutesOptions } from "./helper-routes.ts";
 import type { LayoutStore } from "./layout.ts";
 import { LayoutRoutes } from "./layout-routes.ts";
 import { PromptApi, type PromptApiOptions } from "./prompt-routes.ts";
@@ -64,7 +64,7 @@ import { type ResolvedRoom, type Rooms, roomModeOf } from "./rooms.ts";
 import { SkillDocApi } from "./skill-doc-routes.ts";
 import { SkillGroupApi } from "./skill-group-routes.ts";
 import type { AppSurface } from "./surface.ts";
-import { TeamApi } from "./team-routes.ts";
+import { TeamApi, type TeamApiOptions } from "./team-routes.ts";
 import type { WebThreads } from "./threads.ts";
 import { UploadRefusal, type Uploads } from "./uploads.ts";
 import {
@@ -135,24 +135,9 @@ export interface AppApiOptions {
 	/** Present when the schedules pane is served. */
 	schedules?: Pick<ScheduleStore, "all" | "get" | "remove">;
 	directory: Pick<AgentDirectory, "agent" | "agents" | "group" | "groups">;
-	team: Pick<
-		AgentTeam,
-		| "update"
-		| "promptHistory"
-		| "dress"
-		| "usableModels"
-		| "modelOf"
-		| "defaultModel"
-		| "createAgent"
-		| "archive"
-		| "restore"
-		| "remove"
-		| "createGroup"
-		| "updateGroup"
-		| "finishedHelpers"
-		| "archiveHelpers"
-		| "restoreHelpers"
-	>;
+	team: TeamApiOptions["team"] &
+		HelperRoutesOptions["team"] &
+		Pick<AgentTeam, "usableModels" | "defaultModel" | "helpersOn">;
 	/** Present when the host has the skills addon: the catalog an agent's skills are chosen from, and the change of what it carries. */
 	skills?: {
 		catalog(): SkillView[];
@@ -571,6 +556,7 @@ export class AppApi {
 			...(pushTiers.includes(tier) ? { push: true as const } : {}),
 			...(this.#options.prompts ? { prompts: true } : {}),
 			...(this.#options.skills ? { skillEdit: true } : {}),
+			...(this.#options.team.helpersOn() ? { helpers: true } : {}),
 			...(this.#options.quietHours
 				? { quietHours: this.#options.quietHours }
 				: {}),

@@ -232,15 +232,14 @@ function setup(
 		},
 	};
 	const team = {
-		update: async (name: string, _change: unknown, by?: string) => {
-			calls.push(`update ${name} by ${by ?? "-"}`);
-			return "updated";
-		},
+		update: async (name: string, _change: unknown, by?: string) =>
+			calls.push(`update ${name} by ${by ?? "-"}`) && "updated",
 		promptHistory: async (name: string) => {
 			if (name === "nobody") throw new AgentError("There is no agent.");
 			return agentHistory;
 		},
 		modelOf: () => ({ model: "m/one", thinking: "medium" as const }),
+		helpersOn: () => false,
 	};
 	const api = new AppApi({
 		surface: { surface: "app" } as never,

@@ -270,6 +270,7 @@ export class Rooms {
 										? { origin: agent.origin }
 										: {}),
 									...(agent.finishedAt ? { finished: true as const } : {}),
+									...(agent.preset ? { preset: agent.preset } : {}),
 								},
 								// A temp knight's answers reach its knight's room, which pushes; its cards still do.
 								muted: true as const,
