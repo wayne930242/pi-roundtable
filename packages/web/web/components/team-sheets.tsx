@@ -50,7 +50,10 @@ export function TeamSheetHost() {
 		>
 			<div className="stack agent-sheet" key={shown.id}>
 				{shown.kind === "new-agent" ? (
-					<NewAgent onDone={closeTeamSheet} />
+					<NewAgent
+						onDone={closeTeamSheet}
+						{...(shown.from ? { from: shown.from } : {})}
+					/>
 				) : shown.kind === "archive" ? (
 					<ArchiveList />
 				) : (

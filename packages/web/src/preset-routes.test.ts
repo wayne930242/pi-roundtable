@@ -19,6 +19,13 @@ const assets: AssetBundle = new Map([
 	["index.html", { body: Buffer.from("<html></html>"), type: "text/html" }],
 ]);
 
+const SHARED: HelperPreset = {
+	name: "medic",
+	displayName: "Medic",
+	prompt: "You heal.",
+	skills: [],
+};
+
 let who: { id: string; tier: Tier };
 let saved: Map<string, HelperPreset>;
 let calls: string[];
@@ -37,11 +44,24 @@ function setup(helpersOn = true) {
 			knight(agent);
 			return [...saved.values()];
 		},
-		savePreset: async (agent: string, preset: HelperPreset) => {
+		usablePresets: async (agent: string) => {
+			knight(agent);
+			return [
+				...[...saved.values()].map((p) => ({ ...p, agent })),
+				{ ...SHARED, agent: "boss" },
+			];
+		},
+		savePreset: async (
+			agent: string,
+			preset: HelperPreset,
+			...sharing: unknown[]
+		) => {
 			knight(agent);
 			if (preset.skills.includes("nope"))
 				throw new AgentError("Unknown skills: nope.");
-			calls.push(`save ${agent} ${preset.name}`);
+			calls.push(
+				`save ${agent} ${preset.name}${sharing.length > 0 ? ` ${JSON.stringify(sharing[0])}` : ""}`,
+			);
 			const replaced = saved.has(preset.name);
 			saved.set(preset.name, preset);
 			return { preset, replaced };
@@ -139,7 +159,7 @@ const WRITER = {
 	skills: ["kit-do"],
 	model: "m/two",
 	thinking: "high",
-	character: { class: "bard" },
+	character: { class: "bard" as const },
 };
 
 beforeEach(() => {
@@ -176,6 +196,7 @@ describe("a knight's presets over the API", () => {
 					skills: [],
 				},
 			],
+			shared: [{ ...SHARED, agent: "boss" }],
 			max: 20,
 		});
 		expect(
@@ -186,6 +207,31 @@ describe("a knight's presets over the API", () => {
 		expect(((await gone.json()) as ApiError).error).toContain(
 			'no preset "writer"',
 		);
+	});
+
+	test("a save carries whom the preset is shared with, and leaves it out to keep it", async () => {
+		const server = setup();
+		for (const sharedWith of ["all", ["boss"], null, undefined])
+			expect(
+				(
+					await call(server, "PUT", "agents/scout/presets/writer", {
+						...WRITER,
+						...(sharedWith === undefined ? {} : { sharedWith }),
+					})
+				).status,
+			).toBe(200);
+		expect(calls).toEqual([
+			'save scout writer "all"',
+			'save scout writer ["boss"]',
+			"save scout writer null",
+			"save scout writer",
+		]);
+		const bad = await call(server, "PUT", "agents/scout/presets/writer", {
+			...WRITER,
+			sharedWith: "boss",
+		});
+		expect(bad.status).toBe(400);
+		expect(((await bad.json()) as ApiError).error).toContain("sharedWith");
 	});
 
 	test("the team's refusal is a 400 in its words, and a bad body is named", async () => {

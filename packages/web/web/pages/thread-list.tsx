@@ -49,7 +49,7 @@ const HelperRow = memo(function HelperRow(
 				<strong>{view.displayName}</strong>
 				{view.helper?.preset ? (
 					<span className="meta helper-preset">
-						{t("Preset: {name}", { name: view.helper.preset })}
+						{t("Recruited from {name}", { name: view.helper.preset })}
 					</span>
 				) : null}
 				<Unread room={view.key} />

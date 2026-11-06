@@ -285,6 +285,42 @@ test("making an agent sends the form, shows its room and closes the sheet", asyn
 	}
 });
 
+test("a new knight from a preset starts filled in with its fields, skills and look, and the person names it", async () => {
+	const create = spyOn(teamApi, "createAgent").mockResolvedValue(
+		profile("writer-knight"),
+	);
+	try {
+		await openSheet({
+			kind: "new-agent",
+			from: {
+				displayName: "Writer",
+				prompt: "You write.",
+				skills: ["kit-do"],
+				model: "model-b",
+				character: { class: "bard" },
+			},
+		});
+		expect(field("Name")?.value).toBe("Writer");
+		expect(field("Prompt")?.value).toBe("You write.");
+		expect(field("Permanent name")?.value).toBe("");
+		expect(q("[data-seed-skills]")?.textContent).toBe("Skills (1): kit-do");
+		expect(button("Make knight")?.disabled).toBe(true);
+		await typeInto(field("Permanent name"), "writer-knight");
+		await page.click(button("Make knight"));
+		await page.act(() => settle(60));
+		expect(create).toHaveBeenCalledWith({
+			name: "writer-knight",
+			displayName: "Writer",
+			prompt: "You write.",
+			model: "model-b",
+			character: { class: "bard" },
+			skills: ["kit-do"],
+		});
+	} finally {
+		create.mockRestore();
+	}
+});
+
 test("a look chosen in the creator is sent with the agent; leaving the creator keeps the suggestion", async () => {
 	const create = spyOn(teamApi, "createAgent").mockResolvedValue(
 		profile("notes"),

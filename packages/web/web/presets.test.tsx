@@ -13,18 +13,25 @@ import type {
 	ConfigView,
 	PresetSave,
 	PresetView,
+	RoomView,
 	SessionView,
+	SharedPresetView,
 } from "../src/api-types.ts";
 import { AgentSheetHost } from "./components/agent-sheet.tsx";
 import { Toaster } from "./components/toaster.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
-import { closeAgentSheet, openAgentSheet } from "./lib/agent-sheet.ts";
+import {
+	closeAgentSheet,
+	currentAgentSheet,
+	openAgentSheet,
+} from "./lib/agent-sheet.ts";
 import { ApiFailure, api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { editApi } from "./lib/edit-api.ts";
 import { loadKit } from "./lib/kit.ts";
 import { teamApi } from "./lib/team-api.ts";
+import { closeTeamSheet, currentTeamSheet } from "./lib/team-sheet.ts";
 
 const config: ConfigView = {
 	title: "Console",
@@ -55,7 +62,30 @@ const WRITER: PresetView = {
 	model: "model-b",
 };
 
+const MEDIC: SharedPresetView = {
+	agent: "boss",
+	name: "medic",
+	displayName: "Medic",
+	prompt: "You heal.",
+	skills: [],
+};
+/** A knight in the room list, which the sharing's picker offers. */
+const room = (name: string, over: Partial<RoomView> = {}): RoomView => ({
+	key: `app:agent.${name}`,
+	kind: "agent",
+	name,
+	displayName: name[0]?.toUpperCase() + name.slice(1),
+	home: false,
+	readOnly: false,
+	mode: { yolo: false, longRunning: false },
+	typing: false,
+	stoppable: false,
+	...over,
+});
+
 let page: TestPage;
+let shared: SharedPresetView[];
+let carried: boolean;
 let session: SessionView;
 let shown: AgentProfileView;
 let presets: PresetView[];
@@ -81,7 +111,17 @@ beforeEach(() => {
 	window.innerWidth = 1280;
 	session = partialSession({ helpers: true });
 	presets = [WRITER];
+	shared = [];
+	carried = false;
 	saved = [];
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [
+			room("scout"),
+			room("boss"),
+			room("boss-1", { helper: { parent: "app:agent.boss" } as never }),
+		],
+	});
 	refuse = undefined;
 	shown = profile();
 	track(spyOn(api, "agent").mockImplementation(async () => shown));
@@ -90,7 +130,7 @@ beforeEach(() => {
 	);
 	track(spyOn(api, "session").mockImplementation(async () => session));
 	track(
-		spyOn(teamApi, "skills").mockResolvedValue({
+		spyOn(teamApi, "skills").mockImplementation(async () => ({
 			skills: [
 				{
 					name: "writing-skills",
@@ -98,14 +138,15 @@ beforeEach(() => {
 					builtin: true,
 					carried: true,
 				},
-				{ name: "kit-do", source: "linked", builtin: false, carried: false },
+				{ name: "kit-do", source: "linked", builtin: false, carried },
 			],
-		}),
+		})),
 	);
 	track(spyOn(editApi, "skillGroups").mockResolvedValue({ groups: [] }));
 	track(
 		spyOn(teamApi, "presets").mockImplementation(async () => ({
 			presets,
+			shared,
 			max: 20,
 		})),
 	);
@@ -123,6 +164,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
 	closeAgentSheet();
+	closeTeamSheet();
 	for (const spy of spies.splice(0)) spy.mockRestore();
 	for (const dismiss of all('.toaster [aria-label="Dismiss"]'))
 		await page.click(dismiss);
@@ -254,7 +296,12 @@ test("a new preset is made in a sheet over the knight's, with the shared fields,
 	expect(saved).toEqual([
 		{
 			name: "editor",
-			body: { displayName: "Editor", prompt: "You edit.", skills: ["kit-do"] },
+			body: {
+				displayName: "Editor",
+				prompt: "You edit.",
+				skills: ["kit-do"],
+				sharedWith: null,
+			},
 		},
 	]);
 	expect(text()).toContain("Created the preset.");
@@ -293,6 +340,7 @@ test("an existing preset opens with its name fixed, saves whole, and a refusal s
 			prompt: "You write the long post.",
 			skills: ["kit-do"],
 			model: "model-b",
+			sharedWith: null,
 		},
 	});
 	expect(text()).toContain("Saved the preset.");
@@ -316,4 +364,101 @@ test("deleting a preset asks first, then takes its row away", async () => {
 	);
 	// The confirmation and the editor are both closed.
 	expect(all("dialog.sheet[open]")).toHaveLength(1);
+});
+
+const chip = (label: string) =>
+	[
+		...(editor()?.querySelectorAll<HTMLButtonElement>(".option-chip") ?? []),
+	].find((one) => one.textContent === label) ?? null;
+
+test("the owner chooses whom a preset is available to: only its knight, every knight, or knights picked", async () => {
+	await open();
+	await page.click(q("[data-preset=writer]"));
+	await page.act(() => settle(80));
+	expect(editor()?.textContent).toContain("Available to");
+	expect(chip("Only Scout")?.getAttribute("aria-pressed")).toBe("true");
+	await page.click(chip("All knights"));
+	await page.click(ofEditor("Save"));
+	await page.act(() => settle(60));
+	expect(saved.at(-1)?.body.sharedWith).toBe("all");
+	await page.click(chip("Chosen knights"));
+	// The picker offers the other knights, not this one nor a temp knight.
+	const boxes = () =>
+		[...(editor()?.querySelectorAll("input[type=checkbox]") ?? [])].map(
+			(one) => one.closest("label")?.textContent,
+		);
+	expect(boxes()).toEqual(["Boss"]);
+	await page.click(editor()?.querySelector("input[type=checkbox]") ?? null);
+	await page.click(ofEditor("Save"));
+	await page.act(() => settle(60));
+	expect(saved.at(-1)?.body.sharedWith).toEqual(["boss"]);
+});
+
+test("a preset shared with the knight is listed read-only and opens in the knight that saved it", async () => {
+	shared = [MEDIC];
+	await open();
+	const row = q("[data-shared-preset='boss/medic']");
+	expect(row?.textContent).toContain("medic · Medic");
+	expect(row?.textContent).toContain("Shared by Boss");
+	// The count is of the knight's own presets.
+	expect(q("[data-presets] h3")?.textContent).toBe(
+		"Temp knight presets (1/20)",
+	);
+	await page.click(row);
+	await page.act(() => settle(80));
+	expect(editor()?.getAttribute("aria-label")).toBe("Preset: boss/medic");
+	expect(editor()?.querySelector("fieldset")?.disabled).toBe(true);
+	expect(ofEditor("Save")).toBeNull();
+	expect(ofEditor("Delete preset")).toBeNull();
+	expect(editor()?.textContent).not.toContain("Available to");
+	await page.click(ofEditor("Open in Boss"));
+	await page.act(() => settle(40));
+	expect(currentAgentSheet()?.name).toBe("boss");
+});
+
+test("save as preset copies the knight into a new preset, with the skills it carries but the built-in ones", async () => {
+	carried = true;
+	await open();
+	await page.click(button("Save as preset"));
+	await page.act(() => settle(80));
+	const sheet = editor();
+	expect(sheet?.getAttribute("aria-label")).toBe("New preset");
+	const inputs = sheet?.querySelectorAll<HTMLInputElement>("input") ?? [];
+	expect(inputs[0]?.value).toBe("");
+	expect(inputs[1]?.value).toBe("Scout");
+	expect(sheet?.querySelector("textarea")?.value).toBe("You scout.");
+	await typeInto(inputs[0], "scout-copy");
+	await page.click(ofEditor("Save"));
+	await page.act(() => settle(60));
+	const { v: _v, ...look } = character;
+	expect(saved).toEqual([
+		{
+			name: "scout-copy",
+			body: {
+				displayName: "Scout",
+				prompt: "You scout.",
+				skills: ["kit-do"],
+				character: look,
+				sharedWith: null,
+			},
+		},
+	]);
+});
+
+test("a knight made from a preset opens the new knight's form with a copy of its fields", async () => {
+	await open();
+	await page.click(q("[data-preset=writer]"));
+	await page.act(() => settle(80));
+	await page.click(ofEditor("Create a knight from this"));
+	await page.act(() => settle(40));
+	expect(currentAgentSheet()).toBeUndefined();
+	expect(currentTeamSheet()).toMatchObject({
+		kind: "new-agent",
+		from: {
+			displayName: "Writer",
+			prompt: WRITER.prompt,
+			skills: ["kit-do"],
+			model: "model-b",
+		},
+	});
 });

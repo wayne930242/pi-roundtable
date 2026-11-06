@@ -31,7 +31,7 @@
 	"packages/web/src/console-api.ts": 712,
 	"packages/web/src/edit-routes.test.ts": 1065,
 	"packages/web/src/host/host-app.test.ts": 2000,
-	"packages/web/src/i18n/zh-tw.ts": 1387,
+	"packages/web/src/i18n/zh-tw.ts": 1386,
 	"packages/web/src/options.ts": 1149,
 	"packages/web/src/team-routes.test.ts": 957,
 	"packages/web/src/web-app.ts": 718,

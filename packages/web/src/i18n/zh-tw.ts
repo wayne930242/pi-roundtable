@@ -200,7 +200,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Regular: "標準",
 	Stout: "壯碩",
 
-	// 清理
+	// 清理與輸入框
 	"Delete permanently": "永久刪除",
 	"Permanently delete {name}?": "要永久刪除{name}嗎？",
 	"Starting over…": "重新開始中…",
@@ -209,8 +209,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"The live conversation and all archives will be permanently deleted. Memory and schedules are preserved.":
 		"進行中的對話與所有封存都會被永久刪除。記憶與排程會保留。",
 	"Waiting for this turn…": "等待這個回合結束…",
-
-	// 輸入框
 	"{name} is over the {limit} limit.": "{name}超過了 {limit} 的上限。",
 	"A message carries up to {count} files, so this long text cannot be added as one. Remove a file first.":
 		"一則訊息最多附帶 {count} 個檔案，因此無法把這段長文字加成檔案。請先移除一個檔案。",
@@ -230,7 +228,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} file": "{count} 個檔案",
 	"{count} files": "{count} 個檔案",
 
-	// 訊息列
+	// 訊息列、模式橫幅與進度
 	"Conversation started over": "對話已重新開始",
 	"View the archived conversation": "查看封存的對話",
 	"Archived conversation": "封存的對話",
@@ -242,8 +240,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Try again": "再試一次",
 	"Waiting to send…": "等待傳送…",
 	"Yolo mode approved: {action}": "Yolo 模式已核准：{action}",
-
-	// 模式橫幅
 	"{count} approved": "已核准 {count} 項",
 	"Long-running mode is on: turns go on past their time limit.":
 		"長時間執行模式已開啟：回合可超過時間上限繼續進行。",
@@ -256,8 +252,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{name}: Yolo on": "{name}：已開 yolo",
 	"{name}: Yolo and long-running on": "{name}：已開 yolo 與長時間",
 	"{name}: modes off": "{name}：已關閉模式",
-
-	// 進度
 	"{name} is working…": "{name}正在處理…",
 	"Show the whole stream": "顯示完整串流",
 	"{count} earlier tool": "前面還有 {count} 個工具",
@@ -371,6 +365,15 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Saved the preset.": "已儲存範本。",
 	"Deleted the preset.": "已刪除範本。",
 	"Preset: {name}": "範本：{name}",
+	"Save as preset": "存成範本",
+	"Create a knight from this": "建立成騎士",
+	"Available to": "開放給",
+	"Only {name}": "只有{name}",
+	"All knights": "所有騎士",
+	"Chosen knights": "指定騎士",
+	"Shared by {name}": "{name} 分享",
+	"Open in {name}": "在{name}中開啟",
+	"Recruited from {name}": "招募自：{name}",
 
 	// 連接器
 	"{count} tools": "{count} 個工具",
@@ -817,7 +820,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Parchment by day, night castle by night, gold rules, shield avatars and wax seals.":
 		"白天是羊皮紙，夜晚是夜間城堡，搭配金色分隔線、盾形頭像與蠟封印章。",
 
-	// 技能
+	// 技能、圓桌與對話記錄
 	"All knights": "所有騎士",
 	"Knight-written": "騎士撰寫",
 	"Built-in": "內建",
@@ -827,8 +830,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	None: "無",
 	"Registered skills and their carriers; ask a knight on Discord to edit their contents.":
 		"已登錄的技能與搭載對象；如要修改內容，請在 Discord 上請騎士編輯。",
-
-	// 圓桌
 	Close: "關閉",
 	"Reset view": "重設視角",
 	Log: "記錄",
@@ -842,8 +843,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Back to the whole table": "回到整張圓桌",
 	You: "你",
 	"Tap to show the whole message": "點一下顯示整段訊息",
-
-	// 對話記錄
 	"(empty)": "（空白）",
 	"Archived {name}": "已封存的{name}",
 	"Current conversation": "目前的對話",

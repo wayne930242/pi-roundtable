@@ -286,7 +286,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 			<Skills name={name} opened={opened} />
 			{profile.helper ? null : (
 				<Suspense fallback={null}>
-					<PresetCard agent={name} models={models} />
+					<PresetCard knight={profile} models={models} />
 				</Suspense>
 			)}
 			<section className="card stack" ref={look} tabIndex={-1}>

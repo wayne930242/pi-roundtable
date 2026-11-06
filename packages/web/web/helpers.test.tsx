@@ -197,7 +197,7 @@ test("a temp knight made from a preset names it quietly in its row; one made wit
 	]);
 	const rows = all("a.helper-link");
 	expect(rows[0]?.querySelector(".helper-preset")?.textContent).toBe(
-		"Preset: writer",
+		"Recruited from writer",
 	);
 	expect(rows[1]?.querySelector(".helper-preset")).toBeNull();
 });

@@ -2,16 +2,20 @@
 // button or the room's header asks for one with `openTeamSheet`, and `TeamSheetHost` (mounted once,
 // in the app) draws it.
 
+import type { PresetView } from "../../src/api-types.ts";
 import { signal } from "./signal.ts";
 
+/** What a new knight's form starts from, such as a preset's fields; a copy, not a link. */
+export type KnightSeed = Omit<PresetView, "name" | "sharedWith">;
+
 export type TeamSheetRequest =
-	| { kind: "new-agent"; id: number }
+	| { kind: "new-agent"; from?: KnightSeed; id: number }
 	/** A group's name edits it; without one the sheet makes a new group. */
 	| { kind: "group"; name?: string; id: number }
 	| { kind: "archive"; id: number };
 
 type Ask =
-	| { kind: "new-agent" }
+	| { kind: "new-agent"; from?: KnightSeed }
 	| { kind: "group"; name?: string }
 	| { kind: "archive" };
 

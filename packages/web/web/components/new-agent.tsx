@@ -1,6 +1,7 @@
 import {
 	type CharacterInput,
 	type CharacterSpec,
+	resolveCharacter,
 	suggestCharacter,
 } from "pi-roundtable/characters";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -9,6 +10,7 @@ import { ApiFailure, api, messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
+import type { KnightSeed } from "../lib/team-sheet.ts";
 import { toast } from "../lib/toast.ts";
 import {
 	AgentFields,
@@ -27,25 +29,46 @@ const slugOf = (displayName: string): string =>
 		.replace(/^-+|-+$/g, "")
 		.slice(0, 32);
 
+/** The look a seed gives, over the one its role suggests; none when it gives none or a bad one. */
+function seedLook(
+	from: KnightSeed | undefined,
+): { input: CharacterInput; spec: CharacterSpec } | undefined {
+	if (!from?.character) return undefined;
+	try {
+		const spec = resolveCharacter(
+			from.character,
+			suggestCharacter({ name: "new", ...from }),
+		);
+		return { input: from.character, spec };
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * The form that makes an agent: the fields of the `agent_create` tool. Its look is the one its role
- * suggests until a person picks another in the creator, which opens in place of the form.
+ * suggests until a person picks another in the creator, which opens in place of the form. `from`
+ * fills it in, as from a preset, with the skills it gives; the permanent name is the person's.
  */
-export function NewAgent({ onDone }: { onDone(): void }) {
+export function NewAgent({
+	onDone,
+	from,
+}: {
+	onDone(): void;
+	from?: KnightSeed;
+}) {
 	const [draft, setDraft] = useState<FieldsDraft>({
-		displayName: "",
-		prompt: "",
-		model: DEFAULT,
-		thinking: DEFAULT,
+		displayName: from?.displayName ?? "",
+		prompt: from?.prompt ?? "",
+		model: from?.model ?? DEFAULT,
+		thinking: from?.thinking ?? DEFAULT,
 	});
 	const { displayName, prompt } = draft;
 	const [name, setName] = useState("");
 	const [named, setNamed] = useState(false);
 	const [task, setTask] = useState("");
-	const [look, setLook] = useState<{
-		input: CharacterInput;
-		spec: CharacterSpec;
-	}>();
+	const [look, setLook] = useState(() => seedLook(from));
+	const skills = from?.skills ?? [];
 	const [picking, setPicking] = useState(false);
 	const [models, setModels] = useState<string[]>([]);
 	const [error, setError] = useState<string>();
@@ -98,6 +121,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 				...(draft.thinking !== DEFAULT ? { thinking: draft.thinking } : {}),
 				...(task.trim() ? { task: task.trim() } : {}),
 				...(look ? { character: look.input } : {}),
+				...(skills.length > 0 ? { skills } : {}),
 			};
 			const profile = await teamApi.createAgent(made);
 			await refreshRooms();
@@ -167,6 +191,11 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 					{t("Optional. The knight starts on it as soon as it is made.")}
 				</span>
 			</label>
+			{skills.length > 0 ? (
+				<p className="meta" data-seed-skills="">
+					{t("Skills ({count})", { count: skills.length })}: {skills.join(", ")}
+				</p>
+			) : null}
 			<LookSummary
 				spec={shown}
 				name={name || "new"}

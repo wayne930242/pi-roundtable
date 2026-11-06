@@ -15,17 +15,33 @@ export interface PresetView {
 	model?: string;
 	/** Absent runs the knight's own thinking level. */
 	thinking?: string;
+	/** Who else may recruit from it: every knight, or the knights named; absent, only its knight. */
+	sharedWith?: "all" | string[];
 }
 
-/** `GET api/agents/<name>/presets`: the knight's presets by name, and how many it may keep. */
+/** A preset another knight shares with this one, which only that knight or an owner changes. */
+export interface SharedPresetView extends PresetView {
+	/** The knight that saved it. */
+	agent: string;
+}
+
+/**
+ * `GET api/agents/<name>/presets`: the knight's presets by name, those other knights share with it,
+ * and how many it may keep.
+ */
 export interface PresetsView {
 	presets: PresetView[];
+	shared: SharedPresetView[];
 	max: number;
 }
 
-/** The body of `PUT api/agents/<name>/presets/<preset>`: the preset whole, its name in the path. */
-export type PresetSave = Omit<PresetView, "name" | "skills"> & {
+/**
+ * The body of `PUT api/agents/<name>/presets/<preset>`: the preset whole, its name in the path.
+ * `sharedWith` `null` shares it with none; left out, a replaced preset keeps its sharing.
+ */
+export type PresetSave = Omit<PresetView, "name" | "skills" | "sharedWith"> & {
 	skills?: string[];
+	sharedWith?: "all" | string[] | null;
 };
 
 /** The answer of the `PUT`: the preset as saved, and whether it replaced one of that name. */

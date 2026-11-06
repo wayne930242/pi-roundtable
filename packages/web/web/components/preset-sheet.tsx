@@ -1,54 +1,62 @@
-import {
-	type CharacterInput,
-	type CharacterSpec,
-	resolveCharacter,
-	suggestCharacter,
-} from "pi-roundtable/characters";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
-	AgentSkillsView,
-	PresetSave,
+	AgentProfileView,
 	PresetsView,
 	PresetView,
+	SharedPresetView,
 } from "../../src/api-types.ts";
-import { ApiFailure, api, messageOf } from "../lib/api.ts";
+import { api, messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { teamApi } from "../lib/team-api.ts";
-import { toast } from "../lib/toast.ts";
-import {
-	AgentFields,
-	DEFAULT,
-	type FieldsDraft,
-	NAME,
-} from "./agent-fields.tsx";
-import { Confirm } from "./confirm.tsx";
-import { LookCreator, LookSummary } from "./look-pick.tsx";
-import { Sheet } from "./sheet.tsx";
-import { SkillPicker } from "./skill-picker.tsx";
+import type { KnightSeed } from "../lib/team-sheet.ts";
+import { useKnights } from "./knight-picker.tsx";
+import { PresetSheet } from "./preset-editor.tsx";
 import { Failure } from "./states.tsx";
 
 const firstLine = (text: string) => text.trim().split("\n")[0] ?? "";
 
+/** What the card has open: one of the knight's presets or a new one, one shared with it, or the knight copied. */
+type Opened =
+	| { kind: "own"; preset?: PresetView }
+	| { kind: "shared"; preset: SharedPresetView }
+	| { kind: "knight"; seed: KnightSeed };
+
+/** The knight's own fields as a preset's, its look included; its skills come with the catalog. */
+const seedOf = (knight: AgentProfileView): KnightSeed => {
+	const { v: _v, ...character } = knight.character;
+	return {
+		displayName: knight.displayName,
+		prompt: knight.prompt,
+		skills: [],
+		character,
+		...(knight.model ? { model: knight.model } : {}),
+		...(knight.thinking ? { thinking: knight.thinking } : {}),
+	};
+};
+
 /**
  * A knight's temp-knight presets on its sheet: one row each, a tap opening the preset's editor, and a
- * new one up to the most it may keep. Shown only where the host makes temp knights.
+ * new one up to the most it may keep, blank or copied from the knight. Below them, read-only, the
+ * presets other knights share with it. Shown only where the host makes temp knights.
  */
 export function PresetCard(props: {
-	agent: string;
+	knight: AgentProfileView;
 	models: readonly string[];
 }) {
+	const agent = props.knight.name;
 	const [view, setView] = useState<PresetsView>();
 	const [error, setError] = useState<string>();
-	// The preset being edited, or `null` for a new one.
-	const [editing, setEditing] = useState<PresetView | null>();
+	const [opened, setOpened] = useState<Opened>();
+	const knights = useKnights();
+	const nameOf = (name: string) =>
+		knights.find((one) => one.name === name)?.displayName ?? name;
 	useEffect(() => {
 		let current = true;
 		// Without a session to read, as without temp knights, the card stays away.
 		api
 			.session()
 			.then(
-				(session) =>
-					session.helpers ? teamApi.presets(props.agent) : undefined,
+				(session) => (session.helpers ? teamApi.presets(agent) : undefined),
 				() => undefined,
 			)
 			.then(
@@ -58,17 +66,41 @@ export function PresetCard(props: {
 		return () => {
 			current = false;
 		};
-	}, [props.agent]);
+	}, [agent]);
 	if (error) return <Failure message={error} />;
 	if (!view) return null;
-	const { presets, max } = view;
+	const { presets, shared, max } = view;
 	const keep = (saved: PresetView) =>
 		setView({
-			max,
+			...view,
 			presets: [...presets.filter((p) => p.name !== saved.name), saved].sort(
 				(a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
 			),
 		});
+	const row = (
+		preset: PresetView,
+		meta: string,
+		open: Opened,
+		key: Record<string, string>,
+	) => (
+		<li key={Object.values(key)[0]}>
+			<button
+				type="button"
+				className="menu-item"
+				{...key}
+				aria-haspopup="dialog"
+				onClick={() => setOpened(open)}
+			>
+				<span className="menu-text">
+					<strong>
+						{preset.name} · {preset.displayName}
+					</strong>
+					<span className="meta">{meta}</span>
+				</span>
+			</button>
+		</li>
+	);
+	const owner = opened?.kind === "shared" ? opened.preset.agent : agent;
 	return (
 		<section className="card stack" data-presets="">
 			<h3>
@@ -77,29 +109,24 @@ export function PresetCard(props: {
 					max,
 				})}
 			</h3>
-			{presets.length > 0 ? (
+			{presets.length + shared.length > 0 ? (
 				<ul className="menu">
-					{presets.map((preset) => (
-						<li key={preset.name}>
-							<button
-								type="button"
-								className="menu-item"
-								data-preset={preset.name}
-								aria-haspopup="dialog"
-								onClick={() => setEditing(preset)}
-							>
-								<span className="menu-text">
-									<strong>
-										{preset.name} · {preset.displayName}
-									</strong>
-									<span className="meta">
-										{t("Skills ({count})", { count: preset.skills.length })} ·{" "}
-										{firstLine(preset.prompt)}
-									</span>
-								</span>
-							</button>
-						</li>
-					))}
+					{presets.map((preset) =>
+						row(
+							preset,
+							`${t("Skills ({count})", { count: preset.skills.length })} · ${firstLine(preset.prompt)}`,
+							{ kind: "own", preset },
+							{ "data-preset": preset.name },
+						),
+					)}
+					{shared.map((preset) =>
+						row(
+							preset,
+							t("Shared by {name}", { name: nameOf(preset.agent) }),
+							{ kind: "shared", preset },
+							{ "data-shared-preset": `${preset.agent}/${preset.name}` },
+						),
+					)}
 				</ul>
 			) : null}
 			<div className="actions">
@@ -107,241 +134,46 @@ export function PresetCard(props: {
 					type="button"
 					className="secondary"
 					disabled={presets.length >= max}
-					onClick={() => setEditing(null)}
+					onClick={() =>
+						setOpened({ kind: "knight", seed: seedOf(props.knight) })
+					}
+				>
+					{t("Save as preset")}
+				</button>
+				<button
+					type="button"
+					className="secondary"
+					disabled={presets.length >= max}
+					onClick={() => setOpened({ kind: "own" })}
 				>
 					{t("New preset")}
 				</button>
 			</div>
-			{editing !== undefined ? (
+			{opened ? (
 				<PresetSheet
-					agent={props.agent}
-					preset={editing ?? undefined}
+					agent={owner}
+					agentName={owner === agent ? props.knight.displayName : nameOf(owner)}
+					{...(opened.kind === "knight"
+						? { seed: opened.seed }
+						: opened.preset
+							? { preset: opened.preset }
+							: {})}
+					readOnly={opened.kind === "shared"}
 					models={props.models}
-					onClose={() => setEditing(undefined)}
+					onClose={() => setOpened(undefined)}
 					onSaved={(saved) => {
 						keep(saved);
-						setEditing(saved);
+						setOpened({ kind: "own", preset: saved });
 					}}
 					onDeleted={(name) => {
-						setView({ max, presets: presets.filter((p) => p.name !== name) });
-						setEditing(undefined);
+						setView({
+							...view,
+							presets: presets.filter((p) => p.name !== name),
+						});
+						setOpened(undefined);
 					}}
 				/>
 			) : null}
 		</section>
-	);
-}
-
-const draftOf = (preset: PresetView | undefined): FieldsDraft => ({
-	displayName: preset?.displayName ?? "",
-	prompt: preset?.prompt ?? "",
-	model: preset?.model ?? DEFAULT,
-	thinking: preset?.thinking ?? DEFAULT,
-});
-
-/**
- * One preset's editor, stacked over the knight's sheet: its fields as a new knight's, the skills its
- * temp knight carries and its look. The name is chosen once; a save sends the preset whole.
- */
-function PresetSheet(props: {
-	agent: string;
-	preset: PresetView | undefined;
-	models: readonly string[];
-	onClose(): void;
-	onSaved(preset: PresetView): void;
-	onDeleted(name: string): void;
-}) {
-	const { agent, preset } = props;
-	const [name, setName] = useState(preset?.name ?? "");
-	const [draft, setDraft] = useState(() => draftOf(preset));
-	const [skills, setSkills] = useState(preset?.skills ?? []);
-	const [look, setLook] = useState<CharacterInput | undefined>(
-		preset?.character,
-	);
-	const [picking, setPicking] = useState(false);
-	const [catalog, setCatalog] = useState<AgentSkillsView>();
-	const [error, setError] = useState<string>();
-	const [saving, setSaving] = useState(false);
-	const [deleting, setDeleting] = useState(false);
-	const nameId = useId();
-	useEffect(() => {
-		let current = true;
-		teamApi.skills(agent).then(
-			(loaded) => current && setCatalog(loaded),
-			(failure) => {
-				// The host has no skills addon: a preset carries none.
-				if (
-					current &&
-					!(failure instanceof ApiFailure && failure.status === 404)
-				)
-					setError(messageOf(failure));
-			},
-		);
-		return () => {
-			current = false;
-		};
-	}, [agent]);
-	const who = { name: name || "new", ...draft };
-	const suggested = suggestCharacter(who);
-	let spec: CharacterSpec = suggested;
-	try {
-		if (look) spec = resolveCharacter(look, suggested);
-	} catch {
-		// A look the server would refuse shows the suggestion; the save names the field.
-	}
-	const ready =
-		NAME.test(name) && draft.displayName.trim() !== "" && draft.prompt.trim();
-	const choices =
-		catalog?.skills.map((skill) => ({
-			...skill,
-			carried: skill.builtin || skills.includes(skill.name),
-		})) ?? [];
-	const save = async () => {
-		setSaving(true);
-		setError(undefined);
-		const body: PresetSave = {
-			displayName: draft.displayName.trim(),
-			prompt: draft.prompt,
-			skills,
-			...(look ? { character: look } : {}),
-			...(draft.model !== DEFAULT ? { model: draft.model } : {}),
-			...(draft.thinking !== DEFAULT ? { thinking: draft.thinking } : {}),
-		};
-		try {
-			const saved = await teamApi.savePreset(agent, name, body);
-			toast(saved.replaced ? t("Saved the preset.") : t("Created the preset."));
-			props.onSaved(saved.preset);
-		} catch (failure) {
-			setError(messageOf(failure));
-		} finally {
-			setSaving(false);
-		}
-	};
-	return (
-		<Sheet
-			open
-			title={
-				preset ? t("Preset: {name}", { name: preset.name }) : t("New preset")
-			}
-			size="wide"
-			onClose={props.onClose}
-		>
-			{picking ? (
-				<LookCreator
-					{...who}
-					spec={spec}
-					onPick={(input) => {
-						setLook(input);
-						setPicking(false);
-					}}
-					onCancel={() => setPicking(false)}
-				/>
-			) : (
-				<form
-					className="stack form preset-sheet"
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (ready && !saving) save();
-					}}
-				>
-					<label htmlFor={nameId}>
-						{t("Preset name")}
-						<input
-							id={nameId}
-							value={name}
-							readOnly={preset !== undefined}
-							autoComplete="off"
-							autoCapitalize="none"
-							spellCheck={false}
-							aria-invalid={name !== "" && !NAME.test(name)}
-							onChange={(event) => setName(event.target.value)}
-						/>
-						<span className="meta">
-							{t(
-								"Lowercase letters, digits and dashes, up to 32. It cannot be changed later.",
-							)}
-						</span>
-					</label>
-					<AgentFields
-						draft={draft}
-						onChange={setDraft}
-						models={props.models}
-						defaultModel={t("The knight's own")}
-						defaultThinking={t("The knight's own")}
-					/>
-					{catalog ? (
-						<div className="stack">
-							<h4>{t("Skills ({count})", { count: skills.length })}</h4>
-							<SkillPicker
-								skills={choices}
-								who={draft.displayName || name}
-								onFlip={(skill, next) =>
-									setSkills(
-										next
-											? [...skills, skill]
-											: skills.filter((one) => one !== skill),
-									)
-								}
-								onApplyGroup={async (group, on) => {
-									const locked = new Set(
-										choices.filter((s) => s.builtin).map((s) => s.name),
-									);
-									const added = on
-										? group.skills.filter((s) => !skills.includes(s))
-										: [];
-									const removed = on
-										? []
-										: group.skills.filter(
-												(s) => skills.includes(s) && !locked.has(s),
-											);
-									setSkills([
-										...skills.filter((s) => !removed.includes(s)),
-										...added,
-									]);
-									return { added, removed };
-								}}
-							/>
-						</div>
-					) : null}
-					<LookSummary
-						spec={spec}
-						name={who.name}
-						displayName={draft.displayName}
-						chosen={look !== undefined}
-						onChoose={() => setPicking(true)}
-					/>
-					{error ? <Failure message={error} /> : null}
-					<div className="actions">
-						{preset ? (
-							<button
-								type="button"
-								className="danger"
-								onClick={() => setDeleting(true)}
-							>
-								{t("Delete preset")}
-							</button>
-						) : null}
-						<button type="submit" disabled={!ready || saving}>
-							{saving ? t("Saving…") : t("Save")}
-						</button>
-					</div>
-				</form>
-			)}
-			<Confirm
-				open={deleting}
-				title={t("Delete {name}?", { name })}
-				confirmLabel={t("Delete preset")}
-				tone="danger"
-				onClose={() => setDeleting(false)}
-				onConfirm={async () => {
-					await teamApi.deletePreset(agent, name);
-					toast(t("Deleted the preset."));
-					setDeleting(false);
-					props.onDeleted(name);
-				}}
-			>
-				<p>{t("This cannot be undone.")}</p>
-			</Confirm>
-		</Sheet>
 	);
 }
