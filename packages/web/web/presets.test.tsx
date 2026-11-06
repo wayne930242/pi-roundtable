@@ -155,7 +155,13 @@ beforeEach(() => {
 			async (_agent, name, body) => {
 				if (refuse) throw new ApiFailure(refuse, undefined, 400, undefined);
 				saved.push({ name, body });
-				const preset = { name, ...body, skills: body.skills ?? [] };
+				const { sharedWith, ...fields } = body;
+				const preset = {
+					name,
+					...fields,
+					skills: body.skills ?? [],
+					...(sharedWith ? { sharedWith } : {}),
+				};
 				return { preset, replaced: presets.some((p) => p.name === name) };
 			},
 		),
