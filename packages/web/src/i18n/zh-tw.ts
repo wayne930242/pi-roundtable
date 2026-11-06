@@ -338,8 +338,8 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Session {id}": "工作階段 {id}",
 	Today: "今天",
 	Yesterday: "昨天",
-
 	// 騎士
+	Basics: "基本",
 	"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.":
 		"職業、配色與部件。這裡、聊天室與 Discord 的圖像都會跟著改變。",
 	Default: "預設",

@@ -16,6 +16,7 @@ const AGENT_SHEET_CSS = `
 	flex: 1;
 	min-width: 0;
 	padding: 0 var(--space-2);
+	white-space: nowrap;
 }
 
 /* A knight's skills: the carried ones as chips, a search, group filters and one line per skill. */
@@ -60,6 +61,7 @@ button.skill-chip:hover:not(:disabled) {
 
 .skill-search {
 	display: flex;
+	flex-direction: row;
 	align-items: center;
 	gap: var(--space-2);
 }

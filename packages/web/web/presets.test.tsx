@@ -253,7 +253,7 @@ test("the knight's sheet lists its presets on their tab after the skills, with t
 	expect(row?.textContent).not.toContain("Keep it short.");
 	// Its tab comes after the skills'.
 	expect(all(".agent-sheet [role=tab]").map((one) => one.textContent)).toEqual([
-		"Profile",
+		"Basics",
 		"Skills",
 		"Presets",
 		"Look",
@@ -267,7 +267,7 @@ test("no card for a temp knight, nor where the host makes no temp knights", asyn
 	await page.act(() => settle(120));
 	expect(q("[data-presets]")).toBeNull();
 	expect(all(".agent-sheet [role=tab]").map((one) => one.textContent)).toEqual([
-		"Profile",
+		"Basics",
 		"Skills",
 		"Look",
 		"More",
@@ -283,7 +283,7 @@ test("no card for a temp knight, nor where the host makes no temp knights", asyn
 	expect(q(".agent-sheet")).not.toBeNull();
 	expect(q("[data-presets]")).toBeNull();
 	expect(all(".agent-sheet [role=tab]").map((one) => one.textContent)).toEqual([
-		"Profile",
+		"Basics",
 		"Skills",
 		"Look",
 		"More",

@@ -30,15 +30,15 @@ test("the sheet is tabs over one panel each, Profile first, and Presets only whe
 	const list = q(".agent-sheet [role=tablist]");
 	expect(list?.getAttribute("aria-label")).toBe("Edit knight");
 	expect(tabs().map((one) => one.label)).toEqual([
-		"Profile",
+		"Basics",
 		"Skills",
 		"Look",
 		"More",
 	]);
-	expect(selected()).toBe("Profile");
+	expect(selected()).toBe("Basics");
 	const shown = visiblePanel();
 	expect(shown).toHaveLength(1);
-	const tab = tabNamed("Profile");
+	const tab = tabNamed("Basics");
 	expect(shown[0]?.getAttribute("aria-labelledby")).toBe(tab?.id ?? "");
 	expect(tab?.getAttribute("aria-controls")).toBe(shown[0]?.id ?? "");
 	expect(shown[0]?.querySelector("form")).not.toBeNull();
@@ -71,16 +71,16 @@ test("the arrow keys, Home and End move among the tabs and show the one they lan
 	expect(selected()).toBe("Skills");
 	expect(document.activeElement).toBe(tabNamed("Skills"));
 	expect(tabNamed("Skills")?.tabIndex).toBe(0);
-	expect(tabNamed("Profile")?.tabIndex).toBe(-1);
+	expect(tabNamed("Basics")?.tabIndex).toBe(-1);
 	expect(visiblePanel()[0]?.getAttribute("data-tab")).toBe("skills");
 	await key("End");
 	expect(selected()).toBe("More");
 	await key("ArrowRight");
-	expect(selected()).toBe("Profile");
+	expect(selected()).toBe("Basics");
 	await key("ArrowLeft");
 	expect(selected()).toBe("More");
 	await key("Home");
-	expect(selected()).toBe("Profile");
+	expect(selected()).toBe("Basics");
 });
 
 test("a tab asked for opens it, and look and skills still ask for theirs", async () => {
@@ -97,7 +97,7 @@ test("a tab asked for opens it, and look and skills still ask for theirs", async
 	// Presets where the host has none shows the profile.
 	await page.act(() => openAgentSheet("scout", { tab: "presets" }));
 	await page.act(() => settle(40));
-	expect(selected()).toBe("Profile");
+	expect(selected()).toBe("Basics");
 });
 
 test("an unsaved edit survives a trip to another tab", async () => {
@@ -105,7 +105,7 @@ test("an unsaved edit survives a trip to another tab", async () => {
 	await typeInto(q<HTMLInputElement>(".agent-sheet input"), "Scout Two");
 	await page.click(tabNamed("Skills"));
 	expect(q(".agent-sheet [data-tab=profile]")).toBeNull();
-	await page.click(tabNamed("Profile"));
+	await page.click(tabNamed("Basics"));
 	expect(q<HTMLInputElement>(".agent-sheet input")?.value).toBe("Scout Two");
 	expect(
 		q<HTMLButtonElement>(".agent-sheet [data-tab=profile] button[type=submit]")

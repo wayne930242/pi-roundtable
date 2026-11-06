@@ -234,7 +234,7 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 
 	const tabs = (
 		[
-			["profile", t("Profile")],
+			["profile", t("Basics")],
 			["skills", t("Skills")],
 			["presets", t("Presets")],
 			["look", t("Look")],
