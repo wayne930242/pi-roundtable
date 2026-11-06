@@ -22,6 +22,8 @@ export type MakeAgent = (
 		parent: Agent;
 		/** The conversation the temp knight is made from; only it and the owners may message the temp knight. */
 		origin?: string;
+		/** The preset it is made from, kept on its record. */
+		preset?: string;
 	},
 	fields: {
 		name: string;
@@ -50,20 +52,13 @@ export async function createHelper(
 	const { speaker, parent, limits } = helperMaker(ctx, caller, "helper_create");
 	// A preset saved earlier is checked again now, merged with the call.
 	const merged = await withPreset(ctx, parent, input);
-	const {
-		task,
-		name: given,
-		model,
-		thinking,
-		preset: _preset,
-		...rest
-	} = merged;
+	const { task, name: given, model, thinking, preset, ...rest } = merged;
 	const { displayName, prompt } = rest;
 	if (!displayName || !prompt)
 		throw new AgentError(
 			"Give display_name and prompt, or a preset (from helper_preset_list) that has them.",
 		);
-	checkHelperGrant(ctx, speaker, parent, merged);
+	checkHelperGrant(ctx, speaker.tier, parent, merged);
 	const name = given ?? nextName(ctx, parent.name);
 	// Everything that can be refused is checked before anything is made or archived.
 	store.checkNewName(name);
@@ -75,6 +70,7 @@ export async function createHelper(
 			creator: parent,
 			parent,
 			origin: ctx.turns.turnChannel(caller),
+			...(input.preset ? { preset: input.preset } : {}),
 		},
 		{ ...rest, displayName, prompt, name },
 		{ model, thinking },

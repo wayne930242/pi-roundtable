@@ -1,5 +1,6 @@
 import type { SQL } from "bun";
 import type { CharacterSpec } from "../../characters/index.ts";
+import { isCheckDatabase } from "../db/check-database.ts";
 import type { Migration } from "../db/migrations.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { ThinkingLevel } from "../domain/models.ts";
@@ -54,8 +55,6 @@ export {
 	MAX_PROMPT_CHARS,
 	MIN_GROUP_MEMBERS,
 } from "./agent-rules.ts";
-
-import { isCheckDatabase } from "../db/check-database.ts";
 
 /**
  * Agents, groups, and group messages, in the database. Agents and groups are also held
@@ -138,8 +137,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 					avatarPrompt: seed.avatarPrompt ?? "",
 					channelId: seed.channelId ?? null,
 				});
-				// Only the inserted rows join the map: reloading it whole would drop a write that
-				// committed after its SELECT.
+				// Only inserted rows join the map: a whole reload drops a write committed after its SELECT.
 				if (rows[0]) added.push(this.keepAgent(rows[0]).name);
 			}
 			return added;
@@ -165,6 +163,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		/** Makes it a temp knight of this active, permanent knight. */
 		parent?: string;
 		origin?: string; // the conversation a temp knight was made from
+		preset?: string; // the preset it was made from
 	}): Promise<Agent> {
 		return this.#serial(async () => {
 			checkAgentName(agent.name);
@@ -184,6 +183,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 				character: agent.character ?? null,
 				parent: agent.parent ?? null,
 				origin: agent.origin ?? null,
+				preset: agent.preset ?? null,
 			});
 			return this.keepAgent(rows[0]);
 		});

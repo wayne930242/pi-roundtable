@@ -23,6 +23,7 @@ export interface AgentRow {
 	parent: string | null;
 	finished_at: Date | null;
 	origin: string | null;
+	preset: string | null;
 }
 
 export interface GroupRow {
@@ -50,6 +51,7 @@ export const toAgent = (row: AgentRow): Agent => {
 		...(row.parent ? { parent: row.parent } : {}),
 		...(row.finished_at ? { finishedAt: row.finished_at } : {}),
 		...(row.origin ? { origin: row.origin } : {}),
+		...(row.preset ? { preset: row.preset } : {}),
 	};
 };
 
@@ -167,5 +169,12 @@ export function agentMigrations(guildId: string): Migration[] {
 		AgentConversations.migration,
 		// The temp-knight presets each agent saved; kept when the agent is archived.
 		HelperPresets.migration,
+		// The preset a temp knight was made from, by name.
+		{
+			name: "agents-helper-preset",
+			up: async (sql) => {
+				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS preset text`;
+			},
+		},
 	];
 }

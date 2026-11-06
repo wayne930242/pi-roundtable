@@ -44,12 +44,14 @@ export class AgentStatements {
 		parent: string | null;
 		/** The conversation a temp knight was made from. */
 		origin: string | null;
+		/** The preset a temp knight was made from. */
+		preset: string | null;
 	}): Promise<AgentRow[]> {
 		return this.#sql`
-			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character, parent, origin)
+			INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id, avatar_hash, character, parent, origin, preset)
 			VALUES (${this.#guild}, ${agent.name}, ${agent.displayName}, ${agent.prompt}, ${agent.avatarPrompt},
 				${agent.channelId}, ${agent.avatarHash},
-				${agent.character}::jsonb, ${agent.parent}, ${agent.origin})
+				${agent.character}::jsonb, ${agent.parent}, ${agent.origin}, ${agent.preset})
 			RETURNING *`;
 	}
 

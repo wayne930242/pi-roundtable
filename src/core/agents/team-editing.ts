@@ -158,9 +158,8 @@ export class TeamEditing {
 
 	/**
 	 * An owner creates an agent from outside any agent turn (the web app's form; any other tier is
-	 * refused, since the opening task runs as `speaker`): the same checks,
-	 * picture, channel and opening task as `create`, and the model and thinking level the owner
-	 * picked. Without a task the agent only exists, waiting in its room. Returns the new agent.
+	 * refused, since the opening task runs as `speaker`): the checks, picture, channel and opening
+	 * task of `create`, and the owner's model and thinking. Without a task it waits in its room.
 	 */
 	async createFor(
 		speaker: Speaker,
@@ -224,6 +223,7 @@ export class TeamEditing {
 			parent?: Agent | undefined;
 			/** The conversation a temp knight is made from: made on Discord, it lives in a thread of the parent's channel, made elsewhere in its rooms alone. */
 			origin?: string | undefined;
+			preset?: string | undefined;
 		},
 		input: {
 			name: string;
@@ -258,8 +258,7 @@ export class TeamEditing {
 		const categoryName = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
-		// A model or thinking level the host cannot run fails the create, before anything is made.
-		// A temp knight runs the parent's, as it stands, unless told otherwise.
+		// An unusable model or thinking fails the create first; a temp knight runs its parent's unless told otherwise.
 		const model =
 			settings.model === undefined && who.parent
 				? who.parent.model
@@ -299,6 +298,7 @@ export class TeamEditing {
 				...(channelId ? { channelId } : {}),
 				...(who.parent ? { parent: who.parent.name } : {}),
 				...(who.parent && who.origin ? { origin: who.origin } : {}),
+				...(who.parent && who.preset ? { preset: who.preset } : {}),
 			});
 		} catch (error) {
 			await this.#closeOrphan(channelId);

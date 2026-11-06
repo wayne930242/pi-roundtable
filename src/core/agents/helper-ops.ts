@@ -1,4 +1,5 @@
 import type { Agent } from "./agent-rules.ts";
+import type { HelperPreset } from "./helper-presets.ts";
 
 /** A knight cleared its own temp knights with `helper_end`. */
 export interface HelpersEnded {
@@ -30,4 +31,22 @@ export interface HelperTeam {
 	restoreHelpers(names: readonly string[]): Promise<string[]>;
 	/** Called when a knight clears its own temp knights with `helper_end`; not for an owner's or the host's clearing. */
 	onHelpersEnded(listener: (event: HelpersEnded) => void): void;
+	/** Whether the host makes temp knights at all: false under `helpers: false`. */
+	helpersOn(): boolean;
+	/**
+	 * A knight's temp-knight presets, by name, as an owner manages them outside any agent turn.
+	 * These three throw AgentError when temp knights are off, for an unknown or archived agent,
+	 * and for a temp knight, which keeps none.
+	 */
+	presets(agent: string): Promise<HelperPreset[]>;
+	/**
+	 * Saves a preset whole under its name, with `helper_preset_set`'s checks at the owner's tier;
+	 * refuses a new one past 20. Returns the preset as saved and whether it replaced one.
+	 */
+	savePreset(
+		agent: string,
+		preset: HelperPreset,
+	): Promise<{ preset: HelperPreset; replaced: boolean }>;
+	/** Deletes one of a knight's presets; says whether there was one. */
+	deletePreset(agent: string, name: string): Promise<boolean>;
 }

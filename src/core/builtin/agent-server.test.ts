@@ -235,6 +235,7 @@ describe("the agent server's runtime", () => {
 			"agent-outbox",
 			"agent-latest-conversation",
 			"helper-presets",
+			"agents-helper-preset",
 		]);
 	});
 });

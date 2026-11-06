@@ -40,6 +40,7 @@ function fakeDatabase() {
 				parent: null,
 				finished_at: null,
 				origin: null,
+				preset: null,
 			};
 			agents.set(name, row);
 			return [row];

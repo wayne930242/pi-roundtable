@@ -4,7 +4,7 @@ import type { ThinkingSetting } from "../domain/models.ts";
 import { assistantName } from "../i18n/index.ts";
 import { zonedStamp } from "../kernel/time.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
-import type { ChannelMessage } from "./agent-ports.ts";
+import type { AgentChannels, ChannelMessage } from "./agent-ports.ts";
 import { characterOf, isHelper } from "./agent-rules.ts";
 import { describeThinking } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
@@ -89,4 +89,24 @@ export function agentDetails(
 		`Look: ${lookText(characterOf(agent))}`,
 		`Prompt:\n${agent.prompt}`,
 	].join("\n");
+}
+
+const READ_LIMIT = 50;
+
+/** channel_read: messages of a Discord channel, newest last, around one when given. */
+export async function readChannel(
+	channels: AgentChannels | undefined,
+	channel: string,
+	around: string | undefined,
+	limit: number | undefined,
+): Promise<string> {
+	if (!channels) throw new AgentError(NO_CHANNELS);
+	const id = channelIdFromRef(channel);
+	const messages = await channels.read(id, {
+		limit: Math.min(Math.max(limit ?? 20, 1), READ_LIMIT),
+		...(around ? { around } : {}),
+	});
+	return messages.length > 0
+		? messages.map(messageLine).join("\n")
+		: `<#${id}> has no messages there.`;
 }

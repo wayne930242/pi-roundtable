@@ -17,6 +17,10 @@ export type {
 } from "./core/agents/agent-store.ts";
 export type { AvatarMode } from "./core/agents/agent-tools.ts";
 export type { HelpersEnded, HelperTeam } from "./core/agents/helper-ops.ts";
+export {
+	type HelperPreset,
+	MAX_HELPER_PRESETS,
+} from "./core/agents/helper-presets.ts";
 export type { RouteKind, RoutingTable } from "./core/agents/routes.ts";
 export {
 	agentRoomKey,

@@ -36,6 +36,8 @@ export interface Agent {
 	finishedAt?: Date;
 	/** The conversation (channel key) a temp knight was made from; only it and the owners may message the temp knight. */
 	origin?: string;
+	/** The preset a temp knight was made from, by name; absent when it was made without one. */
+	preset?: string;
 }
 
 /** Whether the agent is a temp knight: one a knight made to do a task, which has a parent. */

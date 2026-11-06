@@ -108,6 +108,7 @@
 			"GroupStatus": "src/core/agents/team-status.d.ts#GroupStatus",
 			"HeldActionStore": "src/core/contract/runtime.d.ts#HeldActionStore",
 			"HeldCall": "src/core/domain/conversation.d.ts#HeldCall",
+			"HelperPreset": "src/core/agents/helper-presets.d.ts#HelperPreset",
 			"HelperTeam": "src/core/agents/helper-ops.d.ts#HelperTeam",
 			"HelpersConfig": "src/core/config/helpers.d.ts#HelpersConfig",
 			"HelpersEnded": "src/core/agents/helper-ops.d.ts#HelpersEnded",
@@ -149,6 +150,7 @@
 			"LogFn": "src/core/kernel/log.d.ts#LogFn",
 			"Logger": "src/core/kernel/log.d.ts#Logger",
 			"MAX_ATTACHMENT_BYTES": "src/core/attachments/attachment-fetcher.d.ts#MAX_ATTACHMENT_BYTES",
+			"MAX_HELPER_PRESETS": "src/core/agents/helper-presets.d.ts#MAX_HELPER_PRESETS",
 			"MEMORY": "src/core/plugin-api/services.d.ts#MEMORY",
 			"MEMORY_KINDS": "src/core/modules/memory/owner-memory-store.d.ts#MEMORY_KINDS",
 			"MODES": "src/core/plugin-api/services.d.ts#MODES",
@@ -750,7 +752,7 @@
 		"src/core/agents/agent-ports.d.ts#CategoryLayout": "interface CategoryLayout {\n    \n    id?: string;\n    name: string;\n    channelIds: string[];\n}",
 		"src/core/agents/agent-ports.d.ts#ChannelMessage": "interface ChannelMessage {\n    id: string;\n    author: string;\n    at: Date;\n    text: string;\n    attachments: string[];\n}",
 		"src/core/agents/agent-ports.d.ts#DashboardBoard": "interface DashboardBoard {\n    show(sections: string[]): Promise<void>;\n}",
-		"src/core/agents/agent-rules.d.ts#Agent": "interface Agent {\n    name: string;\n    displayName: string;\n    prompt: string;\n    avatarPrompt: string;\n    \n    character?: CharacterSpec;\n    \n    avatarHash?: string;\n    \n    channelId?: string;\n    \n    model?: string;\n    \n    thinking?: ThinkingLevel;\n    status: AgentStatus;\n    \n    parent?: string;\n    \n    finishedAt?: Date;\n    \n    origin?: string;\n}",
+		"src/core/agents/agent-rules.d.ts#Agent": "interface Agent {\n    name: string;\n    displayName: string;\n    prompt: string;\n    avatarPrompt: string;\n    \n    character?: CharacterSpec;\n    \n    avatarHash?: string;\n    \n    channelId?: string;\n    \n    model?: string;\n    \n    thinking?: ThinkingLevel;\n    status: AgentStatus;\n    \n    parent?: string;\n    \n    finishedAt?: Date;\n    \n    origin?: string;\n    \n    preset?: string;\n}",
 		"src/core/agents/agent-rules.d.ts#AgentGroup": "interface AgentGroup {\n    name: string;\n    displayName: string;\n    \n    channelId?: string;\n    \n    members: string[];\n    host: string;\n    status: AgentStatus;\n}",
 		"src/core/agents/agent-rules.d.ts#AgentSeed": "interface AgentSeed {\n    name: string;\n    displayName: string;\n    prompt: string;\n    \n    character?: CharacterInput;\n    \n    avatarPrompt?: string;\n    channelId?: string;\n}",
 		"src/core/agents/agent-rules.d.ts#AgentStatus": "type AgentStatus = \"active\" | \"archived\";",
@@ -763,10 +765,11 @@
 		"src/core/agents/agent-tools.d.ts#AvatarMode": "type AvatarMode = \"redraw\" | \"new_prompt\" | \"edit\";",
 		"src/core/agents/character-png.d.ts#characterPng": "declare function characterPng(spec: CharacterSpec, options?: ComposeOptions): Promise<Uint8Array>;",
 		"src/core/agents/helper-ops.d.ts#HelpersEnded": "interface HelpersEnded {\n    \n    parent: string;\n    \n    names: string[];\n}",
-		"src/core/agents/helper-ops.d.ts#HelperTeam": "interface HelperTeam {\n    \n    helpersOf(parent: string): Agent[];\n    \n    finishedHelpers(parents?: readonly string[]): Agent[];\n    \n    archiveHelpers(names: readonly string[], by: string): Promise<string[]>;\n    \n    restoreHelpers(names: readonly string[]): Promise<string[]>;\n    \n    onHelpersEnded(listener: (event: HelpersEnded) => void): void;\n}",
+		"src/core/agents/helper-ops.d.ts#HelperTeam": "interface HelperTeam {\n    \n    helpersOf(parent: string): Agent[];\n    \n    finishedHelpers(parents?: readonly string[]): Agent[];\n    \n    archiveHelpers(names: readonly string[], by: string): Promise<string[]>;\n    \n    restoreHelpers(names: readonly string[]): Promise<string[]>;\n    \n    onHelpersEnded(listener: (event: HelpersEnded) => void): void;\n    \n    helpersOn(): boolean;\n    \n    presets(agent: string): Promise<HelperPreset[]>;\n    \n    savePreset(agent: string, preset: HelperPreset): Promise<{\n        preset: HelperPreset;\n        replaced: boolean;\n    }>;\n    \n    deletePreset(agent: string, name: string): Promise<boolean>;\n}",
 		"src/core/agents/helper-preset-ops.d.ts#HelperFields": "interface HelperFields {\n    preset?: string;\n    displayName?: string;\n    prompt?: string;\n    character?: CharacterInput;\n    skills?: string[];\n    model?: string;\n    thinking?: string;\n}",
 		"src/core/agents/helper-preset-ops.d.ts#PresetAction": "type PresetAction = {\n    kind: \"set\";\n    preset: HelperPreset;\n} | {\n    kind: \"list\";\n    name?: string;\n} | {\n    kind: \"delete\";\n    name: string;\n};",
 		"src/core/agents/helper-presets.d.ts#HelperPreset": "interface HelperPreset {\n    name: string;\n    displayName: string;\n    prompt: string;\n    skills: string[];\n    character?: CharacterInput;\n    model?: string;\n    thinking?: string;\n}",
+		"src/core/agents/helper-presets.d.ts#MAX_HELPER_PRESETS": "declare const MAX_HELPER_PRESETS = 20;",
 		"src/core/agents/routes.d.ts#RouteKind": "type RouteKind = \"integration\" | \"agentMessage\" | \"opening\";",
 		"src/core/agents/routes.d.ts#RoutingTable": "interface RoutingTable {\n    \n    primary(agent: string): ChannelKey | undefined;\n    \n    placeOn(agent: string, surface: string): ChannelKey | undefined;\n    \n    of(agent: string, kind: \"integration\", origin: ChannelKey): ChannelKey;\n    of(agent: string, kind: \"agentMessage\", origin: ChannelKey): ChannelKey;\n    of(agent: string, kind: RouteKind, origin?: ChannelKey): ChannelKey | undefined;\n    \n    place(name: string): ChannelKey | undefined;\n}",
 		"src/core/agents/team-keys.d.ts#agentRoomKey": "declare const agentRoomKey: (surface: string, agent: string) => ChannelKey;",
@@ -1422,12 +1425,6 @@
 			"id": "src/core/agents/helper-preset-ops.d.ts#PresetAction",
 			"references": [
 				"kit:AgentOps via src/core/agents/agent-tools.d.ts#AgentOps"
-			]
-		},
-		{
-			"id": "src/core/agents/helper-presets.d.ts#HelperPreset",
-			"references": [
-				"kit:AgentOps via src/core/agents/helper-preset-ops.d.ts#PresetAction"
 			]
 		},
 		{

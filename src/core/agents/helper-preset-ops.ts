@@ -3,7 +3,7 @@ import { helpersOf, type ResolvedHelpers } from "../config/helpers.ts";
 import { AgentError } from "../domain/errors.ts";
 import { THINKING_LEVELS } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { Speaker } from "../identity/speakers.ts";
+import type { Speaker, Tier } from "../identity/speakers.ts";
 import { toolTiers } from "../runtime/tool-tiers.ts";
 import {
 	type Agent,
@@ -64,19 +64,16 @@ export function helperMaker(
  */
 export function checkHelperGrant(
 	ctx: TeamContext,
-	speaker: Speaker,
+	tier: Tier,
 	parent: Agent,
 	fields: Pick<HelperFields, "model" | "thinking" | "skills">,
 ): void {
 	const tiers = ctx.options.toolTiers ?? toolTiers();
-	if (
-		!tiers.allows(speaker.tier, "agent_update") &&
-		(fields.model || fields.thinking)
-	)
+	if (!tiers.allows(tier, "agent_update") && (fields.model || fields.thinking))
 		throw new AgentError(
 			"A temp knight runs your model and thinking level; choosing others needs a higher tier.",
 		);
-	if (fields.skills?.length && !tiers.allows(speaker.tier, "agent_skills")) {
+	if (fields.skills?.length && !tiers.allows(tier, "agent_skills")) {
 		const own = new Set(ctx.options.skills?.carriedNames(parent.name) ?? []);
 		const extra = fields.skills.filter((skill) => !own.has(skill));
 		if (extra.length > 0)
@@ -134,9 +131,7 @@ export async function presetAction(
 	const { speaker, parent } = helperMaker(ctx, caller, tool);
 	const presets = ctx.options.store.presets;
 	if (action.kind === "set") {
-		const { preset } = action;
-		checkPreset(ctx, preset);
-		checkHelperGrant(ctx, speaker, parent, preset);
+		const preset = validatePreset(ctx, speaker.tier, parent, action.preset);
 		const done = await presets.set(parent.name, preset);
 		return `${done === "created" ? "Created" : "Replaced"} the preset "${preset.name}"; make its temp knight with helper_create and preset "${preset.name}".`;
 	}
@@ -156,8 +151,18 @@ export async function presetAction(
 	return all.map(presetLine).join("\n");
 }
 
-/** The checks a temp knight's fields get when it is made, applied when the preset is saved. */
-function checkPreset(ctx: TeamContext, preset: HelperPreset): void {
+/**
+ * The preset as it is saved, its skills deduplicated, or AgentError: the checks a temp knight's
+ * fields get when it is made, and what a speaker of `tier` may grant beyond the parent's own.
+ * The store holds the cap of presets as it saves.
+ */
+export function validatePreset(
+	ctx: TeamContext,
+	tier: Tier,
+	parent: Agent,
+	given: HelperPreset,
+): HelperPreset {
+	const preset = { ...given, skills: [...new Set(given.skills)] };
 	if (!PRESET_NAME.test(preset.name))
 		throw new AgentError(
 			`"${preset.name}" is not a preset name: use 1 to 32 lowercase letters, digits, and dashes.`,
@@ -180,7 +185,36 @@ function checkPreset(ctx: TeamContext, preset: HelperPreset): void {
 			);
 		registry.checkRegistered(preset.skills);
 	}
+	checkHelperGrant(ctx, tier, parent, preset);
+	return preset;
 }
+
+/**
+ * The knight whose presets an owner manages from outside any agent turn: refused when temp knights
+ * are off, for an unknown or archived agent, and for a temp knight, which keeps none.
+ */
+function presetOwner(ctx: TeamContext, name: string): Agent {
+	if (!helpersOf(ctx.options.helpers))
+		throw new AgentError("Temp knights are switched off on this host.");
+	const agent = ctx.options.store.activeAgent(name);
+	if (isHelper(agent))
+		throw new AgentError(`"${name}" is a temp knight and keeps no presets.`);
+	return agent;
+}
+
+/** An owner's handling of a knight's presets, at the owner's tier; see `HelperTeam.presets`. */
+export const ownerPresets = (ctx: TeamContext) => ({
+	list: async (agent: string): Promise<HelperPreset[]> =>
+		ctx.options.store.presets.list(presetOwner(ctx, agent).name),
+	save: async (agent: string, given: HelperPreset) => {
+		const parent = presetOwner(ctx, agent);
+		const preset = validatePreset(ctx, "owner", parent, given);
+		const done = await ctx.options.store.presets.set(parent.name, preset);
+		return { preset, replaced: done === "replaced" };
+	},
+	delete: async (agent: string, name: string): Promise<boolean> =>
+		ctx.options.store.presets.delete(presetOwner(ctx, agent).name, name),
+});
 
 const presetLine = (preset: HelperPreset): string => {
 	const prompt = preset.prompt.replace(/\s+/g, " ").trim();

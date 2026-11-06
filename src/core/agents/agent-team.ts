@@ -1,5 +1,6 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { CharacterInput } from "../../characters/index.ts";
+import { helpersOf } from "../config/helpers.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
@@ -17,7 +18,11 @@ import {
 	agentToolsExtension,
 } from "./agent-tools.ts";
 import type { HelperTeam } from "./helper-ops.ts";
-import { type PresetAction, presetAction } from "./helper-preset-ops.ts";
+import {
+	ownerPresets,
+	type PresetAction,
+	presetAction,
+} from "./helper-preset-ops.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import type { TeamHelpers } from "./team-helpers.ts";
@@ -39,17 +44,14 @@ import { teamSelection } from "./team-selection.ts";
 import { type TeamStatus, teamStatus } from "./team-status.ts";
 import {
 	agentDetails,
-	channelIdFromRef,
-	messageLine,
 	NO_CHANNELS,
+	readChannel,
 	teamListText,
 } from "./team-text.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 export type { AgentTeamOptions } from "./team-options.ts";
 export type { AgentStatus, GroupStatus, TeamStatus } from "./team-status.ts";
-
-const READ_LIMIT = 50;
 
 /**
  * The agent server: every agent is one channel and one conversation with every owner tool.
@@ -317,21 +319,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#lifecycle.helpers.reach(...args);
 	}
 
-	async read(
-		channel: string,
-		around: string | undefined,
-		limit: number | undefined,
-	): Promise<string> {
-		const { channels } = this.#options;
-		if (!channels) throw new AgentError(NO_CHANNELS);
-		const id = channelIdFromRef(channel);
-		const messages = await channels.read(id, {
-			limit: Math.min(Math.max(limit ?? 20, 1), READ_LIMIT),
-			...(around ? { around } : {}),
-		});
-		return messages.length > 0
-			? messages.map(messageLine).join("\n")
-			: `<#${id}> has no messages there.`;
+	read(...args: [string, string | undefined, number | undefined]) {
+		return readChannel(this.#options.channels, ...args);
 	}
 
 	// ── AgentOps ───────────────────────────────────────────────────────────
@@ -416,6 +405,23 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	/** A knight keeps its own temp-knight presets; see `AgentOps.helperPreset`. */
 	helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string> {
 		return presetAction(this.#context, caller, action);
+	}
+
+	helpersOn(): boolean {
+		return helpersOf(this.#options.helpers) !== false;
+	}
+
+	/** An owner manages a knight's presets; see `HelperTeam.presets`. */
+	presets(agent: string): ReturnType<HelperTeam["presets"]> {
+		return ownerPresets(this.#context).list(agent);
+	}
+
+	savePreset(...args: Parameters<HelperTeam["savePreset"]>) {
+		return ownerPresets(this.#context).save(...args);
+	}
+
+	deletePreset(agent: string, name: string): Promise<boolean> {
+		return ownerPresets(this.#context).delete(agent, name);
 	}
 
 	/** A knight archives its own temp knights; the pages that show the parent are told. */
