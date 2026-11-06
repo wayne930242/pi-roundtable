@@ -1,219 +1,38 @@
+import { expect, spyOn, test } from "bun:test";
 import {
-	afterAll,
-	afterEach,
-	beforeAll,
-	beforeEach,
-	expect,
-	spyOn,
-	test,
-} from "bun:test";
-import { CATALOG, type CharacterSpec } from "pi-roundtable/characters";
-import { partial } from "pi-roundtable/testing";
-import type {
-	AgentProfileView,
-	AgentSkillsView,
-	ConfigView,
-	RoomView,
-} from "../src/api-types.ts";
+	agent,
+	all,
+	button,
+	config,
+	Host,
+	inReview,
+	model,
+	open,
+	page,
+	pickModel,
+	profile,
+	q,
+	SCOUT,
+	settle,
+	setupAgentSheet,
+	submit,
+	tabNamed,
+	typeInto,
+	update,
+	view,
+} from "./agent-sheet-fixture.tsx";
 import { AgentSheetHost } from "./components/agent-sheet.tsx";
-import { RoomConfirmHost } from "./components/room-confirms.tsx";
-import { Toaster } from "./components/toaster.tsx";
-import { openPage, releaseDom, type TestPage } from "./dom.ts";
-import {
-	closeAgentSheet,
-	currentAgentSheet,
-	openAgentSheet,
-} from "./lib/agent-sheet.ts";
-import { ApiFailure, api } from "./lib/api.ts";
+import { currentAgentSheet, openAgentSheet } from "./lib/agent-sheet.ts";
+import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { editApi } from "./lib/edit-api.ts";
-import { loadKit } from "./lib/kit.ts";
-import { clearRoomConfirm } from "./lib/room-confirm.ts";
-import { setRouting } from "./lib/router.ts";
-import { type AppConnection, setConnection } from "./lib/socket.ts";
 import { teamApi } from "./lib/team-api.ts";
-import { closeTeamSheet, currentTeamSheet } from "./lib/team-sheet.ts";
+import { currentTeamSheet } from "./lib/team-sheet.ts";
 import { AgentPage } from "./pages/agent.tsx";
 import { RoomPage } from "./pages/room.tsx";
 
-const SCOUT = "app:agent.scout";
-const config: ConfigView = {
-	title: "Console",
-	panes: ["rooms"],
-	timeZone: "UTC",
-	look: "modern",
-};
-
-const character: CharacterSpec = {
-	v: 1,
-	class: "knight",
-	...CATALOG.classes.knight.preset,
-};
-
-const profile = (over: Partial<AgentProfileView> = {}): AgentProfileView => ({
-	name: "scout",
-	displayName: "Scout",
-	prompt: "You scout.\nBe brief.\nNever guess.",
-	effective: { model: "model-a", thinking: "medium" },
-	avatar: "avatars/x.png",
-	character,
-	room: SCOUT,
-	...over,
-});
-
-const view = (over: Partial<RoomView> = {}): RoomView => ({
-	key: SCOUT,
-	kind: "agent",
-	name: "scout",
-	displayName: "Scout",
-	home: false,
-	readOnly: false,
-	mode: { yolo: false, longRunning: false },
-	typing: false,
-	stoppable: false,
-	...over,
-});
-
-let page: TestPage;
-beforeAll(async () => {
-	await loadKit();
-	// The sheet loads the creator on demand; having it loaded already keeps the tests off the clock.
-	await import("./components/character-creator.tsx");
-	page = await openPage();
-	setRouting(undefined);
-	setConnection(
-		partial<AppConnection>({
-			send: () => true,
-			focus: () => undefined,
-		}),
-	);
-});
-afterAll(async () => {
-	setConnection(undefined);
-	await page.unmount();
-	await releaseDom();
-});
-
-const settle = (ms = 40) =>
-	new Promise<void>((resolve) => setTimeout(resolve, ms));
-const q = <T extends Element = HTMLElement>(selector: string): T | null =>
-	document.querySelector<T>(selector);
-const all = <T extends Element = HTMLElement>(selector: string): T[] => [
-	...document.querySelectorAll<T>(selector),
-];
-const typeInto = (
-	element: HTMLTextAreaElement | HTMLInputElement | null,
-	text: string,
-) => {
-	if (!element) throw new Error("nothing to type into");
-	return page.act(() => {
-		const prototype =
-			element instanceof HTMLTextAreaElement
-				? HTMLTextAreaElement.prototype
-				: HTMLInputElement.prototype;
-		Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
-			element,
-			text,
-		);
-		element.dispatchEvent(new Event("input", { bubbles: true }));
-	});
-};
-const button = (text: string) =>
-	all<HTMLButtonElement>("button").find(
-		(one) => one.textContent?.trim() === text,
-	) ?? null;
-/** The form's own submit button; the character creator has a Save of its own. */
-const submit = () =>
-	q<HTMLButtonElement>(".agent-sheet > form button[type=submit]");
-const inReview = (text: string) =>
-	all<HTMLButtonElement>(".review button").find(
-		(one) => one.textContent === text,
-	) ?? null;
-const model = () => q<HTMLSelectElement>(".agent-sheet > form select");
-const pickModel = (value: string) =>
-	page.act(() => {
-		const select = model();
-		if (select) select.value = value;
-		select?.dispatchEvent(new Event("change", { bubbles: true }));
-	});
-
-let agent: ReturnType<typeof spyOn>;
-let models: ReturnType<typeof spyOn>;
-let update: ReturnType<typeof spyOn>;
-let skills: ReturnType<typeof spyOn>;
-let skillGroups: ReturnType<typeof spyOn>;
-const skillList = (carried: string[] = []): AgentSkillsView => ({
-	skills: [
-		{
-			name: "writing-skills",
-			description: "Use when writing a skill.",
-			source: "builtin",
-			builtin: true,
-			carried: true,
-		},
-		{
-			name: "kit-do",
-			description: "Use when changing source.",
-			source: "linked",
-			builtin: false,
-			carried: carried.includes("kit-do"),
-		},
-	],
-});
-beforeEach(() => {
-	window.innerWidth = 1280;
-	window.location.hash = "#/room/app%3Aagent.scout";
-	store.dispatch({ type: "rooms_loaded", rooms: [view()] });
-	agent = spyOn(api, "agent").mockResolvedValue(profile());
-	models = spyOn(api, "models").mockResolvedValue({
-		models: ["model-a", "model-b"],
-	});
-	update = spyOn(api, "updateAgent").mockImplementation(async (_name, patch) =>
-		profile(patch as Partial<AgentProfileView>),
-	);
-	skills = spyOn(teamApi, "skills").mockResolvedValue(skillList());
-	skillGroups = spyOn(editApi, "skillGroups").mockResolvedValue({
-		groups: [],
-	});
-});
-afterEach(async () => {
-	closeAgentSheet();
-	await page.render(null);
-	store.dispatch({ type: "rooms_loaded", rooms: [] });
-	agent.mockRestore();
-	models.mockRestore();
-	update.mockRestore();
-	skills.mockRestore();
-	skillGroups.mockRestore();
-	clearRoomConfirm();
-	closeTeamSheet();
-});
-
-const Host = () => (
-	<ConfigContext.Provider value={config}>
-		<AgentSheetHost />
-		<RoomConfirmHost />
-		<Toaster />
-	</ConfigContext.Provider>
-);
-
-async function open(
-	options: { look?: boolean; skills?: boolean; creator?: boolean } = {},
-) {
-	await page.render(<Host />);
-	await page.act(() =>
-		openAgentSheet("scout", {
-			look: options.look === true,
-			skills: options.skills === true,
-		}),
-	);
-	// The profile arrives, then the creator's chunk; each wait ends in an `act`, which draws what came.
-	for (let waited = 0; waited < 5000; waited += 40) {
-		await page.act(() => settle(40));
-		if (options.creator === false || q(".agent-sheet .creator")) return;
-	}
-}
+setupAgentSheet();
 
 test("the sheet is a wide sheet titled Edit knight, with the knight's fields, chips and look", async () => {
 	await open();
@@ -234,7 +53,9 @@ test("the sheet is a wide sheet titled Edit knight, with the knight's fields, ch
 		"model-b",
 	]);
 	expect(model()?.value).toBe("default");
-	expect(all("button.option-chip").map((one) => one.textContent)).toEqual([
+	expect(
+		all("[data-tab=profile] button.option-chip").map((one) => one.textContent),
+	).toEqual([
 		"Default",
 		"Off",
 		"Minimal",
@@ -243,7 +64,13 @@ test("the sheet is a wide sheet titled Edit knight, with the knight's fields, ch
 		"High",
 		"Very high",
 	]);
-	expect(q(".option-chip[aria-pressed=true]")?.textContent).toBe("Default");
+	expect(
+		q("[data-tab=profile] .option-chip[aria-pressed=true]")?.textContent,
+	).toBe("Default");
+	// The look is a tab of its own, drawn when it is shown.
+	expect(q(".agent-sheet .creator")).toBeNull();
+	await page.click(tabNamed("Look"));
+	await page.act(() => settle(80));
 	expect(q(".agent-sheet .creator")).not.toBeNull();
 });
 
@@ -327,9 +154,10 @@ test("the prompt opens in a full-screen editor that edits the same text", async 
 	const area = full?.querySelector<HTMLTextAreaElement>("textarea.prompt-full");
 	expect(area?.value).toBe("You scout.\nBe brief.\nNever guess.");
 	await typeInto(area ?? null, "Typed in full screen");
-	expect(q<HTMLTextAreaElement>(".agent-sheet > form textarea")?.value).toBe(
-		"Typed in full screen",
-	);
+	expect(
+		q<HTMLTextAreaElement>(".agent-sheet [data-tab=profile] > form textarea")
+			?.value,
+	).toBe("Typed in full screen");
 	await page.click(
 		full?.querySelector<HTMLElement>(".sheet-head button") ?? null,
 	);
@@ -405,9 +233,10 @@ test("History lists who changed the prompt and when, shows a change as a diff, a
 		]);
 		await page.click(button("Use this text"));
 		// The text is in the editor as an edit to save; nothing was sent.
-		expect(q<HTMLTextAreaElement>(".agent-sheet > form textarea")?.value).toBe(
-			"You scout.\nBe brief.\nNever guess.",
-		);
+		expect(
+			q<HTMLTextAreaElement>(".agent-sheet [data-tab=profile] > form textarea")
+				?.value,
+		).toBe("You scout.\nBe brief.\nNever guess.");
 		expect(q(".history")).toBeNull();
 		expect(update).not.toHaveBeenCalled();
 	} finally {
@@ -717,209 +546,6 @@ test("a group's header name is a button that opens the group's sheet, not an age
 	}
 });
 
-test("the sheet lists the host's skills; the built-in one is on and cannot be turned off, another flips as the server says", async () => {
-	const set = spyOn(teamApi, "setSkills").mockResolvedValue(
-		skillList(["kit-do"]),
-	);
-	try {
-		await open();
-		expect(skills).toHaveBeenCalledWith("scout");
-		const switches = all<HTMLButtonElement>(
-			'section[aria-label="Skills"] button[role=switch]',
-		);
-		expect(switches.map((one) => one.getAttribute("aria-label"))).toEqual([
-			"writing-skills",
-			"kit-do",
-		]);
-		expect(switches[0]?.disabled).toBe(true);
-		expect(switches[0]?.getAttribute("aria-checked")).toBe("true");
-		expect(switches[1]?.getAttribute("aria-checked")).toBe("false");
-		await page.click(switches[1] ?? null);
-		await page.act(() => settle(40));
-		expect(set).toHaveBeenCalledWith("scout", { add: ["kit-do"] });
-		expect(
-			q(
-				'section[aria-label="Skills"] button[aria-label="kit-do"]',
-			)?.getAttribute("aria-checked"),
-		).toBe("true");
-		// Flipping it back asks for the removal.
-		set.mockResolvedValue(skillList());
-		await page.click(
-			q('section[aria-label="Skills"] button[aria-label="kit-do"]'),
-		);
-		await page.act(() => settle(40));
-		expect(set).toHaveBeenLastCalledWith("scout", { remove: ["kit-do"] });
-	} finally {
-		set.mockRestore();
-	}
-});
-
-/** Opens the sheet without waiting for the creator's chunk, until the skills have come. */
-async function openAtSkills(skills: boolean) {
-	await open({ skills, creator: false });
-	for (
-		let waited = 0;
-		waited < 3000 && !q('section[aria-label="Skills"]');
-		waited += 40
-	)
-		await page.act(() => settle(40));
-}
-
-test("Skills opens the sheet scrolled to the skills, titled with how many the knight carries", async () => {
-	const scrolled: Element[] = [];
-	const original = Element.prototype.scrollIntoView;
-	Element.prototype.scrollIntoView = function (this: Element) {
-		scrolled.push(this);
-	};
-	const set = spyOn(teamApi, "setSkills").mockResolvedValue(
-		skillList(["kit-do"]),
-	);
-	try {
-		await openAtSkills(true);
-		const section = q('section[aria-label="Skills"]');
-		expect(section).not.toBeNull();
-		expect(scrolled).toEqual([section as Element]);
-		expect(document.activeElement).toBe(section);
-		// The built-in one counts: it is carried.
-		expect(section?.querySelector("h3")?.textContent).toBe("Skills (1)");
-		await page.click(
-			q('section[aria-label="Skills"] button[aria-label="kit-do"]'),
-		);
-		await page.act(() => settle(40));
-		expect(q('section[aria-label="Skills"] h3')?.textContent).toBe(
-			"Skills (2)",
-		);
-	} finally {
-		Element.prototype.scrollIntoView = original;
-		set.mockRestore();
-	}
-});
-
-test("Edit knight does not scroll to the skills; Skills after it for the same knight does", async () => {
-	const scrolled: Element[] = [];
-	const original = Element.prototype.scrollIntoView;
-	Element.prototype.scrollIntoView = function (this: Element) {
-		scrolled.push(this);
-	};
-	try {
-		await openAtSkills(false);
-		expect(q('section[aria-label="Skills"]')).not.toBeNull();
-		expect(scrolled).toHaveLength(0);
-		await page.act(() => openAgentSheet("scout", { skills: true }));
-		await page.act(() => settle(80));
-		expect(scrolled.map((one) => one.getAttribute("aria-label"))).toEqual([
-			"Skills",
-		]);
-	} finally {
-		Element.prototype.scrollIntoView = original;
-	}
-});
-
-test("a refused skill change shows the server's words and leaves the switch where it was", async () => {
-	const set = spyOn(teamApi, "setSkills").mockRejectedValue(
-		new Error("Unknown skills: kit-do."),
-	);
-	try {
-		await open();
-		await page.click(
-			q('section[aria-label="Skills"] button[aria-label="kit-do"]'),
-		);
-		await page.act(() => settle(40));
-		expect(document.body.textContent).toContain("Unknown skills: kit-do.");
-		expect(
-			q(
-				'section[aria-label="Skills"] button[aria-label="kit-do"]',
-			)?.getAttribute("aria-checked"),
-		).toBe("false");
-	} finally {
-		set.mockRestore();
-	}
-});
-
-test("a skill group's switch says what it lacks, asks first, switches on only the missing skills and switches them off again", async () => {
-	skillGroups.mockResolvedValue({
-		groups: [
-			{ name: "basics", description: "Basics.", skills: ["writing-skills"] },
-			{
-				name: "coding",
-				description: "Coding.",
-				skills: ["writing-skills", "kit-do"],
-			},
-		],
-	});
-	const apply = spyOn(editApi, "applySkillGroup").mockImplementation(
-		async (_group, _agent, on = true) => {
-			skills.mockResolvedValue(skillList(on ? ["kit-do"] : []));
-			return on
-				? { added: ["kit-do"], removed: [] }
-				: { added: [], removed: ["kit-do"] };
-		},
-	);
-	try {
-		await open({ creator: false });
-		await page.act(() => settle(80));
-		const toggle = (group: string) =>
-			q<HTMLButtonElement>(
-				`.skill-apply button[aria-label="Skill group ${group}"]`,
-			);
-		const row = (group: string) => toggle(group)?.closest("li");
-		expect(row("basics")?.textContent).toContain("Carries all of it.");
-		expect(toggle("basics")?.getAttribute("aria-checked")).toBe("true");
-		// Only built-in skills: there is nothing to switch off.
-		expect(toggle("basics")?.disabled).toBe(true);
-		expect(row("coding")?.textContent).toContain("Lacks 1: kit-do");
-		expect(toggle("coding")?.getAttribute("aria-checked")).toBe("false");
-		await page.click(toggle("coding"));
-		const confirmOn = q<HTMLDialogElement>(
-			'dialog[aria-label="Switch this skill group on?"]',
-		);
-		expect(confirmOn?.open).toBe(true);
-		expect(confirmOn?.textContent).toContain("scout will also carry: kit-do.");
-		expect(apply).not.toHaveBeenCalled();
-		await page.click(button("Switch on"));
-		await page.act(() => settle(80));
-		expect(apply).toHaveBeenCalledWith("coding", "scout", true);
-		expect(document.body.textContent).toContain("Switched on: kit-do");
-		expect(
-			q(
-				'section[aria-label="Skills"] button[aria-label="kit-do"]',
-			)?.getAttribute("aria-checked"),
-		).toBe("true");
-		expect(toggle("coding")?.getAttribute("aria-checked")).toBe("true");
-		await page.click(toggle("coding"));
-		const confirmOff = q<HTMLDialogElement>(
-			'dialog[aria-label="Switch this skill group off?"]',
-		);
-		expect(confirmOff?.open).toBe(true);
-		expect(confirmOff?.textContent).toContain(
-			"scout will no longer carry: kit-do.",
-		);
-		await page.click(button("Switch off"));
-		await page.act(() => settle(80));
-		expect(apply).toHaveBeenLastCalledWith("coding", "scout", false);
-		expect(document.body.textContent).toContain("Switched off: kit-do");
-		expect(toggle("coding")?.getAttribute("aria-checked")).toBe("false");
-	} finally {
-		apply.mockRestore();
-	}
-});
-
-test("without skill groups the sheet shows no group switches", async () => {
-	await open({ creator: false });
-	await page.act(() => settle(80));
-	expect(q('section[aria-label="Skills"]')).not.toBeNull();
-	expect(q(".skill-apply")).toBeNull();
-});
-
-test("a host without skills shows no skills section", async () => {
-	skills.mockRejectedValue(
-		new ApiFailure("This host has no skills.", undefined, 404),
-	);
-	await open();
-	expect(q('section[aria-label="Skills"]')).toBeNull();
-	expect(q(".agent-sheet .failure")).toBeNull();
-});
-
 test("Archive asks first, naming the agent, and archives it through the server", async () => {
 	const archive = spyOn(teamApi, "archiveAgent").mockResolvedValue({
 		ok: true,
@@ -931,6 +557,7 @@ test("Archive asks first, naming the agent, and archives it through the server",
 	});
 	try {
 		await open();
+		await page.click(tabNamed("More"));
 		await page.click(button("Archive Scout"));
 		// The sheet gives way to the question.
 		expect(currentAgentSheet()).toBeUndefined();
@@ -961,11 +588,14 @@ test("the coordinator's sheet has no Archive button", async () => {
 		rooms: [view({ home: true, coordinator: true })],
 	});
 	await open();
+	await page.click(tabNamed("More"));
+	expect(button("History of the prompt")).not.toBeNull();
 	expect(button("Archive Scout")).toBeNull();
 });
 
 test("the home room of a team with no coordinator can be archived", async () => {
 	store.dispatch({ type: "rooms_loaded", rooms: [view({ home: true })] });
 	await open();
+	await page.click(tabNamed("More"));
 	expect(button("Archive Scout")).not.toBeNull();
 });

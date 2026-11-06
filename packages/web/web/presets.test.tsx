@@ -24,6 +24,7 @@ import {
 	closeAgentSheet,
 	currentAgentSheet,
 	openAgentSheet,
+	rememberAgentTab,
 } from "./lib/agent-sheet.ts";
 import { ApiFailure, api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
@@ -171,6 +172,7 @@ beforeEach(() => {
 afterEach(async () => {
 	closeAgentSheet();
 	closeTeamSheet();
+	rememberAgentTab("profile");
 	for (const spy of spies.splice(0)) spy.mockRestore();
 	for (const dismiss of all('.toaster [aria-label="Dismiss"]'))
 		await page.click(dismiss);
@@ -230,7 +232,8 @@ async function open(card = true): Promise<void> {
 			<Toaster />
 		</ConfigContext.Provider>,
 	);
-	await page.act(() => openAgentSheet("scout", { look: false, skills: false }));
+	// The presets are a tab of their own.
+	await page.act(() => openAgentSheet("scout", card ? { tab: "presets" } : {}));
 	for (let waited = 0; waited < 3000; waited += 40) {
 		await page.act(() => settle(40));
 		if (card ? q("[data-presets]") : q(".agent-sheet [aria-label=Skills]"))
@@ -238,7 +241,7 @@ async function open(card = true): Promise<void> {
 	}
 }
 
-test("the knight's sheet lists its presets under the skills, with their count and the most it may keep", async () => {
+test("the knight's sheet lists its presets on their tab after the skills, with their count and the most it may keep", async () => {
 	await open();
 	const card = q("[data-presets]");
 	expect(card?.querySelector("h3")?.textContent).toBe(
@@ -248,11 +251,14 @@ test("the knight's sheet lists its presets under the skills, with their count an
 	expect(row?.textContent).toContain("writer · Writer");
 	expect(row?.textContent).toContain("Skills (1) · You write the post.");
 	expect(row?.textContent).not.toContain("Keep it short.");
-	// It comes after the skills card.
-	const cards = all(".agent-sheet > section.card");
-	expect(cards.findIndex((one) => one.hasAttribute("data-presets"))).toBe(
-		cards.findIndex((one) => one.getAttribute("aria-label") === "Skills") + 1,
-	);
+	// Its tab comes after the skills'.
+	expect(all(".agent-sheet [role=tab]").map((one) => one.textContent)).toEqual([
+		"Profile",
+		"Skills",
+		"Presets",
+		"Look",
+		"More",
+	]);
 });
 
 test("no card for a temp knight, nor where the host makes no temp knights", async () => {
@@ -260,6 +266,12 @@ test("no card for a temp knight, nor where the host makes no temp knights", asyn
 	await open(false);
 	await page.act(() => settle(120));
 	expect(q("[data-presets]")).toBeNull();
+	expect(all(".agent-sheet [role=tab]").map((one) => one.textContent)).toEqual([
+		"Profile",
+		"Skills",
+		"Look",
+		"More",
+	]);
 	closeAgentSheet();
 	await page.render(null);
 	session = partialSession({ helpers: true });
@@ -270,6 +282,12 @@ test("no card for a temp knight, nor where the host makes no temp knights", asyn
 	await page.act(() => settle(120));
 	expect(q(".agent-sheet")).not.toBeNull();
 	expect(q("[data-presets]")).toBeNull();
+	expect(all(".agent-sheet [role=tab]").map((one) => one.textContent)).toEqual([
+		"Profile",
+		"Skills",
+		"Look",
+		"More",
+	]);
 	expect(teamApi.presets).not.toHaveBeenCalled();
 });
 
@@ -293,9 +311,7 @@ test("a new preset is made in a sheet over the knight's, with the shared fields,
 	await typeInto(inputs[1], "Editor");
 	await typeInto(sheet?.querySelector("textarea"), "You edit.");
 	// A skill's switch changes the draft only; nothing is sent yet.
-	await page.click(
-		sheet?.querySelector('[role="switch"][aria-label="kit-do"]') ?? null,
-	);
+	await page.click(sheet?.querySelector('button[aria-label="kit-do"]') ?? null);
 	expect(teamApi.savePreset).not.toHaveBeenCalled();
 	await page.click(ofEditor("Save"));
 	await page.act(() => settle(60));

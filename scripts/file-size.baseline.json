@@ -37,7 +37,6 @@
 	"packages/web/src/web-app.ts": 718,
 	"packages/web/src/web-plugin.test.ts": 753,
 	"packages/web/src/web-plugin.ts": 575,
-	"packages/web/web/agent-sheet.test.tsx": 971,
 	"packages/web/web/app.tsx": 593,
 	"packages/web/web/components/cards.tsx": 632,
 	"packages/web/web/components/character-creator.tsx": 750,

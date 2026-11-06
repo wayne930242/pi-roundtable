@@ -30,7 +30,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"頁面開啟期間應用程式已更新，因此有部分內容無法載入。",
 	"This page stopped working. Reloading usually fixes it.":
 		"這個頁面停止運作了。重新載入通常就能解決。",
-
 	// 檔案
 	Files: "檔案",
 	"this place is read-only": "此區唯讀",
@@ -119,7 +118,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"“{name}” goes to the trash, where you can bring it back.":
 		"「{name}」會移到垃圾桶，之後可以還原。",
 	"Resize the folder list": "調整資料夾列表的寬度",
-
 	// 卡片
 	"{names} can approve this, and so can an owner.":
 		"{names}可以核准這項操作，擁有者也可以。",
@@ -153,7 +151,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Expired: "已過期",
 	Cancelled: "已取消",
 	Withdrawn: "已撤回",
-
 	// 角色建立器
 	"{name}, {state}": "{name}，{state}",
 	"{name} ({state})": "{name}（{state}）",
@@ -1200,6 +1197,11 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"It also leaves the skill groups {groups}.": "它也會離開技能組合 {groups}。",
 	"This cannot be undone.": "這個動作無法復原。",
 	"Skills ({count})": "技能（{count}）",
+	"{count} carried": "已帶 {count} 個",
+	"{count} built in": "內建 {count} 個",
+	"Show carried": "顯示已帶",
+	"Show all ({count})": "顯示全部（{count}）",
+	Presets: "範本",
 	"Choose the skills this knight carries.": "選擇這位騎士攜帶的技能。",
 	"Skill groups": "技能組合",
 	"A group lists skills to switch on for a knight in one step, from the knight's sheet. Knights carry the skills, not the group.":
@@ -1216,8 +1218,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"小寫字母、數字與單一連字號，最多 64 個字元。",
 	Description: "描述",
 	"Save group": "儲存組合",
-	"Switching a group on switches on its skills this knight lacks; switching it off switches off its skills, built-in ones excepted.":
-		"打開組合會開啟這位騎士還沒有的組合技能；關閉組合會關掉組合裡的技能，內建技能除外。",
 	"Carries all of it.": "已攜帶全部技能。",
 	"Lacks {count}: {skills}": "缺少 {count} 個：{skills}",
 	"Skill group {name}": "技能組合 {name}",

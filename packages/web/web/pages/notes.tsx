@@ -8,6 +8,7 @@ import type {
 import { Dialog } from "../components/dialog.tsx";
 import { Select } from "../components/select.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
+import { Tabs } from "../components/tabs.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";
 import { today } from "../lib/format.ts";
@@ -118,22 +119,20 @@ export function NotesPage() {
 				/>
 			) : null}
 			<div className="toolbar">
-				<div className="tabs" role="tablist">
-					{KINDS.map((entry) => (
-						<button
-							key={entry.kind}
-							type="button"
-							role="tab"
-							aria-selected={kind === entry.kind}
-							onClick={() => setKind(entry.kind)}
-						>
-							{t(entry.label)}
-							{notes
-								? ` ${notes.filter((n) => n.kind === entry.kind).length}`
-								: ""}
-						</button>
-					))}
-				</div>
+				<Tabs<NoteKind>
+					label={t("Notes")}
+					value={kind}
+					tabs={KINDS.map((entry) => {
+						const label = t(entry.label);
+						return {
+							value: entry.kind,
+							label: notes
+								? `${label} ${notes.filter((n) => n.kind === entry.kind).length}`
+								: label,
+						};
+					})}
+					onChange={setKind}
+				/>
 				<input
 					type="search"
 					placeholder={t("Search (words separated by spaces)")}

@@ -7,24 +7,22 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type {
-	AgentPatch,
-	AgentProfileView,
-	AgentSkillsView,
-} from "../../src/api-types.ts";
+import type { AgentPatch, AgentProfileView } from "../../src/api-types.ts";
 import {
+	type AgentTab,
 	closeAgentSheet,
 	currentAgentSheet,
+	lastAgentTab,
+	rememberAgentTab,
 	useAgentSheet,
 } from "../lib/agent-sheet.ts";
-import { ApiFailure, api, messageOf } from "../lib/api.ts";
+import { installAgentSheetStyle } from "../lib/agent-sheet-style.ts";
+import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useRoomState } from "../lib/characters.ts";
 import { editApi } from "../lib/edit-api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { setRoomMuted } from "../lib/mute.ts";
-import { askRoomConfirm } from "../lib/room-confirm.ts";
-import { teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import {
 	AgentFields,
@@ -32,13 +30,17 @@ import {
 	type FieldsDraft as Draft,
 	thinkingOf,
 } from "./agent-fields.tsx";
+import { AgentMore } from "./agent-more.tsx";
 import { defaultModelLabel, Review } from "./agent-review.tsx";
+import { Skills } from "./agent-skills.tsx";
 import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
-import { SkillPicker } from "./skill-picker.tsx";
 import { Failure, Loading } from "./states.tsx";
 import { Switch } from "./switch.tsx";
+import { panelId, Tabs, tabId } from "./tabs.tsx";
+
+installAgentSheetStyle();
 
 // The history of a prompt is read now and then; it loads when it is asked for.
 const HistorySheet = lazy(() =>
@@ -114,7 +116,6 @@ export function AgentSheetHost() {
 		</Sheet>
 	);
 }
-
 /** One agent's name, prompt, model, thinking and look, and whether its room is pushed. */
 function AgentEditor({ name, opened }: { name: string; opened: number }) {
 	const [profile, setProfile] = useState<AgentProfileView>();
@@ -140,14 +141,47 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 		profile?.room ?? "",
 	);
 	const muteId = useId();
+	const tabsId = useId();
+	const [tab, setTab] = useState<AgentTab>(
+		() => currentAgentSheet()?.tab ?? lastAgentTab(),
+	);
+	// A panel mounts when it is first shown and stays, so a lazy one loads only if it is asked for.
+	const [shown, setShown] = useState<ReadonlySet<AgentTab>>(
+		() => new Set([tab]),
+	);
+	const [noSkills, setNoSkills] = useState(false);
+	const [helpers, setHelpers] = useState(false);
+	const show = (next: AgentTab) => {
+		setTab(next);
+		setShown((before) => new Set(before).add(next));
+		rememberAgentTab(next);
+	};
+	useEffect(() => {
+		let current = true;
+		api.session().then(
+			(session) => current && setHelpers(session.helpers === true),
+			() => undefined,
+		);
+		return () => {
+			current = false;
+		};
+	}, []);
 
-	// "Change look" in a menu lands on the creator.
+	// A tab asked for (Change look, Skills in a menu) is shown; the creator takes the focus once drawn.
+	const focusLook = useRef(false);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
 	useEffect(() => {
-		if (!loaded || !currentAgentSheet()?.look) return;
-		look.current?.scrollIntoView({ block: "start" });
-		look.current?.focus({ preventScroll: true });
-	}, [loaded, opened]);
+		const asked = currentAgentSheet()?.tab;
+		if (asked) show(asked);
+		focusLook.current = asked === "look";
+	}, [opened]);
+	const onLook = tab === "look";
+	useEffect(() => {
+		if (!loaded || !onLook || !focusLook.current || !look.current) return;
+		focusLook.current = false;
+		look.current.scrollIntoView({ block: "start" });
+		look.current.focus({ preventScroll: true });
+	});
 
 	// Each open reads the profile again, so a save made elsewhere is the base of the diff; a draft with
 	// unsaved edits is kept.
@@ -198,140 +232,179 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 		}
 	};
 
+	const tabs = (
+		[
+			["profile", t("Profile")],
+			["skills", t("Skills")],
+			["presets", t("Presets")],
+			["look", t("Look")],
+			["more", t("More")],
+		] as const
+	)
+		.filter(
+			([value]) =>
+				(value !== "skills" || !noSkills) &&
+				(value !== "presets" || (helpers && !profile.helper)),
+		)
+		.map(([value, label]) => ({ value, label }));
+	const on = tabs.some((one) => one.value === tab) ? tab : "profile";
+	const panel = (value: AgentTab) => ({
+		id: panelId(tabsId, value),
+		role: "tabpanel",
+		"aria-labelledby": tabId(tabsId, value),
+		hidden: on !== value,
+		"data-tab": value,
+	});
+	const mounted = (value: AgentTab) =>
+		on === value ||
+		(shown.has(value) && tabs.some((one) => one.value === value));
+
 	return (
 		<div className="stack agent-sheet">
-			<header className="profile-head">
-				<PageCharacter
-					spec={profile.character}
-					name={profile.name}
-					size={72}
-					state={state}
-					label={profile.displayName}
-				/>
-				<div>
-					<h3>{profile.displayName}</h3>
-					<p className="meta">
-						{t("Runs on {model}, thinking {thinking}", {
-							model: profile.effective.model,
-							thinking: thinkingOf(profile.effective.thinking),
-						})}
-					</p>
-				</div>
-			</header>
-			<ul className="menu">
-				<li>
-					<label className="menu-item menu-toggle" htmlFor={muteId}>
-						<span className="menu-icon">
-							<Icon name={muted ? "bell-off" : "bell"} />
-						</span>
-						<span className="menu-text">
-							<strong>{t("Notifications")}</strong>
-							<span className="meta">
-								{t(
-									"Push this room's posts to every owner's devices. A card that waits for you is always pushed.",
-								)}
-							</span>
-						</span>
-						<Switch
-							id={muteId}
-							checked={!muted}
-							label={t("Notifications")}
-							busy={muting}
-							onChange={async (next) => {
-								setMuting(true);
-								await setRoomMuted(profile.room, !next);
-								setMuting(false);
-							}}
+			<Tabs
+				label={t("Edit knight")}
+				className="agent-tabs"
+				prefix={tabsId}
+				value={on}
+				tabs={tabs}
+				onChange={show}
+			/>
+			{on === "profile" ? (
+				<div className="stack" {...panel("profile")}>
+					<header className="profile-head">
+						<PageCharacter
+							spec={profile.character}
+							name={profile.name}
+							size={72}
+							state={state}
+							label={profile.displayName}
 						/>
-					</label>
-				</li>
-			</ul>
-			{reviewing ? (
-				<Review
-					profile={profile}
-					draft={draft}
-					saving={saving}
-					onBack={() => setReviewing(false)}
-					onSave={save}
-				/>
-			) : (
-				<form
-					className="stack form"
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (!dirty) return;
-						// A prompt shapes everything the agent does: it is read over once before it is saved.
-						if (patch.prompt !== undefined) setReviewing(true);
-						else save();
-					}}
-				>
-					<AgentFields
-						draft={draft}
-						onChange={setDraft}
-						models={models}
-						defaultModel={defaultModelLabel(profile)}
-						onHistory={() => setHistory(true)}
-					/>
-					<div className="actions">
-						<button type="submit" disabled={!dirty || saving}>
-							{saving
-								? t("Saving…")
-								: patch.prompt !== undefined
-									? t("Review changes")
-									: t("Save")}
-						</button>
-					</div>
-				</form>
-			)}
-			<Skills name={name} opened={opened} />
-			{profile.helper ? null : (
-				<Suspense fallback={null}>
-					<PresetCard knight={profile} models={models} />
-				</Suspense>
-			)}
-			<section className="card stack" ref={look} tabIndex={-1}>
-				<h3>{t("Look")}</h3>
-				<p className="meta">
-					{t(
-						"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.",
-					)}
-				</p>
-				<Suspense fallback={<Loading />}>
-					<CharacterCreator
-						name={profile.name}
-						displayName={profile.displayName}
-						prompt={profile.prompt}
-						character={profile.character}
-						onSaved={(saved) => setProfile(saved)}
-					/>
-				</Suspense>
-			</section>
-			{coordinator ? null : (
-				<section className="card stack">
-					<h3>{t("Archive")}</h3>
-					<p className="meta">
-						{t(
-							"An archived knight stops answering and its schedules are cancelled. Its history is kept, and you can restore it from Archived.",
-						)}
-					</p>
-					<div className="actions">
-						<button
-							type="button"
-							className="danger"
-							onClick={() => {
-								closeAgentSheet();
-								askRoomConfirm({
-									kind: "archive",
-									room: profile.room,
-									name: profile.displayName,
-								});
+						<div>
+							<h3>{profile.displayName}</h3>
+							<p className="meta">
+								{t("Runs on {model}, thinking {thinking}", {
+									model: profile.effective.model,
+									thinking: thinkingOf(profile.effective.thinking),
+								})}
+							</p>
+						</div>
+					</header>
+					<ul className="menu">
+						<li>
+							<label className="menu-item menu-toggle" htmlFor={muteId}>
+								<span className="menu-icon">
+									<Icon name={muted ? "bell-off" : "bell"} />
+								</span>
+								<span className="menu-text">
+									<strong>{t("Notifications")}</strong>
+									<span className="meta">
+										{t(
+											"Push this room's posts to every owner's devices. A card that waits for you is always pushed.",
+										)}
+									</span>
+								</span>
+								<Switch
+									id={muteId}
+									checked={!muted}
+									label={t("Notifications")}
+									busy={muting}
+									onChange={async (next) => {
+										setMuting(true);
+										await setRoomMuted(profile.room, !next);
+										setMuting(false);
+									}}
+								/>
+							</label>
+						</li>
+					</ul>
+					{reviewing ? (
+						<Review
+							profile={profile}
+							draft={draft}
+							saving={saving}
+							onBack={() => setReviewing(false)}
+							onSave={save}
+						/>
+					) : (
+						<form
+							className="stack form"
+							onSubmit={(event) => {
+								event.preventDefault();
+								if (!dirty) return;
+								// A prompt shapes everything the agent does: it is read over once before it is saved.
+								if (patch.prompt !== undefined) setReviewing(true);
+								else save();
 							}}
 						>
-							{t("Archive {name}", { name: profile.displayName })}
-						</button>
-					</div>
-				</section>
+							<AgentFields
+								draft={draft}
+								onChange={setDraft}
+								models={models}
+								defaultModel={defaultModelLabel(profile)}
+								onHistory={() => setHistory(true)}
+							/>
+							<div className="actions">
+								<button type="submit" disabled={!dirty || saving}>
+									{saving
+										? t("Saving…")
+										: patch.prompt !== undefined
+											? t("Review changes")
+											: t("Save")}
+								</button>
+							</div>
+						</form>
+					)}
+				</div>
+			) : null}
+			{noSkills ? null : (
+				<div {...panel("skills")}>
+					<Skills
+						name={name}
+						opened={opened}
+						onAbsent={() => setNoSkills(true)}
+					/>
+				</div>
 			)}
+			{mounted("presets") ? (
+				<div {...panel("presets")}>
+					<Suspense fallback={<Loading />}>
+						<PresetCard knight={profile} models={models} />
+					</Suspense>
+				</div>
+			) : null}
+			{mounted("look") ? (
+				<section
+					className="card stack"
+					ref={look}
+					tabIndex={-1}
+					{...panel("look")}
+				>
+					<h3>{t("Look")}</h3>
+					<p className="meta">
+						{t(
+							"Class, colors and parts. The picture here, in the rooms and in Discord all follow it.",
+						)}
+					</p>
+					<Suspense fallback={<Loading />}>
+						<CharacterCreator
+							name={profile.name}
+							displayName={profile.displayName}
+							prompt={profile.prompt}
+							character={profile.character}
+							onSaved={(saved) => setProfile(saved)}
+						/>
+					</Suspense>
+				</section>
+			) : null}
+			{on === "more" ? (
+				<div className="stack" {...panel("more")}>
+					<AgentMore
+						profile={profile}
+						coordinator={coordinator}
+						onHistory={() => setHistory(true)}
+					/>
+				</div>
+			) : null}
 			{history ? (
 				<Suspense fallback={null}>
 					<HistorySheet
@@ -355,93 +428,5 @@ function AgentEditor({ name, opened }: { name: string; opened: number }) {
 				</Suspense>
 			) : null}
 		</div>
-	);
-}
-
-/**
- * The skills the agent carries, from the host's catalog: a switch each, applied as it is flipped.
- * The built-in ones are carried by every agent and stay on. A host without skills shows nothing.
- */
-function Skills({ name, opened }: { name: string; opened: number }) {
-	const [view, setView] = useState<AgentSkillsView>();
-	const [busy, setBusy] = useState<string>();
-	const [error, setError] = useState<string>();
-	const section = useRef<HTMLElement>(null);
-	const loaded = view !== undefined;
-	// "Skills" in a menu lands here once the list has come.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
-	useEffect(() => {
-		if (!loaded || !currentAgentSheet()?.skills) return;
-		section.current?.scrollIntoView({ block: "start" });
-		section.current?.focus({ preventScroll: true });
-	}, [loaded, opened]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is a new ask for the same agent
-	useEffect(() => {
-		let current = true;
-		teamApi.skills(name).then(
-			(loaded) => current && setView(loaded),
-			(failure) => {
-				// The host has no skills addon: there is nothing to choose.
-				if (
-					current &&
-					!(failure instanceof ApiFailure && failure.status === 404)
-				)
-					setError(messageOf(failure));
-			},
-		);
-		return () => {
-			current = false;
-		};
-	}, [name, opened]);
-	if (error) return <Failure message={error} />;
-	if (!view) return null;
-	const reread = () =>
-		teamApi.skills(name).then(setView, (failure) => {
-			toast(messageOf(failure), "danger");
-		});
-	const flip = async (skill: string, next: boolean) => {
-		setBusy(skill);
-		try {
-			setView(
-				await teamApi.setSkills(
-					name,
-					next ? { add: [skill] } : { remove: [skill] },
-				),
-			);
-		} catch (failure) {
-			toast(messageOf(failure), "danger");
-		} finally {
-			setBusy(undefined);
-		}
-	};
-	return (
-		<section
-			className="card stack"
-			aria-label={t("Skills")}
-			ref={section}
-			tabIndex={-1}
-		>
-			<h3>
-				{t("Skills ({count})", {
-					count: view.skills.filter((skill) => skill.carried).length,
-				})}
-			</h3>
-			<p className="meta">
-				{t(
-					"What the knight can load when a task calls for it. It applies from its next turn.",
-				)}
-			</p>
-			<SkillPicker
-				skills={view.skills}
-				who={name}
-				busy={busy}
-				onFlip={flip}
-				onApplyGroup={async (group, on) => {
-					const applied = await editApi.applySkillGroup(group.name, name, on);
-					reread();
-					return applied;
-				}}
-			/>
-		</section>
 	);
 }
