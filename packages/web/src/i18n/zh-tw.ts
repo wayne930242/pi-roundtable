@@ -369,7 +369,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Create a knight from this": "建立成騎士",
 	"Available to": "開放給",
 	"Only {name}": "只有{name}",
-	"All knights": "所有騎士",
 	"Chosen knights": "指定騎士",
 	"Shared by {name}": "{name} 分享",
 	"Open in {name}": "在{name}中開啟",
