@@ -48,9 +48,11 @@ test("the page builds with relative URLs only, and every file it names is in the
  * the optimistic read and the drawer's Home together 14 bytes over. The 50 bytes after that are
  * the left swipe's reveal taking the shared constructed-sheet helper (8 bytes over): the page's
  * policy refuses a style element, so the lazy reveal's style needs that helper's preload entry.
+ * The 50 bytes after that are a room's system line wrapping inside the room (a long yolo approval
+ * widened it) and the temp knight row's recruited-from line, together 30 bytes over.
  */
 const FIRST_LOAD_BASELINE =
-	145_612 + 8_707 + 2_000 + 200 + 260 + 300 + 150 + 100 + 100 + 50;
+	145_612 + 8_707 + 2_000 + 200 + 260 + 300 + 150 + 100 + 100 + 50 + 50;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 

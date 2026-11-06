@@ -1086,10 +1086,6 @@ button.room-picture:hover:not(:disabled) {
 	text-align: center;
 }
 
-.line > svg {
-	flex: none;
-}
-
 .day {
 	display: flex;
 	justify-content: center;
