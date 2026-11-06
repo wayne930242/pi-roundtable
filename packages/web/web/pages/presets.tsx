@@ -18,6 +18,7 @@ import { Select } from "../components/select.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useCharacters } from "../lib/characters.ts";
+import { installStyle } from "../lib/lazy-style.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { teamApi } from "../lib/team-api.ts";
 import { useFetched } from "../lib/use-fetched.ts";
@@ -37,7 +38,16 @@ const sharingOf = (preset: PresetView, owner: string): string =>
  * Every knight's temp-knight presets, grouped by the knight they belong to: whom each is shared
  * with and who recruited from it. A row opens the same preset sheet as the knight's own sheet.
  */
+const PRESETS_CSS = `
+.preset-owner {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+`;
+
 export default function PresetsPage() {
+	installStyle("presets-page", PRESETS_CSS);
 	const [session, setSession] = useState<SessionView>();
 	const [models, setModels] = useState<readonly string[]>([]);
 	const [version, setVersion] = useState(0);
@@ -79,7 +89,7 @@ export default function PresetsPage() {
 		reload();
 	};
 	return (
-		<section className="stack" data-presets-page="">
+		<section className="page stack" data-presets-page="">
 			<div className="card-head">
 				<h2>{t("Presets")}</h2>
 				{helpers ? (
@@ -124,7 +134,7 @@ export default function PresetsPage() {
 			) : null}
 			{groups.map((agent) => (
 				<article key={agent} className="card stack" data-owner={agent}>
-					<div className="card-head">
+					<div className="preset-owner">
 						<PageCharacter
 							spec={characters[agent]}
 							name={agent}
