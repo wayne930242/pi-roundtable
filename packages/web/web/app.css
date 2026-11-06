@@ -1078,6 +1078,18 @@ button.room-picture:hover:not(:disabled) {
 	color: var(--muted);
 }
 
+/* A long line (a yolo approval quoting a whole command) wraps inside the room instead of widening it. */
+.line > span,
+.line .prose {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	text-align: center;
+}
+
+.line > svg {
+	flex: none;
+}
+
 .day {
 	display: flex;
 	justify-content: center;
