@@ -20,6 +20,9 @@ export type { HelpersEnded, HelperTeam } from "./core/agents/helper-ops.ts";
 export {
 	type HelperPreset,
 	MAX_HELPER_PRESETS,
+	type OwnedPreset,
+	type PresetSharing,
+	type UsablePreset,
 } from "./core/agents/helper-presets.ts";
 export type { RouteKind, RoutingTable } from "./core/agents/routes.ts";
 export {

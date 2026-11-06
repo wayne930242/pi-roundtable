@@ -25,12 +25,12 @@ export function helperToolDefs(
 		{
 			name: "helper_create",
 			label: "Create temp knight",
-			description: `Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room. A temp knight you make often can be saved as a preset (helper_preset_set) and made by its name: what you give in the call replaces the preset's, and skills you give are added to the preset's.`,
+			description: `Make a temp knight (a helper knight) for one self-contained task that can run on its own, such as one of several things to look up or compare. It is a real agent with its own picture and place, listed under you; it starts at once and its answer comes back to you here as a new turn, like message_agent's. Make one per task, then end your turn; when the answers are in, merge them and clear the ones that are done with helper_end. It runs your model unless you give one, cannot make knights, temp knights or groups, and has no schedules. You may have a few at once, and when you are at the limit your oldest finished one is archived to make room. Before making a temp knight, check helper_preset_list for a preset to recruit it from and recruit with helper_create and preset when one fits; write a new one only otherwise. A temp knight recruited from a preset takes what you leave out from it: what you give in the call replaces the preset's, and skills you give are added to the preset's. Save one you make often with helper_preset_set.`,
 			parameters: Type.Object({
 				preset: Type.Optional(
 					Type.String({
 						description:
-							"A preset of yours, from helper_preset_list, that gives what you leave out here.",
+							"The preset to recruit it from, from helper_preset_list: your own by its name, or a shared one as <agent>/<name>; it gives what you leave out here.",
 					}),
 				),
 				display_name: Type.Optional(

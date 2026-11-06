@@ -23,7 +23,7 @@ const PRESET_NAME = Type.String({
 	description: "The preset's name: lowercase letters, digits, and dashes.",
 });
 
-/** The tools that keep a knight's temp-knight presets, which only it sees and uses. */
+/** The tools that keep a knight's temp-knight presets, which it and the knights they are shared with recruit from. */
 export function helperPresetToolDefs(
 	ops: Pick<AgentOps, "helperPreset">,
 	scope: AgentTurnScope,
@@ -36,7 +36,7 @@ export function helperPresetToolDefs(
 			name: "helper_preset_set",
 			label: "Save temp knight preset",
 			description:
-				"Save a temp knight you make often (its role prompt, skills, and look) as a preset, then make it with helper_create and preset instead of writing them again. Saving under a name you have replaces that preset whole. Only you see and use your presets; you may keep 20.",
+				"Save a temp knight you make often (its role prompt, skills, and look) as a preset, then recruit it with helper_create and preset instead of writing them again. Saving under a name you have replaces that preset whole and keeps whom it is shared with, which only an owner sets. Only you and the knights an owner shares it with recruit from it, and only you or an owner change it; you may keep 20.",
 			parameters: Type.Object({
 				name: PRESET_NAME,
 				display_name: DISPLAY,
@@ -78,7 +78,7 @@ export function helperPresetToolDefs(
 			name: "helper_preset_list",
 			label: "List temp knight presets",
 			description:
-				"List your temp knight presets, one line each; with a name, show that preset in full.",
+				"List the presets you may recruit temp knights from, one line each: yours, then those other knights share with you as <agent>/<name>. With a name, show that preset in full.",
 			parameters: Type.Object({
 				name: Type.Optional(
 					Type.String({ description: "A preset to show in full." }),
@@ -95,7 +95,8 @@ export function helperPresetToolDefs(
 		{
 			name: "helper_preset_delete",
 			label: "Delete temp knight preset",
-			description: "Delete one of your temp knight presets.",
+			description:
+				"Delete one of your own temp knight presets; one shared with you only its knight or an owner deletes.",
 			parameters: Type.Object({
 				name: Type.String({ description: "The preset's name." }),
 			}),

@@ -236,6 +236,7 @@ describe("the agent server's runtime", () => {
 			"agent-latest-conversation",
 			"helper-presets",
 			"agents-helper-preset",
+			"helper-presets-shared",
 		]);
 	});
 });

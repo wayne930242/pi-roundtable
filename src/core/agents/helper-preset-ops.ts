@@ -12,7 +12,19 @@ import {
 	checkPrompt,
 	isHelper,
 } from "./agent-rules.ts";
-import type { HelperPreset } from "./helper-presets.ts";
+import {
+	checkSharing,
+	findPreset,
+	presetLine,
+	presetText,
+	usablePresets,
+} from "./helper-preset-lookup.ts";
+import type {
+	HelperPreset,
+	OwnedPreset,
+	PresetSharing,
+	UsablePreset,
+} from "./helper-presets.ts";
 import type { TeamContext } from "./team-options.ts";
 
 /** What the helper_preset tools ask of the team. */
@@ -84,8 +96,9 @@ export function checkHelperGrant(
 }
 
 /**
- * The call's fields over the named preset: what the call gives replaces the preset's, and its
- * skills are added after the preset's. An unknown preset is refused with the caller's names.
+ * The call's fields over the named preset (see `findPreset`): what the call gives replaces the
+ * preset's, and its skills are added after the preset's. `preset` comes back as its temp knight
+ * records it, qualified for a shared one.
  */
 export async function withPreset<T extends HelperFields>(
 	ctx: TeamContext,
@@ -94,20 +107,12 @@ export async function withPreset<T extends HelperFields>(
 ): Promise<T> {
 	const { preset: name, ...given } = input;
 	if (!name) return input;
-	const presets = ctx.options.store.presets;
-	const preset = await presets.get(parent.name, name);
-	if (!preset) {
-		const names = (await presets.list(parent.name)).map((p) => p.name);
-		throw new AgentError(
-			names.length > 0
-				? `You have no preset "${name}". Your presets: ${names.join(", ")}.`
-				: `You have no preset "${name}", nor any other; save one with helper_preset_set.`,
-		);
-	}
+	const { preset, ref } = await findPreset(ctx, parent.name, name);
 	const skills = [...new Set([...preset.skills, ...(given.skills ?? [])])];
 	const character = { ...preset.character, ...given.character };
 	return {
 		...given,
+		preset: ref,
 		displayName: given.displayName ?? preset.displayName,
 		prompt: given.prompt ?? preset.prompt,
 		...(Object.keys(character).length > 0 ? { character } : {}),
@@ -121,7 +126,10 @@ export async function withPreset<T extends HelperFields>(
 	} as T;
 }
 
-/** The helper_preset tools: an agent saves, lists, and deletes its own temp-knight presets. */
+/**
+ * The helper_preset tools: an agent saves and deletes its own temp-knight presets, keeping their
+ * sharing, and lists its own and those shared with it.
+ */
 export async function presetAction(
 	ctx: TeamContext,
 	caller: AgentTurnScope,
@@ -133,22 +141,25 @@ export async function presetAction(
 	if (action.kind === "set") {
 		const preset = validatePreset(ctx, speaker.tier, parent, action.preset);
 		const done = await presets.set(parent.name, preset);
-		return `${done === "created" ? "Created" : "Replaced"} the preset "${preset.name}"; make its temp knight with helper_create and preset "${preset.name}".`;
+		return `${done === "created" ? "Created" : "Replaced"} the preset "${preset.name}"; recruit its temp knight with helper_create and preset "${preset.name}".`;
 	}
 	if (action.kind === "delete") {
-		if (!(await presets.delete(parent.name, action.name)))
+		const owner = action.name.split("/")[0] ?? "";
+		if (action.name.includes("/") && owner !== parent.name)
+			throw new AgentError(
+				`The preset "${action.name}" is ${owner}'s; only ${owner} or an owner may delete it.`,
+			);
+		const name = action.name.slice(action.name.indexOf("/") + 1);
+		if (!(await presets.delete(parent.name, name)))
 			throw new AgentError(`You have no preset "${action.name}".`);
-		return `Deleted the preset "${action.name}".`;
+		return `Deleted the preset "${name}".`;
 	}
-	if (action.name) {
-		const preset = await presets.get(parent.name, action.name);
-		if (!preset) throw new AgentError(`You have no preset "${action.name}".`);
-		return presetText(preset);
-	}
-	const all = await presets.list(parent.name);
+	if (action.name)
+		return presetText(await findPreset(ctx, parent.name, action.name));
+	const all = await usablePresets(ctx, parent.name);
 	if (all.length === 0)
 		return "You have no presets; save one with helper_preset_set.";
-	return all.map(presetLine).join("\n");
+	return all.map((preset) => presetLine(parent.name, preset)).join("\n");
 }
 
 /**
@@ -204,38 +215,24 @@ function presetOwner(ctx: TeamContext, name: string): Agent {
 
 /** An owner's handling of a knight's presets, at the owner's tier; see `HelperTeam.presets`. */
 export const ownerPresets = (ctx: TeamContext) => ({
-	list: async (agent: string): Promise<HelperPreset[]> =>
+	list: async (agent: string): Promise<OwnedPreset[]> =>
 		ctx.options.store.presets.list(presetOwner(ctx, agent).name),
-	save: async (agent: string, given: HelperPreset) => {
+	usable: async (agent: string): Promise<UsablePreset[]> =>
+		usablePresets(ctx, presetOwner(ctx, agent).name),
+	save: async (
+		agent: string,
+		given: HelperPreset,
+		sharedWith?: PresetSharing | null,
+	): Promise<{ preset: OwnedPreset; replaced: boolean }> => {
 		const parent = presetOwner(ctx, agent);
-		const preset = validatePreset(ctx, "owner", parent, given);
-		const done = await ctx.options.store.presets.set(parent.name, preset);
+		const { sharedWith: _ignored, ...content } = given as OwnedPreset;
+		const valid = validatePreset(ctx, "owner", parent, content);
+		const sharing = checkSharing(ctx, parent.name, sharedWith);
+		const { presets } = ctx.options.store;
+		const done = await presets.set(parent.name, valid, sharing);
+		const preset = (await presets.get(parent.name, valid.name)) ?? valid;
 		return { preset, replaced: done === "replaced" };
 	},
 	delete: async (agent: string, name: string): Promise<boolean> =>
 		ctx.options.store.presets.delete(presetOwner(ctx, agent).name, name),
 });
-
-const presetLine = (preset: HelperPreset): string => {
-	const prompt = preset.prompt.replace(/\s+/g, " ").trim();
-	const head = prompt.length > 80 ? `${prompt.slice(0, 80)}…` : prompt;
-	const extras = [
-		preset.skills.length > 0 ? `skills: ${preset.skills.join(", ")}` : "",
-		preset.model ? `model: ${preset.model}` : "",
-	].filter(Boolean);
-	return `${preset.name}: "${preset.displayName}"${extras.length > 0 ? ` (${extras.join("; ")})` : ""}: ${head}`;
-};
-
-const presetText = (preset: HelperPreset): string =>
-	[
-		`Preset "${preset.name}"`,
-		`Display name: ${preset.displayName}`,
-		`Skills: ${preset.skills.length > 0 ? preset.skills.join(", ") : "none"}`,
-		...(preset.character?.class ? [`Class: ${preset.character.class}`] : []),
-		...(preset.character?.palette
-			? [`Color: ${preset.character.palette}`]
-			: []),
-		...(preset.model ? [`Model: ${preset.model}`] : []),
-		...(preset.thinking ? [`Thinking: ${preset.thinking}`] : []),
-		`Prompt:\n${preset.prompt}`,
-	].join("\n");

@@ -18,11 +18,7 @@ import {
 	agentToolsExtension,
 } from "./agent-tools.ts";
 import type { HelperTeam } from "./helper-ops.ts";
-import {
-	ownerPresets,
-	type PresetAction,
-	presetAction,
-} from "./helper-preset-ops.ts";
+import { ownerPresets, presetAction } from "./helper-preset-ops.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import type { TeamHelpers } from "./team-helpers.ts";
@@ -403,8 +399,8 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	}
 
 	/** A knight keeps its own temp-knight presets; see `AgentOps.helperPreset`. */
-	helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string> {
-		return presetAction(this.#context, caller, action);
+	helperPreset(...args: Parameters<AgentOps["helperPreset"]>) {
+		return presetAction(this.#context, ...args);
 	}
 
 	helpersOn(): boolean {
@@ -414,6 +410,10 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	/** An owner manages a knight's presets; see `HelperTeam.presets`. */
 	presets(agent: string): ReturnType<HelperTeam["presets"]> {
 		return ownerPresets(this.#context).list(agent);
+	}
+
+	usablePresets(agent: string): ReturnType<HelperTeam["usablePresets"]> {
+		return ownerPresets(this.#context).usable(agent);
 	}
 
 	savePreset(...args: Parameters<HelperTeam["savePreset"]>) {

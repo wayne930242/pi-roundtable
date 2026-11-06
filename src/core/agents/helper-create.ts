@@ -70,7 +70,7 @@ export async function createHelper(
 			creator: parent,
 			parent,
 			origin: ctx.turns.turnChannel(caller),
-			...(input.preset ? { preset: input.preset } : {}),
+			...(preset ? { preset } : {}),
 		},
 		{ ...rest, displayName, prompt, name },
 		{ model, thinking },

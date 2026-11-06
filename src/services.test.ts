@@ -139,6 +139,7 @@ const team: AgentTeam = {
 	onHelpersEnded: () => undefined,
 	helpersOn: () => true,
 	presets: async () => [],
+	usablePresets: async () => [],
 	savePreset: async (_agent, preset) => ({ preset, replaced: false }),
 	deletePreset: async () => false,
 	createGroup: async () => "created",

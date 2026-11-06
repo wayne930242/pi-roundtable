@@ -338,6 +338,7 @@ describe("defineRoundtable", () => {
 			"agent-latest-conversation",
 			"helper-presets",
 			"agents-helper-preset",
+			"helper-presets-shared",
 		]);
 	});
 

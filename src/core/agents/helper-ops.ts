@@ -1,5 +1,10 @@
 import type { Agent } from "./agent-rules.ts";
-import type { HelperPreset } from "./helper-presets.ts";
+import type {
+	HelperPreset,
+	OwnedPreset,
+	PresetSharing,
+	UsablePreset,
+} from "./helper-presets.ts";
 
 /** A knight cleared its own temp knights with `helper_end`. */
 export interface HelpersEnded {
@@ -34,19 +39,27 @@ export interface HelperTeam {
 	/** Whether the host makes temp knights at all: false under `helpers: false`. */
 	helpersOn(): boolean;
 	/**
-	 * A knight's temp-knight presets, by name, as an owner manages them outside any agent turn.
-	 * These three throw AgentError when temp knights are off, for an unknown or archived agent,
-	 * and for a temp knight, which keeps none.
+	 * A knight's temp-knight presets, by name, with whom each is shared, as an owner manages them
+	 * outside any agent turn. These four throw AgentError when temp knights are off, for an unknown
+	 * or archived agent, and for a temp knight, which keeps none.
 	 */
-	presets(agent: string): Promise<HelperPreset[]>;
+	presets(agent: string): Promise<OwnedPreset[]>;
+	/**
+	 * What a knight may recruit its temp knights from: its own presets, then those other active
+	 * knights share with it, each with the agent that saved it.
+	 */
+	usablePresets(agent: string): Promise<UsablePreset[]>;
 	/**
 	 * Saves a preset whole under its name, with `helper_preset_set`'s checks at the owner's tier;
-	 * refuses a new one past 20. Returns the preset as saved and whether it replaced one.
+	 * refuses a new one past 20. `sharedWith` sets who else may recruit from it: every knight,
+	 * the knights named, or `null` none; left out, a replaced preset keeps its sharing and a new
+	 * one is shared with none. Returns the preset as saved and whether it replaced one.
 	 */
 	savePreset(
 		agent: string,
 		preset: HelperPreset,
-	): Promise<{ preset: HelperPreset; replaced: boolean }>;
+		sharedWith?: PresetSharing | null,
+	): Promise<{ preset: OwnedPreset; replaced: boolean }>;
 	/** Deletes one of a knight's presets; says whether there was one. */
 	deletePreset(agent: string, name: string): Promise<boolean>;
 }

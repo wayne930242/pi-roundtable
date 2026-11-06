@@ -176,5 +176,7 @@ export function agentMigrations(guildId: string): Migration[] {
 				await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS preset text`;
 			},
 		},
+		// Whom a preset is shared with, besides the agent that saved it.
+		HelperPresets.sharingMigration,
 	];
 }

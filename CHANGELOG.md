@@ -9,10 +9,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - An owner manages a knight's temp-knight presets outside any agent turn: `AgentTeam.presets(agent)`, `savePreset(agent, preset)` (returns the preset as saved and whether it replaced one) and `deletePreset(agent, name)`. A save runs `helper_preset_set`'s checks at the owner's tier and keeps the cap of 20. All three refuse when temp knights are off, for an unknown or archived agent, and for a temp knight. `HelperTeam.helpersOn()` tells whether the host makes temp knights at all. `HelperPreset` and `MAX_HELPER_PRESETS` are exported.
 - A temp knight made from a preset keeps its name: `Agent.preset`, stored in a new `preset` column of `agents` that the migration `agents-helper-preset` adds.
+- A knight's preset can be shared with other knights, so a preset and the knights recruiting from it are many to many. The owner sets the sharing with `AgentTeam.savePreset(agent, preset, sharedWith)`: `"all"`, a list of knights, or `null` for none; left out, a replaced preset keeps its sharing, which an agent's `helper_preset_set` never changes. The new migration `helper-presets-shared` adds `helper_presets.shared_with`. `AgentTeam.presets(agent)` returns each preset's `sharedWith`, and `AgentTeam.usablePresets(agent)` lists what a knight may recruit from: its own, then those other active knights share with it. `OwnedPreset`, `UsablePreset` and `PresetSharing` are exported.
+- `helper_preset_list` lists a knight's own presets, then those shared with it as `<agent>/<name>`; `helper_create` with `preset` takes its own name, `<agent>/<name>`, or a bare name one shared preset alone has, its own winning, and refuses a bare name several share. A shared preset is checked at the caller's tier against the caller's skills, so sharing never widens what a knight may grant, and only its saving agent or an owner changes or deletes it. A temp knight recruited from a shared preset records the qualified name.
 
 ### Changed
 
 - `helper_preset_set` and `AgentTeam.savePreset` go through one check, so the tool and the owner's save refuse the same presets.
+- The prompt names no presets: it tells a knight to check `helper_preset_list` for a preset to recruit from before making a temp knight, and to write a new one only when none fits. `helper_create` says the same, and the preset tools speak of recruiting a temp knight from a preset.
 
 ## [0.35.0] - 2026-11-06
 
