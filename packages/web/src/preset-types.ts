@@ -49,3 +49,28 @@ export interface PresetSaved {
 	preset: PresetView;
 	replaced: boolean;
 }
+
+/** The temp knights one knight recruited from a preset. */
+export interface PresetRecruitsView {
+	knight: string;
+	active: number;
+	archived: number;
+	/** When the latest was made, as an ISO time. */
+	last?: string;
+}
+
+/** A preset as the presets page lists it: with its knight and who recruited from it. */
+export interface PresetOverviewView extends SharedPresetView {
+	recruits: PresetRecruitsView[];
+}
+
+/** `GET api/presets`: every active knight's presets, by knight and then name. */
+export interface PresetsOverview {
+	presets: PresetOverviewView[];
+	max: number;
+}
+
+/** The answer of `POST api/agents/<name>/presets/<preset>/transfer` `{ to }`: the preset as moved. */
+export interface PresetTransferred {
+	preset: PresetView;
+}

@@ -5,7 +5,9 @@ import { recordingLogger } from "pi-roundtable/testing";
 import type {
 	ApiError,
 	PresetSaved,
+	PresetsOverview,
 	PresetsView,
+	PresetTransferred,
 	SessionView,
 } from "./api-types.ts";
 import { AppApi } from "./app/routes.ts";
@@ -65,6 +67,23 @@ function setup(helpersOn = true) {
 			const replaced = saved.has(preset.name);
 			saved.set(preset.name, preset);
 			return { preset, replaced };
+		},
+		allPresets: async () => [
+			{ ...SHARED, agent: "boss", recruits: [] },
+			...[...saved.values()].map((p) => ({
+				...p,
+				agent: "scout",
+				recruits: [{ knight: "scout", active: 1, archived: 2 }],
+			})),
+		],
+		transferPreset: async (agent: string, name: string, to: string) => {
+			knight(agent);
+			const preset = saved.get(name);
+			if (!preset) throw new AgentError(`${agent} has no preset "${name}".`);
+			if (to === agent)
+				throw new AgentError(`The preset "${name}" is already ${agent}'s.`);
+			calls.push(`transfer ${agent} ${name} ${to}`);
+			return { ...preset, sharedWith: [agent] };
 		},
 		deletePreset: async (agent: string, name: string) => {
 			knight(agent);
@@ -259,6 +278,8 @@ describe("a knight's presets over the API", () => {
 			["GET", "agents/scout/presets", undefined],
 			["PUT", "agents/scout/presets/writer", WRITER],
 			["DELETE", "agents/scout/presets/writer", undefined],
+			["GET", "presets", undefined],
+			["POST", "agents/scout/presets/writer/transfer", { to: "boss" }],
 		] as const) {
 			const response = await call(server, method, path, body);
 			expect([method, response.status]).toEqual([method, 403]);
@@ -275,5 +296,50 @@ describe("a knight's presets over the API", () => {
 			await call(setup(false), "GET", "session")
 		).json()) as SessionView;
 		expect(off.helpers).toBeUndefined();
+	});
+
+	test("every knight's presets are listed with their recruits", async () => {
+		const server = setup();
+		saved.set("writer", { name: "writer", ...WRITER });
+		const response = await call(server, "GET", "presets");
+		expect(response.status).toBe(200);
+		const view = (await response.json()) as PresetsOverview;
+		expect(view.max).toBe(20);
+		expect(view.presets.map((p) => `${p.agent}/${p.name}`)).toEqual([
+			"boss/medic",
+			"scout/writer",
+		]);
+		expect(view.presets[1]?.recruits).toEqual([
+			{ knight: "scout", active: 1, archived: 2 },
+		]);
+	});
+
+	test("a transfer moves the preset, and the team's refusal is a 400", async () => {
+		const server = setup();
+		saved.set("writer", { name: "writer", ...WRITER });
+		const path = "agents/scout/presets/writer/transfer";
+		const moved = await call(server, "POST", path, { to: "boss" });
+		expect(moved.status).toBe(200);
+		expect(((await moved.json()) as PresetTransferred).preset).toEqual({
+			name: "writer",
+			...WRITER,
+			sharedWith: ["scout"],
+		});
+		expect(calls).toEqual(["transfer scout writer boss"]);
+		const same = await call(server, "POST", path, { to: "scout" });
+		expect(same.status).toBe(400);
+		expect(((await same.json()) as ApiError).error).toContain("already");
+		const unknown = await call(
+			server,
+			"POST",
+			"agents/scout/presets/nope/transfer",
+			{ to: "boss" },
+		);
+		expect(unknown.status).toBe(400);
+		expect((await call(server, "POST", path, {})).status).toBe(400);
+		expect(
+			(await call(server, "POST", "agents/scout/presets/writer/other", {}))
+				.status,
+		).toBe(404);
 	});
 });

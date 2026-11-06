@@ -36,7 +36,11 @@ import {
 } from "./api-http.ts";
 import type { CardLog } from "./card-log.ts";
 import type { LayoutStore } from "./layout.ts";
-import { type PresetTeam, presetRoutes } from "./preset-routes.ts";
+import {
+	allPresetsRoute,
+	type PresetTeam,
+	presetRoutes,
+} from "./preset-routes.ts";
 import { promptVersionView } from "./prompt-routes.ts";
 import type { RoomLog } from "./room-log.ts";
 import type { Rooms } from "./rooms.ts";
@@ -169,8 +173,8 @@ export class TeamApi {
 			this.#options.changed();
 			return json({ ok: true });
 		}
-		if (action === "presets" && parts.length <= 5)
-			return presetRoutes(request, name, parts[4], this.#options.team);
+		if (action === "presets" && parts.length <= 6)
+			return presetRoutes(request, name, parts.slice(4), this.#options.team);
 		if (action === "skills" && parts.length === 4) {
 			if (method === "GET") return json(this.#skillsOf(name));
 			if (method === "PUT") return this.#carry(request, name, asOwner);
@@ -422,6 +426,13 @@ export class TeamApi {
 	// ── The archive ────────────────────────────────────────────────────────
 
 	/** Archived agents and groups, which stay reachable here until they are restored or deleted. */
+	/** `GET api/archive` or `GET api/presets`, for owners. */
+	listing(area: "archive" | "presets", owner: OwnerOf): Promise<Response> {
+		return area === "archive"
+			? this.archived(owner)
+			: allPresetsRoute(owner, this.#options.team);
+	}
+
 	async archived(owner: OwnerOf): Promise<Response> {
 		await owner();
 		const { directory, rooms } = this.#options;

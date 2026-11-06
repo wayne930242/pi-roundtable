@@ -56,6 +56,8 @@ const EXPECTED: [string, string, Record<string, Outcome>][] = [
 	["POST", "api/channels/123/delete", O],
 	["GET", "api/skills", O],
 	["GET", "api/skills/review", O],
+	["GET", "api/presets", O],
+	["POST", "api/agents/scout/presets/writer/transfer", O],
 	["GET", "api/connectors", O],
 	["GET", "api/connectors/managed", O],
 	["POST", "api/connectors/managed", O],
@@ -266,6 +268,7 @@ describe("the authorization table", () => {
 				["GET", "api/overview"],
 				["GET", "api/workspace/roots"],
 				["GET", "api/skills"],
+				["GET", "api/presets"],
 			] as const)
 				expect(outcome(method, path, who)).not.toBe("allow");
 		}

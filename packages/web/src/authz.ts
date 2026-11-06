@@ -41,6 +41,7 @@ export const ROUTES: readonly Rule[] = [
 	row("*", "api/channels/:id/:action", "O"),
 	row("*", "api/skills", "O"),
 	row("*", "api/skills/:name", "O"),
+	row("*", "api/presets", "O"),
 	row("*", "api/connectors", "O"),
 	row("*", "api/connectors/**", "O"),
 	row("*", "api/models", "O"),

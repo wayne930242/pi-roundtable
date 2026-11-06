@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `GET api/presets` answers `{ presets, max }` for owners: every active knight's presets, each with its `agent`, `sharedWith` and `recruits` (per recruiting knight, its `active` and `archived` temp knights and the `last` time one was made).
+- `POST api/agents/<name>/presets/<preset>/transfer` with `{ to }` gives the preset to another knight and answers `{ preset }` as moved; a refusal of the team, such as a name the other knight already has, is a 400 in its words.
+
 ### Changed
 
 - The Edit knight sheet is tabs under its header, which stay in view: Profile (the picture, notifications and the knight's fields), Skills, Presets (on a host with temp knights, for a knight that is not one), Look and More (the prompt's history and Archive). The arrow keys, Home and End move among them. The sheet opens on the tab shown last in the session, for any knight; `openAgentSheet` takes `tab: "profile" | "skills" | "presets" | "look" | "more"`, and `look` and `skills` still open theirs. An unsaved edit of the fields survives a change of tab, and the creator and the presets load only when their tab is first shown. The notes page's kinds use the same tab bar.

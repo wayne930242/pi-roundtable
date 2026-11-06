@@ -1,7 +1,13 @@
 import type { AgentTeam } from "pi-roundtable";
 import { MAX_HELPER_PRESETS } from "pi-roundtable";
 import type { CharacterInput } from "pi-roundtable/characters";
-import type { PresetSaved, PresetsView, PresetView } from "../api-types.ts";
+import type {
+	PresetSaved,
+	PresetsOverview,
+	PresetsView,
+	PresetTransferred,
+	PresetView,
+} from "../api-types.ts";
 import { json } from "../http.ts";
 import {
 	bad,
@@ -15,21 +21,46 @@ import {
 /** What the preset routes ask of the team. */
 export type PresetTeam = Pick<
 	AgentTeam,
-	"presets" | "usablePresets" | "savePreset" | "deletePreset"
+	| "presets"
+	| "usablePresets"
+	| "savePreset"
+	| "deletePreset"
+	| "allPresets"
+	| "transferPreset"
 >;
+
+/** `GET api/presets`, for owners: every knight's presets with who recruited from them. */
+export async function allPresetsRoute(
+	owner: () => Promise<unknown>,
+	team: Pick<PresetTeam, "allPresets">,
+): Promise<Response> {
+	await owner();
+	return json({
+		presets: await team.allPresets(),
+		max: MAX_HELPER_PRESETS,
+	} satisfies PresetsOverview);
+}
 
 /**
  * `api/agents/<name>/presets[/<preset>]`, for owners: a knight's temp-knight presets listed with
- * those shared with it, saved whole with whom they are shared, and deleted. The team checks them as `helper_preset_set` does, at the owner's tier; a
+ * those shared with it, saved whole with whom they are shared, deleted, and given to another
+ * knight with `POST …/<preset>/transfer`. The team checks them as `helper_preset_set` does, at the owner's tier; a
  * refusal comes back as a 400 with its words.
  */
 export async function presetRoutes(
 	request: Request,
 	agent: string,
-	preset: string | undefined,
+	[preset, verb]: string[],
 	team: PresetTeam,
 ): Promise<Response> {
 	const { method } = request;
+	if (preset && verb === "transfer" && method === "POST") {
+		const to = requiredText(await bodyOf(request), "to");
+		return json({
+			preset: await team.transferPreset(agent, preset, to),
+		} satisfies PresetTransferred);
+	}
+	if (verb !== undefined) throw new HttpError(404, "There is no such API.");
 	if (!preset && method === "GET")
 		return json({
 			presets: await team.presets(agent),

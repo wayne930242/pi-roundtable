@@ -426,6 +426,7 @@ export class AppApi {
 					"agents",
 					"groups",
 					"archive",
+					"presets",
 					"models",
 					"workspace",
 					"prompts",
@@ -519,8 +520,8 @@ export class AppApi {
 		const owner = () => this.#owner(admission);
 		if (area === "agents") return this.#team.agents(request, parts, owner);
 		if (area === "groups") return this.#team.groups(request, parts, owner);
-		if (area === "archive" && method === "GET" && !id)
-			return this.#team.archived(owner);
+		if ((area === "archive" || area === "presets") && method === "GET" && !id)
+			return this.#team.listing(area, owner);
 		if (area === "prompts") {
 			if (!this.#prompts)
 				throw new HttpError(404, "This host has no prompts to edit.");
@@ -610,8 +611,7 @@ export class AppApi {
 		const room = await rooms.resolve(key);
 		if (!room) throw notFound();
 		if (!action && method === "GET") {
-			// A thread dismissed from the list, or a temp knight's room the list leaves out, still opens
-			// by its address; the page asks for its view.
+			// A dismissed thread or a temp knight's room still opens by its address.
 			const view =
 				(await rooms.threadView(room.key)) ??
 				(await rooms.openHelper(room.key));
