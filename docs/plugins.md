@@ -4533,6 +4533,7 @@ Import from the entries listed below; source area files are internal.
 | `GroupStatus` | `pi-roundtable` | type |
 | `HeldActionStore` | `pi-roundtable` | type |
 | `HeldCall` | `pi-roundtable` | type |
+| `HelperPreset` | `pi-roundtable` | type |
 | `HelperTeam` | `pi-roundtable` | type |
 | `HelpersConfig` | `pi-roundtable` | type |
 | `HelpersEnded` | `pi-roundtable` | type |
@@ -4577,6 +4578,7 @@ Import from the entries listed below; source area files are internal.
 | `LOCAL_TEAM_ID` | `pi-roundtable` | value |
 | `MEMORY` | `pi-roundtable` | value |
 | `MAX_ATTACHMENT_BYTES` | `pi-roundtable` | value |
+| `MAX_HELPER_PRESETS` | `pi-roundtable` | value |
 | `MODES` | `pi-roundtable` | value |
 | `MEMORY_KINDS` | `pi-roundtable` | value |
 | `MemberJoinedEvent` | `pi-roundtable` | type |
