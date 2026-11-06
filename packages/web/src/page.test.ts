@@ -53,10 +53,25 @@ test("the page builds with relative URLs only, and every file it names is in the
  * after that are the Edit knight sheet's tabs and the reworked skill picker, 95 bytes over: the
  * entry carries `openAgentSheet`'s tab and the remembered one, and the preload table names the new
  * shared chunks (the tab bar the notes page shares, the picker the preset editor shares); the
- * sheet, its tabs' and the picker's styles and the lift's wiggle are lazy.
+ * sheet, its tabs' and the picker's styles and the lift's wiggle are lazy. The 150 bytes after
+ * that are the Presets pane, 107 bytes over: its name, label, icon and lazy route, and the preload
+ * table naming the chunks the page shares with the knight's sheet (the preset rows, recruits and
+ * transfer, and the search field); the page and those parts are lazy.
  */
 const FIRST_LOAD_BASELINE =
-	145_612 + 8_707 + 2_000 + 200 + 260 + 300 + 150 + 100 + 100 + 50 + 50 + 150;
+	145_612 +
+	8_707 +
+	2_000 +
+	200 +
+	260 +
+	300 +
+	150 +
+	100 +
+	100 +
+	50 +
+	50 +
+	150 +
+	150;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 

@@ -271,11 +271,11 @@ describe("refuses to start", () => {
 			"schedules",
 			"conversations",
 			"notes",
+			"presets",
 		]);
 		const settings = resolveOptions(base());
 		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);
-		// A file may be 100 MiB by default, and an operator may raise it past what the listener takes
-		// by default: the upload route asks the listener for the room.
+		// A file may be 100 MiB by default, or more: the upload route asks the listener for the room.
 		expect(settings.uploadMaxBytes).toBe(100 * 1024 * 1024);
 		expect([settings.push.preview, settings.push.endpointHosts]).toEqual([
 			true,

@@ -11,6 +11,7 @@ import { teamApi } from "../lib/team-api.ts";
 import type { KnightSeed } from "../lib/team-sheet.ts";
 import { useKnights } from "./knight-picker.tsx";
 import { PresetSheet } from "./preset-editor.tsx";
+import { PresetRow } from "./preset-parts.tsx";
 import { Failure } from "./states.tsx";
 
 const firstLine = (text: string) => text.trim().split("\n")[0] ?? "";
@@ -83,23 +84,18 @@ export function PresetCard(props: {
 		open: Opened,
 		key: Record<string, string>,
 	) => (
-		<li key={Object.values(key)[0]}>
-			<button
-				type="button"
-				className="menu-item"
-				{...key}
-				aria-haspopup="dialog"
-				onClick={() => setOpened(open)}
-			>
-				<span className="menu-text">
-					<strong>
-						{preset.name} · {preset.displayName}
-					</strong>
-					<span className="meta">{meta}</span>
-				</span>
-			</button>
-		</li>
+		<PresetRow
+			key={Object.values(key)[0]}
+			preset={preset}
+			meta={meta}
+			data={key}
+			onOpen={() => setOpened(open)}
+		/>
 	);
+	const drop = (name: string) => {
+		setView({ ...view, presets: presets.filter((p) => p.name !== name) });
+		setOpened(undefined);
+	};
 	const owner = opened?.kind === "shared" ? opened.preset.agent : agent;
 	return (
 		<section className="card stack" data-presets="">
@@ -165,13 +161,11 @@ export function PresetCard(props: {
 						keep(saved);
 						setOpened({ kind: "own", preset: saved });
 					}}
-					onDeleted={(name) => {
-						setView({
-							...view,
-							presets: presets.filter((p) => p.name !== name),
-						});
-						setOpened(undefined);
-					}}
+					// Given away or deleted, the preset leaves this knight's list.
+					onTransferred={() =>
+						opened.kind === "own" && opened.preset && drop(opened.preset.name)
+					}
+					onDeleted={drop}
 				/>
 			) : null}
 		</section>

@@ -12,7 +12,9 @@ import type {
 	GroupProfileView,
 	PresetSave,
 	PresetSaved,
+	PresetsOverview,
 	PresetsView,
+	PresetTransferred,
 } from "../../src/api-types.ts";
 import { api, request } from "./api.ts";
 import { store } from "./app-store.ts";
@@ -48,6 +50,13 @@ export const teamApi = {
 		),
 	deletePreset: (name: string, preset: string) =>
 		send<undefined>(`agents/${named(name)}/presets/${named(preset)}`, "DELETE"),
+	allPresets: () => request<PresetsOverview>("presets"),
+	transferPreset: (name: string, preset: string, to: string) =>
+		send<PresetTransferred>(
+			`agents/${named(name)}/presets/${named(preset)}/transfer`,
+			"POST",
+			{ to },
+		),
 	archive: () => request<ArchiveView>("archive"),
 	createGroup: (made: GroupCreate) =>
 		send<GroupProfileView>("groups", "POST", made),

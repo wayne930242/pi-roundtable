@@ -107,7 +107,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `routing` | `hash` | `path` 保留 mount 下的頁面路徑與 history 導航。 |
 | `admission` | `owners` | `owners` 只讓 owner 進入；`access` 讓 `IDENTITY` 在這個 surface 上接納的所有人進入（owner、admin、成員）。見「成員與關卡」。 |
 | `modes` | 開啟 | 設為 `false` 就不提供 yolo 與長時間執行開關；`PUT api/rooms/<key>/mode` 回 404。 |
-| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes` | 可再選 `skills`、`connectors` 並指定順序；`schedules`、`table` 和 `workspace` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。`admission: "access"` 時預設會加上 `profile`，也可以用 `{ owner, admin?, member }` 依身分層級分別設定；owner 專屬的頁面裡，只有 `table` 能列給成員或管理員（該層級也要有 `rooms`）。 |
+| `panes` | `rooms`、`table`、`workspace`、`overview`、`schedules`、`conversations`、`notes`、`presets` | 可再選 `skills`、`connectors` 並指定順序；`presets` 列出每位騎士的臨時騎士範本；`schedules`、`table`、`workspace` 和 `presets` 需要 `rooms`，`workspace` 還要有可顯示的位置。明確列出的清單照寫的為準。`admission: "access"` 時預設會加上 `profile`，也可以用 `{ owner, admin?, member }` 依身分層級分別設定；owner 專屬的頁面裡，只有 `table` 能列給成員或管理員（該層級也要有 `rooms`）。 |
 | `workspace` | 騎士的目錄 | 檔案頁顯示什麼。`workspace.roots` 加入更多位置，每個有 `workspace.roots.id`、`workspace.roots.label`、`workspace.roots.dir` 和 `workspace.roots.writable`（沒設就是唯讀）；`workspace.agents`、`workspace.scratch` 設為 `false` 就不顯示騎士的工作目錄或暫存目錄。`dir` 是 `dataDir` 或包含它時會無法啟動。 |
 | `surface` | `app` | app 房間的 key 前綴。改了它，所有房間都會重新開始。 |
 | `cardGraceSeconds` | `120` | 一輪執行等卡片的秒數，大於 0、最多 3600。 |

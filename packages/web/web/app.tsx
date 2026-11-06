@@ -115,6 +115,7 @@ const LABELS: Record<PaneName | "settings" | "more", string> = {
 	conversations: wording("Conversations"),
 	notes: wording("Notes"),
 	skills: wording("Skills"),
+	presets: wording("Presets"),
 	connectors: wording("Connectors"),
 	rooms: wording("Rooms"),
 	schedules: wording("Schedules"),
@@ -132,8 +133,7 @@ export function App() {
 		api
 			.config()
 			.then(async (loaded) => {
-				// The locale the bootstrap named is usually the same; a host with none in the page names it here.
-				// Wording that fails to load leaves the page in English rather than unusable.
+				// The locale the bootstrap named is usually the same; a host with none in the page names it here, and wording that fails to load leaves the page in English rather than unusable.
 				await loadBuiltInMessages(loaded.locale).catch((failure) =>
 					console.warn("the built-in wording failed to load", failure),
 				);

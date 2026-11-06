@@ -1,4 +1,4 @@
-// The Edit knight sheet's tabs and the skill picker's styles, which load with them.
+// The Edit knight sheet's tabs, the skill picker's and the search field's styles, which load with them.
 
 import { installStyle } from "./lazy-style.ts";
 
@@ -59,14 +59,14 @@ button.skill-chip:hover:not(:disabled) {
 	text-decoration: line-through;
 }
 
-.skill-search {
+.search-field {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
 	gap: var(--space-2);
 }
 
-.skill-search input {
+.search-field input {
 	flex: 1;
 	min-width: 0;
 }

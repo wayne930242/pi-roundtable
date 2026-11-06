@@ -168,6 +168,23 @@ beforeEach(() => {
 		),
 	);
 	track(spyOn(teamApi, "deletePreset").mockResolvedValue(undefined));
+	track(
+		spyOn(teamApi, "allPresets").mockImplementation(async () => ({
+			presets: presets.map((p) => ({
+				...p,
+				agent: "scout",
+				recruits: [{ knight: "scout", active: 1, archived: 2 }],
+			})),
+			max: 20,
+		})),
+	);
+	track(
+		spyOn(teamApi, "transferPreset").mockImplementation(
+			async (_agent, name) => ({
+				preset: { ...(presets.find((p) => p.name === name) ?? WRITER) },
+			}),
+		),
+	);
 });
 afterEach(async () => {
 	closeAgentSheet();
@@ -385,6 +402,34 @@ test("deleting a preset asks first, then takes its row away", async () => {
 		"Temp knight presets (0/20)",
 	);
 	// The confirmation and the editor are both closed.
+	expect(all("dialog.sheet[open]")).toHaveLength(1);
+});
+
+test("on the knight's sheet a preset shows who recruited from it, and a transfer takes its row away", async () => {
+	await open();
+	await page.click(q("[data-preset=writer]"));
+	await page.act(() => settle(80));
+	const recruits = editor()?.querySelector("[data-recruits]");
+	expect(recruits?.textContent).toContain("Recruited by");
+	expect(recruits?.textContent).toContain("Recruited 3 times · 1 knight");
+	expect(recruits?.querySelector("[data-recruit=scout]")?.textContent).toBe(
+		"ScoutActive 1 · Archived 2",
+	);
+	await page.click(editor()?.querySelector("[data-transfer]") ?? null);
+	await page.act(() => settle(40));
+	// The knight itself is not offered; the one picked gets it.
+	const picks = editor()?.querySelectorAll("input[type=checkbox]") ?? [];
+	expect(picks).toHaveLength(1);
+	await page.click(picks[0] ?? null);
+	await page.click(button("Transfer preset"));
+	await page.act(() => settle(80));
+	expect(teamApi.transferPreset).toHaveBeenCalledWith(
+		"scout",
+		"writer",
+		"boss",
+	);
+	expect(text()).toContain("Transferred to Boss.");
+	expect(q("[data-preset=writer]")).toBeNull();
 	expect(all("dialog.sheet[open]")).toHaveLength(1);
 });
 

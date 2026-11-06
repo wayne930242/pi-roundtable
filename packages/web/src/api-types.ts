@@ -13,6 +13,7 @@ export const PANES = [
 	"conversations",
 	"notes",
 	"skills",
+	"presets",
 	"connectors",
 	"rooms",
 	"schedules",
@@ -22,13 +23,11 @@ export const PANES = [
 ] as const;
 export type PaneName = (typeof PANES)[number];
 
-/**
- * The panes only an owner is served: they show the whole host, which a member's view never does.
- * The table is not among them: for a member it seats only the host rooms they may list.
- */
+/** The panes only an owner is served: they show the whole host. A member's table seats only their host rooms. */
 export const OWNER_ONLY_PANES = [
 	"overview",
 	"skills",
+	"presets",
 	"connectors",
 	"workspace",
 ] as const satisfies readonly PaneName[];

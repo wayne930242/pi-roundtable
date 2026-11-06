@@ -342,10 +342,7 @@ export interface WebConsoleOptions {
 	uploads?: { keepDays?: number };
 	/** The page's title and heading; default `Roundtable`. */
 	title?: string;
-	/**
-	 * The page's description for search results and link previews (`description` and
-	 * `og:description`); default a line derived from the title.
-	 */
+	/** The page's `description` and `og:description` for search and link previews; default from the title. */
 	description?: string;
 	/** Where the install icons come from; default the ones this package ships. */
 	icons?: { dir: string };
@@ -474,6 +471,7 @@ const DEFAULT_OWNER_PANES: readonly PaneName[] = [
 	"schedules",
 	"conversations",
 	"notes",
+	"presets",
 ];
 
 /** The panes a member is served by default, of those the owners have. */
@@ -506,6 +504,8 @@ function checkOwnerPanes(panes: readonly PaneName[]): PaneName[] {
 		fail("the table pane needs the rooms pane, whose agents it seats");
 	if (list.includes("workspace") && !list.includes("rooms"))
 		fail("the workspace pane needs the rooms pane, which serves its API");
+	if (list.includes("presets") && !list.includes("rooms"))
+		fail("the presets pane needs the rooms pane, which serves its API");
 	return list;
 }
 

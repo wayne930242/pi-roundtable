@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `GET api/presets` answers `{ presets, max }` for owners: every active knight's presets, each with its `agent`, `sharedWith` and `recruits` (per recruiting knight, its `active` and `archived` temp knights and the `last` time one was made).
 - `POST api/agents/<name>/presets/<preset>/transfer` with `{ to }` gives the preset to another knight and answers `{ preset }` as moved; a refusal of the team, such as a name the other knight already has, is a 400 in its words.
+- A Presets page (`#/presets`, the new `presets` pane, listed on the More page) shows every knight's temp-knight presets, grouped by the knight each belongs to: a row per preset with its name, display name, skill count, whom it is available to (only its knight, all knights, or how many) and how often it was recruited and by how many knights. A search field and a knight filter narrow the list. A row opens the same preset sheet as the Edit knight sheet; "New preset" first asks which knight it belongs to. With no presets, or on a host without temp knights, the page says so. `presets` is in the default owner panes and needs `rooms`; a host that lists its panes adds it by hand.
+- The preset sheet, wherever it opens, has a "Recruited by" section (each knight that made temp knights from the preset, with how many are active and archived) and, for a knight's own preset, "Transfer to…", which picks the knight to give it to and asks before moving it.
 
 ### Changed
 

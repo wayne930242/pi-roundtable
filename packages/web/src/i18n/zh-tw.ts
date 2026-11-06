@@ -196,7 +196,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Slim: "纖細",
 	Regular: "標準",
 	Stout: "壯碩",
-
 	// 清理與輸入框
 	"Delete permanently": "永久刪除",
 	"Permanently delete {name}?": "要永久刪除{name}嗎？",
@@ -224,7 +223,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"(long text attached)": "（已附上長文字）",
 	"{count} file": "{count} 個檔案",
 	"{count} files": "{count} 個檔案",
-
 	// 訊息列、模式橫幅與進度
 	"Conversation started over": "對話已重新開始",
 	"View the archived conversation": "查看封存的對話",
@@ -257,7 +255,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} tool": "{count} 個工具",
 	"Show tool use": "展開工具使用",
 	"Hide tool use": "收合工具使用",
-
 	// 聊天室選單
 	"A thread has no settings.": "討論串沒有設定。",
 	"Approve held actions in this room without asking. Risky ones still ask.":
@@ -304,7 +301,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Round stopped": "本輪已停止",
 	"Stop the round": "停止本輪",
 	"Your message waits for the next round": "你的訊息排在下一輪",
-
 	// 通知
 	"A file is no longer available. Attach it again.":
 		"檔案已無法使用。請重新附加。",
@@ -319,7 +315,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"訊息沒有被接收。請檢查連線後再試一次。",
 	"This room is read-only.": "這個聊天室為唯讀。",
 	"Write a message or attach a file.": "請輸入訊息或附加檔案。",
-
 	// 連線與格式
 	"The console answered {status}.": "主控台回應了 {status}。",
 	"The console is unreachable. Reload the page to sign in again.":
@@ -370,7 +365,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Shared by {name}": "{name} 分享",
 	"Open in {name}": "在{name}中開啟",
 	"Recruited from {name}": "招募自：{name}",
-
 	// 連接器
 	"{count} tools": "{count} 個工具",
 	Disabled: "已停用",
@@ -458,7 +452,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"What outside AI clients see": "外部 AI 用戶端看到的內容",
 	"The channel's name and topic on Discord stay as they are.":
 		"頻道在 Discord 上的名稱和主題維持不變。",
-
 	// 對話
 	"{count} archived": "已封存 {count} 筆",
 	"archived only": "僅有封存",
@@ -480,7 +473,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Private to {name}": "僅限{name}",
 	"Shared · {name}": "共用 · {name}",
 	Started: "開始於",
-
 	// 記憶
 	"{name} (disabled)": "{name}（已停用）",
 	"{name} (you)": "{name}（你）",
@@ -511,7 +503,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Searched when a knight needs them.": "騎士需要時才會搜尋。",
 	Events: "事件",
 	"Carried into every turn until their date.": "到期日之前每個回合都會帶入。",
-
 	// 總覽
 	"(No messages)": "（沒有訊息）",
 	"{count} waiting": "{count} 項等待中",
@@ -551,7 +542,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Container stopped": "容器已停止",
 	"No container yet": "尚無容器",
 	"Container status unknown": "容器狀態未知",
-
 	// 聊天室
 	"Back to rooms": "回到聊天室列表",
 	"Every approval it makes is written into the conversation, and a banner stays up while yolo mode is on.":
@@ -581,7 +571,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Turn on yolo mode?": "要開啟 Yolo 模式嗎？",
 	"Turn on yolo mode": "開啟 Yolo 模式",
 	"Working…": "處理中…",
-
 	// 長按與右鍵選單
 	"Edit knight": "編輯騎士",
 	"Change look": "換外觀",
@@ -617,7 +606,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Download: "下載",
 	"Could not copy.": "無法複製。",
 	"Could not share.": "無法分享。",
-
 	// 新增、封存與群組
 	"New knight": "新增騎士",
 	"New group": "新增群組",
@@ -672,7 +660,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Give add or remove.": "請給 add 或 remove。",
 	"members must be a list of text.": "members 必須是文字清單。",
 	"Give displayName, members or host.": "請給 displayName、members 或 host。",
-
 	// 聊天室列表
 	Knights: "騎士",
 	"Dispatch threads": "派工討論串",
@@ -1202,6 +1189,19 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Show carried": "顯示已帶",
 	"Show all ({count})": "顯示全部（{count}）",
 	Presets: "範本",
+	"Recruited by": "招募紀錄",
+	"Recruited {count} times": "招募 {count} 次",
+	"Recruited {count} time": "招募 {count} 次",
+	"{count} knight": "{count} 位騎士",
+	"Active {count}": "進行中 {count}",
+	"Archived {count}": "已結束 {count}",
+	"Transfer to…": "轉給…",
+	"Transfer preset": "轉移範本",
+	"Transferred to {name}.": "已轉給 {name}。",
+	"Which knight it belongs to": "屬於哪位騎士",
+	"No presets yet.": "還沒有範本。",
+	"Temp knights are off on this host.": "這台主機沒有開啟臨時騎士。",
+	"Choose a knight.": "請選擇一位騎士。",
 	"Choose the skills this knight carries.": "選擇這位騎士攜帶的技能。",
 	"Skill groups": "技能組合",
 	"A group lists skills to switch on for a knight in one step, from the knight's sheet. Knights carry the skills, not the group.":

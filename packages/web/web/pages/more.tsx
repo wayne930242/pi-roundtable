@@ -13,6 +13,7 @@ export const PANE_ICONS: Record<PaneName | "settings" | "more", IconName> = {
 	conversations: "conversations",
 	notes: "notes",
 	skills: "skills",
+	presets: "copy",
 	connectors: "connectors",
 	settings: "settings",
 	more: "more",

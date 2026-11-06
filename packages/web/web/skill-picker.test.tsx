@@ -99,7 +99,7 @@ test("the list shows what is not carried, folded to its first rows until Show al
 
 test("the search matches names and descriptions and shows every match", async () => {
 	await draw();
-	const search = q<HTMLInputElement>(".skill-search input");
+	const search = q<HTMLInputElement>(".search-field input");
 	expect(search?.getAttribute("aria-label")).toBe("Search Skills");
 	const type = (text: string) =>
 		page.act(() => {

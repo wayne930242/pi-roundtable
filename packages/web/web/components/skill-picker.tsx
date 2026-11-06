@@ -1,9 +1,10 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import type { SkillChoiceView, SkillGroupView } from "../../src/api-types.ts";
 import { installAgentSheetStyle } from "../lib/agent-sheet-style.ts";
 import { editApi } from "../lib/edit-api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { Icon } from "./icons.tsx";
+import { SearchField } from "./search-field.tsx";
 import { ApplyGroup, type GroupApplied } from "./skill-apply.tsx";
 
 export type { GroupApplied } from "./skill-apply.tsx";
@@ -41,7 +42,6 @@ export function SkillPicker(props: {
 	const [carriedToo, setCarriedToo] = useState(false);
 	const [all, setAll] = useState(false);
 	const [open, setOpen] = useState<string>();
-	const searchId = useId();
 	useEffect(() => {
 		let current = true;
 		editApi.skillGroups().then(
@@ -105,17 +105,11 @@ export function SkillPicker(props: {
 					</button>
 				))}
 			</div>
-			<label className="skill-search" htmlFor={searchId}>
-				<Icon name="search" size={16} />
-				<input
-					id={searchId}
-					type="search"
-					aria-label={t("Search {name}", { name: t("Skills") })}
-					placeholder={t("Search {name}", { name: t("Skills") })}
-					value={query}
-					onChange={(event) => setQuery(event.target.value)}
-				/>
-			</label>
+			<SearchField
+				label={t("Search {name}", { name: t("Skills") })}
+				value={query}
+				onChange={setQuery}
+			/>
 			<fieldset
 				className="option-chips skill-filters"
 				aria-label={t("Skill groups")}

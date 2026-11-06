@@ -7,6 +7,7 @@ import {
 import { useEffect, useId, useState } from "react";
 import type {
 	AgentSkillsView,
+	PresetRecruitsView,
 	PresetSave,
 	PresetView,
 } from "../../src/api-types.ts";
@@ -26,6 +27,7 @@ import { Chips } from "./chips.tsx";
 import { Confirm } from "./confirm.tsx";
 import { KnightPicker } from "./knight-picker.tsx";
 import { LookCreator, LookSummary } from "./look-pick.tsx";
+import { PresetRecruits, TransferPreset } from "./preset-parts.tsx";
 import { Sheet } from "./sheet.tsx";
 import { SkillPicker } from "./skill-picker.tsx";
 import { Failure } from "./states.tsx";
@@ -51,7 +53,9 @@ const draftOf = (preset: KnightSeed | undefined): FieldsDraft => ({
  * One preset's editor, stacked over the knight's sheet: its fields as a new knight's, the skills its
  * temp knight carries, its look and whom it is available to. The name is chosen once; a save sends
  * the preset whole. `seed` starts a new one from a knight, with the skills it carries; `readOnly`
- * shows another knight's shared preset, to open in that knight or to make a knight from.
+ * shows another knight's shared preset, to open in that knight or to make a knight from. A saved
+ * preset also shows who recruited from it (`recruits`, or read when left out) and, when it is the
+ * knight's own, is transferred to another knight.
  */
 export function PresetSheet(props: {
 	agent: string;
@@ -60,7 +64,9 @@ export function PresetSheet(props: {
 	seed?: KnightSeed;
 	readOnly: boolean;
 	models: readonly string[];
+	recruits?: readonly PresetRecruitsView[];
 	onClose(): void;
+	onTransferred(to: string): void;
 	onSaved(preset: PresetView): void;
 	onDeleted(name: string): void;
 }) {
@@ -280,6 +286,13 @@ export function PresetSheet(props: {
 							/>
 						) : null}
 					</fieldset>
+					{preset ? (
+						<PresetRecruits
+							agent={agent}
+							name={preset.name}
+							{...(props.recruits ? { recruits: props.recruits } : {})}
+						/>
+					) : null}
 					{error ? <Failure message={error} /> : null}
 					<div className="actions">
 						{preset || readOnly ? (
@@ -301,6 +314,13 @@ export function PresetSheet(props: {
 							>
 								{t("Open in {name}", { name: props.agentName })}
 							</button>
+						) : null}
+						{preset && !readOnly ? (
+							<TransferPreset
+								agent={agent}
+								name={preset.name}
+								onTransferred={props.onTransferred}
+							/>
 						) : null}
 						{preset && !readOnly ? (
 							<button
