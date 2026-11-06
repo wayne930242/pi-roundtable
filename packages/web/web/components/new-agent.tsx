@@ -3,43 +3,21 @@ import {
 	type CharacterSpec,
 	suggestCharacter,
 } from "pi-roundtable/characters";
-import { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { AgentCreate } from "../../src/api-types.ts";
 import { ApiFailure, api, messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
-import { PageCharacter } from "./character.tsx";
-import { Select } from "./select.tsx";
-import { Failure, Loading } from "./states.tsx";
-
-// The creator is a page's worth of picking; it loads when the look is first chosen.
-const CharacterCreator = lazy(() =>
-	import("./character-creator.tsx").then((m) => ({
-		default: m.CharacterCreator,
-	})),
-);
-
-const NAME = /^[a-z0-9-]{1,32}$/;
-const DEFAULT = "default";
-
-/** The models by provider (the part before the first slash), in the order listed; those without a provider stand alone. */
-function modelGroups(
-	models: readonly string[],
-): { provider: string; models: string[] }[] {
-	const groups: { provider: string; models: string[] }[] = [];
-	for (const one of models) {
-		const slash = one.indexOf("/");
-		const provider = slash > 0 ? one.slice(0, slash) : "";
-		const group = groups.find(
-			(candidate) => candidate.provider === provider && provider !== "",
-		);
-		if (group) group.models.push(one);
-		else groups.push({ provider, models: [one] });
-	}
-	return groups;
-}
+import {
+	AgentFields,
+	DEFAULT,
+	type FieldsDraft,
+	NAME,
+} from "./agent-fields.tsx";
+import { LookCreator, LookSummary } from "./look-pick.tsx";
+import { Failure } from "./states.tsx";
 
 /** A permanent name from a display name: its Latin letters and digits, joined by dashes. */
 const slugOf = (displayName: string): string =>
@@ -54,11 +32,15 @@ const slugOf = (displayName: string): string =>
  * suggests until a person picks another in the creator, which opens in place of the form.
  */
 export function NewAgent({ onDone }: { onDone(): void }) {
-	const [displayName, setDisplayName] = useState("");
+	const [draft, setDraft] = useState<FieldsDraft>({
+		displayName: "",
+		prompt: "",
+		model: DEFAULT,
+		thinking: DEFAULT,
+	});
+	const { displayName, prompt } = draft;
 	const [name, setName] = useState("");
 	const [named, setNamed] = useState(false);
-	const [prompt, setPrompt] = useState("");
-	const [model, setModel] = useState(DEFAULT);
 	const [task, setTask] = useState("");
 	const [look, setLook] = useState<{
 		input: CharacterInput;
@@ -68,7 +50,7 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 	const [models, setModels] = useState<string[]>([]);
 	const [error, setError] = useState<string>();
 	const [saving, setSaving] = useState(false);
-	const ids = [useId(), useId(), useId(), useId(), useId()] as const;
+	const ids = [useId(), useId()] as const;
 
 	useEffect(() => {
 		let current = true;
@@ -91,19 +73,17 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 
 	if (picking)
 		return (
-			<Suspense fallback={<Loading />}>
-				<CharacterCreator
-					name={name || "new"}
-					displayName={displayName}
-					prompt={prompt}
-					character={shown}
-					onPick={(input, spec) => {
-						setLook({ input, spec });
-						setPicking(false);
-					}}
-					onCancel={() => setPicking(false)}
-				/>
-			</Suspense>
+			<LookCreator
+				name={name || "new"}
+				displayName={displayName}
+				prompt={prompt}
+				spec={shown}
+				onPick={(input, spec) => {
+					setLook({ input, spec });
+					setPicking(false);
+				}}
+				onCancel={() => setPicking(false)}
+			/>
 		);
 
 	const create = async () => {
@@ -114,7 +94,8 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 				name,
 				displayName: displayName.trim(),
 				prompt,
-				...(model !== DEFAULT ? { model } : {}),
+				...(draft.model !== DEFAULT ? { model: draft.model } : {}),
+				...(draft.thinking !== DEFAULT ? { thinking: draft.thinking } : {}),
 				...(task.trim() ? { task: task.trim() } : {}),
 				...(look ? { character: look.input } : {}),
 			};
@@ -142,81 +123,42 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 				if (ready && !saving) create();
 			}}
 		>
-			<label htmlFor={ids[0]}>
-				{t("Name")}
-				<input
-					id={ids[0]}
-					value={displayName}
-					autoComplete="off"
-					onChange={(event) => {
-						setDisplayName(event.target.value);
-						if (!named) setName(slugOf(event.target.value));
-					}}
-				/>
-			</label>
+			<AgentFields
+				draft={draft}
+				onChange={(next) => {
+					setDraft(next);
+					if (!named && next.displayName !== displayName)
+						setName(slugOf(next.displayName));
+				}}
+				models={models}
+				defaultModel={t("Default model")}
+				promptHint={t("Its job, its sources, its limits and how it reports.")}
+			>
+				<label htmlFor={ids[0]}>
+					{t("Permanent name")}
+					<input
+						id={ids[0]}
+						value={name}
+						autoComplete="off"
+						autoCapitalize="none"
+						spellCheck={false}
+						aria-invalid={name !== "" && !NAME.test(name)}
+						onChange={(event) => {
+							setNamed(true);
+							setName(event.target.value);
+						}}
+					/>
+					<span className="meta">
+						{t(
+							"Lowercase letters, digits and dashes, up to 32. It names the room and cannot be changed.",
+						)}
+					</span>
+				</label>
+			</AgentFields>
 			<label htmlFor={ids[1]}>
-				{t("Permanent name")}
-				<input
-					id={ids[1]}
-					value={name}
-					autoComplete="off"
-					autoCapitalize="none"
-					spellCheck={false}
-					aria-invalid={name !== "" && !NAME.test(name)}
-					onChange={(event) => {
-						setNamed(true);
-						setName(event.target.value);
-					}}
-				/>
-				<span className="meta">
-					{t(
-						"Lowercase letters, digits and dashes, up to 32. It names the room and cannot be changed.",
-					)}
-				</span>
-			</label>
-			<label htmlFor={ids[2]}>
-				{t("Prompt")}
-				<textarea
-					id={ids[2]}
-					rows={6}
-					value={prompt}
-					onChange={(event) => setPrompt(event.target.value)}
-				/>
-				<span className="meta">
-					{t("Its job, its sources, its limits and how it reports.")}
-				</span>
-			</label>
-			<label htmlFor={ids[4]}>
-				{t("Model")}
-				<Select
-					id={ids[4]}
-					value={model}
-					onChange={(event) => setModel(event.target.value)}
-				>
-					<option value={DEFAULT}>{t("Default model")}</option>
-					{modelGroups(models).map((group) =>
-						group.provider === "" ? (
-							group.models.map((one) => (
-								<option key={one} value={one}>
-									{one}
-								</option>
-							))
-						) : (
-							<optgroup key={group.provider} label={group.provider}>
-								{group.models.map((one) => (
-									<option key={one} value={one}>
-										{one}
-									</option>
-								))}
-							</optgroup>
-						),
-					)}
-				</Select>
-			</label>
-			<label htmlFor={ids[3]}>
 				{t("Opening task")}
 				<textarea
-					id={ids[3]}
+					id={ids[1]}
 					rows={3}
 					value={task}
 					onChange={(event) => setTask(event.target.value)}
@@ -225,27 +167,13 @@ export function NewAgent({ onDone }: { onDone(): void }) {
 					{t("Optional. The knight starts on it as soon as it is made.")}
 				</span>
 			</label>
-			<div className="profile-head">
-				<PageCharacter
-					spec={shown}
-					name={name || "new"}
-					size={72}
-					label={displayName}
-				/>
-				<div>
-					<strong>{t("Look")}</strong>
-					<span className="meta">
-						{look ? t("Your look") : t("Suggested from its role")}
-					</span>
-					<button
-						type="button"
-						className="secondary compact"
-						onClick={() => setPicking(true)}
-					>
-						{t("Choose a look")}
-					</button>
-				</div>
-			</div>
+			<LookSummary
+				spec={shown}
+				name={name || "new"}
+				displayName={displayName}
+				chosen={look !== undefined}
+				onChoose={() => setPicking(true)}
+			/>
 			{error ? <Failure message={error} /> : null}
 			<div className="actions">
 				<button type="submit" disabled={!ready || saving}>

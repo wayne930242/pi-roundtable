@@ -24,6 +24,12 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Round table": "圓桌",
 	Settings: "設定",
 	More: "更多",
+	Reload: "重新載入",
+	"Something went wrong": "發生了一些問題",
+	"The app was updated while this page was open, so part of it could not load.":
+		"頁面開啟期間應用程式已更新，因此有部分內容無法載入。",
+	"This page stopped working. Reloading usually fixes it.":
+		"這個頁面停止運作了。重新載入通常就能解決。",
 
 	// 檔案
 	Files: "檔案",
@@ -113,14 +119,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"“{name}” goes to the trash, where you can bring it back.":
 		"「{name}」會移到垃圾桶，之後可以還原。",
 	"Resize the folder list": "調整資料夾列表的寬度",
-
-	// 錯誤邊界
-	Reload: "重新載入",
-	"Something went wrong": "發生了一些問題",
-	"The app was updated while this page was open, so part of it could not load.":
-		"頁面開啟期間應用程式已更新，因此有部分內容無法載入。",
-	"This page stopped working. Reloading usually fixes it.":
-		"這個頁面停止運作了。重新載入通常就能解決。",
 
 	// 卡片
 	"{names} can approve this, and so can an owner.":
@@ -232,9 +230,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{count} file": "{count} 個檔案",
 	"{count} files": "{count} 個檔案",
 
-	// 群組圓桌
-	Close: "關閉",
-
 	// 訊息列
 	"Conversation started over": "對話已重新開始",
 	"View the archived conversation": "查看封存的對話",
@@ -261,12 +256,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"{name}: Yolo on": "{name}：已開 yolo",
 	"{name}: Yolo and long-running on": "{name}：已開 yolo 與長時間",
 	"{name}: modes off": "{name}：已關閉模式",
-
-	// 命令面板
-	"Find a room or page": "尋找聊天室或頁面",
-	"Nothing matches.": "沒有符合的項目。",
-	Page: "頁面",
-	Thread: "討論串",
 
 	// 進度
 	"{name} is working…": "{name}正在處理…",
@@ -371,6 +360,17 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	Prompt: "提示詞",
 	"Runs on {model}, thinking {thinking}": "使用 {model}，思考程度 {thinking}",
 	"Saved.": "已儲存。",
+	"Temp knight presets ({count}/{max})": "臨時騎士範本（{count}/{max}）",
+	"New preset": "新增範本",
+	"Preset name": "範本名稱",
+	"Lowercase letters, digits and dashes, up to 32. It cannot be changed later.":
+		"小寫英文字母、數字與連字號，最多 32 個字元。之後無法更改。",
+	"The knight's own": "跟著騎士自己的",
+	"Delete preset": "刪除範本",
+	"Created the preset.": "已建立範本。",
+	"Saved the preset.": "已儲存範本。",
+	"Deleted the preset.": "已刪除範本。",
+	"Preset: {name}": "範本：{name}",
 
 	// 連接器
 	"{count} tools": "{count} 個工具",
@@ -679,6 +679,10 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Dispatch threads": "派工討論串",
 	"Find a room": "尋找聊天室",
 	"Switch rooms": "切換聊天室",
+	"Find a room or page": "尋找聊天室或頁面",
+	"Nothing matches.": "沒有符合的項目。",
+	Page: "頁面",
+	Thread: "討論串",
 	"Show threads": "顯示串",
 	"Hide threads": "收起串",
 	"Keyboard shortcuts": "鍵盤快速鍵",
@@ -825,6 +829,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 		"已登錄的技能與搭載對象；如要修改內容，請在 Discord 上請騎士編輯。",
 
 	// 圓桌
+	Close: "關閉",
 	"Reset view": "重設視角",
 	Log: "記錄",
 	"Show the council as": "評議會的顯示方式",
@@ -850,7 +855,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Tool failed": "工具執行失敗",
 	"Tool result": "工具結果",
 	User: "使用者",
-	// 命令面板與對話紀錄共用
 	Knight: "騎士",
 	"Summary of earlier conversation": "先前對話的摘要",
 
@@ -1003,7 +1007,7 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"An event needs its date as YYYY-MM-DD.":
 		"事件的日期必須是 YYYY-MM-DD 格式。",
 	"Only an event has a date.": "只有事件才有日期。",
-	// 職業
+	// 角色的職業、適合的工作、色盤與部件
 	"character.class.wizard": "巫師",
 	"character.class.knight": "騎士",
 	"character.class.scholar": "學者",
@@ -1028,7 +1032,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.class.jester": "弄臣",
 	"character.class.paladin": "聖騎士",
 	"character.class.archivist": "檔案管理員",
-	// 職業適合的工作
 	"character.jobs.wizard": "協調者、規劃者、主騎士",
 	"character.jobs.knight": "審查者、品質把關、守護者",
 	"character.jobs.scholar": "研究員、文獻回顧",
@@ -1053,7 +1056,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.jobs.jester": "腦力激盪、發想、幽默",
 	"character.jobs.paladin": "合規、政策、核准",
 	"character.jobs.archivist": "知識庫、索引、記憶",
-	// 色盤
 	"character.palette.azure": "蔚藍",
 	"character.palette.gules": "緋紅",
 	"character.palette.vert": "翠綠",
@@ -1062,7 +1064,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.palette.sable": "墨黑",
 	"character.palette.teal": "青藍",
 	"character.palette.rose": "玫瑰",
-	// 服裝
 	"character.outfit.robe": "長袍",
 	"character.outfit.scholar": "學者服",
 	"character.outfit.armor": "鎖子甲",
@@ -1078,7 +1079,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.outfit.surplice": "法衣",
 	"character.outfit.motley": "小丑裝",
 	"character.outfit.sailor": "水手束衣",
-	// 帽子
 	"character.hat.none": "無帽子",
 	"character.hat.wizard": "巫師帽",
 	"character.hat.helm": "頭盔",
@@ -1103,7 +1103,6 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"character.hat.sailor": "草帽",
 	"character.hat.jester": "小丑帽",
 	"character.hat.winghelm": "翼盔",
-	// 道具
 	"character.prop.staff": "法杖",
 	"character.prop.shield": "盾牌",
 	"character.prop.scroll": "卷軸",

@@ -187,6 +187,21 @@ test("a knight's temp knights hang under it, one row each with its state, and ar
 	expect(all("a.room-row")).toHaveLength(2);
 });
 
+test("a temp knight made from a preset names it quietly in its row; one made without names none", async () => {
+	await show([
+		...ROOMS,
+		helper(H1, {
+			helper: { parent: SCOUT, parentName: "scout", preset: "writer" },
+		}),
+		helper(H2, { typing: true }),
+	]);
+	const rows = all("a.helper-link");
+	expect(rows[0]?.querySelector(".helper-preset")?.textContent).toBe(
+		"Preset: writer",
+	);
+	expect(rows[1]?.querySelector(".helper-preset")).toBeNull();
+});
+
 test("a knight whose temp knights are all finished shows them folded, and a tap on the count opens them", async () => {
 	await show([...ROOMS, helper(H1, {}, true), helper(H2, {}, true)]);
 	expect(all("a.helper-link")).toHaveLength(0);

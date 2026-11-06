@@ -47,6 +47,11 @@ const HelperRow = memo(function HelperRow(
 			>
 				<RoomPicture view={view} size={20} />
 				<strong>{view.displayName}</strong>
+				{view.helper?.preset ? (
+					<span className="meta helper-preset">
+						{t("Preset: {name}", { name: view.helper.preset })}
+					</span>
+				) : null}
 				<Unread room={view.key} />
 				<span className="helper-state">
 					{props.waiting ? <WaitingBadge count={props.waiting} /> : null}

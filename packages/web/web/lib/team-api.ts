@@ -10,6 +10,9 @@ import type {
 	GroupCreate,
 	GroupPatch,
 	GroupProfileView,
+	PresetSave,
+	PresetSaved,
+	PresetsView,
 } from "../../src/api-types.ts";
 import { api, request } from "./api.ts";
 import { store } from "./app-store.ts";
@@ -35,6 +38,16 @@ export const teamApi = {
 		request<AgentSkillsView>(`agents/${named(name)}/skills`),
 	setSkills: (name: string, change: AgentSkillsChange) =>
 		send<AgentSkillsView>(`agents/${named(name)}/skills`, "PUT", change),
+	presets: (name: string) =>
+		request<PresetsView>(`agents/${named(name)}/presets`),
+	savePreset: (name: string, preset: string, body: PresetSave) =>
+		send<PresetSaved>(
+			`agents/${named(name)}/presets/${named(preset)}`,
+			"PUT",
+			body,
+		),
+	deletePreset: (name: string, preset: string) =>
+		send<undefined>(`agents/${named(name)}/presets/${named(preset)}`, "DELETE"),
 	archive: () => request<ArchiveView>("archive"),
 	createGroup: (made: GroupCreate) =>
 		send<GroupProfileView>("groups", "POST", made),

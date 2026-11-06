@@ -80,6 +80,15 @@ export const HELPER_CSS = `
 	white-space: nowrap;
 }
 
+.helper-preset {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--muted);
+	font-size: var(--text-xs);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .helper-state {
 	display: flex;
 	flex: none;

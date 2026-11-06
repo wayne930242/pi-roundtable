@@ -127,12 +127,17 @@ const button = (text: string, within: ParentNode = document) =>
 	[...within.querySelectorAll<HTMLButtonElement>("button")].find(
 		(one) => one.textContent?.trim() === text,
 	) ?? null;
-const field = (label: string) =>
-	all<HTMLLabelElement>("label")
-		.find((one) => one.firstChild?.textContent === label)
-		?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-			"input, textarea",
-		) ?? null;
+/** The field a label names: inside it, or the one its `for` points at, as the shared prompt field's. */
+const field = (label: string) => {
+	const named = all<HTMLLabelElement>("label").find(
+		(one) => one.firstChild?.textContent === label,
+	);
+	return (named?.querySelector("input, textarea") ??
+		(named?.htmlFor ? document.getElementById(named.htmlFor) : null)) as
+		| HTMLInputElement
+		| HTMLTextAreaElement
+		| null;
+};
 const chip = (text: string) =>
 	all<HTMLButtonElement>("button.option-chip").find(
 		(one) => one.textContent === text,

@@ -130,10 +130,13 @@ const inReview = (text: string) =>
 	all<HTMLButtonElement>(".review button").find(
 		(one) => one.textContent === text,
 	) ?? null;
-const chip = (text: string) =>
-	all<HTMLButtonElement>("button.option-chip").find(
-		(one) => one.textContent === text,
-	) ?? null;
+const model = () => q<HTMLSelectElement>(".agent-sheet > form select");
+const pickModel = (value: string) =>
+	page.act(() => {
+		const select = model();
+		if (select) select.value = value;
+		select?.dispatchEvent(new Event("change", { bubbles: true }));
+	});
 
 let agent: ReturnType<typeof spyOn>;
 let models: ReturnType<typeof spyOn>;
@@ -224,11 +227,14 @@ test("the sheet is a wide sheet titled Edit knight, with the knight's fields, ch
 	expect(q<HTMLTextAreaElement>(".agent-sheet textarea")?.value).toBe(
 		"You scout.\nBe brief.\nNever guess.",
 	);
-	// Model and thinking are chips; the saved choice is the pressed one.
-	expect(all("button.option-chip").map((one) => one.textContent)).toEqual([
+	// The model is one select, the default first and chosen; the thinking levels are chips.
+	expect([...(model()?.options ?? [])].map((one) => one.text)).toEqual([
 		"Default model (model-a)",
 		"model-a",
 		"model-b",
+	]);
+	expect(model()?.value).toBe("default");
+	expect(all("button.option-chip").map((one) => one.textContent)).toEqual([
 		"Default",
 		"Off",
 		"Minimal",
@@ -237,21 +243,15 @@ test("the sheet is a wide sheet titled Edit knight, with the knight's fields, ch
 		"High",
 		"Very high",
 	]);
-	expect(chip("Default model (model-a)")?.getAttribute("aria-pressed")).toBe(
-		"true",
-	);
-	expect(chip("model-b")?.getAttribute("aria-pressed")).toBe("false");
+	expect(q(".option-chip[aria-pressed=true]")?.textContent).toBe("Default");
 	expect(q(".agent-sheet .creator")).not.toBeNull();
 });
 
 test("choosing a model saves just the model, with no review step", async () => {
 	await open();
 	expect(submit()?.disabled).toBe(true);
-	await page.click(chip("model-b"));
-	expect(chip("model-b")?.getAttribute("aria-pressed")).toBe("true");
-	expect(chip("Default model (model-a)")?.getAttribute("aria-pressed")).toBe(
-		"false",
-	);
+	await pickModel("model-b");
+	expect(model()?.value).toBe("model-b");
 	expect(submit()?.textContent).toBe("Save");
 	await page.click(submit());
 	expect(update).toHaveBeenCalledTimes(1);
@@ -301,7 +301,7 @@ test("a changed prompt is reviewed as a diff before it is saved", async () => {
 test("the review lists a changed name and model beside the prompt diff", async () => {
 	await open();
 	await typeInto(q<HTMLInputElement>(".agent-sheet input"), "Scout II");
-	await page.click(chip("model-a"));
+	await pickModel("model-a");
 	await typeInto(q<HTMLTextAreaElement>(".agent-sheet textarea"), "New prompt");
 	await page.click(submit());
 	const fields = all(".review-fields li").map((one) => one.textContent);
