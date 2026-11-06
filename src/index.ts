@@ -21,6 +21,8 @@ export {
 	type HelperPreset,
 	MAX_HELPER_PRESETS,
 	type OwnedPreset,
+	type PresetOverview,
+	type PresetRecruits,
 	type PresetSharing,
 	type UsablePreset,
 } from "./core/agents/helper-presets.ts";

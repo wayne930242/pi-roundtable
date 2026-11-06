@@ -4535,6 +4535,8 @@ Import from the entries listed below; source area files are internal.
 | `HeldCall` | `pi-roundtable` | type |
 | `HelperPreset` | `pi-roundtable` | type |
 | `OwnedPreset` | `pi-roundtable` | type |
+| `PresetOverview` | `pi-roundtable` | type |
+| `PresetRecruits` | `pi-roundtable` | type |
 | `PresetSharing` | `pi-roundtable` | type |
 | `UsablePreset` | `pi-roundtable` | type |
 | `HelperTeam` | `pi-roundtable` | type |

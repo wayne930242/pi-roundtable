@@ -19,6 +19,7 @@ import {
 } from "./agent-tools.ts";
 import type { HelperTeam } from "./helper-ops.ts";
 import { ownerPresets, presetAction } from "./helper-preset-ops.ts";
+import { allPresets, transferPreset } from "./helper-preset-overview.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import type { TeamHelpers } from "./team-helpers.ts";
@@ -408,21 +409,17 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	}
 
 	/** An owner manages a knight's presets; see `HelperTeam.presets`. */
-	presets(agent: string): ReturnType<HelperTeam["presets"]> {
-		return ownerPresets(this.#context).list(agent);
-	}
-
-	usablePresets(agent: string): ReturnType<HelperTeam["usablePresets"]> {
-		return ownerPresets(this.#context).usable(agent);
-	}
-
-	savePreset(...args: Parameters<HelperTeam["savePreset"]>) {
-		return ownerPresets(this.#context).save(...args);
-	}
-
-	deletePreset(agent: string, name: string): Promise<boolean> {
-		return ownerPresets(this.#context).delete(agent, name);
-	}
+	readonly presets: HelperTeam["presets"] = (agent) =>
+		ownerPresets(this.#context).list(agent);
+	readonly usablePresets: HelperTeam["usablePresets"] = (agent) =>
+		ownerPresets(this.#context).usable(agent);
+	readonly savePreset: HelperTeam["savePreset"] = (...args) =>
+		ownerPresets(this.#context).save(...args);
+	readonly deletePreset: HelperTeam["deletePreset"] = (agent, name) =>
+		ownerPresets(this.#context).delete(agent, name);
+	readonly allPresets = () => allPresets(this.#context);
+	readonly transferPreset: HelperTeam["transferPreset"] = (...args) =>
+		transferPreset(this.#context, ...args);
 
 	/** A knight archives its own temp knights; the pages that show the parent are told. */
 	helperEnd(

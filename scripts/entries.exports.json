@@ -247,6 +247,8 @@
 			"PrecheckScriptContext",
 			"PrecheckScriptRunner",
 			"PrecheckTool",
+			"PresetOverview",
+			"PresetRecruits",
 			"PresetSharing",
 			"Principal",
 			"ProfileRules",

@@ -204,7 +204,7 @@ export function validatePreset(
  * The knight whose presets an owner manages from outside any agent turn: refused when temp knights
  * are off, for an unknown or archived agent, and for a temp knight, which keeps none.
  */
-function presetOwner(ctx: TeamContext, name: string): Agent {
+export function presetOwner(ctx: TeamContext, name: string): Agent {
 	if (!helpersOf(ctx.options.helpers))
 		throw new AgentError("Temp knights are switched off on this host.");
 	const agent = ctx.options.store.activeAgent(name);

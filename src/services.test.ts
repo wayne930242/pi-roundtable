@@ -142,6 +142,10 @@ const team: AgentTeam = {
 	usablePresets: async () => [],
 	savePreset: async (_agent, preset) => ({ preset, replaced: false }),
 	deletePreset: async () => false,
+	allPresets: async () => [],
+	transferPreset: async () => {
+		throw new Error("no presets");
+	},
 	createGroup: async () => "created",
 	updateGroup: async () => "updated",
 	dress: async () => {

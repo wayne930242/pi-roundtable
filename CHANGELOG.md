@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `AgentTeam.allPresets()` lists every preset of every active knight that is no temp knight, by knight and then name, each with `sharedWith` and `recruits`: the knights that made temp knights from it, each with how many are active and archived and when the latest was made (`last`). `PresetOverview` and `PresetRecruits` are exported.
+- `AgentTeam.transferPreset(agent, name, to)` gives a preset to another active knight, keeping its content and sharing. The new owner leaves the shared list. The old owner joins it when the preset was shared with none or with a list, so the old owner can still recruit from it; the owner removes it from the list to take that away. A preset shared with every knight stays so. The transfer refuses the same knight, a name the new owner already has, a new owner at 20 presets, and an unknown preset. Temp knights made from the preset before keep the name they recorded, so `allPresets` does not count them among the moved preset's recruits.
+
 ## [0.36.0] - 2026-11-06
 
 ### Added

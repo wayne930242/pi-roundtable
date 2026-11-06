@@ -2,6 +2,7 @@ import type { Agent } from "./agent-rules.ts";
 import type {
 	HelperPreset,
 	OwnedPreset,
+	PresetOverview,
 	PresetSharing,
 	UsablePreset,
 } from "./helper-presets.ts";
@@ -62,4 +63,16 @@ export interface HelperTeam {
 	): Promise<{ preset: OwnedPreset; replaced: boolean }>;
 	/** Deletes one of a knight's presets; says whether there was one. */
 	deletePreset(agent: string, name: string): Promise<boolean>;
+	/**
+	 * Every preset of every active knight, by knight and then name, each with whom it is shared and
+	 * the knights that recruited temp knights from it. Throws AgentError when temp knights are off.
+	 */
+	allPresets(): Promise<PresetOverview[]>;
+	/**
+	 * Moves a knight's preset to another active knight that is no temp knight, keeping its content
+	 * and sharing: `to` leaves the shared list, and the old owner joins it unless the preset is
+	 * shared with every knight. Refuses the same knight, a name `to` already has, `to` at 20
+	 * presets, and an unknown preset. Temp knights made from it keep the name they recorded.
+	 */
+	transferPreset(agent: string, name: string, to: string): Promise<OwnedPreset>;
 }

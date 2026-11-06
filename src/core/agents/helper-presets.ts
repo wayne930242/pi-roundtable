@@ -59,6 +59,31 @@ const toPreset = (row: Row): UsablePreset => ({
 		: {}),
 });
 
+/** The temp knights one knight recruited from a preset, by their status. */
+export interface PresetRecruits {
+	/** The knight that made them. */
+	knight: string;
+	active: number;
+	archived: number;
+	/** When the latest of them was made, as an ISO time. */
+	last?: string;
+}
+
+/** A preset as the presets page lists it: with its agent and who recruited from it. */
+export interface PresetOverview extends UsablePreset {
+	/** The knights that made temp knights from it, by name. */
+	recruits: PresetRecruits[];
+}
+
+/** The temp knights of one parent made from one recorded preset, with one status. */
+export interface RecruitRow {
+	parent: string;
+	preset: string;
+	status: "active" | "archived";
+	count: number;
+	last: Date | null;
+}
+
 const owned = ({ agent: _agent, ...preset }: UsablePreset): OwnedPreset =>
 	preset;
 
@@ -169,6 +194,55 @@ export class HelperPresets {
 					shared_with = CASE WHEN ${keep} THEN helper_presets.shared_with
 						ELSE EXCLUDED.shared_with END`;
 			return replaced ? "replaced" : "created";
+		});
+	}
+
+	/** Every agent's presets, by agent and then name. */
+	async all(): Promise<UsablePreset[]> {
+		const rows: Row[] = await this.#sql`
+			SELECT * FROM helper_presets WHERE guild_id = ${this.#guild} ORDER BY agent, name`;
+		return rows.map(toPreset);
+	}
+
+	/** The temp knights made from a preset, counted by parent, recorded preset, and status. */
+	recruits(): Promise<RecruitRow[]> {
+		return this.#sql`
+			SELECT parent, preset, status, count(*)::int AS count, max(created_at) AS last
+			FROM agents
+			WHERE guild_id = ${this.#guild} AND parent IS NOT NULL AND preset IS NOT NULL
+			GROUP BY parent, preset, status`;
+	}
+
+	/**
+	 * Moves a preset to another agent with the sharing given, refusing when that agent has one of
+	 * the name or the cap of presets; says whether there was a preset to move.
+	 */
+	async transfer(
+		from: string,
+		name: string,
+		to: string,
+		sharing: string[],
+	): Promise<boolean> {
+		const guild = this.#guild;
+		return this.#sql.begin(async (tx) => {
+			// The lock `set` takes for the receiving agent, so the cap holds against its saves.
+			await tx`SELECT pg_advisory_xact_lock(hashtext(${`helper-presets:${guild}:${to}`}))`;
+			const [counted]: { total: number; same: number }[] = await tx`
+				SELECT count(*)::int AS total, count(*) FILTER (WHERE name = ${name})::int AS same
+				FROM helper_presets WHERE guild_id = ${guild} AND agent = ${to}`;
+			if ((counted?.same ?? 0) > 0)
+				throw new AgentError(`${to} already has a preset "${name}".`);
+			if ((counted?.total ?? 0) >= MAX_HELPER_PRESETS)
+				throw new AgentError(
+					`${to} has ${MAX_HELPER_PRESETS} presets, the most one may keep; it must delete one first.`,
+				);
+			const moved = await tx`
+				UPDATE helper_presets
+				SET agent = ${to}, updated_at = now(),
+					shared_with = ${sharing.length > 0 ? sharing : null}::jsonb
+				WHERE guild_id = ${guild} AND agent = ${from} AND name = ${name}
+				RETURNING name`;
+			return moved.length > 0;
 		});
 	}
 
