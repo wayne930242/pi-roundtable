@@ -1,47 +1,18 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { GroupProfileView } from "../../src/api-types.ts";
 import { messageOf } from "../lib/api.ts";
-import { useSelector } from "../lib/app-store.ts";
 import { translate as t } from "../lib/messages.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
 import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { Chips } from "./chips.tsx";
+import { KnightPicker, useKnights } from "./knight-picker.tsx";
 import { Failure, Loading } from "./states.tsx";
 
 const NAME = /^[a-z0-9-]{1,32}$/;
 const MIN_MEMBERS = 2;
 const MAX_MEMBERS = 8;
-
-/** Splits the names of one agent from its display name in the selector's one string. */
-const SEP = "\u0000";
-
-/** The agents a group can be made of: the active ones, as the room list has them. */
-function useAgents(): { name: string; displayName: string }[] {
-	// One string, so the editor redraws only when the agents change, not on every message.
-	const shape = useSelector((state) =>
-		state.order
-			.flatMap((key) => {
-				const view = state.rooms[key]?.view;
-				// A temp knight takes no group seat.
-				return view?.kind === "agent" && !view.helper
-					? [`${view.name}${SEP}${view.displayName}`]
-					: [];
-			})
-			.join(`${SEP}${SEP}`),
-	);
-	return useMemo(
-		() =>
-			shape === ""
-				? []
-				: shape.split(`${SEP}${SEP}`).map((one) => {
-						const [name = "", displayName = ""] = one.split(SEP);
-						return { name, displayName };
-					}),
-		[shape],
-	);
-}
 
 /**
  * Makes a group, or edits one: its name, which agents are in it and which of them is the host, who
@@ -49,7 +20,7 @@ function useAgents(): { name: string; displayName: string }[] {
  * speaking-tie order.
  */
 export function GroupEditor(props: { name?: string; onDone(): void }) {
-	const agents = useAgents();
+	const agents = useKnights();
 	const [loaded, setLoaded] = useState<GroupProfileView>();
 	const [error, setError] = useState<string>();
 	const [displayName, setDisplayName] = useState("");
@@ -187,38 +158,13 @@ export function GroupEditor(props: { name?: string; onDone(): void }) {
 					</span>
 				</label>
 			)}
-			<fieldset className="field">
-				<legend>{t("Members")}</legend>
-				<span className="meta">
-					{t("Pick 2 to 8 knights. They take turns in the order picked.")}
-				</span>
-				<ul className="menu">
-					{agents.map((agent) => {
-						const on = members.includes(agent.name);
-						return (
-							<li key={agent.name}>
-								<label className="menu-item menu-toggle">
-									<input
-										type="checkbox"
-										checked={on}
-										disabled={!on && members.length >= MAX_MEMBERS}
-										onChange={() =>
-											setMembers(
-												on
-													? members.filter((one) => one !== agent.name)
-													: [...members, agent.name],
-											)
-										}
-									/>
-									<span className="menu-text">
-										<strong>{agent.displayName}</strong>
-									</span>
-								</label>
-							</li>
-						);
-					})}
-				</ul>
-			</fieldset>
+			<KnightPicker
+				label={t("Members")}
+				hint={t("Pick 2 to 8 knights. They take turns in the order picked.")}
+				chosen={members}
+				onChange={setMembers}
+				max={MAX_MEMBERS}
+			/>
 			{members.length >= MIN_MEMBERS ? (
 				<Chips
 					label={t("Host")}
