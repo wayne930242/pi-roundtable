@@ -744,7 +744,6 @@ host = await testHost({
 						"conversations",
 						"notes",
 						"skills",
-						"presets",
 						"connectors",
 					],
 			...(process.env.LOCALE

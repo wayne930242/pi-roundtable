@@ -179,7 +179,7 @@ async function open(): Promise<void> {
 test("the presets are grouped by knight, each row with its skills, sharing and recruits", async () => {
 	await open();
 	expect(owners()).toEqual(["boss", "scout"]);
-	expect(q("[data-owner=scout] .card-head")?.textContent).toBe("Scout");
+	expect(q("[data-owner=scout] .preset-owner")?.textContent).toBe("Scout");
 	expect(q("[data-owner=scout] svg, [data-owner=scout] img")).not.toBeNull();
 	expect(rows()).toEqual(["boss/medic", "scout/scribe", "scout/writer"]);
 	const meta = (key: string) =>
