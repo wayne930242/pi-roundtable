@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-06
+
 ### Added
 
 - `AgentTeam.allPresets()` lists every preset of every active knight that is no temp knight, by knight and then name, each with `sharedWith` and `recruits`: the knights that made temp knights from it, each with how many are active and archived and when the latest was made (`last`). `PresetOverview` and `PresetRecruits` are exported.

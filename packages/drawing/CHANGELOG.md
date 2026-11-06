@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-06
+
+- Release in lockstep with pi-roundtable 0.37.0 (a Presets page with recruits and transfer; the Edit knight sheet as tabs; a searchable skill picker; a lifted row that wiggles and resists its first pixels); peer range `>=0.37.0 <0.38.0`, no package-specific behavior changes.
+
 ## [0.36.0] - 2026-11-06
 
 - Release in lockstep with pi-roundtable 0.36.0 (temp-knight presets managed from the knight sheet, shared between knights, and recruited by name); peer range `>=0.36.0 <0.37.0`, no package-specific behavior changes.

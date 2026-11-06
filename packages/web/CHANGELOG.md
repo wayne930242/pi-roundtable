@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-06
+
 ### Added
 
 - `GET api/presets` answers `{ presets, max }` for owners: every active knight's presets, each with its `agent`, `sharedWith` and `recruits` (per recruiting knight, its `active` and `archived` temp knights and the `last` time one was made).
