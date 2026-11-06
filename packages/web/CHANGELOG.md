@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-06
+
 ### Fixed
 
 - A system line in a room, such as a yolo approval quoting a whole command, wraps inside the room instead of widening it; the widened room scrolled sideways and kept the drawer's swipe from opening.

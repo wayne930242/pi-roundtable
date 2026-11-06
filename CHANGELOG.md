@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-06
+
 ### Added
 
 - An owner manages a knight's temp-knight presets outside any agent turn: `AgentTeam.presets(agent)`, `savePreset(agent, preset)` (returns the preset as saved and whether it replaced one) and `deletePreset(agent, name)`. A save runs `helper_preset_set`'s checks at the owner's tier and keeps the cap of 20. All three refuse when temp knights are off, for an unknown or archived agent, and for a temp knight. `HelperTeam.helpersOn()` tells whether the host makes temp knights at all. `HelperPreset` and `MAX_HELPER_PRESETS` are exported.
