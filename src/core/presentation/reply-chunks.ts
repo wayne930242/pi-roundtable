@@ -8,8 +8,8 @@ import { splitReply } from "./reply-splitter.ts";
  * `table` or `mermaid`, or a GitHub alert) is YAML that only a surface that draws it should
  * see, so a block of a kind the surface does not list in `blocks` is turned into text first.
  * A surface that draws any block gets the result whole, since cutting a fence breaks the block;
- * any other surface gets it split into messages within Discord's limit. A block that is not
- * closed yet is no block, and stays text.
+ * any other surface gets it split into messages within Discord's limit. A block left open at the end
+ * of the text is still a block; one that does not parse becomes a plain code block.
  */
 export function chunksFor(
 	surface: BlockSupport | undefined,
