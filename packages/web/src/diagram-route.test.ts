@@ -1,5 +1,5 @@
-import { Worker } from "node:worker_threads";
 import { describe, expect, test } from "bun:test";
+import { Worker } from "node:worker_threads";
 import type { ActorFacts } from "pi-roundtable";
 import { recordingLogger } from "pi-roundtable/testing";
 import type { AssetBundle } from "./assets.ts";
@@ -312,5 +312,22 @@ describe("DiagramRenderer workers", () => {
 		await Bun.sleep(300);
 		expect(created).toBeGreaterThan(1);
 		expect(created - exited).toBeLessThanOrEqual(1);
+	});
+
+	test("a worker that fails to start is busy, not a verdict kept for the source", async () => {
+		let starts = 0;
+		const renderer = new DiagramRenderer({
+			spawn: () => {
+				starts += 1;
+				return new Worker("throw new Error('no start')", { eval: true });
+			},
+		});
+		const service = new DiagramService({
+			render: (source, scheme) => renderer.draw(source, scheme),
+		});
+		const url = `http://x/api/diagram?scheme=light&s=${Buffer.from("graph TD\nA-->B").toString("base64url")}`;
+		expect((await service.serve(new Request(url))).status).toBe(503);
+		expect((await service.serve(new Request(url))).status).toBe(503);
+		expect(starts).toBe(2);
 	});
 });

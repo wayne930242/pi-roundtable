@@ -16,7 +16,7 @@ export interface DiagramRendererOptions {
 	spawn?: () => Worker;
 }
 
-/** How long a new worker may take to load the drawing library. */
+/** How long a new worker may take to load the drawing library; a worker that fails to start is no verdict on a source, so it is refused as `busy`. */
 const START_MS = 15_000;
 
 interface Reply {
@@ -74,12 +74,12 @@ export class DiagramRenderer {
 			worker.unref();
 			const timer = setTimeout(() => {
 				this.#drop(worker);
-				reject(new DiagramRefusal("slow"));
+				reject(new DiagramRefusal("busy"));
 			}, START_MS);
 			worker.once("error", () => {
 				clearTimeout(timer);
 				this.#drop(worker);
-				reject(new DiagramRefusal("invalid"));
+				reject(new DiagramRefusal("busy"));
 			});
 			worker.once("exit", () => this.#forget(worker));
 			worker.once("message", () => {

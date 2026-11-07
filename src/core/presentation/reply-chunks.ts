@@ -1,6 +1,6 @@
 import { type BlockKind, parse, toText } from "pi-better-show";
 import type { BlockSupport, BlockTextFlavor } from "../domain/block-support.ts";
-import { diagramText } from "./diagram-text.ts";
+import { diagramDrawer } from "./diagram-text.ts";
 import { splitReply } from "./reply-splitter.ts";
 
 /**
@@ -42,5 +42,5 @@ function convert(
 	// Toward a surface that draws all of them the text is already right, and rejoining the
 	// segments would only change its spacing.
 	if (blocks.every((block) => draws.includes(block.kind))) return text;
-	return toText(segments, { flavor, mermaid: diagramText, keep: draws });
+	return toText(segments, { flavor, mermaid: diagramDrawer(), keep: draws });
 }
