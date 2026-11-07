@@ -11,6 +11,7 @@ import type {
 	HostCardView,
 	ReadMarkView,
 	RoomMessage,
+	RoomView,
 	ServerFrame,
 } from "../src/api-types.ts";
 import { HostCard } from "./components/host-card.tsx";
@@ -241,6 +242,55 @@ beforeEach(() => {
 		name: "Ada",
 		uploads: { perMessage: 4, maxBytes: 1000 },
 	});
+});
+
+/** A listed agent room or thread, with its unread count as the room list reports it. */
+const listed = (key: string, over: Partial<RoomView> = {}): RoomView => ({
+	key,
+	kind: "agent",
+	name: key,
+	displayName: key,
+	home: false,
+	readOnly: false,
+	mode: { yolo: false, longRunning: false },
+	typing: false,
+	stoppable: false,
+	...over,
+});
+
+test("a room that leaves the list takes its unread count with it, a host room keeps its own", () => {
+	const parent = listed("app:agent.prune-parent");
+	const helper = listed("app:agent.prune-helper", {
+		helper: { parent: parent.key, parentName: "Parent" },
+		unread: 3,
+	});
+	const host = "app:inbox.prune-host-0001";
+	hostState.seedUnread({ [host]: 2 });
+	store.dispatch({ type: "rooms_loaded", rooms: [parent, helper] });
+	expect(hostState.totalUnread()).toBe(5);
+	// The helper was archived: the next list has no room of it.
+	store.dispatch({ type: "rooms_loaded", rooms: [parent] });
+	expect(hostState.unreadOf(helper.key)).toBe(0);
+	expect(hostState.unreadCounts()).toEqual({ [host]: 2 });
+	expect(hostState.totalUnread()).toBe(2);
+	// Restored, the list brings the server's count back.
+	store.dispatch({ type: "rooms_loaded", rooms: [parent, helper] });
+	expect(hostState.unreadOf(helper.key)).toBe(3);
+	hostState.seedUnread({ [host]: 0 });
+	store.dispatch({ type: "rooms_loaded", rooms: [] });
+});
+
+test("a dismissed thread takes its unread count with it", () => {
+	const thread = listed("app:thread.prune-dismissed", {
+		kind: "thread",
+		unread: 4,
+	});
+	store.dispatch({ type: "rooms_loaded", rooms: [thread] });
+	expect(hostState.unreadOf(thread.key)).toBe(4);
+	store.dispatch({ type: "threads_dismissed", rooms: [thread.key] });
+	expect(hostState.unreadOf(thread.key)).toBe(0);
+	expect(hostState.unreadCounts()[thread.key]).toBeUndefined();
+	store.dispatch({ type: "rooms_loaded", rooms: [] });
 });
 
 test("an arriving message counts as unread unless it is the person's own or the room is being read", () => {

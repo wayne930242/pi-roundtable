@@ -93,14 +93,44 @@ function seedFromRooms(): void {
 	let next: Record<string, number> | undefined;
 	for (const [key, room] of Object.entries(store.getState().rooms)) {
 		const view = room.view;
-		if (!view || seeded.has(view)) continue;
+		if (!view || seeded.has(view) || departed.has(key)) continue;
 		seeded.add(view);
 		next ??= { ...state.unread };
 		next[key] = view.unread ?? 0;
 	}
 	if (next) set({ unread: next });
 }
-store.subscribe(seedFromRooms);
+
+// A room that leaves the room list (a helper archived, a thread dismissed) has no row to read it
+// from, so its count goes too, and the view the store still holds of it seeds nothing until the
+// list brings the room back. Only a room the page saw listed is dropped: a host room is never in
+// the list and keeps the count its own list seeded.
+let listed: readonly string[] = [];
+const departed = new Set<string>();
+function dropLeftRooms(): void {
+	const { order, rooms } = store.getState();
+	if (order === listed) return;
+	const kept = new Set(order);
+	const gone = listed.filter((key) => !kept.has(key));
+	listed = order;
+	for (const key of order) {
+		if (!departed.delete(key)) continue;
+		const view = rooms[key]?.view;
+		if (view) seeded.delete(view);
+	}
+	for (const key of gone) departed.add(key);
+	const counted = gone.filter((key) => key in state.unread);
+	if (counted.length === 0) return;
+	const next = { ...state.unread };
+	for (const key of counted) delete next[key];
+	set({ unread: next });
+}
+
+store.subscribe(() => {
+	dropLeftRooms();
+	seedFromRooms();
+});
+dropLeftRooms();
 seedFromRooms();
 
 /** The marks and the person's cursor a fetch of a room's messages brought. */
