@@ -105,6 +105,16 @@ describeDb("webchat's persistent private inbox", () => {
 					false,
 				);
 				expect(await b.list(principalId)).toEqual([second]);
+				// A notice an agent wrote with a display block is kept and shown as text.
+				await directA.deliver(
+					principalId,
+					"Done.\n\n```table\ncolumns: [name]\nrows:\n  - [alpha]\n```",
+				);
+				const shown = socketA.frames.at(-1) as unknown as {
+					notice: { text: string };
+				};
+				expect(shown.notice.text).not.toContain("```table");
+				expect(shown.notice.text).toContain("• name: alpha");
 			} finally {
 				chatA.chat.closed(socketA);
 				chatB.chat.closed(socketB);

@@ -136,6 +136,7 @@ export {
 	quietLinks,
 	splitReply,
 	supportOf,
+	textFor,
 	thinkingLine,
 	zonedStamp,
 } from "./presentation.ts";

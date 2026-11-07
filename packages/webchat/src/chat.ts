@@ -21,6 +21,7 @@ import {
 	type TurnAttachments,
 	type TurnResult,
 } from "pi-roundtable";
+import { textFor } from "pi-roundtable/kit";
 import { RateWindow, TurnBudget } from "./budget.ts";
 import { type ClientCallLimits, ClientDesk } from "./client-calls.ts";
 import { type Connection, Connections } from "./connections.ts";
@@ -940,7 +941,8 @@ export class WebChat {
 		this.connections.sendTo(principal, {
 			type: "reply",
 			conversation,
-			text: result.text,
+			// The web chat draws no display block, so a block reads as text, as it does on Discord.
+			text: textFor(undefined, result.text),
 			...(result.thinking ? { thinking: result.thinking } : {}),
 			...(result.files?.length
 				? {

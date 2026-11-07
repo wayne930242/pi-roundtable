@@ -15,10 +15,21 @@ export function chunksFor(
 	surface: BlockSupport | undefined,
 	text: string,
 ): string[] {
-	const draws = surface?.blocks ?? [];
-	const converted = convert(text, draws, surface?.blockText ?? "discord");
-	if (draws.length === 0) return splitReply(converted);
+	const converted = textFor(surface, text);
+	if ((surface?.blocks ?? []).length === 0) return splitReply(converted);
 	return converted.trim() ? [converted] : [];
+}
+
+/**
+ * The text as `chunksFor` would send it, in one piece: a block of a kind the surface does not draw
+ * is text, and nothing is cut. For a surface that shows a message however long it is, such as a
+ * web chat's, where cutting would split a code fence.
+ */
+export function textFor(
+	surface: BlockSupport | undefined,
+	text: string,
+): string {
+	return convert(text, surface?.blocks ?? [], surface?.blockText ?? "discord");
 }
 
 function convert(
