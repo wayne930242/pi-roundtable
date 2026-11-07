@@ -113,6 +113,7 @@ const EXPECTED: [string, string, Record<string, Outcome>][] = [
 	["POST", "api/uploads", V],
 	["DELETE", "api/uploads/u1", V],
 	["GET", "api/files/f1", V],
+	["GET", "api/diagram", V],
 	["GET", "api/schedules", V],
 	["DELETE", "api/schedules/s1", V],
 	["GET", "api/host/case", V],

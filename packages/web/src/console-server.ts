@@ -9,6 +9,7 @@ import type {
 import { allowedNext, nextOfPath } from "./auth/next.ts";
 import { type Decision, decide } from "./authz.ts";
 import type { ConsoleApi } from "./console-api.ts";
+import { DiagramService } from "./diagram-route.ts";
 import { type ConsolePresentation, message } from "./features.ts";
 import type { Gate } from "./gate.ts";
 import { json } from "./http.ts";
@@ -98,6 +99,7 @@ export class ConsoleServer {
 	readonly #options: ConsoleServerOptions;
 	readonly #base: string;
 	readonly #meta: PageMeta | undefined;
+	readonly #diagrams = new DiagramService();
 	readonly #streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
 	#pending: ReturnType<typeof setTimeout> | undefined;
 	#ping: ReturnType<typeof setInterval> | undefined;
@@ -197,6 +199,10 @@ export class ConsoleServer {
 		if (!decision.allow) return this.#denied(decision);
 		if (rest === "api/events" && request.method === "GET")
 			return this.#events();
+		if (rest === "api/diagram")
+			return request.method === "GET"
+				? this.#diagrams.serve(request)
+				: new Response("Method not allowed", { status: 405 });
 		const owned = await this.#options.app?.handle(request, rest, admission);
 		if (owned) return owned;
 		if (rest.startsWith("api/"))

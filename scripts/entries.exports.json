@@ -371,6 +371,7 @@
 			"OWNER_SPEAKER",
 			"TEST_GUILD",
 			"checkSurfaceContract",
+			"describeBlocksContract",
 			"describeDb",
 			"describeSurfaceContract",
 			"eagerText",

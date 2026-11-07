@@ -10,6 +10,9 @@ import type {
 	QuestionnaireAnswer,
 } from "../interactions/questionnaire.ts";
 import { BLOCK_CHECKS } from "./surface-contract-blocks.ts";
+
+export { describeBlocksContract } from "./surface-contract-blocks.ts";
+
 import { QUESTIONNAIRE_CHECKS } from "./surface-contract-questionnaire.ts";
 import {
 	answeredOnlyByThem,

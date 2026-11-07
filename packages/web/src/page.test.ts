@@ -56,7 +56,11 @@ test("the page builds with relative URLs only, and every file it names is in the
  * sheet, its tabs' and the picker's styles and the lift's wiggle are lazy. The 150 bytes after
  * that are the Presets pane, 107 bytes over: its name, label, icon and lazy route, and the preload
  * table naming the chunks the page shares with the knight's sheet (the preset rows, recruits and
- * transfer, and the search field); the page and those parts are lazy.
+ * transfer, and the search field); the page and those parts are lazy. The 600 bytes after that are
+ * the display blocks (cards, tables, diagrams in a message): the message Markdown's test for a
+ * block and its lazy import, the Markdown pass split out so the blocks chunk can reuse it (405
+ * bytes gzipped), and the block slots' tokens in the stylesheet (166); pi-better-show's parser,
+ * elements and React wrappers are the lazy blocks chunk, which the next test keeps out of the entry.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -71,7 +75,8 @@ const FIRST_LOAD_BASELINE =
 	50 +
 	50 +
 	150 +
-	150;
+	150 +
+	600;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
@@ -238,4 +243,33 @@ test("the zh-TW catalog is a chunk of its own, which the page loads only for tha
 	expect(holders).toHaveLength(1);
 	expect(holders[0]).toMatch(/^chunk-zh-tw-/);
 	expect(text("sw.js")).toContain(holders[0] as string);
+});
+
+test("the display blocks ship as a lazy chunk the worker precaches, and the entry holds no element code", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "web-console-blocks-"));
+	await buildPage(dir);
+	const assets = loadAssets(dir);
+	const html = new TextDecoder().decode(assets.get("index.html")?.body);
+	const first = [...html.matchAll(/(?:src|href)="\.\/([^"]+\.js)"/g)].map(
+		(match) => match[1] ?? "",
+	);
+	expect(first.length).toBeGreaterThanOrEqual(1);
+	const text = (name: string) =>
+		new TextDecoder().decode(assets.get(name)?.body);
+	for (const name of first) {
+		expect(text(name)).not.toContain("pbs-");
+		expect(text(name)).not.toContain("pbs-answer");
+	}
+	const blocks = readdirSync(dir).filter((name) =>
+		/^chunk-blocks-[a-z0-9]+\.js$/.test(name),
+	);
+	expect(blocks).toHaveLength(1);
+	const chunk = text(blocks[0] ?? "");
+	for (const tag of ["pbs-cards", "pbs-table", "pbs-diagram", "pbs-callout"])
+		expect(chunk).toContain(tag);
+	// The entry names the chunk only as a lazy import; the worker's precache list holds it.
+	const worker = readFileSync(join(dir, "sw.js"), "utf8");
+	expect(worker).toContain(blocks[0] ?? "");
+	// Diagrams load as images from the app's own origin, which the page's policy already allows.
+	expect(chunk).toContain("api/diagram?scheme=");
 });

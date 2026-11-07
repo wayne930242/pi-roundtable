@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Display blocks (`cards`, `table`, `steps`, `stats`, `mindmap`, `mermaid`, `diff`, GitHub alerts and the interactive kinds of `pi-better-show`) in an agent's reply reach every surface in a form it can show. `ChatSurface.blocks` lists the kinds a surface draws itself; a reply then arrives whole in one chunk, with those fences intact. `ChatSurface.blockText` (`BlockTextFlavor`) picks the text a block reads as on any other surface: `discord` by default, `line`, or `plain`. Discord and LINE never receive a block as YAML any more; a diagram is drawn as Unicode boxes.
 - `chunksFor(surface, text)` and `BlockSupport` (`pi-roundtable/kit`) cut agent text for a surface. `InterimPosts` carries the same `blocks` and `blockText`, which the host's surface port fills in from the surface.
-- `describeSurfaceContract` checks that a surface listing `blocks` delivers a long block of a declared kind whole.
+- `describeSurfaceContract` checks that a surface listing `blocks` delivers a long block of a declared kind whole; `describeBlocksContract` (`pi-roundtable/testing`) runs only that check for a surface that cannot run the whole contract.
 - `pi-better-show` 0.2.0 is a dependency.
 
 ### Changed

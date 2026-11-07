@@ -140,6 +140,7 @@ export type {
 } from "./core/testing/surface-contract.ts";
 export {
 	checkSurfaceContract,
+	describeBlocksContract,
 	describeSurfaceContract,
 } from "./core/testing/surface-contract.ts";
 export type { TestHost, TestHostOptions } from "./core/testing/test-host.ts";
@@ -148,9 +149,8 @@ export type { FakeThreadHost } from "./core/testing/thread-host.ts";
 export { fakeThreads } from "./core/testing/thread-host.ts";
 
 /**
- * A service the plugin under test reads, with the members the test gives it, made by
- * `servicePair(KEY, { ... })`. Reading a member the test did not give throws a PluginError that
- * names it.
+ * A service the plugin under test reads, with the members the test gives it, made by `servicePair(KEY,
+ * { ... })`. Reading a member the test did not give throws a PluginError that names it.
  */
 export interface ServicePair {
 	readonly key: ServiceKey<unknown>;

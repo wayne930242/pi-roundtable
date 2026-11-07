@@ -1382,6 +1382,41 @@ a.menu-item:focus-visible,
 	margin: 0 0 var(--space-3);
 }
 
+/*
+ * Display blocks (pi-better-show's pbs-* elements) take the console's colors through their own
+ * tokens, so both schemes and the Camelot look carry over. The elements add no inline style.
+ */
+.block-slot {
+	--pbs-bg: var(--surface);
+	--pbs-surface: var(--surface-2);
+	--pbs-fg: var(--text);
+	--pbs-muted: var(--muted);
+	--pbs-line: var(--border);
+	--pbs-control: var(--control-border);
+	--pbs-accent: var(--accent);
+	--pbs-on-accent: var(--on-accent);
+	--pbs-note: var(--accent);
+	--pbs-ok: var(--success);
+	--pbs-warn: var(--warn);
+	--pbs-risk: var(--danger);
+	--pbs-radius: var(--radius);
+	--pbs-font: var(--font);
+	--pbs-mono: var(--font-mono);
+	--pbs-font-size: var(--text-sm);
+	margin: 0 0 var(--space-3);
+	overflow-x: auto;
+}
+
+.block-slot > * {
+	display: block;
+}
+
+.prose p.block-error {
+	margin-top: calc(-1 * var(--space-2));
+	font-size: var(--text-xs);
+	color: var(--danger);
+}
+
 /* Discord's subtext (`-# `): a quiet small line, close to what it notes. */
 .prose p.subtext {
 	font-size: var(--text-xs);

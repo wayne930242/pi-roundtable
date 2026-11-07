@@ -1,7 +1,9 @@
+import { describe, test } from "bun:test";
 import type { SurfaceContractSubject } from "./surface-contract.ts";
 import {
 	expectThat,
 	type Running,
+	runCheck,
 	seen,
 	until,
 } from "./surface-contract-support.ts";
@@ -38,3 +40,20 @@ export const BLOCK_CHECKS: readonly {
 		},
 	},
 ];
+
+/**
+ * Registers only the display-block part of the contract, for a surface that cannot run the whole
+ * chat contract (its person writes through a browser, say). The subject needs `surface`,
+ * `channel` and `observations()` showing the replies its person has seen; `write` is never called.
+ */
+export function describeBlocksContract(
+	name: string,
+	make: () => Promise<SurfaceContractSubject>,
+): void {
+	describe(`${name} keeps the display-block contract`, () => {
+		for (const check of BLOCK_CHECKS)
+			test(check.name, async () => {
+				await runCheck(check, make);
+			});
+	});
+}

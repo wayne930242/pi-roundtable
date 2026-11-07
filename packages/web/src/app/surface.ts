@@ -1,3 +1,4 @@
+import { DISPLAY_KINDS } from "pi-better-show";
 import {
 	type AttachmentContent,
 	type AttachmentRef,
@@ -20,6 +21,7 @@ import {
 	type RoundView,
 	START_OVER_TEXT,
 } from "../api-types.ts";
+import { APP_FORMATTING } from "./app-formatting.ts";
 import type { OwnerDesk } from "./desk.ts";
 import { type FileBinding, type FileDir, typeByName } from "./files.ts";
 import { QueuedDelivery } from "./queued-delivery.ts";
@@ -28,13 +30,6 @@ import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import { AppSurfaceThreads } from "./surface-threads.ts";
 import type { WebThreads } from "./threads.ts";
 import type { Uploads } from "./uploads.ts";
-
-/**
- * What the model is told about the app's rendering, as the surface's `formatting`. English: it is
- * model-facing text, not a message-catalog string.
- */
-const APP_FORMATTING =
-	"Reply formatting (web app): Markdown renders, including tables, headings, lists, quotes, links, inline code and fenced code blocks. Raw HTML does not render. Files you attach appear under your message.";
 
 /** The name a reply shows when its sender names none. */
 const ASSISTANT = "Knight";
@@ -114,6 +109,8 @@ export class AppSurface implements ChatSurface {
 	readonly label = "the web app";
 	readonly supportsFiles = true;
 	readonly formatting = APP_FORMATTING;
+	/** The display blocks the page draws itself (see pi-better-show); the interactive kinds arrive as text. */
+	readonly blocks = DISPLAY_KINDS;
 	/** The turn takes an upload up to the most the app lets a person upload. */
 	readonly maxAttachmentBytes: number;
 	/** Present on a surface with host rooms: what was said in one since the assistant last posted. */

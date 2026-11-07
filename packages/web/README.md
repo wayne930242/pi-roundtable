@@ -661,6 +661,8 @@ A page on another site that makes the owner's browser send a request therefore c
 **Cross-site scripting and framing.**
 The page is a prebuilt bundle served from the same origin.
 Every response carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`, and the page carries a Content-Security-Policy of `default-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`, so it loads only its own script and style and cannot be framed.
+
+The diagram route `GET api/diagram` answers any admitted viewer with an SVG that the page loads only through an `<img>` (`img-src 'self'`), so no policy change is needed; the SVG response carries its own policy `default-src 'none'; style-src 'unsafe-inline'`, and a source over 8 KB is refused.
 Path routing uses `base-uri 'self'` for the package-inserted, validated mount base.
 Transcript text, notes, and channel names are rendered as plain text, and no link is taken from a transcript.
 Skill documents render Markdown with raw HTML escaped, no fetched images, and only HTTP(S) links; relative links remain non-navigating text.

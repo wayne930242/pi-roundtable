@@ -69,6 +69,8 @@ export const ROUTES: readonly Rule[] = [
 	row("*", "api/uploads", "V"),
 	row("*", "api/uploads/:id", "V"),
 	row("*", "api/files/:id", "V"),
+	// A Mermaid diagram drawn as an image for the page; any admitted viewer, like a file.
+	row(["GET"], "api/diagram", "V"),
 	// Schedules: the owner's all, a member's own (inside the handler).
 	row("*", "api/schedules", "V"),
 	row("*", "api/schedules/:id", "V"),
