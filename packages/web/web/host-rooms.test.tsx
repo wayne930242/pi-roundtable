@@ -273,6 +273,13 @@ test("a room that leaves the list takes its unread count with it, a host room ke
 	expect(hostState.unreadOf(helper.key)).toBe(0);
 	expect(hostState.unreadCounts()).toEqual({ [host]: 2 });
 	expect(hostState.totalUnread()).toBe(2);
+	// Its last message can land after the list dropped it, and counts nothing.
+	onFrame({
+		type: "message",
+		room: helper.key,
+		message: message(90, { room: helper.key }),
+	});
+	expect(hostState.unreadOf(helper.key)).toBe(0);
 	// Restored, the list brings the server's count back.
 	store.dispatch({ type: "rooms_loaded", rooms: [parent, helper] });
 	expect(hostState.unreadOf(helper.key)).toBe(3);

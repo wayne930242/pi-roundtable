@@ -162,6 +162,8 @@ export function onFrame(frame: ServerFrame): void {
 		case "message":
 		case "host_message": {
 			const me = store.getState().principal?.id;
+			// A room that left the list counts nothing until the list brings it back with its own count.
+			if (departed.has(frame.room)) return;
 			if (!countsAsUnread(frame.message, me) || beingRead(frame.room)) return;
 			set({
 				unread: {
