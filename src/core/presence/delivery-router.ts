@@ -1,8 +1,9 @@
 import type { SurfacePort } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
+import { supportOf } from "../domain/block-support.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { Logger } from "../kernel/log.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
+import { chunksFor } from "../presentation/reply-chunks.ts";
 import type {
 	DirectChannelProvider,
 	DirectChannels,
@@ -49,7 +50,7 @@ export interface DeliveryRouter {
 
 export function deliveryRouter(
 	providers: () => readonly DirectChannelProvider[],
-	surfaces: Pick<SurfacePort, "sendReply">,
+	surfaces: Pick<SurfacePort, "sendReply"> & Partial<Pick<SurfacePort, "of">>,
 	logger?: Pick<Logger, "warn">,
 ): DeliveryRouter {
 	const order = (origin: Origin): readonly DirectChannelProvider[] => {
@@ -124,7 +125,11 @@ export function deliveryRouter(
 				await reached.provider.deliver(principalId, text);
 			else
 				await surfaces.sendReply(reached.channel, {
-					chunks: splitReply(text),
+					// The text of a notice may be an agent's (the notify tool's), block fences included.
+					chunks: chunksFor(
+						supportOf(surfaces.of?.(reached.channel), reached.channel),
+						text,
+					),
 				});
 			await mirrored(reached.provider, principalId, text);
 			return true;

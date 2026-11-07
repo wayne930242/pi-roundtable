@@ -14,7 +14,6 @@ const root = resolve(import.meta.dir, "..");
 const REVIEWED: Record<string, string> = {
 	"src/core/presentation/reply-chunks.ts":
 		"chunksFor, the one cut for agent text",
-	"src/core/presence/delivery-router.ts": "a notice from the host",
 	"src/core/builtin/modules.ts": "an error report from the host",
 	"src/core/builtin/agent-server.ts": "an error report from the host",
 };

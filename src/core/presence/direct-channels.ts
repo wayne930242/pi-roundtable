@@ -92,7 +92,7 @@ export interface DirectChannels {
 /** The direct channels over the providers the host linked, posting through its surfaces where a provider does not deliver itself. */
 export function directChannelsPort(
 	providers: () => readonly DirectChannelProvider[],
-	surfaces: Pick<SurfacePort, "sendReply">,
+	surfaces: Pick<SurfacePort, "sendReply"> & Partial<Pick<SurfacePort, "of">>,
 	logger?: Pick<Logger, "warn">,
 ): DirectChannels {
 	const router = deliveryRouter(providers, surfaces, logger);

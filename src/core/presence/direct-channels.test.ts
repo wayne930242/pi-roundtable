@@ -78,6 +78,25 @@ describe("the direct channels", () => {
 		expect(posted).toEqual([{ channel: "posted:bo", chunks: ["two"] }]);
 	});
 
+	test("a notice posted in the channel is cut for the surface that serves it: a display block there is text unless the surface draws it", async () => {
+		const table = "```table\ncolumns: [name]\nrows:\n  - [alpha]\n```";
+		const posted: string[][] = [];
+		const port = directChannelsPort(
+			() => [inbox("posted", { bo: "posted:bo" })],
+			{
+				sendReply: async (_channel, reply) =>
+					void posted.push([...reply.chunks]),
+				of: (channel) =>
+					channel.startsWith("posted:")
+						? ({ surface: "posted", blocks: ["cards"] } as never)
+						: undefined,
+			},
+		);
+		await port.notify("posted:room", "bo", `Done.\n\n${table}`);
+		expect(posted.flat().join("\n")).not.toContain("```table");
+		expect(posted.flat().join("\n")).toContain("• name: alpha");
+	});
+
 	test("mirror a delivered notice to every other provider once, and never let a mirror change the result", async () => {
 		const mirrored: { name: string; principalId: string; text: string }[] = [];
 		const warned: unknown[] = [];
