@@ -9,6 +9,7 @@ import {
 	parseChannelKey,
 	type TurnProgress,
 } from "pi-roundtable";
+import { textFor } from "pi-roundtable/kit";
 import type { PromptDesk } from "./prompts.ts";
 import type { ServerFrame } from "./protocol.ts";
 
@@ -51,6 +52,14 @@ export class WebSurface implements ChatSurface {
 				? undefined
 				: (options.formatting ?? WEB_FORMATTING);
 		this.#options = options;
+	}
+
+	/**
+	 * The text as this surface shows it: it draws no display block, so a block reads as the text
+	 * it would on Discord, and nothing is cut, since a message is shown however long it is.
+	 */
+	readable(text: string): string {
+		return textFor(undefined, text);
 	}
 
 	async start(deliver: (message: InboundMessage) => void): Promise<void> {

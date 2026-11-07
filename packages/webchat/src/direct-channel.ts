@@ -4,7 +4,6 @@ import {
 	type DirectChannelProvider,
 	type IdentityService,
 } from "pi-roundtable";
-import { textFor } from "pi-roundtable/kit";
 import { Refusal, type WebChat } from "./chat.ts";
 import type { PgNotices } from "./notices.ts";
 
@@ -62,7 +61,10 @@ export function webDirectChannel(
 		deliver: async (principalId, text) => {
 			if (!(await knows(principalId))) throw new Refusal("forbidden");
 			// The inbox draws no display block, so a block in a notice reads as text.
-			const notice = await notices.add(principalId, textFor(undefined, text));
+			const notice = await notices.add(
+				principalId,
+				chat.surface.readable(text),
+			);
 			chat.connections.sendTo(principalId, { type: "notice", notice });
 		},
 	};

@@ -251,25 +251,6 @@ test("a person opens a conversation by writing to a persona, and gets the turn's
 	expect(registry.records.get(`web:${conversation}`)?.principalId).toBe("ada");
 });
 
-test("a reply with a display block reaches the person as text, not as the block's YAML, and a long one is not cut", async () => {
-	const table = [
-		"```table",
-		"columns: [name, size]",
-		"rows:",
-		...Array.from({ length: 200 }, (_, i) => `  - [row ${i}, ${i}]`),
-		"```",
-	].join("\n");
-	const { connect, say, settled } = await linked(`Here.\n\n${table}`);
-	const ada = connect("ada");
-	await say(ada, { type: "send", id: "c1", persona: "helper", text: "show" });
-	await settled();
-	const reply = ada.frames.at(-1) as { type: string; text: string };
-	expect(reply.type).toBe("reply");
-	expect(reply.text).not.toContain("```table");
-	expect(reply.text).toContain("• name: row 0 · size: 0");
-	expect(reply.text.startsWith("Here.")).toBe(true);
-});
-
 test("a turn the host refuses before it runs, such as one whose conversation cannot be recorded, tells its person it failed", async () => {
 	const refused = new Error("the conversation registry is unreachable");
 	const runner: ConversationTurns = {

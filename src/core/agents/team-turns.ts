@@ -23,6 +23,7 @@ import { AgentMessages } from "./agent-messages.ts";
 import type { Agent } from "./agent-store.ts";
 import { GroupTurns } from "./group-turns.ts";
 import { HelperWork } from "./helper-work.ts";
+import { roomProgress } from "./room-progress.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { mayApprove } from "./team-approval.ts";
 import {
@@ -89,8 +90,7 @@ export class TeamTurns {
 			current: (agent) => this.#current(agent),
 			mayApprove: (speaker, pending) => this.#mayApprove(speaker, pending),
 			turnChannel: (scope) => this.turnChannel(scope),
-			chunks: (channel, text) =>
-				chunksFor(supportOf(options.surfaces?.of(channel), channel), text),
+			chunks: (channel, text) => this.#chunks(channel, text),
 		};
 		this.#messages = new AgentMessages(host);
 		this.#groups = new GroupTurns(host);
@@ -203,7 +203,7 @@ export class TeamTurns {
 		chain: Chain,
 		extra: TurnExtra = {},
 	): Promise<TurnResult> {
-		const { logger, surfaces, startTyping, showStop } = this.#options;
+		const { logger, startTyping, showStop } = this.#options;
 		const stopTyping = startTyping(postTo);
 		// A temp knight is working for as long as a turn of it runs.
 		this.helpers.begin(agent.name);
@@ -225,7 +225,7 @@ export class TeamTurns {
 		};
 		this.#options.events?.turnStarted(turn);
 		const interim = this.#interim(postTo, agent);
-		const progress = this.#progress(postTo);
+		const progress = roomProgress(this.#options, postTo);
 		let result: TurnResult;
 		try {
 			result = await settleTurn(
@@ -269,7 +269,7 @@ export class TeamTurns {
 					"unattended turn had nothing to say; nothing posted",
 				);
 			else {
-				const body = replyBody(result, supportOf(surfaces?.of(postTo), postTo));
+				const body = replyBody(result, this.#support(postTo));
 				await this.#post(postTo, this.#current(agent), body);
 			}
 		} catch (error) {
@@ -303,22 +303,14 @@ export class TeamTurns {
 		return this.#options.store.agent(agent.name) ?? agent;
 	}
 
-	/**
-	 * What a turn in a room shows as it goes, through the room's surface; none in a Discord
-	 * channel, which shows only the final reply, or on a surface that shows no progress.
-	 */
-	#progress(channel: ChannelKey): ((event: TurnProgress) => void) | undefined {
-		const { surfaces, logger } = this.#options;
-		if (discordIdOf(channel) !== undefined || !surfaces?.progress)
-			return undefined;
-		return (event) => {
-			// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
-			surfaces
-				.progress?.(channel, event)
-				.catch((error: unknown) =>
-					logger.warn({ channel, err: error }, "progress not shown"),
-				);
-		};
+	/** What the surface that serves the channel does there (see `supportOf`). */
+	#support(channel: ChannelKey) {
+		return supportOf(this.#options.surfaces?.of(channel), channel);
+	}
+
+	/** The messages that carry an agent's text to the channel, cut for the surface that serves it. */
+	#chunks(channel: ChannelKey, text: string): string[] {
+		return chunksFor(this.#support(channel), text);
 	}
 
 	/**
@@ -428,10 +420,7 @@ export class TeamTurns {
 	async postAs(caller: AgentTurnScope, text: string): Promise<void> {
 		const agent = this.#options.store.activeAgent(caller.name);
 		const channel = this.turnChannel(caller);
-		const chunks = chunksFor(
-			supportOf(this.#options.surfaces?.of(channel), channel),
-			text,
-		);
+		const chunks = this.#chunks(channel, text);
 		await this.#post(channel, this.#current(agent), { chunks });
 	}
 
@@ -464,11 +453,7 @@ export class TeamTurns {
 				: this.routes.primary(coordinator.name);
 		if (!home)
 			throw new AgentError(`${coordinator.name} has no room to post in`);
-		const chunks = chunksFor(
-			supportOf(this.#options.surfaces?.of(home), home),
-			text,
-		);
-		await this.#post(home, coordinator, { chunks });
+		await this.#post(home, coordinator, { chunks: this.#chunks(home, text) });
 	}
 
 	message(...args: Parameters<AgentMessages["message"]>): string {
