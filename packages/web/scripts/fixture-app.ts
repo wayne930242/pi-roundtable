@@ -28,6 +28,7 @@
 //   dispatch a coding job in a thread, with a card there     exchange  the agent asks the scout in a thread
 //   helpers  the agent makes four temp knights, one working for a long time, one waiting on a card, two done
 //   endhelpers  the agent archives its finished temp knights, as helper_end does
+//   blocks   a reply with a block of every kind the app draws (cards, table, steps, stats, mindmap, mermaid, diff, alert)
 // During a running turn (try `stream`), a message with "steer" in it is added to the turn; any other waits its own turn (queued).
 // Anything else gets a reply in Markdown. The control port sends a message as the owner:
 //   curl 'http://127.0.0.1:4181/say?room=app:agent.guide&text=approve'
@@ -48,6 +49,7 @@ import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
 import { buildPage } from "./build-page.ts";
 import { fixtureConnectorFeatures } from "./fixture-connectors.ts";
+import { BLOCKS_REPLY, SAMPLE } from "./fixture-samples.ts";
 
 // The host serves the built page and stops at start-up without one: build it here when it is missing.
 const pageDir = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -319,23 +321,6 @@ def worst(findings: list[Finding]) -> Finding | None:
 seedWorkspace();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const SAMPLE = `Here is a quick look at what I can do for you today:
-
-- **Plan the week.** I keep your calendar and the notes you share with me.
-- **Run things for you.** Anything that changes a system asks first.
-- **Answer questions** with sources.
-
-\`\`\`bash
-bun run deploy --env staging
-\`\`\`
-
-| Task | Status |
-| --- | --- |
-| Backups | done |
-| Release notes | drafting |
-
-Ask me for a *demo* with \`approve\`, \`ask\`, \`quiz\`, \`timeout\`, \`late\` or \`stream\`.`;
-
 type Script = (
 	request: TurnRequest,
 	signal: AbortSignal,
@@ -353,6 +338,7 @@ const promptsOf = (request: TurnRequest) => {
 };
 
 const scripts: Record<string, Script> = {
+	blocks: async () => ({ ok: true, text: BLOCKS_REPLY }),
 	approve: async (request, signal) => {
 		const result = await promptsOf(request).confirm(
 			"Run the deploy?",
