@@ -47,6 +47,8 @@ function pieces(text: string): string[] {
  */
 export class LineSurface implements ChatSurface {
 	readonly surface = "line";
+	/** A block LINE cannot draw reads as plain text, with no Markdown markup. */
+	readonly blockText = "line";
 	readonly label = "LINE";
 	readonly formatting: string | undefined;
 	readonly #outbox: LineOutbox;

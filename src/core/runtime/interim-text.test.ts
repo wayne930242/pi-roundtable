@@ -174,3 +174,35 @@ test("a failing post is logged and never thrown", async () => {
 		"progress message not posted",
 	]);
 });
+
+test("a primary text with a block reaches posts that draw it whole, and posts that do not as text", async () => {
+	const table = [
+		"```table",
+		"columns: [name, size]",
+		"rows:",
+		...Array.from(
+			{ length: 200 },
+			(_, i) => `  - [row ${i} of the table, ${i}]`,
+		),
+		"```",
+	].join("\n");
+	expect(table.length).toBeGreaterThan(2000);
+	const drawing = recording();
+	const onApp = new InterimPoster(
+		{ ...drawing.posts, blocks: ["table"] },
+		{ logger: quiet, channel: "app:room", editMs: 0 },
+	);
+	onApp.messageEnd(toolUse(table));
+	await onApp.flush();
+	expect(drawing.shown).toEqual([table]);
+	const plain = recording();
+	const onDiscord = new InterimPoster(plain.posts, {
+		logger: quiet,
+		channel: "discord:1",
+		editMs: 0,
+	});
+	onDiscord.messageEnd(toolUse(table));
+	await onDiscord.flush();
+	expect(plain.shown.join("\n")).not.toContain("```table");
+	expect(plain.shown.join("\n")).toContain("• name: row 0 of the table");
+});

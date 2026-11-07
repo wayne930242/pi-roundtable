@@ -5,7 +5,7 @@ import {
 	ThreadAutoArchiveDuration,
 } from "discord.js";
 import type { InterimMessage } from "../domain/interim.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
+import { chunksFor } from "../presentation/reply-chunks.ts";
 import type { ThreadHost } from "../threads/dispatch-threads.ts";
 
 /** Parents a dispatch thread may start in; DMs, threads, forums, and voice chats keep posting in place. */
@@ -51,7 +51,8 @@ export class DiscordThreadHost implements ThreadHost {
 
 	async post(threadId: string, text: string): Promise<void> {
 		const thread = await this.#thread(threadId);
-		for (const chunk of splitReply(text)) await thread.send({ content: chunk });
+		for (const chunk of chunksFor(undefined, text))
+			await thread.send({ content: chunk });
 	}
 
 	async send(threadId: string, text: string): Promise<InterimMessage> {

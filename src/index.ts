@@ -154,6 +154,7 @@ export type {
 	TurnAttachments,
 } from "./core/domain/attachment.ts";
 export { NO_ATTACHMENTS } from "./core/domain/attachment.ts";
+export type { BlockTextFlavor } from "./core/domain/block-support.ts";
 export type {
 	ClientCallError,
 	ClientCallOptions,

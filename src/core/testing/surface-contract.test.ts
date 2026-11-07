@@ -15,6 +15,10 @@ import {
 function memoryChat(
 	options: {
 		files?: boolean;
+		/** Draws the table kind, so a long table must reach `sendReply` whole. */
+		blocks?: boolean;
+		/** Cuts a reply's text at Discord's message limit, as a surface that still splits would. */
+		cutsReplies?: boolean;
 		brokenPrompts?: boolean;
 		/** Leaves an approval open when its plugin withdraws the call. */
 		ignoresSupersede?: boolean;
@@ -69,13 +73,16 @@ function memoryChat(
 	const surface: ChatSurface = {
 		surface: "memory",
 		...(options.files ? { supportsFiles: true } : {}),
+		...(options.blocks ? { blocks: ["table"] as const } : {}),
 		start: async (given) => {
 			deliver = given;
 		},
 		sendReply: async (_channel, reply) =>
 			void seen.push({
 				kind: "reply",
-				text: reply.chunks.join("\n"),
+				text: options.cutsReplies
+					? reply.chunks.join("\n").slice(0, 2000)
+					: reply.chunks.join("\n"),
 				files: (reply.files ?? []).map((file) => file.name),
 			}),
 		startTyping: () => {
@@ -171,9 +178,21 @@ describeSurfaceContract("an in-memory chat", async () => memoryChat());
 describeSurfaceContract("an in-memory chat with files", async () =>
 	memoryChat({ files: true }),
 );
+describeSurfaceContract("an in-memory chat that draws tables", async () =>
+	memoryChat({ blocks: true }),
+);
 describeSurfaceContract("an in-memory chat for a member", async () =>
 	memoryChat({ tier: "member" }),
 );
+
+test("the contract catches a surface that cuts a block it says it draws", async () => {
+	const failures = await checkSurfaceContract(async () =>
+		memoryChat({ blocks: true, cutsReplies: true }),
+	);
+	expect(failures.map((failure) => failure.name)).toEqual([
+		"shows a block of a kind it draws whole, longer than a message",
+	]);
+});
 
 test("the contract catches a surface whose cancelled card does not say cancelled", async () => {
 	const failures = await checkSurfaceContract(async () =>

@@ -14,7 +14,7 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import type { TurnProgress } from "../domain/progress.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
+import { chunksFor } from "../presentation/reply-chunks.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
 import { toolTiers } from "../runtime/tool-tiers.ts";
 import { withReplyFiles } from "../shared/reply-files.ts";
@@ -88,6 +88,7 @@ export class TeamTurns {
 			current: (agent) => this.#current(agent),
 			mayApprove: (speaker, pending) => this.#mayApprove(speaker, pending),
 			turnChannel: (scope) => this.turnChannel(scope),
+			chunks: (channel, text) => chunksFor(options.surfaces?.of(channel), text),
 		};
 		this.#messages = new AgentMessages(host);
 		this.#groups = new GroupTurns(host);
@@ -200,7 +201,7 @@ export class TeamTurns {
 		chain: Chain,
 		extra: TurnExtra = {},
 	): Promise<TurnResult> {
-		const { logger, startTyping, showStop } = this.#options;
+		const { logger, surfaces, startTyping, showStop } = this.#options;
 		const stopTyping = startTyping(postTo);
 		// A temp knight is working for as long as a turn of it runs.
 		this.helpers.begin(agent.name);
@@ -265,7 +266,10 @@ export class TeamTurns {
 					{ agent: agent.name, channel: postTo },
 					"unattended turn had nothing to say; nothing posted",
 				);
-			else await this.#post(postTo, this.#current(agent), replyBody(result));
+			else {
+				const body = replyBody(result, surfaces?.of(postTo));
+				await this.#post(postTo, this.#current(agent), body);
+			}
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");
 		} finally {
@@ -418,9 +422,9 @@ export class TeamTurns {
 	 */
 	async postAs(caller: AgentTurnScope, text: string): Promise<void> {
 		const agent = this.#options.store.activeAgent(caller.name);
-		await this.#post(this.turnChannel(caller), this.#current(agent), {
-			chunks: splitReply(text),
-		});
+		const channel = this.turnChannel(caller);
+		const chunks = chunksFor(this.#options.surfaces?.of(channel), text);
+		await this.#post(channel, this.#current(agent), { chunks });
 	}
 
 	/** The channel the scope's turns run in: the group's in a group round, otherwise its own. */
@@ -452,7 +456,8 @@ export class TeamTurns {
 				: this.routes.primary(coordinator.name);
 		if (!home)
 			throw new AgentError(`${coordinator.name} has no room to post in`);
-		await this.#post(home, coordinator, { chunks: splitReply(text) });
+		const chunks = chunksFor(this.#options.surfaces?.of(home), text);
+		await this.#post(home, coordinator, { chunks });
 	}
 
 	message(...args: Parameters<AgentMessages["message"]>): string {

@@ -1,0 +1,35 @@
+import { type BlockKind, parse, toText } from "pi-better-show";
+import { mermaidText } from "pi-better-show/server";
+import type { BlockSupport, BlockTextFlavor } from "../domain/block-support.ts";
+import { splitReply } from "./reply-splitter.ts";
+
+/**
+ * The messages that carry agent-written text to a surface. A display block (a fence such as
+ * `table` or `mermaid`, or a GitHub alert) is YAML that only a surface that draws it should
+ * see, so a block of a kind the surface does not list in `blocks` is turned into text first.
+ * A surface that draws any block gets the result whole, since cutting a fence breaks the block;
+ * any other surface gets it split into messages within Discord's limit. A block that is not
+ * closed yet is no block, and stays text.
+ */
+export function chunksFor(
+	surface: BlockSupport | undefined,
+	text: string,
+): string[] {
+	const draws = surface?.blocks ?? [];
+	const converted = convert(text, draws, surface?.blockText ?? "discord");
+	if (draws.length === 0) return splitReply(converted);
+	return converted.trim() ? [converted] : [];
+}
+
+function convert(
+	text: string,
+	draws: readonly BlockKind[],
+	flavor: BlockTextFlavor,
+): string {
+	const segments = parse(text);
+	const blocks = segments.filter((segment) => segment.type !== "markdown");
+	// Toward a surface that draws all of them the text is already right, and rejoining the
+	// segments would only change its spacing.
+	if (blocks.every((block) => draws.includes(block.kind))) return text;
+	return toText(segments, { flavor, mermaid: mermaidText, keep: draws });
+}

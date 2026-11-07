@@ -191,3 +191,25 @@ test("interim passes who speaks to the surface, and is undefined for a surface w
 	expect(seen).toEqual([{ name: "Coder", agent: "coder" }, undefined]);
 	expect(port.interim("b:1", { name: "Coder" })).toBeUndefined();
 });
+
+test("a channel's interim posts say which blocks its surface draws, so the poster cuts text for it", () => {
+	const posts = { tools: false, post: async () => ({ edit: async () => {} }) };
+	const drawing: ChatSurface = {
+		...recording("app", []),
+		blocks: ["table"],
+		blockText: "plain",
+		interim: () => posts,
+	};
+	const text: ChatSurface = {
+		...recording("discord", []),
+		interim: () => posts,
+	};
+	const port = surfacePort(() => [drawing, text]);
+	const onApp = port.interim("app:room");
+	expect(onApp?.blocks).toEqual(["table"]);
+	expect(onApp?.blockText).toBe("plain");
+	expect(onApp?.tools).toBe(false);
+	const onDiscord = port.interim("discord:1");
+	expect(onDiscord?.blocks).toBeUndefined();
+	expect(onDiscord?.blockText).toBeUndefined();
+});

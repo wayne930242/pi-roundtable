@@ -3125,6 +3125,8 @@ The agent server claims `discord:` keys, and, only on a surface that declares `a
 | `readAttachment(channel, ref)` | Returns the content of an attachment this surface made, such as an upload to a room, as `Promise<AttachmentContent>`: the bytes, `{ path }` of a file on the host, or a stream, the last two stored without holding them whole; the agent server's claim reads the refs of the surface's messages here and never fetches them over the network, and a rejection fails that file. A claim of your own passes the same function as `read` to `attachmentsOf`, or its refs are downloaded | the refs' URLs are downloaded, up to 25 MB each |
 | `maxAttachmentBytes` | The most bytes of one attachment a turn takes from this surface, for a ref, a file, a stream or a download alike; a positive integer, so a surface that keeps large uploads can raise it past 25 MiB. See [files from outside a turn](#contextattachments-files-from-outside-a-turn) | 25 MiB, as Discord's |
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
+| `blocks` | The [display-block](#display-blocks-in-a-reply) kinds the surface draws itself, such as `["table", "mermaid"]` (`BlockKind` of `pi-better-show`); a reply reaches `sendReply` whole, with the fences of those kinds intact. Every other block arrives as text | none: every block arrives as text |
+| `blockText` | How a block the surface does not draw reads as text: `"discord"` (Markdown, with Discord's native `diff` fence), `"line"` (plain text without Markdown markup) or `"plain"` | `"discord"` |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)`. A group's round shows it for the whole round, and stopping ends the round: the member speaking is stopped and the members still waiting do not speak | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
@@ -3230,6 +3232,11 @@ A turn whose channel has no surface, and a surface without `formatting`, add not
 The built-in values: Discord says that Markdown renders except tables, which show as raw pipes, so the model writes bullet lists or `key: value` lines instead; the `line` surface says it shows plain text only; the web chat says full Markdown renders, tables included.
 A host overrides or removes a built-in value through that surface's options (`discord.formatting`, `line({ formatting })`, `webChat({ formatting })`): a text replaces it, and `false` tells the model nothing.
 A custom runtime provider reads the same lookup as `RuntimeDeps.formatting(channel)`.
+
+### Display blocks in a reply
+
+An agent may write a *display block* in a reply: a fenced block whose first word is a kind (`cards`, `table`, `steps`, `stats`, `mindmap`, `mermaid`, `diff`, `options`, `form`, ...) or a GitHub alert (`> [!NOTE]`), as `pi-better-show` defines. A block is YAML or source that only a surface that draws it should show, so the host cuts agent text with `chunksFor(surface, text)` (from `pi-roundtable/kit`), never `splitReply` alone: a block whose kind the surface does not list in `blocks` becomes text first (Discord's flavor by default, `blockText: "line"` for plain text; a diagram is drawn as Unicode boxes), and the result is split into messages within Discord's limit. A surface that lists any kind in `blocks` gets the text whole in one chunk, because cutting a fence breaks the block. A block that does not parse, or is not closed, stays as written. The same applies to interim posts: the host's surface port copies the surface's `blocks` and `blockText` onto the `InterimPosts` it returns, so the poster cuts for the right surface. Host notices and error reports are the host's own text and keep `splitReply`.
+`describeSurfaceContract` checks that a surface listing `blocks` delivers a block of a declared kind longer than a message whole.
 
 Each message a surface delivers says who wrote it in `actor`, the `ActorFacts` the identity service resolves: `provider` and `subject`, such as `discord` and the user id, `name`, `roles` written `<surface>:role:<name>` (left out where the surface does not know them, such as a Discord DM, which is not the same as none), and `legacyId`, the speaker id 0.8 gave the person, so someone carried over keeps their principal.
 A surface that leaves `actor` out has it read from `authorId`, `authorName`, and `authorRoleIds` with its prefix as the provider, and the host warns once that this goes away in 1.0.
@@ -4491,6 +4498,7 @@ Import from the entries listed below; source area files are internal.
 | `ChannelClaim` | `pi-roundtable` | type |
 | `ChannelKey` | `pi-roundtable` | type |
 | `ChatCommand` | `pi-roundtable` | type |
+| `BlockTextFlavor` | `pi-roundtable` | type |
 | `ChatSurface` | `pi-roundtable` | type |
 | `ClassedHold` | `pi-roundtable` | type |
 | `ClientCallError` | `pi-roundtable` | type |
@@ -4850,6 +4858,7 @@ Import from the entries listed below; source area files are internal.
 | `AgentTurnRunner` | `pi-roundtable/kit` | type |
 | `AssistantLike` | `pi-roundtable/kit` | type |
 | `Backlog` | `pi-roundtable/kit` | type |
+| `BlockSupport` | `pi-roundtable/kit` | type |
 | `CODEX_IMAGES_PROVIDER` | `pi-roundtable/kit` | value |
 | `CODEX_IMAGE_MODEL` | `pi-roundtable/kit` | value |
 | `CardLimits` | `pi-roundtable/kit` | type |
@@ -4998,6 +5007,7 @@ Import from the entries listed below; source area files are internal.
 | `maskSecrets` | `pi-roundtable/kit` | value |
 | `secretMaskExtension` | `pi-roundtable/kit` | value |
 | `skillListExtension` | `pi-roundtable/kit` | value |
+| `chunksFor` | `pi-roundtable/kit` | value |
 | `splitReply` | `pi-roundtable/kit` | value |
 | `stringList` | `pi-roundtable/kit` | value |
 | `textOf` | `pi-roundtable/kit` | value |

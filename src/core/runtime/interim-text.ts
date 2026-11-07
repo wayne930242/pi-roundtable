@@ -1,10 +1,8 @@
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnRequest } from "../domain/ports.ts";
 import type { Logger } from "../kernel/log.ts";
-import {
-	DISCORD_MESSAGE_LIMIT,
-	splitReply,
-} from "../presentation/reply-splitter.ts";
+import { chunksFor } from "../presentation/reply-chunks.ts";
+import { DISCORD_MESSAGE_LIMIT } from "../presentation/reply-splitter.ts";
 import { textOf } from "../shared/session-messages.ts";
 import type { PiAgentRuntimeOptions } from "./runtime-types.ts";
 
@@ -113,7 +111,7 @@ export class InterimPoster {
 		if (!text) return;
 		if (isPrimaryText(text, this.#options.primaryChars)) {
 			this.#endRun();
-			for (const chunk of splitReply(text))
+			for (const chunk of chunksFor(this.#posts, text))
 				this.#enqueue(async () => {
 					await this.#posts.post(chunk);
 				}, "interim text not posted");

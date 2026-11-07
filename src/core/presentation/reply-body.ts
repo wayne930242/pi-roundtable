@@ -1,10 +1,17 @@
+import type { BlockSupport } from "../domain/block-support.ts";
 import type { ReplyFile, TurnResult } from "../domain/conversation.ts";
 import { failureNotice } from "./failure-notice.ts";
-import { splitReply } from "./reply-splitter.ts";
+import { chunksFor } from "./reply-chunks.ts";
 import { thinkingLine } from "./thinking-line.ts";
 
-/** What a turn posts: its answer with a thinking line, or the failure or stopped notice. */
-export function replyBody(result: TurnResult): {
+/**
+ * What a turn posts: its answer with a thinking line, or the failure or stopped notice. The
+ * answer is cut for `surface`, the one it is posted on (see `chunksFor`); none = as for Discord.
+ */
+export function replyBody(
+	result: TurnResult,
+	surface?: BlockSupport,
+): {
 	thinking?: string;
 	chunks: string[];
 	files?: ReplyFile[];
@@ -19,7 +26,7 @@ export function replyBody(result: TurnResult): {
 	const thinking = result.thinking ? thinkingLine(result.thinking) : undefined;
 	return {
 		...(thinking ? { thinking } : {}),
-		chunks: splitReply(result.text),
+		chunks: chunksFor(surface, result.text),
 		...(result.files?.length ? { files: result.files } : {}),
 	};
 }

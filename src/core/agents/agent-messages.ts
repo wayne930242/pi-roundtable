@@ -6,7 +6,6 @@ import { addressee, type Speaker } from "../identity/speakers.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
@@ -141,7 +140,7 @@ export class AgentMessages {
 	#card(channel: ChannelKey, as: Agent, card: IntercomCard): Promise<void> {
 		return this.#host
 			.post(channel, this.#host.current(as), {
-				chunks: splitReply(intercomPlain(card)),
+				chunks: this.#host.chunks(channel, intercomPlain(card)),
 				intercom: card,
 			})
 			.catch((error: unknown) =>
@@ -163,7 +162,8 @@ export class AgentMessages {
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
 		await this.#host.post(targetChannel, this.#host.current(sender), {
-			chunks: splitReply(
+			chunks: this.#host.chunks(
+				targetChannel,
 				deliveredMessagePost(this.#host.current(target), text),
 			),
 		});

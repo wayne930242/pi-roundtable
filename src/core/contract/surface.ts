@@ -1,3 +1,5 @@
+import type { BlockKind } from "pi-better-show";
+import type { BlockTextFlavor } from "../domain/block-support.ts";
 import type { OutboundReply, PostAuthor } from "../domain/conversation.ts";
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnProgress } from "../domain/progress.ts";
@@ -131,6 +133,18 @@ export interface ChatSurface {
 	 * appended; a turn whose channel has no surface gets none either.
 	 */
 	readonly formatting?: string;
+	/**
+	 * The display-block kinds this surface draws itself, such as `table` or `mermaid` (see
+	 * pi-better-show). A reply reaches `sendReply` whole, with the fences of those kinds intact; a
+	 * block of any other kind arrives as text, and a surface that lists none gets every block as
+	 * text. Absent = none.
+	 */
+	readonly blocks?: readonly BlockKind[];
+	/**
+	 * How a block this surface does not draw reads as text: `discord` (Markdown with a native
+	 * `diff` fence), `line` (plain text without Markdown markup), or `plain`. Absent = `discord`.
+	 */
+	readonly blockText?: BlockTextFlavor;
 	/**
 	 * Connects and delivers every incoming message; the host passes its conversation router. A
 	 * message whose channel key has another prefix is logged and dropped.

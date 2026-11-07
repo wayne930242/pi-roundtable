@@ -146,6 +146,8 @@ export interface TurnHost {
 			intercom?: IntercomCard;
 		},
 	): Promise<void>;
+	/** The messages that carry an agent's text to the channel, cut for the surface that serves it. */
+	chunks(channel: ChannelKey, text: string): string[];
 	/** The agent's latest row. */
 	current(agent: Agent): Agent;
 	/** Whether the speaker's tier holds every tool of the held actions. */

@@ -4,7 +4,7 @@ import type {
 	InboundMessage,
 	SurfacePort,
 } from "pi-roundtable";
-import { answersAuthor, splitReply } from "pi-roundtable/kit";
+import { answersAuthor, chunksFor } from "pi-roundtable/kit";
 import {
 	type ReadChannelContext,
 	readsChannelContext,
@@ -38,7 +38,8 @@ export interface SandboxClaimOptions {
 	channels: Pick<SandboxChannelStore, "has"> &
 		Partial<Pick<SandboxChannelStore, "owns">>;
 	runtime: Pick<SandboxRuntime, "runTurn" | "stop" | "startFresh">;
-	surfaces: Pick<SurfacePort, "sendReply" | "startTyping">;
+	surfaces: Pick<SurfacePort, "sendReply" | "startTyping"> &
+		Partial<Pick<SurfacePort, "of">>;
 	/** Told of a failed turn, with what failed (a sandbox error, or replyText's own throw). */
 	reportFailure?: (channel: ChannelKey, error: unknown) => void;
 	replyText?: SandboxReplyText;
@@ -178,7 +179,7 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 							? await cardFor(options, posted, message)
 							: undefined;
 						await options.surfaces.sendReply(message.channel, {
-							chunks: splitReply(posted),
+							chunks: chunksFor(options.surfaces.of?.(message.channel), posted),
 							...(card ? { card } : {}),
 						});
 					} catch (error) {

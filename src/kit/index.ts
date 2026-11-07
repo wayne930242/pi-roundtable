@@ -129,6 +129,8 @@ export type {
 } from "./ops-alerts.ts";
 export { OpsAlerts } from "./ops-alerts.ts";
 export {
+	type BlockSupport,
+	chunksFor,
 	headline,
 	quietLinks,
 	splitReply,

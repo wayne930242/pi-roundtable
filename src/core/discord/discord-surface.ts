@@ -30,7 +30,7 @@ import type { PromptScope, Prompts } from "../interactions/prompts.ts";
 import type { Logger } from "../kernel/log.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import type { MemberJoinedEvent } from "../plugin-api/event-types.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
+import { chunksFor } from "../presentation/reply-chunks.ts";
 import { threadsOfHost } from "../threads/host-threads.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
 import {
@@ -418,7 +418,8 @@ export class DiscordSurface
 	/** Sends a Discord user a direct message, split as a reply is. */
 	async sendDirect(userId: string, text: string): Promise<void> {
 		const user = await this.#client.users.fetch(userId);
-		for (const chunk of splitReply(text)) await user.send({ content: chunk });
+		for (const chunk of chunksFor(undefined, text))
+			await user.send({ content: chunk });
 	}
 
 	/** @deprecated The primary owner's direct-message channel; see `DiscordConnection.ownerChannel`. */

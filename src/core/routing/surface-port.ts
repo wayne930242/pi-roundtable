@@ -61,7 +61,18 @@ export function surfacePort(
 				.filter((surface) => surface.agentRooms === true)
 				.map((surface) => surface.surface),
 		names: () => linked().map((surface) => surface.surface),
-		interim: (channel, as) => of(channel)?.interim?.(channel, as),
+		interim: (channel, as) => {
+			const surface = of(channel);
+			const posts = surface?.interim?.(channel, as);
+			if (!surface || !posts) return posts;
+			// The poster cuts text for the surface it posts on, which only the port knows.
+			return {
+				...(posts.tools === undefined ? {} : { tools: posts.tools }),
+				...(surface.blocks ? { blocks: surface.blocks } : {}),
+				...(surface.blockText ? { blockText: surface.blockText } : {}),
+				post: (text) => posts.post(text),
+			};
+		},
 		progress: async (channel, event) => {
 			await of(channel)?.progress?.(channel, event);
 		},

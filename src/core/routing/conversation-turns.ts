@@ -247,7 +247,11 @@ export function conversationTurns(
 						"unattended turn had nothing to say; nothing posted",
 					);
 				else if (input.reply) await input.reply(result);
-				else await surfaces.sendReply(channel, replyBody(result));
+				else
+					await surfaces.sendReply(
+						channel,
+						replyBody(result, surfaces.of(channel)),
+					);
 			} catch (error) {
 				logger.error({ channel, kind, err: error }, "reply not posted");
 			} finally {

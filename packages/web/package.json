@@ -40,7 +40,8 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"jose": "6.2.12"
+		"jose": "6.2.12",
+		"pi-better-show": "0.2.0"
 	},
 	"peerDependencies": {
 		"pi-roundtable": ">=0.37.0 <0.38.0"

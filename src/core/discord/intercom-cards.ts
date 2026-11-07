@@ -13,7 +13,7 @@ import {
 	intercomHeading,
 	intercomSummary,
 } from "../presentation/intercom.ts";
-import { splitReply } from "../presentation/reply-splitter.ts";
+import { chunksFor } from "../presentation/reply-chunks.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 
 /** The custom id of a card's open button starts with this; the text's id follows. */
@@ -70,7 +70,7 @@ export function intercomPost(card: IntercomCard, texts: IntercomTexts) {
 export function intercomReplies(text: string) {
 	const flags = MessageFlags.Ephemeral as const;
 	const allowedMentions = { parse: [] as never[] };
-	const parts = splitReply(text);
+	const parts = chunksFor(undefined, text);
 	if (parts.length <= MAX_PARTS)
 		return parts.map((content) => ({ content, flags, allowedMentions }));
 	return [
