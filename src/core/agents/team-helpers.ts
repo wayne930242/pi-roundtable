@@ -72,12 +72,21 @@ export class TeamHelpers {
 							);
 						return own;
 					});
+		// "finished" passes over the ones still working; saying which keeps one from being forgotten.
+		const working =
+			names === "finished"
+				? mine.filter((agent) => agent.finishedAt === undefined)
+				: [];
+		const left =
+			working.length === 0
+				? ""
+				: ` Still working, so not archived: ${working.map((agent) => agent.name).join(", ")}. A temp knight works while a turn runs, a message waits for it, or an action of its waits for the owner's approval; end one by name to archive it anyway.`;
 		if (wanted.length === 0)
-			return "None of your temp knights is finished yet, so none was archived.";
+			return `None of your temp knights is finished yet, so none was archived.${left}`;
 		const archived = await this.archive(wanted.map((agent) => agent.name));
 		for (const listener of this.#ended)
 			listener({ parent: caller.name, names: archived });
-		return `Archived ${archived.length} temp knight${archived.length === 1 ? "" : "s"}: ${archived.join(", ")}. Their history stays readable, and the owner can restore them.`;
+		return `Archived ${archived.length} temp knight${archived.length === 1 ? "" : "s"}: ${archived.join(", ")}. Their history stays readable, and the owner can restore them.${left}`;
 	}
 
 	/**

@@ -1,13 +1,4 @@
-/** Parses a value a model double-encoded as a JSON string; anything else, or a bad string, comes back as it was. */
-// pi-lens-ignore: no-unknown-returns — this reads untyped model JSON; the tool schema is where it is parsed
-function decoded(value: unknown): unknown {
-	if (typeof value !== "string") return value;
-	try {
-		return JSON.parse(value) as unknown;
-	} catch {
-		return value;
-	}
-}
+import { decodedJson as decoded } from "../../shared/json-arguments.ts";
 
 /**
  * The arguments of an `ask_user` call in the `questions` form: a legacy call's top-level

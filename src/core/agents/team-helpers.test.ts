@@ -324,6 +324,26 @@ describeDb("temp knights (Discord)", () => {
 			expect(fx.store.agent("coordinator-1")?.status).toBe("active");
 		});
 
+		test("helper_end 'finished' names the ones still working, and ending one by name archives it", async () => {
+			await make(2);
+			const helper = fx.store.agent("coordinator-2");
+			const session = discordKey(helper?.channelId ?? "");
+			fx.runtime.held.set(session, { calls: [], speakerId: "1" } as never);
+			await writeTo("coordinator-2", "deploy");
+			await settle();
+			const rest = await asCoordinator((caller) =>
+				fx.team.helperEnd(caller, "finished"),
+			);
+			expect(rest).toContain("Archived 1 temp knight: coordinator-1.");
+			expect(rest).toContain("Still working, so not archived: coordinator-2.");
+			expect(fx.store.agent("coordinator-2")?.status).toBe("active");
+			await asCoordinator((caller) =>
+				fx.team.helperEnd(caller, ["coordinator-2"]),
+			);
+			expect(fx.store.agent("coordinator-2")?.status).toBe("archived");
+			fx.runtime.held.delete(session);
+		});
+
 		test("helper_end 'finished' with none finished archives nothing", async () => {
 			expect(
 				await fx.team.helperEnd(scopeOf("coordinator"), "finished"),

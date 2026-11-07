@@ -1,6 +1,7 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
 import { AgentError } from "../domain/errors.ts";
+import { decodeJsonArguments } from "../shared/json-arguments.ts";
 import { toolError, toolText } from "../shared/tool-result.ts";
 
 export type ToolInput = Record<string, unknown>;
@@ -15,8 +16,8 @@ export interface TextToolDef<Name extends string = string> {
 }
 
 /**
- * Registers text tools. A thrown `refusal` becomes an error result the model reads; any other
- * error fails the call.
+ * Registers text tools. A list or object the model sent as JSON text is decoded first. A thrown
+ * `refusal` becomes an error result the model reads; any other error fails the call.
  */
 export function textToolsExtension(
 	defs: readonly TextToolDef[],
@@ -29,6 +30,8 @@ export function textToolsExtension(
 				label: def.label,
 				description: def.description,
 				parameters: def.parameters,
+				prepareArguments: (args) =>
+					decodeJsonArguments(def.parameters, args) as ToolInput,
 				execute: async (_toolCallId, params, signal) => {
 					try {
 						return toolText(await def.run(params as ToolInput, signal));

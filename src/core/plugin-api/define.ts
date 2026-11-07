@@ -14,6 +14,7 @@ import { messages } from "../i18n/index.ts";
 import { type Speaker, TIERS, type Tier } from "../identity/speakers.ts";
 import type { ApprovedBy } from "../interactions/prompts.ts";
 import { PluginError } from "../kernel/errors.ts";
+import { decodeJsonArguments } from "../shared/json-arguments.ts";
 import {
 	type ToolOutput,
 	toolError,
@@ -206,6 +207,8 @@ export function defineTool<Schema extends TObject>(
 					label: name,
 					description: spec.description,
 					parameters: spec.parameters,
+					prepareArguments: (args) =>
+						decodeJsonArguments(spec.parameters, args) as never,
 					execute: async (toolCallId, params, signal) => {
 						try {
 							return toolOutput(

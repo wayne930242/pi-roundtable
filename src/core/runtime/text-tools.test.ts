@@ -13,6 +13,7 @@ import {
 interface Registered {
 	name: string;
 	label: string;
+	prepareArguments?: (args: unknown) => unknown;
 	execute: (
 		id: string,
 		params: unknown,
@@ -54,6 +55,23 @@ describe("textToolsExtension", () => {
 		expect(result).toEqual({
 			content: [{ type: "text", text: "got hi" }],
 			details: {},
+		});
+	});
+
+	test("decodes a list the model sent as JSON text before pi checks it", async () => {
+		const [tool] = await registered([
+			{
+				...def(() => ""),
+				parameters: Type.Object({
+					names: Type.Union([Type.Array(Type.String()), Type.Literal("all")]),
+				}),
+			},
+		]);
+		expect(tool?.prepareArguments?.({ names: '["a"]' })).toEqual({
+			names: ["a"],
+		});
+		expect(tool?.prepareArguments?.({ names: "all" })).toEqual({
+			names: "all",
 		});
 	});
 
