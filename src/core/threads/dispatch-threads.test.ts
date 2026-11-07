@@ -228,6 +228,22 @@ describe("dispatch threads on a surface other than Discord", () => {
 		expect(app.edits).toEqual([{ thread: "thread.1", text: "-# read · bash" }]);
 	});
 
+	test("a thread's interim posts say which blocks its surface draws", async () => {
+		const app = new FakeSurfaceThreads();
+		const drawing: ChatSurface = {
+			...surfaceOf("app", app),
+			blocks: ["table"],
+			blockText: "plain",
+		};
+		const plain = new FakeSurfaceThreads();
+		const { threads } = overSurfaces([drawing, surfaceOf("other", plain)]);
+		const inApp = await threads.open("app:agent.x", "t");
+		expect(inApp?.interim?.blocks).toEqual(["table"]);
+		expect(inApp?.interim?.blockText).toBe("plain");
+		const inOther = await threads.open("other:room", "t");
+		expect(inOther?.interim?.blocks).toBeUndefined();
+	});
+
 	test("no thread where the surface hosts none, the parent cannot, creation fails, or the channel is excluded", async () => {
 		const app = new FakeSurfaceThreads();
 		app.hostless.add("app:thread.old");

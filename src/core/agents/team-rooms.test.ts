@@ -239,6 +239,29 @@ describe("agent rooms", () => {
 		expect(tools).toBeUndefined();
 	});
 
+	test("a room turn's interim posts say which blocks the surface draws, so long text is cut for it", async () => {
+		const { port } = roomSurface();
+		let seen: { blocks?: unknown; blockText?: unknown } = {};
+		const { team } = setup(
+			(request) => {
+				seen = {
+					blocks: request.interim?.blocks,
+					blockText: request.interim?.blockText,
+				};
+				return { ok: true, text: "done" };
+			},
+			{
+				...port,
+				interim: (channel, as) => {
+					const posts = port.interim(channel, as);
+					return posts && { ...posts, blocks: ["table"], blockText: "plain" };
+				},
+			},
+		);
+		await ask(team);
+		expect(seen).toEqual({ blocks: ["table"], blockText: "plain" });
+	});
+
 	test("a surface without interim posts leaves the room turn with none", async () => {
 		const { port } = roomSurface();
 		let seen: unknown = "unset";

@@ -333,6 +333,9 @@ export class TeamTurns {
 			if (!surfaces || !first) return undefined;
 			return {
 				...(first.tools === false ? { tools: false } : {}),
+				// The poster cuts text for the surface the posts go to.
+				...(first.blocks ? { blocks: first.blocks } : {}),
+				...(first.blockText ? { blockText: first.blockText } : {}),
 				post: async (text) => {
 					if (!channelOwner(store, channel, this.#rooms(channel)))
 						throw new AgentError(`${channel} is archived`);

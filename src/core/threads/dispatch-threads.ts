@@ -12,6 +12,7 @@ import {
 	type SurfacePort,
 	type SurfaceThreads,
 } from "../contract/surface.ts";
+import { supportOf } from "../domain/block-support.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";
@@ -247,6 +248,10 @@ export class DispatchThreads {
 		const { id } = parseChannelKey(channel);
 		let closed = false;
 		const send = threads.send?.bind(threads);
+		const { blocks, blockText } = supportOf(
+			this.#options.surfaces?.of(channel),
+			channel,
+		);
 		const post = async (text: string) => {
 			try {
 				await threads.post(id, text);
@@ -262,7 +267,16 @@ export class DispatchThreads {
 			channel,
 			mention,
 			post,
-			...(send ? { interim: { post: (text: string) => send(id, text) } } : {}),
+			...(send
+				? {
+						interim: {
+							// The poster cuts text for the surface the thread is on.
+							...(blocks ? { blocks } : {}),
+							...(blockText ? { blockText } : {}),
+							post: (text: string) => send(id, text),
+						},
+					}
+				: {}),
 			close: async (report) => {
 				if (closed) return;
 				closed = true;
