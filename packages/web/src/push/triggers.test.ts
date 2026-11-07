@@ -271,6 +271,11 @@ describe("in a muted room", () => {
 
 test("a preview is one line", () => {
 	expect(previewOf("a\n\n  b\tc")).toBe("a b c");
+	const table = "```table\ncolumns: [name, size]\nrows:\n  - [alpha, 1]\n```";
+	expect(previewOf(table)).not.toContain("```");
+	expect(previewOf(table)).not.toContain("columns:");
+	expect(previewOf(table)).toContain("alpha");
+	expect(previewOf("Done.\n\n> [!WARNING] Disk is full")).not.toContain("[!");
 });
 
 describe("when the app does not sign", () => {

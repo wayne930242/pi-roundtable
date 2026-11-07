@@ -1,3 +1,4 @@
+import { parse, toText } from "pi-better-show";
 import type { IdentityService, Logger } from "pi-roundtable";
 import type { NewOutboxRow, PushOutbox } from "./outbox.ts";
 import type { PushPayload, PushSender, SendResult } from "./sender.ts";
@@ -64,9 +65,14 @@ interface Event {
 	principalId?: string;
 }
 
-/** The start of a message, on one line and cut at `PREVIEW_CHARS`. */
+/**
+ * The start of a message, on one line and cut at `PREVIEW_CHARS`. A display block reads as the
+ * text it would on a plain surface, not as its YAML.
+ */
 export function previewOf(text: string): string {
-	const flat = text.replaceAll(/\s+/g, " ").trim();
+	const flat = toText(parse(text), { flavor: "plain" })
+		.replaceAll(/\s+/g, " ")
+		.trim();
 	const letters = Array.from(flat);
 	return letters.length > PREVIEW_CHARS
 		? `${letters.slice(0, PREVIEW_CHARS).join("")}…`
