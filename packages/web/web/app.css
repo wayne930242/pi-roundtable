@@ -993,9 +993,16 @@ button.room-picture:hover:not(:disabled) {
 	color: inherit;
 }
 
+/* Away from the bubble's text: darker under white text by day, lighter under dark text by night. */
 .message[data-mine] .prose code,
 .message[data-mine] .prose blockquote {
-	background: rgb(255 255 255 / 0.18);
+	background: light-dark(rgb(0 0 0 / 0.14), rgb(255 255 255 / 0.18));
+}
+
+/* A quote keeps the bubble's text, not the page's muted grey; its rule marks it as a quote. */
+.message[data-mine] .prose blockquote {
+	color: inherit;
+	border-left: 3px solid color-mix(in srgb, currentColor 45%, transparent);
 }
 
 .message[data-mine] .code-block pre {
