@@ -1,3 +1,4 @@
+import { Worker } from "node:worker_threads";
 import { describe, expect, test } from "bun:test";
 import type { ActorFacts } from "pi-roundtable";
 import { recordingLogger } from "pi-roundtable/testing";
@@ -5,6 +6,7 @@ import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
 import { decide } from "./authz.ts";
 import { ConsoleServer } from "./console-server.ts";
+import { DiagramRenderer } from "./diagram-renderer.ts";
 import { DiagramService } from "./diagram-route.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit, refuse } from "./verifier.ts";
@@ -277,5 +279,38 @@ describe("the drawing of a diagram", () => {
 		});
 		await Promise.all([1, 2, 3].map(() => service.serve(request("same"))));
 		expect(calls).toBe(1);
+	});
+});
+
+describe("DiagramRenderer workers", () => {
+	test("every worker it starts ends, however drawings time out and queue", async () => {
+		let created = 0;
+		let exited = 0;
+		const renderer = new DiagramRenderer({
+			timeoutMs: 60,
+			queue: 30,
+			spawn: () => {
+				created += 1;
+				// Answers ready, then draws only what says "ok".
+				const worker = new Worker(
+					`const { parentPort: p } = require("node:worker_threads");
+					p.postMessage({ ready: true });
+					p.on("message", (job) => { if (job.source.includes("ok")) p.postMessage({ id: job.id, svg: "<svg/>" }); });`,
+					{ eval: true },
+				);
+				worker.once("exit", () => {
+					exited += 1;
+				});
+				return worker;
+			},
+		});
+		await Promise.allSettled(
+			Array.from({ length: 12 }, (_, i) =>
+				renderer.draw(`graph TD\n A${i}-->${i % 2 ? "ok" : "hang"}`, "light"),
+			),
+		);
+		await Bun.sleep(300);
+		expect(created).toBeGreaterThan(1);
+		expect(created - exited).toBeLessThanOrEqual(1);
 	});
 });

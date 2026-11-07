@@ -12,6 +12,8 @@ export interface DiagramRendererOptions {
 	timeoutMs?: number;
 	/** How many drawings may wait behind the one running; default 4. More are refused as `busy`. */
 	queue?: number;
+	/** Starts a worker; default the drawing worker. For tests. */
+	spawn?: () => Worker;
 }
 
 /** How long a new worker may take to load the drawing library. */
@@ -34,8 +36,9 @@ export class DiagramRenderer {
 	readonly #timeoutMs: number;
 	readonly #queue: number;
 	#worker: Promise<Worker> | undefined;
-	/** The worker that has loaded, once it has. */
-	#alive: Worker | undefined;
+	/** The worker `#worker` stands for, loaded or not; only it is ever forgotten. */
+	#current: Worker | undefined;
+	readonly #spawn: () => Worker;
 	#waiting = 0;
 	#tail: Promise<unknown> = Promise.resolve();
 	#nextId = 1;
@@ -43,6 +46,9 @@ export class DiagramRenderer {
 	constructor(options: DiagramRendererOptions = {}) {
 		this.#timeoutMs = options.timeoutMs ?? 3000;
 		this.#queue = options.queue ?? 4;
+		this.#spawn =
+			options.spawn ??
+			(() => new Worker(new URL("./diagram-worker.ts", import.meta.url)));
 	}
 
 	/** The SVG of `source`, or rejects with a `DiagramRefusal`. */
@@ -62,9 +68,8 @@ export class DiagramRenderer {
 
 	#start(): Promise<Worker> {
 		this.#worker ??= new Promise<Worker>((resolve, reject) => {
-			const worker = new Worker(
-				new URL("./diagram-worker.ts", import.meta.url),
-			);
+			const worker = this.#spawn();
+			this.#current = worker;
 			// An idle worker does not keep the console's process running.
 			worker.unref();
 			const timer = setTimeout(() => {
@@ -79,7 +84,6 @@ export class DiagramRenderer {
 			worker.once("exit", () => this.#forget(worker));
 			worker.once("message", () => {
 				clearTimeout(timer);
-				this.#alive = worker;
 				resolve(worker);
 			});
 		});
@@ -88,8 +92,8 @@ export class DiagramRenderer {
 
 	/** Forgets the worker if it is the current one; a later one is left alone. */
 	#forget(worker: Worker): void {
-		if (this.#alive !== undefined && this.#alive !== worker) return;
-		this.#alive = undefined;
+		if (this.#current !== worker) return;
+		this.#current = undefined;
 		this.#worker = undefined;
 	}
 
