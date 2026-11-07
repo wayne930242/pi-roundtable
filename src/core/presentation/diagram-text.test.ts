@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { DIAGRAM_TEXT_DEADLINE_MS, diagramText } from "./diagram-text.ts";
 
-const slow = `stateDiagram-v2\n${Array.from({ length: 25 }, (_, i) => `S${i} --> S${i + 1}`).join("\n")}`;
+// Not the source of reply-chunks.test.ts, which would be remembered from there.
+const slow = `stateDiagram-v2\n${Array.from({ length: 26 }, (_, i) => `S${i} --> S${i + 1}`).join("\n")}`;
 
 test("draws a small diagram as boxes", () => {
 	expect(diagramText("graph TD\n  A[Start] --> B[Done]")).toContain("Start");
