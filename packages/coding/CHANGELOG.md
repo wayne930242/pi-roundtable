@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-11-07
+
+- Release in lockstep with pi-roundtable 0.37.1 (an archived temp knight's or a dismissed thread's unread count leaves the tab title and dot without a reload); no package-specific behavior changes.
+
 ## [0.37.0] - 2026-11-06
 
 - Release in lockstep with pi-roundtable 0.37.0 (a Presets page with recruits and transfer; the Edit knight sheet as tabs; a searchable skill picker; a lifted row that wiggles and resists its first pixels); peer range `>=0.37.0 <0.38.0`, no package-specific behavior changes.

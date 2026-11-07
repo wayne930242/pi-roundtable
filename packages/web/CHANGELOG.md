@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-11-07
+
 ### Fixed
 
 - An archived temp knight's or a dismissed thread's unread count no longer stays in the tab title and the tab dot until a reload: a room that leaves the room list takes its count with it, and a restored room brings the server's count back. A host room, which is never in the list, keeps its count; a finished helper that is still listed keeps its count until read.

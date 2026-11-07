@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-11-07
+
+- Release in lockstep with pi-roundtable-web 0.37.1 (an archived temp knight's or a dismissed thread's unread count leaves the tab title and dot without a reload); no core behavior changes.
+
 ## [0.37.0] - 2026-11-06
 
 ### Added
