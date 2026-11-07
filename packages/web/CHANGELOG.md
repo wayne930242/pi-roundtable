@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-08
+
+### Fixed
+
+- A quote in one's own bubble reads again: it took the page's muted grey on the accent (1.2 to 1.6:1, worst in the Camelot look by night) and now keeps the bubble's text with a rule beside it, while its fill and inline code's go darker by day and lighter by night, away from the text (7.1 to 11.2:1 in both looks and schemes).
+
 ## [0.38.0] - 2026-11-08
 
 ### Added

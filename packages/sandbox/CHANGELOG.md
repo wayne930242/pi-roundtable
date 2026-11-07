@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.38.1 (a quote in one's own app bubble is readable in every look; a list a model sends as JSON text reaches a tool as the list, so `helper_end` by name works); no package-specific behavior changes.
+
 ## [0.38.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.38.0 (display blocks: the web app draws cards, tables, steps, stats, mind maps, Mermaid diagrams, diffs and alerts in a message, and every other surface gets them as text); peer range `>=0.38.0 <0.39.0`.

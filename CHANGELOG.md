@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-08
+
+### Fixed
+
+- A list a model sends as JSON text, such as `helper_end { names: "[\"blog-2\"]" }`, reaches the tool as the list. Pi wrapped such text whole in a list of one, so `helper_end` found no temp knight by that name; text tools and `defineTool` tools now decode a top-level string their schema refuses when its JSON is an array or object the schema accepts. `ask_user` shares the same decoder.
+- `helper_end` with `"finished"` says which temp knights it passed over because they are still working, such as one whose action waits for the owner's approval, and that ending one by name archives it anyway.
+
 ## [0.38.0] - 2026-11-08
 
 ### Added
