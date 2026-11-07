@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.38.0 (display blocks: the web app draws cards, tables, steps, stats, mind maps, Mermaid diagrams, diffs and alerts in a message, and every other surface gets them as text); peer range `>=0.38.0 <0.39.0`, no package-specific behavior changes.
+
 ## [0.37.1] - 2026-11-07
 
 - Release in lockstep with pi-roundtable 0.37.1 (an archived temp knight's or a dismissed thread's unread count leaves the tab title and dot without a reload); no package-specific behavior changes.

@@ -5,11 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-08
+
 ### Added
 
 - A message in the app draws display blocks: a fence of the kind `cards`, `table`, `steps`, `stats`, `mindmap`, `mermaid` or `diff`, or a GitHub alert, becomes a panel instead of a code block, with the `pbs-*` elements of `pi-better-show` (a dependency, pinned exactly). The elements load as a lazy `chunk-blocks-*` that the worker precaches, so history draws offline; a message without a block never loads it. A block that does not parse, one that is not closed yet while a turn streams, and the interactive kinds (`options`, `form`, `suggest`, `checklist`, `review`, answered by typing in this release) stay code blocks, the first with the reason under it. Colors follow the console's light, dark and Camelot schemes, and a theme change redraws.
 - `AppSurface.blocks` declares those kinds (a host's room, through `AppSurface.support`, draws none and its turns are not told to write them), so the host sends a reply whole and never cuts a fence; `APP_FORMATTING` tells the model how to write each kind.
-- `GET api/diagram?scheme=light|dark&s=<base64url source>` draws a Mermaid diagram as an SVG image for `pbs-diagram`. Any admitted viewer may read it (tier `V`). A source over 8 KB is refused (413), one that cannot be drawn, or takes longer than 3 seconds, answers 422, and the last 200 verdicts are kept, a refusal included. The drawing runs in a worker thread, one at a time, so a heavy diagram never holds the console's event loop; more than five waiting answer 503. The answer carries `image/svg+xml`, `X-Content-Type-Options: nosniff`, an immutable private cache and its own Content-Security-Policy `default-src 'none'; style-src 'unsafe-inline'`; the page shows it only as an `<img>`, which runs no script. The page's Content-Security-Policy does not change.
+- `GET api/diagram?scheme=light|dark&s=<base64url source>` draws a Mermaid diagram as an SVG image for `pbs-diagram`. Any admitted viewer may read it (tier `V`). A source over 8 KB is refused (413), one that cannot be drawn, or takes longer than 3 seconds, answers 422, and the last 200 verdicts are kept, a refusal included; one that took too long is tried again after ten minutes, since a loaded host may be why. The drawing runs in a worker thread, one at a time, so a heavy diagram never holds the console's event loop; more than five waiting answer 503. The answer carries `image/svg+xml`, `X-Content-Type-Options: nosniff`, an immutable private cache and its own Content-Security-Policy `default-src 'none'; style-src 'unsafe-inline'`; the page shows it only as an `<img>`, which runs no script. The page's Content-Security-Policy does not change.
 
 ## [0.37.1] - 2026-11-07
 
@@ -289,7 +291,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The overview's Start over resets an agent's or group's web room, not its Discord channel's sessions.
 - A room dragged within Ungrouped no longer makes the other rows move aside as if it could be placed among them; Ungrouped keeps its newest-first order, and a room dragged in from a pinned list or a folder lights it without a placement line.
 
-
 ## [0.27.1] - 2026-10-31
 
 ### Fixed
@@ -493,7 +494,6 @@ The core peer range is now `>=0.24.0 <0.25.0`.
 - A group room's "Table" button now switches the room between its list and the scene, and the choice is kept per room (it opened a panel or sheet with the members' table before). In the scene the whole group conversation runs in the dialogue box, the camera turns to whoever replies and rests on the whole ring while the owner speaks, a seat tapped by hand holds until the next line, and a speaker change never takes the focus from the message box. Under Camelot the compact strip of the members still stands under the header in the list view.
 - On a phone held upright the scene fills the top 55 % and the dialogue box the rest, and the box collapses to its nameplate line; on its side the scene is whole and the box lies over its bottom third.
 - The no-WebGL table (and the compact strip) draws the same hall in SVG: podiums with gold plates that letter Chinese, standees cut out with a rim and a dark line, the owner's low desk, the focused seat marked, the same palette and the same dialogue box over it.
-
 
 ## [0.23.2] - 2026-10-29
 
