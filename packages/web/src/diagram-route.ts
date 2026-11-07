@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mermaidSvg } from "pi-better-show/server";
+import { DiagramRefusal, DiagramRenderer } from "./diagram-renderer.ts";
 
 /** The most a diagram's source may be: 8 KB, so a request cannot make the host draw something huge. */
 export const MAX_DIAGRAM_BYTES = 8 * 1024;
@@ -19,31 +19,43 @@ const refuse = (status: number, error: string, cache = "no-store"): Response =>
 	Response.json({ error }, { status, headers: { "cache-control": cache } });
 
 export interface DiagramServiceOptions {
-	/** Draws the source; throws for one it cannot draw. Default `mermaidSvg` with a transparent background. */
-	render?: (source: string, scheme: "light" | "dark") => string;
-	/** How many renders to keep; default 200. */
+	/** Draws the source; throws or rejects for one it cannot draw. Default: a worker thread drawing with `mermaidSvg`. */
+	render?: (
+		source: string,
+		scheme: "light" | "dark",
+	) => string | Promise<string>;
+	/** How many renders, and refused sources, to keep; default 200. */
 	capacity?: number;
+	/** The longest one drawing may take, in milliseconds; default 3000. Not with `render`. */
+	timeoutMs?: number;
+	/** How many drawings may wait behind the one running; default 4. Not with `render`. */
+	queue?: number;
 }
+
+/** How a source stands: drawn (the SVG), or one the app will not draw. */
+type Verdict = string | null;
 
 /**
  * `GET api/diagram?scheme=light|dark&s=<base64url source>`: a Mermaid diagram as an SVG image
  * for the page's `pbs-diagram`. The page shows it only as an `<img>`, which runs no script. The
- * renders are kept by a hash of scheme and source, the least recently used going first.
+ * drawing runs off the event loop, one at a time, with a time limit (see `DiagramRenderer`); the
+ * verdicts are kept by a hash of scheme and source, the least recently used going first, and a source
+ * that could not be drawn is remembered as well, so a repeat costs nothing. A request that arrives
+ * while its source is being drawn waits for that drawing.
  */
 export class DiagramService {
 	readonly #render: NonNullable<DiagramServiceOptions["render"]>;
 	readonly #capacity: number;
 	/** Insertion order is use order: a hit moves its entry to the end. */
-	readonly #renders = new Map<string, string>();
+	readonly #verdicts = new Map<string, Verdict>();
+	readonly #drawing = new Map<string, Promise<Verdict | "busy">>();
 
 	constructor(options: DiagramServiceOptions = {}) {
-		this.#render =
-			options.render ??
-			((source, scheme) => mermaidSvg(source, { scheme, transparent: true }));
+		this.#render = options.render ?? workerRender(options);
 		this.#capacity = options.capacity ?? KEPT;
 	}
 
-	serve(request: Request): Response {
+	async serve(request: Request): Promise<Response> {
 		const params = new URL(request.url).searchParams;
 		const scheme = params.get("scheme") ?? "";
 		const encoded = params.get("s") ?? "";
@@ -62,20 +74,72 @@ export class DiagramService {
 		const key = createHash("sha256")
 			.update(`${scheme}\0${source}`)
 			.digest("hex");
-		let svg = this.#renders.get(key);
-		if (svg === undefined) {
-			try {
-				svg = this.#render(source, scheme as "light" | "dark");
-			} catch {
-				return refuse(422, "This is not a diagram the app can draw.");
-			}
-		} else this.#renders.delete(key);
-		this.#renders.set(key, svg);
-		if (this.#renders.size > this.#capacity)
-			for (const oldest of this.#renders.keys()) {
-				this.#renders.delete(oldest);
+		const verdict = await this.#verdictOf(
+			key,
+			source,
+			scheme as "light" | "dark",
+		);
+		if (verdict === "busy")
+			return refuse(503, "Diagrams are being drawn; try again shortly.");
+		if (verdict === null)
+			return refuse(422, "This is not a diagram the app can draw.");
+		return new Response(verdict, { headers: IMAGE_HEADERS });
+	}
+
+	#verdictOf(
+		key: string,
+		source: string,
+		scheme: "light" | "dark",
+	): Promise<Verdict | "busy"> | Verdict {
+		const kept = this.#verdicts.get(key);
+		if (kept !== undefined) {
+			this.#verdicts.delete(key);
+			this.#verdicts.set(key, kept);
+			return kept;
+		}
+		const running = this.#drawing.get(key);
+		if (running) return running;
+		const drawing = this.#draw(source, scheme).then((verdict) => {
+			this.#drawing.delete(key);
+			if (verdict !== "busy") this.#keep(key, verdict);
+			return verdict;
+		});
+		this.#drawing.set(key, drawing);
+		return drawing;
+	}
+
+	async #draw(
+		source: string,
+		scheme: "light" | "dark",
+	): Promise<Verdict | "busy"> {
+		try {
+			return await this.#render(source, scheme);
+		} catch (error) {
+			return error instanceof DiagramRefusal && error.why === "busy"
+				? "busy"
+				: null;
+		}
+	}
+
+	#keep(key: string, verdict: Verdict): void {
+		this.#verdicts.set(key, verdict);
+		if (this.#verdicts.size > this.#capacity)
+			for (const oldest of this.#verdicts.keys()) {
+				this.#verdicts.delete(oldest);
 				break;
 			}
-		return new Response(svg, { headers: IMAGE_HEADERS });
 	}
+}
+
+/** Drawing in a worker thread, one at a time. */
+function workerRender(
+	options: DiagramServiceOptions,
+): NonNullable<DiagramServiceOptions["render"]> {
+	const renderer = new DiagramRenderer({
+		...(options.timeoutMs === undefined
+			? {}
+			: { timeoutMs: options.timeoutMs }),
+		...(options.queue === undefined ? {} : { queue: options.queue }),
+	});
+	return (source, scheme) => renderer.draw(source, scheme);
 }

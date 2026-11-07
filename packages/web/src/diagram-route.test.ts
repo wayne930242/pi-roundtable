@@ -145,11 +145,11 @@ describe("DiagramService", () => {
 			},
 		});
 		for (const source of ["a", "a", "b", "a"])
-			expect(await service.serve(request(source)).text()).toBe(
+			expect(await (await service.serve(request(source))).text()).toBe(
 				`<svg>${source}</svg>`,
 			);
 		expect(drawn).toEqual(["light:a", "light:b"]);
-		await service.serve(request("a", "dark")).text();
+		await (await service.serve(request("a", "dark"))).text();
 		expect(drawn).toEqual(["light:a", "light:b", "dark:a"]);
 	});
 
@@ -163,7 +163,7 @@ describe("DiagramService", () => {
 			},
 		});
 		for (const source of ["a", "b", "a", "c", "b", "a"])
-			await service.serve(request(source)).text();
+			await (await service.serve(request(source))).text();
 		// c pushed b out (a was used after b); b came back and pushed a out.
 		expect(drawn).toEqual(["a", "b", "c", "b", "a"]);
 	});
@@ -176,15 +176,17 @@ describe("DiagramService", () => {
 				return "<svg/>";
 			},
 		});
-		for (let i = 0; i < 200; i++) await service.serve(request(`n${i}`)).text();
-		for (let i = 0; i < 200; i++) await service.serve(request(`n${i}`)).text();
+		for (let i = 0; i < 200; i++)
+			await (await service.serve(request(`n${i}`))).text();
+		for (let i = 0; i < 200; i++)
+			await (await service.serve(request(`n${i}`))).text();
 		expect(drawn).toHaveLength(200);
-		await service.serve(request("n200")).text();
-		await service.serve(request("n0")).text();
+		await (await service.serve(request("n200"))).text();
+		await (await service.serve(request("n0"))).text();
 		expect(drawn).toHaveLength(202);
 	});
 
-	test("does not keep a render that failed", async () => {
+	test("remembers a source it could not draw, and answers it again without drawing", async () => {
 		let calls = 0;
 		const service = new DiagramService({
 			render: () => {
@@ -192,8 +194,82 @@ describe("DiagramService", () => {
 				throw new Error("not a diagram");
 			},
 		});
-		expect(service.serve(request("x")).status).toBe(422);
-		expect(service.serve(request("x")).status).toBe(422);
-		expect(calls).toBe(2);
+		expect((await service.serve(request("x"))).status).toBe(422);
+		expect((await service.serve(request("x"))).status).toBe(422);
+		expect(calls).toBe(1);
+	});
+
+	test("a refused source is remembered by its hash and scheme, so a repeat costs nothing", async () => {
+		const service = new DiagramService({
+			render: async () => {
+				throw new Error("not a diagram");
+			},
+		});
+		expect((await service.serve(request("x", "dark"))).status).toBe(422);
+		const again = performance.now();
+		expect((await service.serve(request("x", "dark"))).status).toBe(422);
+		expect(performance.now() - again).toBeLessThan(20);
+	});
+});
+
+/** A source of about 8 KB that takes the renderer a second or so: a long chain of nodes. */
+const HEAVY = `graph LR\n${Array.from({ length: 800 }, (_, i) => `${i}-->${i + 1}`).join("\n")}`;
+
+describe("the drawing of a diagram", () => {
+	const request = (source: string) => new Request(url(source));
+
+	test("never holds the event loop: other work runs while a heavy diagram is drawn", async () => {
+		expect(Buffer.byteLength(HEAVY)).toBeLessThanOrEqual(8 * 1024);
+		const service = new DiagramService();
+		await service.serve(request(FLOW));
+		// A timer set before the drawing starts must fire on time while it runs.
+		const started = performance.now();
+		const timer = new Promise<number>((resolve) =>
+			setTimeout(() => resolve(performance.now() - started), 5),
+		);
+		const drawing = service.serve(request(HEAVY));
+		const waited = await timer;
+		const response = await drawing;
+		expect(response.status).toBe(200);
+		expect(waited).toBeLessThan(150);
+	}, 60_000);
+
+	test("gives up on a drawing past its time, answers 422 and remembers that", async () => {
+		const service = new DiagramService({ timeoutMs: 400 });
+		const first = await service.serve(request(HEAVY));
+		expect(first.status).toBe(422);
+		expect(first.headers.get("cache-control")).toBe("no-store");
+		const again = performance.now();
+		expect((await service.serve(request(HEAVY))).status).toBe(422);
+		expect(performance.now() - again).toBeLessThan(20);
+		// The next diagram is drawn by a fresh worker.
+		expect((await service.serve(request(FLOW))).status).toBe(200);
+	}, 60_000);
+
+	test("draws one at a time and turns away what waits beyond its queue, with 503 and no memory of it", async () => {
+		const service = new DiagramService({ timeoutMs: 20_000, queue: 1 });
+		await service.serve(request(FLOW));
+		const other = (n: number) => `${HEAVY}\nZ${n}-->Y${n}`;
+		const answers = await Promise.all([
+			service.serve(request(other(1))),
+			service.serve(request(other(2))),
+			service.serve(request(other(3))),
+		]);
+		expect(answers.map((a) => a.status)).toEqual([200, 200, 503]);
+		expect(answers[2]?.headers.get("cache-control")).toBe("no-store");
+		expect((await service.serve(request(other(3)))).status).toBe(200);
+	}, 60_000);
+
+	test("draws the same source once for requests that arrive together", async () => {
+		let calls = 0;
+		const service = new DiagramService({
+			render: async () => {
+				calls++;
+				await Bun.sleep(30);
+				return "<svg/>";
+			},
+		});
+		await Promise.all([1, 2, 3].map(() => service.serve(request("same"))));
+		expect(calls).toBe(1);
 	});
 });
