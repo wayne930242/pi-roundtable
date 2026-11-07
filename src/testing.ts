@@ -257,10 +257,7 @@ export interface TestPluginOptions {
 	conversations?: Partial<ConversationPort>;
 	/** Replaces `context.turns`, which by default runs turns over the runtime and the surfaces. */
 	turns?: ConversationTurns;
-	/**
-	 * The credentials `context.apiKey` returns, by provider name; a provider not listed reads as
-	 * having none, as on a host that is not logged in to it.
-	 */
+	/** The credentials `context.apiKey` returns, by provider name; a provider not listed reads as having none, as on a host not logged in to it. */
 	apiKeys?: Readonly<Record<string, string>>;
 	/** How long the router holds a bare forward for the message that follows it; the host option `conversations.forwardJoinMs`. */
 	forwardJoinMs?: number;
@@ -483,8 +480,7 @@ export async function testPlugin(
 			sessions: () => linked ?? unlinked("sessions"),
 			toolTiers: tiers,
 			prompts: (channel, speaker) => surfaces.prompts(channel, speaker),
-			formatting: (channel) =>
-				supportOf(surfaces.of(channel), channel).formatting,
+			formatting: (c) => supportOf(surfaces.of(c), c).formatting,
 			agents: {
 				workDir: tmpdir(),
 				skills: () => [],
