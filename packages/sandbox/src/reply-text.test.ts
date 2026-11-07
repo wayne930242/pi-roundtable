@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	type ChannelKey,
+	type ChatSurface,
 	definePlugin,
 	IDENTITY,
 	type InboundMessage,
@@ -44,6 +45,7 @@ const message: InboundMessage = {
 async function harness(
 	reply: { ok: boolean; text: string },
 	replyText?: SandboxReplyText,
+	blocks?: ChatSurface["blocks"],
 ) {
 	const root = mkdtempSync(join(tmpdir(), "sb-reply-text-"));
 	const channels = new SandboxChannelStore(join(root, "c.json"), [], {
@@ -79,6 +81,7 @@ async function harness(
 			surfaces: [
 				{
 					surface: "discord",
+					...(blocks ? { blocks } : {}),
 					start: async () => {},
 					sendReply: async (_channel, sent) => {
 						replies.push(...sent.chunks);
@@ -161,5 +164,33 @@ test("a replyText that throws or returns no string fails the turn and is reporte
 		} finally {
 			await run.done();
 		}
+	}
+});
+
+test("a reply with a display block is cut for the surface that serves the channel: whole where it draws the kind, as text where it does not", async () => {
+	const table = [
+		"```table",
+		"columns: [name, size]",
+		"rows:",
+		...Array.from({ length: 200 }, (_, i) => `  - [row ${i}, ${i}]`),
+		"```",
+	].join("\n");
+	expect(table.length).toBeGreaterThan(2000);
+	const drawing = await harness({ ok: true, text: table }, undefined, [
+		"table",
+	]);
+	try {
+		await drawing.host.conversations.handle(message);
+		expect(drawing.replies).toEqual([table]);
+	} finally {
+		await drawing.done();
+	}
+	const plain = await harness({ ok: true, text: table });
+	try {
+		await plain.host.conversations.handle(message);
+		expect(plain.replies.join("\n")).not.toContain("```table");
+		expect(plain.replies.join("\n")).toContain("• name: row 0 · size: 0");
+	} finally {
+		await plain.done();
 	}
 });

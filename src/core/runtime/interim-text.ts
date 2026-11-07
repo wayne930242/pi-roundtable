@@ -11,11 +11,12 @@ export const PRIMARY_CHARS = 400;
 /** The progress message is edited at most this often; its last state always lands. */
 export const PROGRESS_EDIT_MS = 1_500;
 
-const STRUCTURE = /^\s{0,3}(#{1,6}\s|```|~~~|[-*+]\s|\d+[.)]\s|\|.*\|)/m;
+const STRUCTURE =
+	/^\s{0,3}(#{1,6}\s|```|~~~|[-*+]\s|\d+[.)]\s|\|.*\|)|^\s{0,3}>\s*\[![A-Z]+\]/m;
 
 /**
  * Whether an intermediate text is content the owner must read, such as a proposal or findings:
- * long, or written with a Markdown heading, list, table, or code fence. Shorter narration
+ * long, or written with a Markdown heading, list, table, code fence, or GitHub alert. Shorter narration
  * between tool calls goes to the progress message instead.
  */
 export function isPrimaryText(

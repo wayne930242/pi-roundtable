@@ -41,6 +41,9 @@ const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 test("a long or structured text is primary; a short line is not", () => {
 	expect(isPrimaryText("checking the logs…")).toBe(false);
 	expect(isPrimaryText("x".repeat(PRIMARY_CHARS))).toBe(true);
+	// A GitHub alert is a display block: it is content, so it is converted rather than left raw in the progress line.
+	expect(isPrimaryText("> [!WARNING] Disk is nearly full")).toBe(true);
+	expect(isPrimaryText("> a quoted aside")).toBe(false);
 	expect(isPrimaryText("Plan:\n- one\n- two")).toBe(true);
 	expect(isPrimaryText("## Proposal\nshort")).toBe(true);
 	expect(isPrimaryText("```ts\nx\n```")).toBe(true);
