@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import { Worker } from "node:worker_threads";
 import type { ActorFacts } from "pi-roundtable";
 import { recordingLogger } from "pi-roundtable/testing";
@@ -6,7 +6,7 @@ import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
 import { decide } from "./authz.ts";
 import { ConsoleServer } from "./console-server.ts";
-import { DiagramRenderer } from "./diagram-renderer.ts";
+import { DiagramRefusal, DiagramRenderer } from "./diagram-renderer.ts";
 import { DiagramService } from "./diagram-route.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit, refuse } from "./verifier.ts";
@@ -222,7 +222,8 @@ describe("the drawing of a diagram", () => {
 
 	test("never holds the event loop: other work runs while a heavy diagram is drawn", async () => {
 		expect(Buffer.byteLength(HEAVY)).toBeLessThanOrEqual(8 * 1024);
-		const service = new DiagramService();
+		// The limit is far off: this test is about the event loop, not about giving up.
+		const service = new DiagramService({ timeoutMs: 30_000 });
 		await service.serve(request(FLOW));
 		// A timer set before the drawing starts must fire on time while it runs.
 		const started = performance.now();
@@ -330,4 +331,34 @@ describe("DiagramRenderer workers", () => {
 		expect((await service.serve(new Request(url))).status).toBe(503);
 		expect(starts).toBe(2);
 	});
+});
+
+test("a drawing that overran is tried again after a while; a source that is no diagram is not", async () => {
+	let calls = 0;
+	const service = new DiagramService({
+		render: (source) => {
+			calls += 1;
+			if (source.startsWith("graph")) {
+				if (calls === 1) throw new DiagramRefusal("slow");
+				return "<svg/>";
+			}
+			throw new DiagramRefusal("invalid");
+		},
+	});
+	const ask = (source: string) =>
+		service.serve(new Request(url(source))).then((r) => r.status);
+	try {
+		setSystemTime(new Date("2026-01-01T00:00:00Z"));
+		expect(await ask(FLOW)).toBe(422);
+		expect(await ask("not a diagram")).toBe(422);
+		expect(calls).toBe(2);
+		setSystemTime(new Date("2026-01-01T00:05:00Z"));
+		expect(await ask(FLOW)).toBe(422);
+		setSystemTime(new Date("2026-01-01T00:11:00Z"));
+		expect(await ask(FLOW)).toBe(200);
+		expect(await ask("not a diagram")).toBe(422);
+		expect(calls).toBe(3);
+	} finally {
+		setSystemTime();
+	}
 });

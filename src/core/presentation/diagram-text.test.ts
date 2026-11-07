@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import {
 	DIAGRAM_TEXT_DEADLINE_MS,
 	diagramDrawer,
@@ -54,4 +54,23 @@ test("a chart left undrawn for the reply's budget is drawn in a later reply", ()
 	const texts = quick.map((q) => draw(q));
 	expect(texts.filter((t) => t !== undefined).length).toBe(3);
 	expect(diagramText(quick[4] as string)).toContain("Quick4");
+});
+
+test("a source that overran is tried again after a while", () => {
+	const source = `${slow}\nS90 --> S91`;
+	try {
+		setSystemTime(new Date("2026-01-01T00:00:00Z"));
+		expect(diagramText(source)).toBeUndefined();
+		const kept = performance.now();
+		expect(diagramText(source)).toBeUndefined();
+		expect(performance.now() - kept).toBeLessThan(20);
+		setSystemTime(new Date("2026-01-01T00:11:00Z"));
+		const retried = performance.now();
+		expect(diagramText(source)).toBeUndefined();
+		expect(performance.now() - retried).toBeGreaterThanOrEqual(
+			DIAGRAM_TEXT_DEADLINE_MS - 50,
+		);
+	} finally {
+		setSystemTime();
+	}
 });

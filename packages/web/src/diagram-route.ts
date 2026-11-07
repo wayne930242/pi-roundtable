@@ -5,6 +5,8 @@ import { DiagramRefusal, DiagramRenderer } from "./diagram-renderer.ts";
 export const MAX_DIAGRAM_BYTES = 8 * 1024;
 /** How many drawn diagrams are kept. */
 const KEPT = 200;
+/** How long a source that overran its time stays refused before it is tried again: on a loaded host an overrun is no verdict on the source. */
+const OVERRUN_KEPT_MS = 10 * 60_000;
 const SCHEMES = new Set(["light", "dark"]);
 
 /** What an image answer says about itself: it cannot run script, and it never changes for the same URL. */
@@ -40,7 +42,8 @@ type Verdict = string | null;
  * for the page's `pbs-diagram`. The page shows it only as an `<img>`, which runs no script. The
  * drawing runs off the event loop, one at a time, with a time limit (see `DiagramRenderer`); the
  * verdicts are kept by a hash of scheme and source, the least recently used going first, and a source
- * that could not be drawn is remembered as well, so a repeat costs nothing. A request that arrives
+ * that could not be drawn is remembered as well (one that overran its time, for ten minutes), so a
+ * repeat costs nothing. A request that arrives
  * while its source is being drawn waits for that drawing.
  */
 export class DiagramService {
@@ -48,6 +51,8 @@ export class DiagramService {
 	readonly #capacity: number;
 	/** Insertion order is use order: a hit moves its entry to the end. */
 	readonly #verdicts = new Map<string, Verdict>();
+	/** When each source that overran may be tried again. */
+	readonly #overran = new Map<string, number>();
 	readonly #drawing = new Map<string, Promise<Verdict | "busy">>();
 
 	constructor(options: DiagramServiceOptions = {}) {
@@ -92,7 +97,10 @@ export class DiagramService {
 		scheme: "light" | "dark",
 	): Promise<Verdict | "busy"> | Verdict {
 		const kept = this.#verdicts.get(key);
-		if (kept !== undefined) {
+		if (kept === null && (this.#overran.get(key) ?? Infinity) <= Date.now()) {
+			this.#verdicts.delete(key);
+			this.#overran.delete(key);
+		} else if (kept !== undefined) {
 			this.#verdicts.delete(key);
 			this.#verdicts.set(key, kept);
 			return kept;
@@ -101,7 +109,13 @@ export class DiagramService {
 		if (running) return running;
 		const drawing = this.#draw(source, scheme).then((verdict) => {
 			this.#drawing.delete(key);
-			if (verdict !== "busy") this.#keep(key, verdict);
+			if (verdict === "busy") return verdict;
+			if (verdict === "slow") {
+				this.#keep(key, null);
+				this.#overran.set(key, Date.now() + OVERRUN_KEPT_MS);
+				return null;
+			}
+			this.#keep(key, verdict);
 			return verdict;
 		});
 		this.#drawing.set(key, drawing);
@@ -111,13 +125,13 @@ export class DiagramService {
 	async #draw(
 		source: string,
 		scheme: "light" | "dark",
-	): Promise<Verdict | "busy"> {
+	): Promise<Verdict | "busy" | "slow"> {
 		try {
 			return await this.#render(source, scheme);
 		} catch (error) {
-			return error instanceof DiagramRefusal && error.why === "busy"
-				? "busy"
-				: null;
+			if (error instanceof DiagramRefusal && error.why !== "invalid")
+				return error.why;
+			return null;
 		}
 	}
 
@@ -126,6 +140,7 @@ export class DiagramService {
 		if (this.#verdicts.size > this.#capacity)
 			for (const oldest of this.#verdicts.keys()) {
 				this.#verdicts.delete(oldest);
+				this.#overran.delete(oldest);
 				break;
 			}
 	}

@@ -9,6 +9,8 @@ export const MAX_DRAWN_PER_REPLY = 3;
 /** How long the first drawing of a worker may take to start, with the drawing library loading. */
 const START_MS = 5_000;
 const KEPT = 200;
+/** How long a source that overran stays undrawn before it is tried again: on a loaded host an overrun is no verdict on the source. */
+const OVERRUN_KEPT_MS = 10 * 60_000;
 const RESULT_BYTES = 256 * 1024;
 
 interface Drawer {
@@ -22,6 +24,8 @@ let drawer: Drawer | undefined;
 let unavailable = false;
 /** What was drawn, by source; `null` for one that could not be, so it is not tried again. */
 const drawn = new Map<string, string | null>();
+/** When each source that overran may be tried again. */
+const overran = new Map<string, number>();
 
 function start(): Drawer | undefined {
 	const shared = new SharedArrayBuffer(16 + RESULT_BYTES);
@@ -34,7 +38,6 @@ function start(): Drawer | undefined {
 	worker.unref();
 	worker.on("error", () => {
 		if (drawer?.worker === worker) drawer = undefined;
-		else if (!drawer) unavailable = true;
 	});
 	if (Atomics.wait(head, 0, 0, START_MS) === "timed-out") {
 		void worker.terminate();
@@ -58,7 +61,7 @@ function stop(current: Drawer): void {
  * `DIAGRAM_TEXT_DEADLINE_MS` in all across the reply's sources, and at most `MAX_DRAWN_PER_REPLY` are
  * drawn afresh; a source seen before answers from memory. Callers fall back to the source.
  *
- * What is remembered: a source the worker refused, and one that overran a whole deadline; a source
+ * What is remembered: a source the worker refused, and for ten minutes one that overran a whole deadline; a source
  * left undrawn for the budget, or because no worker could be started, is no verdict and is tried
  * again in a later reply.
  */
@@ -68,7 +71,10 @@ export function diagramDrawer(): (source: string) => string | undefined {
 	return (source) => {
 		if (Buffer.byteLength(source) > MAX_DIAGRAM_TEXT_BYTES) return undefined;
 		const known = drawn.get(source);
-		if (known !== undefined) {
+		if (known === null && (overran.get(source) ?? Infinity) <= Date.now()) {
+			drawn.delete(source);
+			overran.delete(source);
+		} else if (known !== undefined) {
 			drawn.delete(source);
 			drawn.set(source, known);
 			return known ?? undefined;
@@ -81,8 +87,10 @@ export function diagramDrawer(): (source: string) => string | undefined {
 		left -= performance.now() - started;
 		if (typeof result === "object") remember(source, result.text);
 		else if (result === "refused") remember(source, null);
-		else if (result === "slow" && waitMs >= DIAGRAM_TEXT_DEADLINE_MS)
+		else if (result === "slow" && waitMs >= DIAGRAM_TEXT_DEADLINE_MS) {
 			remember(source, null);
+			overran.set(source, Date.now() + OVERRUN_KEPT_MS);
+		}
 		return typeof result === "object" ? result.text : undefined;
 	};
 }
@@ -97,6 +105,7 @@ function remember(source: string, text: string | null): void {
 	if (drawn.size > KEPT)
 		for (const oldest of drawn.keys()) {
 			drawn.delete(oldest);
+			overran.delete(oldest);
 			break;
 		}
 }
