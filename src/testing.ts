@@ -32,6 +32,7 @@ import {
 	ownerRootCommand,
 } from "./core/discord/owner-command.ts";
 import type { DiscordPoster } from "./core/discord/poster/poster.ts";
+import { supportOf } from "./core/domain/block-support.ts";
 import type { ClientPart, ClientPort } from "./core/domain/client.ts";
 import type {
 	PendingConfirmation,
@@ -482,7 +483,8 @@ export async function testPlugin(
 			sessions: () => linked ?? unlinked("sessions"),
 			toolTiers: tiers,
 			prompts: (channel, speaker) => surfaces.prompts(channel, speaker),
-			formatting: (channel) => surfaces.of(channel)?.formatting,
+			formatting: (channel) =>
+				supportOf(surfaces.of(channel), channel).formatting,
 			agents: {
 				workDir: tmpdir(),
 				skills: () => [],
