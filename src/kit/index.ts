@@ -130,10 +130,12 @@ export type {
 export { OpsAlerts } from "./ops-alerts.ts";
 export {
 	type BlockSupport,
+	type ChannelSupport,
 	chunksFor,
 	headline,
 	quietLinks,
 	splitReply,
+	supportOf,
 	thinkingLine,
 	zonedStamp,
 } from "./presentation.ts";

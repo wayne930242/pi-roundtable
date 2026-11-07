@@ -4,7 +4,7 @@ import type {
 	InboundMessage,
 	SurfacePort,
 } from "pi-roundtable";
-import { answersAuthor, chunksFor } from "pi-roundtable/kit";
+import { answersAuthor, chunksFor, supportOf } from "pi-roundtable/kit";
 import {
 	type ReadChannelContext,
 	readsChannelContext,
@@ -179,7 +179,13 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 							? await cardFor(options, posted, message)
 							: undefined;
 						await options.surfaces.sendReply(message.channel, {
-							chunks: chunksFor(options.surfaces.of?.(message.channel), posted),
+							chunks: chunksFor(
+								supportOf(
+									options.surfaces.of?.(message.channel),
+									message.channel,
+								),
+								posted,
+							),
 							...(card ? { card } : {}),
 						});
 					} catch (error) {

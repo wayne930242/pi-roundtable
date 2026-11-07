@@ -224,13 +224,19 @@ describe("the runtime plugin", () => {
 				prompts: () => undefined,
 				of: (channel: string) =>
 					channel.startsWith("chat:")
-						? { surface: "chat", formatting: "No tables." }
+						? {
+								surface: "chat",
+								formatting: "No tables.",
+								support: (key: string) =>
+									key === "chat:quiet" ? { formatting: "Quiet." } : undefined,
+							}
 						: channel.startsWith("bare:")
 							? { surface: "bare" }
 							: undefined,
 			},
 		);
 		expect(deps?.formatting?.("chat:1")).toBe("No tables.");
+		expect(deps?.formatting?.("chat:quiet")).toBe("Quiet.");
 		expect(deps?.formatting?.("bare:1")).toBeUndefined();
 		expect(deps?.formatting?.("other:1")).toBeUndefined();
 	});

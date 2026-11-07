@@ -1,5 +1,6 @@
 import type { ChatSurface, SurfacePort } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
+import { supportOf } from "../domain/block-support.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import {
@@ -66,10 +67,11 @@ export function surfacePort(
 			const posts = surface?.interim?.(channel, as);
 			if (!surface || !posts) return posts;
 			// The poster cuts text for the surface it posts on, which only the port knows.
+			const { blocks, blockText } = supportOf(surface, channel);
 			return {
 				...(posts.tools === undefined ? {} : { tools: posts.tools }),
-				...(surface.blocks ? { blocks: surface.blocks } : {}),
-				...(surface.blockText ? { blockText: surface.blockText } : {}),
+				...(blocks ? { blocks } : {}),
+				...(blockText ? { blockText } : {}),
 				post: (text) => posts.post(text),
 			};
 		},

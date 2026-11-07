@@ -11,7 +11,7 @@ import { conversationTurns } from "./conversation-turns.ts";
 /** A turn that answers `text` in `channel`, and what the surface of that channel was sent. */
 async function replyTo(
 	channel: ChannelKey,
-	surface: Pick<ChatSurface, "surface" | "blocks" | "blockText">,
+	surface: Pick<ChatSurface, "surface" | "blocks" | "blockText" | "support">,
 	text: string,
 ): Promise<OutboundReply[]> {
 	const replies: OutboundReply[] = [];
@@ -113,6 +113,20 @@ describe("a turn's reply on a surface", () => {
 		const [reply] = await replyTo(
 			"nobody:1",
 			{ surface: "app", blocks: DISPLAY_KINDS },
+			ALL_BLOCKS_REPLY,
+		);
+		expect(fencesIn(reply?.chunks.join("\n") ?? "")).toEqual(["diff"]);
+	});
+
+	test("a channel the surface says differs gets no block fence, though the surface draws blocks", async () => {
+		const [reply] = await replyTo(
+			"app:host.1",
+			{
+				surface: "app",
+				blocks: DISPLAY_KINDS,
+				support: (channel) =>
+					channel === "app:host.1" ? { blocks: [] } : undefined,
+			},
 			ALL_BLOCKS_REPLY,
 		);
 		expect(fencesIn(reply?.chunks.join("\n") ?? "")).toEqual(["diff"]);

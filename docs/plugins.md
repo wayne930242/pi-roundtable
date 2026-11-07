@@ -3127,6 +3127,7 @@ The agent server claims `discord:` keys, and, only on a surface that declares `a
 | `formatting` | A short English text on how a reply renders here, such as "no Markdown tables"; the runtime appends it to the system prompt of every turn that replies on this surface, after the persona | nothing is appended |
 | `blocks` | The [display-block](#display-blocks-in-a-reply) kinds the surface draws itself, such as `["table", "mermaid"]` (`BlockKind` of `pi-better-show`); a reply reaches `sendReply` whole, with the fences of those kinds intact. Every other block arrives as text | none: every block arrives as text |
 | `blockText` | How a block the surface does not draw reads as text: `"discord"` (Markdown, with Discord's native `diff` fence), `"line"` (plain text without Markdown markup) or `"plain"` | `"discord"` |
+| `support(channel)` | What differs in one channel of the surface: a `formatting`, `blocks` or `blockText` that replaces the surface's own for a turn that replies there, such as a host's room on a surface that draws blocks only in its own rooms. Return `undefined` for a channel that is like the rest | every channel is like the surface |
 | `startTyping(channel)` | Shows a typing indicator until the returned function is called | none is shown |
 | `showStop(channel)` | Shows the owner a stop control until the returned function is called; using it calls `conversations.stop(channel)`. A group's round shows it for the whole round, and stopping ends the round: the member speaking is stopped and the members still waiting do not speak | none is shown |
 | `react`, `unreact` | Adds or removes the bot's reaction on a message | no marks on queued or steered messages |
@@ -3235,7 +3236,7 @@ A custom runtime provider reads the same lookup as `RuntimeDeps.formatting(chann
 
 ### Display blocks in a reply
 
-An agent may write a *display block* in a reply: a fenced block whose first word is a kind (`cards`, `table`, `steps`, `stats`, `mindmap`, `mermaid`, `diff`, `options`, `form`, ...) or a GitHub alert (`> [!NOTE]`), as `pi-better-show` defines. A block is YAML or source that only a surface that draws it should show, so the host cuts agent text with `chunksFor(surface, text)` (from `pi-roundtable/kit`), never `splitReply` alone: a block whose kind the surface does not list in `blocks` becomes text first (Discord's flavor by default, `blockText: "line"` for plain text; a diagram is drawn as Unicode boxes), and the result is split into messages within Discord's limit. A surface that lists any kind in `blocks` gets the text whole in one chunk, because cutting a fence breaks the block. A block that does not parse, or is not closed, stays as written. The same applies to interim posts: the host's surface port copies the surface's `blocks` and `blockText` onto the `InterimPosts` it returns, so the poster cuts for the right surface. Host notices and error reports are the host's own text and keep `splitReply`.
+An agent may write a *display block* in a reply: a fenced block whose first word is a kind (`cards`, `table`, `steps`, `stats`, `mindmap`, `mermaid`, `diff`, `options`, `form`, ...) or a GitHub alert (`> [!NOTE]`), as `pi-better-show` defines. A block is YAML or source that only a surface that draws it should show, so the host cuts agent text with `chunksFor(surface, text)` (from `pi-roundtable/kit`), never `splitReply` alone: a block whose kind the surface does not list in `blocks` becomes text first (Discord's flavor by default, `blockText: "line"` for plain text; a diagram is drawn as Unicode boxes), and the result is split into messages within Discord's limit. A surface that lists any kind in `blocks` gets the text whole in one chunk, because cutting a fence breaks the block. A block that is not closed at the end of the reply is still a block: a text surface gets it as text, and a surface that draws it gets it as written. A block that does not parse becomes a plain code block. The same applies to interim posts: the host's surface port copies the surface's `blocks` and `blockText` onto the `InterimPosts` it returns, so the poster cuts for the right surface. A surface whose channels differ (a host's room, read on a page that does not draw blocks) answers `support(channel)` with what is different, and `supportOf(surface, channel)` (from `pi-roundtable/kit`) reads the result; the formatting guidance a turn gets follows it too. Host notices and error reports are the host's own text and keep `splitReply`.
 `describeSurfaceContract` checks that a surface listing `blocks` delivers a block of a declared kind longer than a message whole; `describeBlocksContract(name, make)` registers only that check, for a surface that cannot run the whole contract (the subject needs `surface`, `channel` and `observations()` of the replies its person has seen).
 
 Each message a surface delivers says who wrote it in `actor`, the `ActorFacts` the identity service resolves: `provider` and `subject`, such as `discord` and the user id, `name`, `roles` written `<surface>:role:<name>` (left out where the surface does not know them, such as a Discord DM, which is not the same as none), and `legacyId`, the speaker id 0.8 gave the person, so someone carried over keeps their principal.
@@ -4863,6 +4864,7 @@ Import from the entries listed below; source area files are internal.
 | `CODEX_IMAGES_PROVIDER` | `pi-roundtable/kit` | value |
 | `CODEX_IMAGE_MODEL` | `pi-roundtable/kit` | value |
 | `CardLimits` | `pi-roundtable/kit` | type |
+| `ChannelSupport` | `pi-roundtable/kit` | type |
 | `CategoryLayout` | `pi-roundtable/kit` | type |
 | `ChannelMessage` | `pi-roundtable/kit` | type |
 | `ChannelQueue` | `pi-roundtable/kit` | type |
@@ -5010,6 +5012,7 @@ Import from the entries listed below; source area files are internal.
 | `skillListExtension` | `pi-roundtable/kit` | value |
 | `chunksFor` | `pi-roundtable/kit` | value |
 | `splitReply` | `pi-roundtable/kit` | value |
+| `supportOf` | `pi-roundtable/kit` | value |
 | `stringList` | `pi-roundtable/kit` | value |
 | `textOf` | `pi-roundtable/kit` | value |
 | `textToolsExtension` | `pi-roundtable/kit` | value |

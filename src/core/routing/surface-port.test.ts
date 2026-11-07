@@ -213,3 +213,17 @@ test("a channel's interim posts say which blocks its surface draws, so the poste
 	expect(onDiscord?.blocks).toBeUndefined();
 	expect(onDiscord?.blockText).toBeUndefined();
 });
+
+test("a channel the surface says differs gets interim posts that draw nothing", () => {
+	const posts = { tools: false, post: async () => ({ edit: async () => {} }) };
+	const app: ChatSurface = {
+		...recording("app", []),
+		blocks: ["table"],
+		support: (channel) =>
+			channel === "app:host.1" ? { blocks: [] } : undefined,
+		interim: () => posts,
+	};
+	const port = surfacePort(() => [app]);
+	expect(port.interim("app:agent.a")?.blocks).toEqual(["table"]);
+	expect(port.interim("app:host.1")?.blocks).toEqual([]);
+});

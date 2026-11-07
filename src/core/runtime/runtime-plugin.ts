@@ -5,6 +5,7 @@ import type {
 	HeldActionStore,
 	RuntimeDeps,
 } from "../contract/runtime.ts";
+import { supportOf } from "../domain/block-support.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { InterimTextMode } from "../domain/interim.ts";
 import {
@@ -166,7 +167,7 @@ export function runtimePlugin(
 				context.surfaces.prompts(channel, scope);
 			const agents = () => options.agents?.current();
 			const formatting = (channel: ChannelKey) =>
-				context.surfaces.of(channel)?.formatting;
+				supportOf(context.surfaces.of(channel), channel).formatting;
 			const running: AgentRuntime = providers.filled.has("runtime")
 				? providers.runtime(
 						runtimeDeps({

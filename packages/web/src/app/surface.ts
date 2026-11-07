@@ -15,13 +15,14 @@ import {
 	roomOf,
 	type TurnProgress,
 } from "pi-roundtable";
+import type { ChannelSupport } from "pi-roundtable/kit";
 import {
 	type RoomFile,
 	type RoomMessage,
 	type RoundView,
 	START_OVER_TEXT,
 } from "../api-types.ts";
-import { APP_FORMATTING } from "./app-formatting.ts";
+import { APP_FORMATTING, HOST_FORMATTING } from "./app-formatting.ts";
 import type { OwnerDesk } from "./desk.ts";
 import { type FileBinding, type FileDir, typeByName } from "./files.ts";
 import { QueuedDelivery } from "./queued-delivery.ts";
@@ -111,6 +112,15 @@ export class AppSurface implements ChatSurface {
 	readonly formatting = APP_FORMATTING;
 	/** The display blocks the page draws itself (see pi-better-show); the interactive kinds arrive as text. */
 	readonly blocks = DISPLAY_KINDS;
+	/**
+	 * A host's room is read by guests on a page that does not draw blocks, so it draws none and its
+	 * turns are told none (a `diff` fence still reads as code).
+	 */
+	support(channel: ChannelKey): ChannelSupport | undefined {
+		return this.#options.isHostRoom(channel)
+			? { formatting: HOST_FORMATTING, blocks: [] }
+			: undefined;
+	}
 	/** The turn takes an upload up to the most the app lets a person upload. */
 	readonly maxAttachmentBytes: number;
 	/** Present on a surface with host rooms: what was said in one since the assistant last posted. */

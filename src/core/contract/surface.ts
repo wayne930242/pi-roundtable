@@ -1,5 +1,8 @@
 import type { BlockKind } from "pi-better-show";
-import type { BlockTextFlavor } from "../domain/block-support.ts";
+import type {
+	BlockTextFlavor,
+	ChannelSupport,
+} from "../domain/block-support.ts";
 import type { OutboundReply, PostAuthor } from "../domain/conversation.ts";
 import type { InterimMessage, InterimPosts } from "../domain/interim.ts";
 import type { TurnProgress } from "../domain/progress.ts";
@@ -145,6 +148,12 @@ export interface ChatSurface {
 	 * `diff` fence), `line` (plain text without Markdown markup), or `plain`. Absent = `discord`.
 	 */
 	readonly blockText?: BlockTextFlavor;
+	/**
+	 * What differs in one channel of this surface: its `formatting`, `blocks` or `blockText`
+	 * replace the surface's for a turn that replies there, such as a host's room on a surface that
+	 * draws blocks only in its own. Absent, or undefined for a channel = the surface's own.
+	 */
+	support?(channel: ChannelKey): ChannelSupport | undefined;
 	/**
 	 * Connects and delivers every incoming message; the host passes its conversation router. A
 	 * message whose channel key has another prefix is logged and dropped.

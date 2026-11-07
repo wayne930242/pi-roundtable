@@ -5,6 +5,7 @@ import type {
 	ConversationVisibility,
 } from "../conversations/conversation-registry.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
+import { supportOf } from "../domain/block-support.ts";
 import type { ClientPort } from "../domain/client.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { TurnConversation } from "../domain/ports.ts";
@@ -250,7 +251,7 @@ export function conversationTurns(
 				else
 					await surfaces.sendReply(
 						channel,
-						replyBody(result, surfaces.of(channel)),
+						replyBody(result, supportOf(surfaces.of(channel), channel)),
 					);
 			} catch (error) {
 				logger.error({ channel, kind, err: error }, "reply not posted");

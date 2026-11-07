@@ -1,5 +1,6 @@
 import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
+import { supportOf } from "../domain/block-support.ts";
 import type {
 	ChannelKey,
 	IntercomCard,
@@ -88,7 +89,8 @@ export class TeamTurns {
 			current: (agent) => this.#current(agent),
 			mayApprove: (speaker, pending) => this.#mayApprove(speaker, pending),
 			turnChannel: (scope) => this.turnChannel(scope),
-			chunks: (channel, text) => chunksFor(options.surfaces?.of(channel), text),
+			chunks: (channel, text) =>
+				chunksFor(supportOf(options.surfaces?.of(channel), channel), text),
 		};
 		this.#messages = new AgentMessages(host);
 		this.#groups = new GroupTurns(host);
@@ -267,7 +269,7 @@ export class TeamTurns {
 					"unattended turn had nothing to say; nothing posted",
 				);
 			else {
-				const body = replyBody(result, surfaces?.of(postTo));
+				const body = replyBody(result, supportOf(surfaces?.of(postTo), postTo));
 				await this.#post(postTo, this.#current(agent), body);
 			}
 		} catch (error) {
@@ -423,7 +425,10 @@ export class TeamTurns {
 	async postAs(caller: AgentTurnScope, text: string): Promise<void> {
 		const agent = this.#options.store.activeAgent(caller.name);
 		const channel = this.turnChannel(caller);
-		const chunks = chunksFor(this.#options.surfaces?.of(channel), text);
+		const chunks = chunksFor(
+			supportOf(this.#options.surfaces?.of(channel), channel),
+			text,
+		);
 		await this.#post(channel, this.#current(agent), { chunks });
 	}
 
@@ -456,7 +461,10 @@ export class TeamTurns {
 				: this.routes.primary(coordinator.name);
 		if (!home)
 			throw new AgentError(`${coordinator.name} has no room to post in`);
-		const chunks = chunksFor(this.#options.surfaces?.of(home), text);
+		const chunks = chunksFor(
+			supportOf(this.#options.surfaces?.of(home), home),
+			text,
+		);
 		await this.#post(home, coordinator, { chunks });
 	}
 

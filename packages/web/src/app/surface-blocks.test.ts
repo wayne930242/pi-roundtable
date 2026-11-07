@@ -9,12 +9,12 @@ import { AppSurface } from "./surface.ts";
 
 const ROOM = "app:agent.guide" as ChannelKey;
 
-function appSurface(rows: { text?: string }[] = []) {
+function appSurface(rows: { text?: string }[] = [], hostRooms: string[] = []) {
 	return new AppSurface({
 		surface: "app",
 		sockets: { deliver: () => undefined },
 		audienceOf: () => ({ owners: true }),
-		isHostRoom: () => false,
+		isHostRoom: (room: string) => hostRooms.includes(room),
 		log: {
 			append: async (row: { text?: string }) => {
 				rows.push(row);
@@ -73,4 +73,15 @@ test("a 5000-character table reply is stored whole, in one message", async () =>
 	expect(table.length).toBeGreaterThan(5000);
 	await appSurface(rows).sendReply(ROOM, { chunks: [table] });
 	expect(rows.map((row) => row.text)).toEqual([table]);
+});
+
+test("a host room is told no block guide and draws no block, though the app's rooms do", () => {
+	const host = "app:team.guests" as ChannelKey;
+	const surface = appSurface([], [host]);
+	expect(surface.support(ROOM)).toBeUndefined();
+	const there = surface.support(host);
+	expect(there?.blocks).toEqual([]);
+	expect(there?.formatting).toContain("Markdown renders");
+	expect(there?.formatting).not.toContain("Display blocks");
+	expect(there?.formatting).not.toContain("`table`");
 });
