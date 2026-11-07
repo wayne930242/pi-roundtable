@@ -85,4 +85,34 @@ describe("chunksFor", () => {
 		]);
 		expect(chunksFor(drawing, open)).toEqual([open]);
 	});
+
+	test("a diagram that cannot be drawn in time reaches a text surface as its source, in well under a second", () => {
+		// 25 states in a chain: a 250-byte source that the text drawing needs about a minute for.
+		const slow = `stateDiagram-v2\n${Array.from({ length: 25 }, (_, i) => `S${i} --> S${i + 1}`).join("\n")}`;
+		const started = performance.now();
+		const chunks = chunksFor(
+			undefined,
+			`Plan:\n\n\`\`\`mermaid\n${slow}\n\`\`\``,
+		);
+		expect(performance.now() - started).toBeLessThan(2500);
+		expect(chunks.join("\n")).toContain("S0 --> S1");
+		expect(chunks.join("\n")).not.toContain("┌");
+	}, 8000);
+
+	test("a diagram over 3 KB is not drawn as text at all: a text surface gets its source as a code block", () => {
+		const long = `graph TD\n${Array.from({ length: 400 }, (_, i) => `A${i} --> A${i + 1}`).join("\n")}`;
+		expect(Buffer.byteLength(long)).toBeGreaterThan(3 * 1024);
+		const chunks = chunksFor(undefined, `\`\`\`mermaid\n${long}\n\`\`\``);
+		expect(chunks.join("\n")).toContain("A399 --> A400");
+		expect(chunks.join("\n")).not.toContain("┌");
+	}, 8000);
+
+	test("a small diagram is still drawn as boxes, repeated or not", () => {
+		const text = "```mermaid\ngraph TD\n  A[Start] --> B[Done]\n```";
+		for (let i = 0; i < 2; i++) {
+			const joined = chunksFor(undefined, text).join("\n");
+			expect(joined).toContain("Start");
+			expect(joined).toContain("┌");
+		}
+	});
 });
