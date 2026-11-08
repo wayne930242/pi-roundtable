@@ -305,9 +305,8 @@ export class Roundtable {
 		});
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
-		// A report turn that started during the abort grace is stopped too, so the teardown does not wait for it.
-		if (left.length > 0 && this.#link.queue.busy().length > 0)
-			stopQueuedTurns();
+		// A turn that started during the abort grace, a report's, is stopped too, so the teardown does not wait for it.
+		if (left.length > 0) stopQueuedTurns();
 		if (left.length > 0) {
 			logger.warn(
 				{ aborted: left },
