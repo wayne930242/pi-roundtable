@@ -813,8 +813,7 @@ describeDb("the owner app over a real host", () => {
 		const tab = await Client.open(app, { "x-actor": "owner" });
 		if (!tab) throw new Error("the owner was refused");
 		const ready = await tab.take(ofType("ready"));
-		expect(ready.uploads.maxBytes).toBe(100 * 1024 * 1024);
-		expect(ready.uploads).not.toHaveProperty("types");
+		expect(ready.uploads).toEqual({ maxBytes: 100 * 1024 * 1024 });
 		tab.send({
 			type: "send",
 			id: "b1",
@@ -826,8 +825,7 @@ describeDb("the owner app over a real host", () => {
 		const served = await rest(app, `files/${view.id}`);
 		expect(served.headers.get("content-length")).toBe(String(big.byteLength));
 		expect(new Uint8Array(await served.arrayBuffer())).toEqual(big);
-		// Wait for the turn's reply, or on a slow disk it lands in the next test's socket as that test's reply.
-		await tab.take(agentReply("scout"));
+		await tab.take(agentReply("scout")); // else the reply lands in the next test's socket
 		tab.close();
 	});
 

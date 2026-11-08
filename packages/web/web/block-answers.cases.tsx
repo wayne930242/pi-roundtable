@@ -361,20 +361,21 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 		expect(slot(root).dataset.state).toBe("answered");
 	});
 
-	test("an answer the server finds an earlier one for locks the block with the earlier fields", async () => {
-		nextReply = async () => ({
-			ok: false,
-			code: "answered",
-			fields: [["picked", "Postgres"]],
-		});
-		const root = await draw(row(reply(OPTIONS)));
+	test("an answer the server finds an earlier one for is locked by the server's record, and the block opens when that record goes", async () => {
+		nextReply = async () => ({ ok: false, code: "answered" });
+		const message = reply(OPTIONS);
+		const root = await draw(row(message));
 		await click(shadow(root, "pbs-options").querySelector("[part=pick]"));
 		await page.act(() => settle());
+		expect(slot(root).dataset.state).toBe("open");
+		const answers = [
+			{ block: 0, fields: [["picked", "Postgres"]] as BlockFields },
+		];
+		await draw(row({ ...message, answers }), true);
 		expect(slot(root).dataset.state).toBe("answered");
-		expect(
-			(root.querySelector("pbs-options") as { answered?: BlockFields })
-				.answered,
-		).toEqual([["picked", "Postgres"]]);
+		// The other device's send failed: the row comes back without the answer.
+		await draw(row(message), true);
+		expect(slot(root).dataset.state).toBe("open");
 	});
 
 	test("a message that can no longer be answered says to type instead", async () => {

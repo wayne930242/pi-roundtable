@@ -145,9 +145,8 @@ export function AnswerBlock({ segment }: { segment: BlockSegment }) {
 		setNote(undefined);
 		answerBlock(connection, scope, segment.index, body).then((reply) => {
 			if (reply.ok) lockBlock(key, body.fields);
-			else if (reply.code === "answered")
-				lockBlock(key, reply.fields ?? body.fields);
 			else {
+				// An `answered` refusal keeps no lock of its own: the server's record locks the block, and its reopened row opens it again.
 				reopenBlock(key);
 				setNote(refusal(reply));
 			}
