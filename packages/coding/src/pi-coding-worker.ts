@@ -16,6 +16,7 @@ import type {
 	CodingWorker,
 	HeldCallAnswer,
 } from "./coding-desk.ts";
+import { hostStopping } from "./task-control.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
 export interface PiCodingWorkerOptions {
@@ -286,10 +287,11 @@ export class PiCodingWorker implements CodingWorker {
 				/* The group has already exited. */
 			}
 		};
-		// SIGTERM first, so the worker saves what it has; the group is killed when it ends or the grace runs out.
+		// A host shutdown sends SIGTERM first, so the worker saves what it has; the group is killed when it ends
+		// or the grace runs out. A cancel or a timeout kills at once: that work is not saved or merged.
 		const stop = () => {
 			const grace = this.#options.stopGraceMs ?? 5_000;
-			if (grace <= 0) return kill();
+			if (grace <= 0 || signal.reason !== hostStopping) return kill();
 			try {
 				process.kill(child.pid, "SIGTERM");
 			} catch {

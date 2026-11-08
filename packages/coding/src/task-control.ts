@@ -94,4 +94,23 @@ export async function within<T>(
 export const interruptedText =
 	"the host shut down while the worker ran, so the worker was stopped; its commits were not merged into the clone";
 export const interruptedReason =
-	"the host shut down while the task ran; its work stays on its branch and worktree";
+	"the host shut down while the task ran; its tracked changes were saved in a wip: commit, untracked files were not, and the work stays on its branch and worktree";
+/**
+ * The abort reason of a host shutdown. A worker stopped with it is asked to wind down and save a
+ * wip commit; one stopped for any other reason (a cancel, its time) is killed and leaves nothing.
+ */
+export const hostStopping = "the host is stopping";
+/** Said when a task could not start because the host is draining before a restart. */
+export const notStartedText =
+	"not started: host restarting, dispatch again after restart";
+/** Why an aborted worker's branch is not merged. */
+export function notMergedReason(run: {
+	cancelledBy?: string | undefined;
+	interrupted?: boolean | undefined;
+	timedOut?: number | undefined;
+}): string {
+	if (run.cancelledBy !== undefined)
+		return `the task was cancelled by ${run.cancelledBy}`;
+	if (run.interrupted) return interruptedReason;
+	return `the worker was stopped${run.timedOut === undefined ? "" : ` after ${Math.round(run.timedOut / 60_000)} minutes without finishing`}; its work stays on its branch and worktree`;
+}

@@ -71,9 +71,12 @@ export function codingWorkerPrompt(dir: string): string {
 }
 /** The running session, for a stop to end its turn. */
 let working: { abort(): Promise<void> } | undefined;
+/** Set once the host's shutdown asked the worker to stop; the run's own report or failure then waits for it. */
+let winding: Promise<never> | undefined;
 /**
- * The host asked the worker to stop (SIGTERM): it ends its turn, keeps the tracked changes it
- * made in a commit on its own branch, and exits, so the report can say where the work is.
+ * The host's shutdown asked the worker to stop (SIGTERM; a cancel or a timeout kills instead): it
+ * ends its turn, keeps the tracked changes it made in a commit on its own branch, and exits, so
+ * the report can say where the work is. Untracked files are not committed; the report lists them.
  */
 async function windDown(dir: string): Promise<never> {
 	// A turn waiting for an approval never answers its abort, so the commit does not wait long for it.
@@ -119,7 +122,9 @@ async function run({
 	scratchDir,
 	shellEnv,
 }: StartMessage): Promise<string> {
-	process.once("SIGTERM", () => void windDown(job.dir));
+	process.once("SIGTERM", () => {
+		winding ??= windDown(job.dir);
+	});
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
 		modelsPath: join(agentDir, "models.json"),
@@ -242,17 +247,20 @@ if (process.send) {
 		} else if (message.type === "start" && !started) {
 			started = true;
 			void run(message as StartMessage).then(
-				(report) => {
+				async (report) => {
+					await winding;
 					process.send?.({ type: "report", report }, () => process.exit(0));
 				},
-				(error: unknown) =>
+				async (error: unknown) => {
+					await winding;
 					process.send?.(
 						{
 							type: "failure",
 							message: error instanceof Error ? error.message : String(error),
 						},
 						() => process.exit(1),
-					),
+					);
+				},
 			);
 		}
 	});

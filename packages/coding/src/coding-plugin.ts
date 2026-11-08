@@ -161,8 +161,12 @@ export function coding(options: CodingOptions) {
 					: {}),
 				prompts: (channel) => context.surfaces.prompts(channel),
 				// A report of work that ends while the host drains still gets through the closed queue.
-				deliver: (result) =>
-					context.queue.finishing(() => deliverReport(result)),
+				deliver: (result) => {
+					const report = () => deliverReport(result);
+					return context.queue.finishing
+						? context.queue.finishing(report)
+						: report();
+				},
 			});
 			const ship = <T>(repo: string, operation: () => Promise<T>) =>
 				desk.ship(repo, operation);
@@ -208,8 +212,10 @@ export function coding(options: CodingOptions) {
 						name: "coding-desk",
 						// The stored limit is read at start: setup must not query the database.
 						start: () => applyStoredLimit(store, desk, context.logger),
-						// The host names the channels whose work a shutdown waits for or aborts: running and
-						// queued tasks, and reports still going out.
+						// The shutdown starts no queued task and refuses new ones; queued tasks are reported at once.
+						beginDrain: () => desk.beginDrain(),
+						// The host names the channels whose work a shutdown waits for or aborts: running tasks
+						// and reports still going out.
 						busy: () => desk.busyChannels(),
 						// At the drain limit workers are told to stop, and their reports go out, before stop.
 						abort: () => desk.interrupt(),

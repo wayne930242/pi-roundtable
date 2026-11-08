@@ -16,14 +16,17 @@ import type {
 	HeldCallAnswer,
 } from "./desk-types.ts";
 import { checkCount, checkMaxWorkers } from "./limits.ts";
+import { RepoGate } from "./repo-gate.ts";
 import type { Integration, RepoState, WorkerTree } from "./repo-shelf.ts";
 import {
 	type CancelResult,
 	type CodingTask,
 	cancelledText,
 	droppedText,
-	interruptedReason,
+	hostStopping,
 	interruptedText,
+	notMergedReason,
+	notStartedText,
 	within,
 } from "./task-control.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
@@ -59,6 +62,7 @@ function bounded(text: string, max: number): string {
 
 const DEFAULT_MAX_WORKERS = 4;
 const DEFAULT_MAX_QUEUED = 16;
+const DEFAULT_STOP_WAIT_MS = 15_000;
 
 interface Running {
 	job: CodingJob;
@@ -89,16 +93,13 @@ export class CodingDesk {
 	readonly #pending = new Set<Promise<void>>();
 	readonly #running = new Map<number, Running>();
 	readonly #queue: CodingJob[] = [];
-	/** The last integration asked for in each repository, which the next waits for. */
-	readonly #integrations = new Map<string, Promise<unknown>>();
-	/** Repositories whose clone an integration is changing now. */
-	readonly #integrating = new Set<string>();
-	/** Reports and pushes in progress, by repository. */
-	readonly #shipping = new Map<string, Promise<unknown>>();
+	readonly #gate: RepoGate;
 	/** The channels of reports being delivered, one entry each, until `deliver` settles. */
 	readonly #delivering: ChannelKey[] = [];
 	#nextId = 1;
 	#stopped = false;
+	/** The host's shutdown is waiting for work: nothing new starts. */
+	#draining = false;
 	constructor(options: CodingDeskOptions) {
 		this.#modes = new DeskModes(options);
 		this.#maxWorkers = options.maxWorkers ?? DEFAULT_MAX_WORKERS;
@@ -106,8 +107,9 @@ export class CodingDesk {
 		checkMaxWorkers(this.#maxWorkers);
 		checkCount("maxQueued", this.#maxQueued, 0);
 		this.#options = options;
+		this.#gate = new RepoGate(options.shelf);
 	}
-	/** The channels of running workers, which a shutdown waits for; queued tasks are not among them. */
+	/** The channels of running workers. */
 	runningChannels(): ChannelKey[] {
 		return [...this.#running.values()].map(({ job }) => job.channel);
 	}
@@ -116,15 +118,12 @@ export class CodingDesk {
 		return this.#queue.map((job) => job.channel);
 	}
 	/**
-	 * The channels of work a shutdown waits for: running and queued tasks, and the reports of
-	 * finished ones still being delivered, which a stop must not cut off.
+	 * The channels of work a shutdown waits for: running tasks, and the reports of finished or
+	 * dropped ones still being delivered, which a stop must not cut off. Queued tasks are not
+	 * among them: `beginDrain` drops them.
 	 */
 	busyChannels(): ChannelKey[] {
-		return [
-			...this.runningChannels(),
-			...this.queuedChannels(),
-			...this.#delivering,
-		];
+		return [...this.runningChannels(), ...this.#delivering];
 	}
 	/** Workers allowed at once, and how many run and wait now. */
 	workers(): { max: number; running: number; queued: number } {
@@ -150,35 +149,15 @@ export class CodingDesk {
 	}
 	/** Refuses while a worker's branch is being merged into the clone; running workers do not count. */
 	checkIdle(repo: string): void {
-		if (this.#integrating.has(repo))
-			throw new AgentError(
-				`A coding worker's commits are being merged into ${repo}; try again in a moment.`,
-			);
+		this.#gate.checkIdle(repo);
 	}
 	/** Whether a report or push is in progress for the repository. */
 	shipping(repo: string): boolean {
-		return this.#shipping.has(repo);
+		return this.#gate.shipping(repo);
 	}
-	/**
-	 * Runs a report or push of the repository, one at a time; refuses during an integration, and
-	 * an integration that comes due waits for it.
-	 */
-	async ship<T>(repo: string, operation: () => Promise<T>): Promise<T> {
-		this.checkIdle(repo);
-		if (this.#shipping.has(repo))
-			throw new AgentError(
-				"A report or push is already in progress for this repository.",
-			);
-		const done = operation();
-		this.#shipping.set(
-			repo,
-			done.catch(() => {}),
-		);
-		try {
-			return await done;
-		} finally {
-			this.#shipping.delete(repo);
-		}
+	/** Runs a report or push of the repository, one at a time; see `RepoGate.ship`. */
+	ship<T>(repo: string, operation: () => Promise<T>): Promise<T> {
+		return this.#gate.ship(repo, operation);
 	}
 	async idle(): Promise<void> {
 		// A run that ends starts the next queued one before it settles, so look again.
@@ -231,6 +210,16 @@ export class CodingDesk {
 		};
 	}
 	/**
+	 * The host's shutdown began waiting for work: no queued task starts and `start` refuses, so the
+	 * drain waits for the running workers only. Each queued task gets a report at once that it did
+	 * not start, with the time left to deliver it before the queue is sealed.
+	 */
+	beginDrain(): void {
+		this.#draining = true;
+		for (const job of this.#queue.splice(0))
+			this.#track(this.#drop(job, notStartedText));
+	}
+	/**
 	 * The host's drain ran out of time: tells each running worker to stop, as a cancel does, so its
 	 * commits stay on its branch and its report names the worktree, and drops the queued tasks with
 	 * a report that they never ran. Starts nothing more. Whether any task was told.
@@ -243,22 +232,39 @@ export class CodingDesk {
 		for (const run of this.#running.values()) {
 			if (run.interrupted) continue;
 			run.interrupted = true;
-			run.controller.abort();
+			run.controller.abort(hostStopping);
 			told = true;
 		}
 		return told;
 	}
-	/** Stops the running workers and drops the queued tasks, telling each that it never ran. */
+	/**
+	 * Stops the running workers as a host shutdown does and drops the queued tasks, telling each
+	 * that it never ran. Waits at most `stopWaitMs` for the reports: a report turn that is still
+	 * going then is left behind, not waited for.
+	 */
 	async stop(): Promise<void> {
 		this.#stopped = true;
 		for (const job of this.#queue.splice(0)) this.#track(this.#drop(job));
-		for (const run of this.#running.values()) run.controller.abort();
-		await this.idle();
+		for (const run of this.#running.values()) {
+			run.interrupted = true;
+			run.controller.abort(hostStopping);
+		}
+		const waited = this.#options.stopWaitMs ?? DEFAULT_STOP_WAIT_MS;
+		const ended = await within(
+			this.idle().then(() => true),
+			waited,
+		);
+		if (!ended)
+			this.#options.logger.warn(
+				{ waitedMs: waited },
+				"Coding reports still going out; not waiting for them.",
+			);
 	}
 	async start(
 		request: Omit<CodingJob, "id" | "startedAt" | "startHead" | "thread">,
 	): Promise<CodingStart> {
 		if (this.#stopped) throw new AgentError("The coding desk is stopped.");
+		if (this.#draining) throw new AgentError(notStartedText);
 		const task = request.task.trim();
 		if (!task) throw new AgentError("The task is required.");
 		if (task.length > MAX_CODING_TASK_CHARS)
@@ -320,6 +326,7 @@ export class CodingDesk {
 	#fill(): void {
 		while (
 			!this.#stopped &&
+			!this.#draining &&
 			this.#running.size < this.#maxWorkers &&
 			this.#queue.length
 		) {
@@ -352,32 +359,6 @@ export class CodingDesk {
 			await this.#options.deliver(result);
 		} finally {
 			this.#delivering.splice(this.#delivering.indexOf(result.job.channel), 1);
-		}
-	}
-	/** Integrations of one clone run one after another, and never during its report or push. */
-	async #integrate(tree: WorkerTree): Promise<Integration> {
-		const { repo } = tree;
-		const previous = this.#integrations.get(repo) ?? Promise.resolve();
-		const mine = previous
-			.catch(() => {})
-			.then(async () => {
-				for (let ship = this.#shipping.get(repo); ship; ) {
-					await ship;
-					ship = this.#shipping.get(repo);
-				}
-				this.#integrating.add(repo);
-				try {
-					return await this.#options.shelf.integrate(tree);
-				} finally {
-					this.#integrating.delete(repo);
-				}
-			});
-		this.#integrations.set(repo, mine);
-		try {
-			return await mine;
-		} finally {
-			if (this.#integrations.get(repo) === mine)
-				this.#integrations.delete(repo);
 		}
 	}
 	async #run(job: CodingJob, run: Running): Promise<void> {
@@ -525,20 +506,17 @@ export class CodingDesk {
 			await interim?.flush();
 		}
 		let integration: Integration | undefined;
-		// A cancelled or interrupted worker's commits stay on its branch for the owner to inspect, merge or delete.
-		if (tree && (run.cancelledBy !== undefined || run.interrupted))
+		// An aborted worker's commits stay on its branch for the owner to inspect, merge or delete.
+		if (tree && (controller.signal.aborted || run.interrupted))
 			integration = {
 				status: "refused",
 				branch: tree.branch,
 				dir: tree.dir,
-				reason:
-					run.cancelledBy === undefined
-						? interruptedReason
-						: `the task was cancelled by ${run.cancelledBy}`,
+				reason: notMergedReason({ ...run, timedOut }),
 			};
 		else if (tree)
 			try {
-				integration = await this.#integrate(tree);
+				integration = await this.#gate.integrate(tree);
 			} catch (error) {
 				integration = {
 					status: "refused",

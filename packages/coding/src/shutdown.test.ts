@@ -151,7 +151,7 @@ test("the host's shutdown tells running workers to stop, drops the queued tasks 
 	expect(desk.interrupt()).toBe(false);
 });
 
-test("a task counts as busy while it runs, while it waits, and until its report is delivered", async () => {
+test("a task counts as busy while it runs and until its report is delivered, not while it waits", async () => {
 	const { shelf } = await fixture();
 	const report = gate();
 	const finish = gate();
@@ -175,7 +175,7 @@ test("a task counts as busy while it runs, while it waits, and until its report 
 	await desk.start(request({ channel: "test:one" }));
 	await desk.start(request({ channel: "test:two" }));
 	const channels = (): ChannelKey[] => desk.busyChannels();
-	expect(channels()).toEqual(["test:one", "test:two"]);
+	expect(channels()).toEqual(["test:one"]);
 	finish.resolve();
 	// The first worker is done and its slot went to the second, but its report is still going out.
 	while (desk.workers().running === 0 && desk.workers().queued === 1)
@@ -235,4 +235,116 @@ test("the plugin delivers a report through the queue's drain lane, so a report o
 	// The limit passes while the worker runs: it is told to stop, reports, and the report gets through.
 	expect(await roundtable.shutdown("SIGTERM")).toBe(0);
 	expect(seen).toEqual(["report turn"]);
+});
+
+test("a worker that runs out of time is never merged, although it left its work committed", async () => {
+	const { shelf, clone } = await fixture();
+	const work = waitingWorker();
+	const results: CodingResult[] = [];
+	const desk = new CodingDesk({
+		shelf,
+		worker: work.worker,
+		timeoutMs: 100,
+		logger: silentLogger(),
+		deliver: async (result) => {
+			results.push(result);
+		},
+	});
+	stops.push(() => desk.stop());
+	const before = await git(clone, "rev-parse", "HEAD");
+	await desk.start(request());
+	await work.committed;
+	await desk.idle();
+	const [timedOut] = results;
+	expect(timedOut?.outcome).toMatchObject({
+		ok: false,
+		error: expect.stringContaining("ran out of time"),
+	});
+	expect(timedOut?.integration).toMatchObject({ status: "refused" });
+	if (timedOut?.integration?.status !== "refused") throw new Error("merged");
+	expect(existsSync(timedOut.integration.dir)).toBe(true);
+	expect(await git(clone, "rev-parse", "HEAD")).toBe(before);
+});
+
+test("stopping the desk stops its workers without merging them", async () => {
+	const { shelf, clone } = await fixture();
+	const work = waitingWorker();
+	const results: CodingResult[] = [];
+	const desk = new CodingDesk({
+		shelf,
+		worker: work.worker,
+		logger: silentLogger(),
+		deliver: async (result) => {
+			results.push(result);
+		},
+	});
+	const before = await git(clone, "rev-parse", "HEAD");
+	await desk.start(request());
+	await work.committed;
+	await desk.stop();
+	expect(results[0]?.integration).toMatchObject({ status: "refused" });
+	expect(await git(clone, "rev-parse", "HEAD")).toBe(before);
+});
+
+test("once the drain begins no queued task starts, each is reported at once, and a new task is refused", async () => {
+	const { shelf } = await fixture();
+	const finish = gate();
+	const started: number[] = [];
+	const results: CodingResult[] = [];
+	const desk = new CodingDesk({
+		shelf,
+		worker: {
+			run: async (job) => {
+				started.push(job.id);
+				await finish.promise;
+				return "Done.";
+			},
+		},
+		maxWorkers: 1,
+		logger: silentLogger(),
+		deliver: async (result) => {
+			results.push(result);
+		},
+	});
+	stops.push(async () => {
+		finish.resolve();
+		await desk.stop();
+	});
+	await desk.start(request({ channel: "test:one" }));
+	await desk.start(request({ channel: "test:two" }));
+	expect(desk.busyChannels()).toEqual(["test:one"]);
+	desk.beginDrain();
+	// The queued task is told at once, while the first still runs.
+	while (results.length === 0) await Bun.sleep(1);
+	expect(results[0]?.job.channel).toBe("test:two");
+	expect(results[0]?.outcome).toEqual({
+		ok: false,
+		error: "not started: host restarting, dispatch again after restart",
+	});
+	await expect(desk.start(request())).rejects.toThrow(
+		"not started: host restarting, dispatch again after restart",
+	);
+	finish.resolve();
+	await desk.idle();
+	expect(started).toEqual([1]);
+	expect(results.map(({ job }) => job.id)).toEqual([2, 1]);
+	expect(desk.busyChannels()).toEqual([]);
+});
+
+test("stop does not wait past stopWaitMs for a report that is still going out", async () => {
+	const { shelf } = await fixture();
+	const report = gate();
+	const desk = new CodingDesk({
+		shelf,
+		worker: { run: async () => "Done." },
+		stopWaitMs: 100,
+		logger: silentLogger(),
+		deliver: () => report.promise,
+	});
+	stops.push(async () => report.resolve());
+	await desk.start(request());
+	while (desk.busyChannels().length === 0) await Bun.sleep(1);
+	const began = Date.now();
+	await desk.stop();
+	expect(Date.now() - began).toBeLessThan(1_000);
 });
