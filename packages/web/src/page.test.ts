@@ -67,6 +67,8 @@ test("the page builds with relative URLs only, and every file it names is in the
  * The 100 bytes after that are answering a display block (72 over): the message row hands the
  * block its answer and room, and the store takes the `block_refused` frame and a message's
  * `answers`; the block's answer controls, their step and wording are in the lazy blocks chunk.
+ * The 50 bytes after that are refusing the edit of a queued answer (3 over): the queued menu's
+ * items move into `queuedItems`, the shortcut skips an answer, and the toaster words the refusal.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -84,7 +86,8 @@ const FIRST_LOAD_BASELINE =
 	150 +
 	600 +
 	50 +
-	100;
+	100 +
+	50;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
