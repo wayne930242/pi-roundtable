@@ -6,6 +6,16 @@
 
 - A coding worker's yolo mode never approves a call whose class ends in `.yolo-never` (`YOLO_NEVER_CLASS`), even when `autonomy.yolo.allow` names it, matching the core yolo approver.
 
+## [0.40.0] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.40.0 (interactive blocks answered in the app, and chats that cannot show them say so); no package-specific behavior changes.
+
+## [0.39.1] - 2026-11-08
+
+### Fixed
+
+- With `settingsInDatabase: true` the stored worker limit is read when the coding-desk service starts, not during setup, so `Roundtable.check()` (which refuses a database query in setup) passes and the host boots.
+
 ## [0.39.0] - 2026-11-08
 
 ### Added

@@ -9,7 +9,7 @@ import {
 	testDatabaseUrl,
 	testPlugin,
 } from "pi-roundtable/testing";
-import { coding } from "./coding-plugin.ts";
+import { CODING, coding } from "./coding-plugin.ts";
 import {
 	CODING_SETTINGS_MIGRATION,
 	type SettingsPage,
@@ -101,6 +101,42 @@ test("the zh-TW wording fills placeholders, and a host's own entry wins", () => 
 		"Give a whole number from 1 to 64.",
 	);
 	expect(settingsWording("en")("Save")).toBe("Save");
+});
+
+test("setup reads no stored limit; the coding-desk service reads it at start, as Roundtable.check() needs", async () => {
+	const shelfDir = mkdtempSync(join(tmpdir(), "coding-settings-"));
+	cleanups.push(() => rmSync(shelfDir, { recursive: true, force: true }));
+	let phase = "setup";
+	let workers = () => ({ max: 0 });
+	const queried: string[] = [];
+	// SAFETY: the settings store calls the pool only as a tagged template; a stored "6" answers.
+	const sql = ((..._query: unknown[]) => {
+		queried.push(phase);
+		return Promise.resolve([{ value: "6" }]);
+	}) as unknown as SQL;
+	const inner = coding({
+		shelfDir,
+		model: "a/b",
+		worker: { run: async () => "" },
+		maxWorkers: 2,
+		settingsInDatabase: true,
+	});
+	const plugin = await testPlugin(
+		{
+			...inner,
+			async setup(context) {
+				const contribution = await inner.setup(context);
+				const { desk } = context.services.get(CODING);
+				workers = () => desk.workers();
+				phase = "start";
+				return contribution;
+			},
+		},
+		{ database: sql },
+	);
+	cleanups.push(() => plugin.stop());
+	expect(queried).toEqual(["start"]);
+	expect(workers().max).toBe(6);
 });
 
 describeDb("the worker limit in the host database", () => {

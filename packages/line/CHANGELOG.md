@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.40.0 (interactive blocks answered in the app, and chats that cannot show them say so); no package-specific behavior changes.
+
+## [0.39.1] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.39.1 (the coding plugin reads its stored worker limit at start, so `Roundtable.check()` passes with `settingsInDatabase`); no package-specific behavior changes.
+
 ## [0.39.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.39.0 (incoming webhooks for the knights' app rooms; agent tools place rooms in the app's room groups; the owner sets the coding worker limit in Settings); no package-specific behavior changes.
