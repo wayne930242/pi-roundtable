@@ -2,7 +2,23 @@
 
 import type { CharacterInput, CharacterSpec } from "pi-roundtable/characters";
 
+import type {
+	BlockAnswerBody,
+	BlockFields,
+	BlockRefusalCode,
+	RoomBlockAnswer,
+} from "./block-answer-types.ts";
+import type {
+	CardAnswer,
+	ClosedCard,
+	PromptAnswer,
+	PromptFrame,
+	PromptOutcome,
+} from "./prompt-types.ts";
+
+export type * from "./block-answer-types.ts";
 export type * from "./preset-types.ts";
+export type * from "./prompt-types.ts";
 
 /** What an agent is doing in a room, while it works. */
 export type ActivityPhase = "thinking" | "working";
@@ -492,6 +508,8 @@ export interface RoomMessage {
 	 * `cancelled` was cancelled while it waited and never runs. Absent on an ordinary message.
 	 */
 	delivery?: "steered" | "queued" | "cancelled";
+	/** An `agent` message: the interactive blocks the owner has answered, which the page shows locked with what was sent. */
+	answers?: RoomBlockAnswer[];
 }
 
 /** What an agents' message card shows besides its text: which way it went and the other agent. */
@@ -1193,120 +1211,6 @@ export interface UploadView {
 	size: number;
 }
 
-/** An option of a question, as the core writes it. */
-export interface PromptOption {
-	label: string;
-	description?: string;
-	preview?: string;
-}
-
-/** One question of a card. */
-export interface PromptQuestion {
-	question: string;
-	header?: string;
-	/** None means a free-text answer. */
-	options: readonly PromptOption[];
-	multi: boolean;
-	allowOther: boolean;
-}
-
-/** What a held call is, as data beside its markdown text. */
-export interface PromptApproval {
-	action: string;
-	tool: string;
-	input: Record<string, unknown>;
-	files?: { path: string; bytes?: number }[];
-	copy?: { label?: string; text: string };
-	/** Set when long values of `input` were cut to fit `APPROVAL_MAX_BYTES`. */
-	truncated?: true;
-}
-
-/** The card's own words in place of an approval's. */
-export interface PromptWording {
-	approve: string;
-	decline: string;
-	footer: string;
-	approved: string;
-	declined: string;
-}
-
-/** An answer to a question: the chosen options' labels and the person's own text. */
-export interface PromptAnswer {
-	choices: string[];
-	text?: string;
-}
-
-/** A card the server asks the owner: an approval, a question, or several questions. */
-export type PromptFrame =
-	| {
-			id: string;
-			/** When the card opened (ISO 8601, the server's clock), which places it among the room's messages. */
-			at?: string;
-			kind: "approval";
-			title: string;
-			/** The card as markdown text. */
-			message: string;
-			approval?: PromptApproval;
-			/** `turn-timeout` is a turn's time-limit card: continuing it lets the turn go on. */
-			purpose: "action" | "turn-timeout";
-			wording?: PromptWording;
-			/** Only the speaker whose turn asks may answer. */
-			speakerOnly?: true;
-			/** Display names of the people the call names to approve it; owners may still. */
-			approvers?: string[];
-			/** The turn stopped waiting; an answer starts a new turn in the room. */
-			late?: true;
-	  }
-	| {
-			id: string;
-			at?: string;
-			kind: "ask";
-			title: string;
-			question: string;
-			options: readonly PromptOption[];
-			multi: boolean;
-			allowOther: boolean;
-			late?: true;
-	  }
-	| {
-			id: string;
-			at?: string;
-			kind: "questionnaire";
-			title: string;
-			questions: readonly PromptQuestion[];
-			late?: true;
-	  };
-
-/** How a card ended. `withdrawn` is a card the plugin that asked for it took back. */
-export type PromptOutcome =
-	| "approved"
-	| "declined"
-	| "answered"
-	| "expired"
-	| "cancelled"
-	| "withdrawn";
-
-/** What a person gave a question card: one answer, or one per question with the note beside them. */
-export type CardAnswer =
-	| { kind: "ask"; answer: PromptAnswer }
-	| { kind: "questionnaire"; answers: (PromptAnswer | null)[]; note?: string };
-
-/** A card that ended and is kept in its room's history, with how it ended. */
-export interface ClosedCard {
-	room: string;
-	/** The card as it was shown, `at` being when it opened. */
-	frame: PromptFrame;
-	outcome: PromptOutcome;
-	/** Why a `withdrawn` card was taken back. */
-	note?: string;
-	/** Who answered it, by display name; absent for a card nobody answered. */
-	by?: string;
-	/** What was answered, for the question cards. */
-	answer?: CardAnswer;
-	/** When it ended (ISO 8601, the server's clock). */
-	closedAt: string;
-}
-
 /** Why the server refused a frame. */
 export type RefusalCode =
 	| "bad_frame"
@@ -1345,6 +1249,15 @@ export type ClientFrame =
 			mode?: "note" | "turn";
 	  }
 	| { type: "stop"; room: string }
+	/** Answers an interactive block of an agent's reply: the server sends the answer to the agent as the owner's next message, once. `accepted` or `block_refused` echoes `id`. */
+	| {
+			type: "block_answer";
+			id: string;
+			room: string;
+			message: number;
+			block: number;
+			answer: BlockAnswerBody;
+	  }
 	/** Replaces the text of a message of yours that waits for its turn (`delivery: "queued"`). */
 	| { type: "edit_queued"; room: string; message: number; text: string }
 	/** Cancels a message of yours that waits for its turn (`delivery: "queued"`). */
@@ -1416,6 +1329,17 @@ export type ServerFrame =
 	| { type: "accepted"; id: string; room: string; message: RoomMessage }
 	/** `id` names the refused `send`; `prompt` names the card whose answer was refused. */
 	| { type: "refused"; id?: string; prompt?: string; code: RefusalCode }
+	/** A `block_answer` was not taken; the block stays open unless `code` is `answered`, when `fields` are what answered it. */
+	| {
+			type: "block_refused";
+			id: string;
+			room: string;
+			message: number;
+			block: number;
+			code: BlockRefusalCode;
+			reason?: string;
+			fields?: BlockFields;
+	  }
 	/** A message of a room, stored or live; see `RoomMessage`. */
 	| { type: "message"; room: string; message: RoomMessage }
 	/** A stored message changed its text in place, such as a thread's start line once the thread exists. */

@@ -1,13 +1,11 @@
 import type {
 	ChannelKey,
 	ConversationPort,
-	InboundMessage,
 	Logger,
 	RouteSocket,
 	WebSocketAccept,
 	WebSocketRoute,
 } from "pi-roundtable";
-import { PluginError } from "pi-roundtable";
 import {
 	APP_CLOSE_EXPIRED,
 	APP_CLOSE_FORBIDDEN,
@@ -23,12 +21,13 @@ import {
 import type { Authenticator } from "../auth/authenticator.ts";
 import type { Gate } from "../gate.ts";
 import type { PluggedFrames, Viewer, WebAppRegistry } from "../web-app.ts";
+import type { BlockAnswering } from "./block-answering.ts";
 import type { Answerer, OwnerDesk } from "./desk.ts";
 import type { Presence } from "./presence.ts";
 import { parseClientFrame } from "./protocol.ts";
-import { coreMessageId } from "./queued-delivery.ts";
 import { changeQueued } from "./queued-frames.ts";
 import type { Rooms } from "./rooms.ts";
+import { keepNote, say } from "./say.ts";
 import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import type { AppSurface } from "./surface.ts";
 import type { Uploads } from "./uploads.ts";
@@ -53,6 +52,8 @@ export interface SocketRouteOptions {
 	surface: AppSurface;
 	desk: OwnerDesk;
 	rooms: Rooms;
+	/** Takes an owner's answer to an interactive block of an agent's reply. */
+	blockAnswers: Pick<BlockAnswering, "answer">;
 	/** The table of who is busy, sent to the owners after `ready`; absent in a route built without one. */
 	presence?: Pick<Presence, "frame">;
 	uploads: Uploads;
@@ -393,7 +394,7 @@ export class SocketRoute {
 			this.#refuse(
 				connection,
 				"forbidden",
-				frame.type === "send" ? frame.id : undefined,
+				"id" in frame ? frame.id : undefined,
 			);
 			return;
 		}
@@ -405,11 +406,7 @@ export class SocketRoute {
 			return;
 		// While a required step stands undone a socket may only handle notices.
 		if (connection.gated && frame.type !== "ack") {
-			this.#refuse(
-				connection,
-				"gated",
-				frame.type === "send" || frame.type === "act" ? frame.id : undefined,
-			);
+			this.#refuse(connection, "gated", "id" in frame ? frame.id : undefined);
 			return;
 		}
 		await this.#write(connection, who, frame);
@@ -445,6 +442,9 @@ export class SocketRoute {
 				else conversations.stop(room.key);
 				break;
 			}
+			case "block_answer":
+				await this.#blockAnswer(connection, who, frame);
+				return;
 			case "edit_queued":
 			case "cancel_queued":
 				refused = await changeQueued(frame, who, {
@@ -551,6 +551,39 @@ export class SocketRoute {
 	}
 
 	/**
+	 * An owner's answer to a block: sent to the agent as the owner's next message, by the path a
+	 * typed message takes, so it steers into a running turn, queues or starts one. The sender hears
+	 * the message that carries it, or why none was sent; the other sockets see the block locked.
+	 */
+	async #blockAnswer(
+		connection: AppSocket,
+		who: Answerer,
+		frame: Extract<ClientFrame, { type: "block_answer" }>,
+	): Promise<void> {
+		const { id, room, message, block } = frame;
+		const outcome = await this.#options.blockAnswers.answer(
+			frame,
+			who,
+			(key, text, stored) => this.say(key, who, text, [], connection, stored),
+		);
+		this.#options.sockets.deliver(
+			outcome.ok
+				? { type: "accepted", id, room, message: outcome.message }
+				: {
+						type: "block_refused",
+						id,
+						room,
+						message,
+						block,
+						code: outcome.code,
+						...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+						...(outcome.fields === undefined ? {} : { fields: outcome.fields }),
+					},
+			{ connection },
+		);
+	}
+
+	/**
 	 * Whether this answer cannot be taken: a late card's answer starts a turn written as the
 	 * answerer, which needs the actor their credential vouched for. Refused up front, the card
 	 * stays open for someone who has one rather than closing on an answer that goes nowhere.
@@ -587,7 +620,15 @@ export class SocketRoute {
 		if (!surface.started) return refuse("not_accepted");
 		try {
 			if (note)
-				await this.#note(connection, who, room.key, frame.id, text, files);
+				await keepNote(
+					this.#options,
+					connection,
+					who,
+					room.key,
+					frame.id,
+					text,
+					files,
+				);
 			else
 				await this.say(room.key, who, text, files, connection, (message) =>
 					sockets.deliver(
@@ -604,43 +645,8 @@ export class SocketRoute {
 		}
 	}
 
-	/**
-	 * Keeps an owner's internal note in a room: stored and shown to the other readers, and given to
-	 * no one else. It does not reach the host, so the agent runs no turn, the note is not in its
-	 * conversation, and nothing about the room reads as asked.
-	 */
-	async #note(
-		connection: AppSocket,
-		who: Answerer,
-		room: ChannelKey,
-		id: string,
-		text: string,
-		files: readonly RoomFile[],
-	): Promise<void> {
-		const { surface, uploads, sockets } = this.#options;
-		const message = await surface.publish(
-			{
-				room,
-				kind: "owner",
-				principalId: who.principalId,
-				author: who.name,
-				text,
-				files: [...files],
-				note: true,
-			},
-			connection,
-		);
-		uploads.use(files.map((file) => file.id));
-		sockets.deliver({ type: "accepted", id, room, message }, { connection });
-	}
-
-	/**
-	 * Takes a message of the owner into a room: stores it, shows it to the other sockets, and
-	 * hands it to the host as the owner's. `files` are uploads the sender claimed, which move to
-	 * the stored files once the message is stored. `stored` hears the stored message before the
-	 * host does, so a reply cannot overtake it.
-	 */
-	async say(
+	/** Takes a message of the owner into a room; see `say`. */
+	say(
 		room: ChannelKey,
 		who: Answerer,
 		text: string,
@@ -648,37 +654,6 @@ export class SocketRoute {
 		except?: AppSocket,
 		stored?: (message: RoomMessage) => void,
 	): Promise<void> {
-		const { surface, uploads } = this.#options;
-		if (!who.actor)
-			throw new PluginError(
-				"a message needs the actor its sender's credential vouched for",
-			);
-		const message = await surface.publish(
-			{
-				room,
-				kind: "owner",
-				principalId: who.principalId,
-				author: who.name,
-				text,
-				files: [...files],
-			},
-			except,
-		);
-		uploads.use(files.map((file) => file.id));
-		stored?.(message);
-		const inbound: InboundMessage = {
-			channel: room,
-			messageId: coreMessageId(message.id),
-			actor: who.actor,
-			authorId: who.principalId,
-			authorName: who.name,
-			authorIsBot: false,
-			isDirect: false,
-			mentionsBot: false,
-			repliesToBot: false,
-			text,
-			attachments: files.map((file) => uploads.refOf(file)),
-		};
-		surface.deliver(inbound);
+		return say(this.#options, room, who, text, files, except, stored);
 	}
 }

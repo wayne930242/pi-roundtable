@@ -9,6 +9,7 @@ import {
 	START_OVER_TEXT,
 } from "../api-types.ts";
 import { jsonValuesMigration, storedJson } from "../host/stored-json.ts";
+import { BlockAnswers } from "./block-answers.ts";
 
 /** A message to store; the log numbers it and stamps its time. */
 export interface NewRoomMessage {
@@ -91,10 +92,16 @@ function messageOf(row: Row): RoomMessage {
  */
 export class RoomLog {
 	readonly #sql: SQL;
+	/** The interactive blocks of agent replies that the owner has answered. */
+	readonly answers: BlockAnswers;
 
 	constructor(sql: SQL) {
 		this.#sql = sql;
+		this.answers = new BlockAnswers(sql);
 	}
+
+	/** The table of the blocks the owner answered. */
+	static readonly blockAnswersMigration: Migration = BlockAnswers.migration;
 
 	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
 	static readonly jsonValuesMigration: Migration = jsonValuesMigration(
@@ -261,11 +268,51 @@ export class RoomLog {
 		return row === undefined ? undefined : Number(row.id);
 	}
 
-	/** One stored message of the room, or undefined. */
+	/** One stored message of the room, with the blocks answered, or undefined. */
 	async get(room: string, id: number): Promise<RoomMessage | undefined> {
 		const [row]: Row[] = await this.#sql`
 			SELECT * FROM web_room_messages WHERE room = ${room} AND id = ${id}`;
-		return row && messageOf(row);
+		return row && (await this.#answered([messageOf(row)]))[0];
+	}
+
+	/**
+	 * The agent reply that may be answered: stored, a plain agent message (no note, no card between
+	 * agents), and of the room's current conversation, from its latest start-over line on.
+	 */
+	async answerable(room: string, id: number): Promise<RoomMessage | undefined> {
+		const message = await this.get(room, id);
+		if (message?.kind !== "agent" || message.note || message.intercom)
+			return undefined;
+		const start = await this.startOver(room);
+		return start !== undefined && message.id < start ? undefined : message;
+	}
+
+	/**
+	 * The owner message `answerMessage` no longer answers its block (it was cancelled while it
+	 * waited): the block is open again. The agent reply that holds it, as it is now, or undefined
+	 * when the message answered none.
+	 */
+	async reopenAnswer(
+		room: string,
+		answerMessage: number,
+	): Promise<RoomMessage | undefined> {
+		const reply = await this.answers.releaseFor(room, answerMessage);
+		return reply === undefined ? undefined : this.get(room, reply);
+	}
+
+	/** The messages with the blocks the owner answered in each of them. */
+	async #answered(messages: RoomMessage[]): Promise<RoomMessage[]> {
+		const replies = messages.filter((one) => one.kind === "agent");
+		const [first] = replies;
+		if (!first) return messages;
+		const found = await this.answers.of(
+			first.room,
+			replies.map((one) => one.id),
+		);
+		return messages.map((one) => {
+			const answers = found.get(one.id);
+			return answers ? { ...one, answers } : one;
+		});
 	}
 
 	/** Deletes one message of the room; the message as it was, or undefined when the room held none. */
@@ -326,7 +373,9 @@ export class RoomLog {
 				AND (${below ?? null}::bigint IS NULL OR id < ${below ?? null}::bigint)
 			ORDER BY id DESC LIMIT ${count + 1}`;
 		return {
-			messages: rows.slice(0, count).map(messageOf).reverse(),
+			messages: await this.#answered(
+				rows.slice(0, count).map(messageOf).reverse(),
+			),
 			more: rows.length > count,
 		};
 	}

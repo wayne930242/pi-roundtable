@@ -21,7 +21,7 @@
 	"packages/web/src/app/desk.ts": 573,
 	"packages/web/src/app/push.test.ts": 746,
 	"packages/web/src/app/routes.ts": 1161,
-	"packages/web/src/app/socket.ts": 684,
+	"packages/web/src/app/socket.ts": 659,
 	"packages/web/src/app/workspace-files.test.ts": 1439,
 	"packages/web/src/app/workspace-files.ts": 1485,
 	"packages/web/src/auth/auth.test.ts": 934,
