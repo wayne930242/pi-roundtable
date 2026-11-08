@@ -34,6 +34,7 @@ import {
 	codingReport,
 	MAX_CODING_TASK_CHARS,
 } from "./coding-desk.ts";
+import { checkCount, checkMaxWorkers } from "./limits.ts";
 import { PiCodingWorker, type WorkerEnv } from "./pi-coding-worker.ts";
 import {
 	type ChangeReport,
@@ -43,6 +44,7 @@ import {
 	type RepoSummary,
 	reportPost,
 } from "./repo-shelf.ts";
+import { workerHolds } from "./worker-holds.ts";
 
 export interface CodingService {
 	readonly shelf: RepoShelf;
@@ -143,7 +145,7 @@ export interface CodingOptions {
 	 */
 	githubToken?: GithubToken;
 	timeoutMs?: number;
-	/** Workers running at once on the host; default 4. More tasks wait in a queue. */
+	/** Workers running at once on the host, 1 to 64; default 4. More tasks wait in a queue. */
 	maxWorkers?: number;
 	/** Tasks waiting for a worker slot, first in first out; one more is refused. Default 16. */
 	maxQueued?: number;
@@ -164,35 +166,6 @@ export interface CodingOptions {
 	/** Override report delivery, for example to schedule a background conversation turn. */
 	onResult?: (result: CodingResult) => Promise<void>;
 }
-/**
- * The worker's host hold check: the plugin's extra rules, else the linked host rules, with the
- * classes of every check that holds a call so yolo mode can judge it; a check that holds a call
- * without telling its classes leaves the call unclassed.
- */
-function workerHolds(
-	extra: HoldCheck | undefined,
-	linked: () => HoldCheck,
-): HoldCheck {
-	const check: HoldCheck = (tool, input, scope) =>
-		extra?.(tool, input, scope) ?? linked()(tool, input, scope);
-	check.classesOf = (tool, input, scope) => {
-		const found: string[] = [];
-		for (const holds of extra ? [extra, linked()] : [linked()]) {
-			if (holds(tool, input, scope) === undefined) continue;
-			const classes = holds.classesOf?.(tool, input, scope);
-			if (!classes?.length) return undefined;
-			found.push(...classes);
-		}
-		return found.length ? [...new Set(found)] : undefined;
-	};
-	return check;
-}
-function checkCount(name: string, value: number | undefined, least: number) {
-	if (value !== undefined && (!Number.isSafeInteger(value) || value < least))
-		throw new Error(
-			`${name} must be a whole number of at least ${least}; got ${value}.`,
-		);
-}
 async function refusal<T>(operation: () => Promise<T>): Promise<T> {
 	try {
 		return await operation();
@@ -212,8 +185,9 @@ export function coding(options: CodingOptions) {
 		checkLimit("limits.heldEntries", options.limits?.heldEntries);
 		checkLimit("limits.heldChars", options.limits?.heldChars);
 		checkLimit("diagnosticChars", options.diagnosticChars);
-		checkCount("maxWorkers", options.maxWorkers, 1);
-		checkCount("maxQueued", options.maxQueued, 0);
+		if (options.maxWorkers !== undefined) checkMaxWorkers(options.maxWorkers);
+		if (options.maxQueued !== undefined)
+			checkCount("maxQueued", options.maxQueued, 0);
 		const longRunning = options.autonomy?.longRunningMaxMs;
 		if (
 			longRunning !== undefined &&

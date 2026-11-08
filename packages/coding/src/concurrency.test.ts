@@ -320,6 +320,62 @@ test("past the host-wide cap tasks queue in order, start as slots free, and a fu
 	).toThrow("longRunningMaxMs");
 });
 
+test("setMaxWorkers starts queued tasks in order when raised, and when lowered keeps running ones and queues new", async () => {
+	const { shelf } = await fixture();
+	const order: number[] = [];
+	const releases = new Map<number, () => void>();
+	const started = new Map<number, ReturnType<typeof gate>>();
+	for (const id of [1, 2, 3, 4, 5]) started.set(id, gate());
+	const { desk: coding } = desk({
+		shelf,
+		maxWorkers: 1,
+		worker: {
+			run: async (job) => {
+				order.push(job.id);
+				started.get(job.id)?.resolve(undefined);
+				await new Promise<void>((done) => releases.set(job.id, done));
+				return `done ${job.id}`;
+			},
+		},
+	});
+	for (let index = 0; index < 4; index++) await coding.start(request());
+	await started.get(1)?.promise;
+	expect(coding.workers()).toEqual({ max: 1, running: 1, queued: 3 });
+	coding.setMaxWorkers(3);
+	expect(coding.busy()).toEqual([
+		"Coding #1 in sample/project",
+		"Coding #2 in sample/project",
+		"Coding #3 in sample/project",
+		"Coding #4 in sample/project, queued (position 1)",
+	]);
+	await Promise.all([started.get(2)?.promise, started.get(3)?.promise]);
+	expect(coding.workers()).toEqual({ max: 3, running: 3, queued: 1 });
+	coding.setMaxWorkers(1);
+	expect(coding.workers()).toEqual({ max: 1, running: 3, queued: 1 });
+	const fifth = await coding.start(request());
+	expect(fifth.queuePosition).toBe(2);
+	releases.get(1)?.();
+	releases.get(2)?.();
+	await Bun.sleep(50);
+	// Two finished but one still runs, which is the limit: nothing more starts.
+	expect(order.toSorted()).toEqual([1, 2, 3]);
+	expect(coding.workers()).toEqual({ max: 1, running: 1, queued: 2 });
+	releases.get(3)?.();
+	await started.get(4)?.promise;
+	expect(coding.workers()).toEqual({ max: 1, running: 1, queued: 1 });
+	releases.get(4)?.();
+	await started.get(5)?.promise;
+	releases.get(5)?.();
+	await coding.idle();
+	expect(order.slice(3)).toEqual([4, 5]);
+	for (const bad of [0, 65, 2.5, Number.NaN])
+		expect(() => coding.setMaxWorkers(bad)).toThrow("from 1 to 64");
+	coding.setMaxWorkers(64);
+	expect(() =>
+		desk({ shelf, worker: { run: async () => "" }, maxWorkers: 65 }),
+	).toThrow("maxWorkers");
+});
+
 test("a stop drops queued tasks with a notice and waits only for the running worker", async () => {
 	const { shelf } = await fixture();
 	const ran: number[] = [];

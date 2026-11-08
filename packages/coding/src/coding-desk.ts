@@ -21,6 +21,7 @@ import {
 	workTimeout,
 	YOLO_CARDED_SHELL_CLASSES,
 } from "pi-roundtable/kit";
+import { checkCount, checkMaxWorkers, checkTime } from "./limits.ts";
 import type {
 	Integration,
 	RepoShelf,
@@ -28,6 +29,8 @@ import type {
 	WorkerTree,
 } from "./repo-shelf.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
+
+export { checkLimit } from "./limits.ts";
 
 export type HeldCallAnswer = "approved" | "declined" | "held";
 /** Who spoke the turn that started a job, as yolo and long-running modes need to know. */
@@ -167,16 +170,6 @@ export interface CodingLimits {
 	/** Longest held-action entry; default 1,000 characters. */
 	heldChars?: number;
 }
-export function checkLimit(name: string, value: number | undefined): void {
-	if (
-		value !== undefined &&
-		value !== Number.POSITIVE_INFINITY &&
-		(!Number.isSafeInteger(value) || value < 1)
-	)
-		throw new Error(
-			`${name} must be a whole number of at least 1, or Infinity; got ${value}.`,
-		);
-}
 export const MAX_CODING_TASK_CHARS = 8_000;
 const MAX_REPORT_CHARS = 20_000;
 const MAX_HELD_ENTRIES = 10;
@@ -193,22 +186,8 @@ const DEFAULT_TIMEOUT_MS = 3_600_000;
 const DEFAULT_LONG_RUNNING_MS = 4 * 60 * 60_000;
 /** How often a run past its own limit looks again at the starter's long-running mode. */
 const LONG_RUNNING_STEP_MS = 60_000;
-const MAX_TIMER_MS = 2_147_483_647;
 const DEFAULT_MAX_WORKERS = 4;
 const DEFAULT_MAX_QUEUED = 16;
-
-function checkTime(name: string, value: number): void {
-	if (!Number.isFinite(value) || value <= 0 || value > MAX_TIMER_MS)
-		throw new AgentError(
-			`${name} must be positive, finite and at most ${MAX_TIMER_MS}.`,
-		);
-}
-function checkCount(name: string, value: number, least: number): void {
-	if (!Number.isSafeInteger(value) || value < least)
-		throw new AgentError(
-			`${name} must be a whole number of at least ${least}; got ${value}.`,
-		);
-}
 
 /** The rule a class belongs to: the part before its first dot, or a rule's bare name. */
 function ruleOf(id: string): string {
@@ -229,7 +208,7 @@ interface Running {
  */
 export class CodingDesk {
 	readonly #options: CodingDeskOptions;
-	readonly #maxWorkers: number;
+	#maxWorkers: number;
 	readonly #maxQueued: number;
 	readonly #longRunningMs: number;
 	readonly #yoloApproves: (id: string) => boolean;
@@ -252,7 +231,7 @@ export class CodingDesk {
 		checkTime("autonomy.longRunningMaxMs", longRunning);
 		this.#maxWorkers = options.maxWorkers ?? DEFAULT_MAX_WORKERS;
 		this.#maxQueued = options.maxQueued ?? DEFAULT_MAX_QUEUED;
-		checkCount("maxWorkers", this.#maxWorkers, 1);
+		checkMaxWorkers(this.#maxWorkers);
 		checkCount("maxQueued", this.#maxQueued, 0);
 		this.#longRunningMs = longRunning;
 		const allow = new Set(options.autonomy?.yolo?.allow ?? []);
@@ -273,6 +252,20 @@ export class CodingDesk {
 	/** The channels of queued tasks, in queue order. */
 	queuedChannels(): ChannelKey[] {
 		return this.#queue.map((job) => job.channel);
+	}
+	/** Workers allowed at once, and how many run and wait now. */
+	workers(): { max: number; running: number; queued: number } {
+		const { size: running } = this.#running;
+		return { max: this.#maxWorkers, running, queued: this.#queue.length };
+	}
+	/**
+	 * Changes how many workers run at once, 1 to 64. A higher limit starts queued tasks now, in
+	 * order; a lower one stops no running worker, and new tasks queue until fewer run.
+	 */
+	setMaxWorkers(max: number): void {
+		checkMaxWorkers(max);
+		this.#maxWorkers = max;
+		this.#fill();
 	}
 	busy(): string[] {
 		return [
@@ -382,6 +375,9 @@ export class CodingDesk {
 	/** Frees the job's slot and starts the next queued tasks. */
 	#free(job: CodingJob): void {
 		this.#running.delete(job.id);
+		this.#fill();
+	}
+	#fill(): void {
 		while (
 			!this.#stopped &&
 			this.#running.size < this.#maxWorkers &&
