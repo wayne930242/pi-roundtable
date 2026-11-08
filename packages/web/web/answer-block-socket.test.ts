@@ -29,12 +29,15 @@ class FakeSocket {
 
 let page: TestPage;
 let original: unknown;
+const started: AppConnection[] = [];
 beforeAll(async () => {
 	page = await openPage();
 	original = Reflect.get(globalThis, "WebSocket");
 	Reflect.set(globalThis, "WebSocket", FakeSocket);
 });
 afterAll(async () => {
+	// A connection left running would fetch and reconnect inside the next test file.
+	for (const connection of started) connection.stop();
 	Reflect.set(globalThis, "WebSocket", original);
 	await page.unmount();
 	await releaseDom();
@@ -49,6 +52,7 @@ const scope = (block = 0) => ({
 const opened = () => {
 	const connection = new AppConnection("test");
 	connection.start();
+	started.push(connection);
 	const socket = FakeSocket.all.at(-1) as FakeSocket;
 	socket.onopen?.();
 	return { connection, socket };
@@ -73,7 +77,16 @@ test("an answer to a block goes out as a block_answer frame and resolves when th
 		type: "accepted",
 		id: frame.id,
 		room: "app:agent.guide",
-		message: { id: 9 } as never,
+		// The page's store takes this frame, so the message is whole: other files read the same store.
+		message: {
+			id: 9,
+			room: "app:agent.guide",
+			kind: "owner",
+			author: "Ada",
+			text: "User picked A.",
+			files: [],
+			at: "2026-11-08T04:00:00.000Z",
+		},
 	});
 	expect(await pending).toEqual({ ok: true });
 	connection.stop();
