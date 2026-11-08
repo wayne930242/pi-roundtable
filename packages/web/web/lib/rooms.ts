@@ -17,6 +17,9 @@ import type {
 } from "../../src/api-types.ts";
 import { isStartOver } from "../../src/api-types.ts";
 import { type RoomCard, roomCards, shownAbove } from "./room-surface.ts";
+import type { ToolChip } from "./tool-chip.ts";
+
+export type { ToolChip };
 
 // The owner app's state: a pure reducer over the socket's frames and the page's own actions, so
 // what the page shows can be tested without a browser. Nothing here touches the DOM or the clock.
@@ -29,14 +32,6 @@ const PROGRESS_TOOLS = 20;
 export const ROOM_PAGE = 50;
 /** The most ended cards kept for a room whose messages the page holds none of; the history brings the rest. */
 const KEPT_RESOLVED_CARDS = 30;
-
-export interface ToolChip {
-	id: string;
-	tool: string;
-	preview?: string;
-	status: "running" | "ok" | "failed" | "refused";
-	refused?: "declined" | "expired" | "pending" | "held" | "withdrawn";
-}
 
 /** What the running turn shows: the text it streams and the tools it runs. */
 export interface Progress {
