@@ -37,7 +37,7 @@
 		"fixture:app": "bun scripts/fixture-app.ts",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p web",
 		"lint": "biome check .",
-		"test": "bun test"
+		"test": "bun test --isolate"
 	},
 	"dependencies": {
 		"jose": "6.2.12",

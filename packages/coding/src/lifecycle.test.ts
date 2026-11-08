@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import type { HoldCheck } from "pi-roundtable";
 import type { CodingJob } from "./coding-desk.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
+import { until } from "./testing/until.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
 const dirs: string[] = [];
@@ -74,16 +75,16 @@ test("aborting a real worker during its approval card kills the child process", 
 	controller.abort();
 	await expect(result).rejects.toThrow("stopped");
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("normal worker completion cleans up shell descendants in its process group", async () => {
 	const { worker, job, repoDir } = fixture();
 	writeFileSync(join(repoDir, "start-descendant"), "start");
 	await worker.run(job, AbortSignal.timeout(10_000), async () => "held");
 	const pid = Number(readFileSync(join(repoDir, "descendant.pid"), "utf8"));
-	await Bun.sleep(50); // Allow the OS to reap the terminated orphan.
+	await until(() => !running(pid), "the terminated orphan is reaped");
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("worker configuration failures return a credential-free exit category", async () => {
 	const { worker, job, repoDir } = fixture();
@@ -109,7 +110,7 @@ test("worker configuration failures return a credential-free exit category", asy
 	}
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("worker standing context includes regular repo instructions, not parent or symlinked instructions", async () => {
 	const { worker, job, repoDir } = fixture();
@@ -132,7 +133,7 @@ test("worker standing context includes regular repo instructions, not parent or 
 	);
 	expect(second).toContain("externalContext=false");
 	expect(second).toContain("repoContext=true");
-});
+}, 30_000);
 
 test("trusted host prompt and workspace carry into the process without bypassing private hold policy", async () => {
 	const { job, repoDir, agentDir } = fixture();
@@ -179,7 +180,7 @@ test("trusted host prompt and workspace carry into the process without bypassing
 	expect(report).toContain("Do not retry");
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("a held call carries the hold classes of every check that holds it", async () => {
 	const { job, agentDir } = fixture();
@@ -209,4 +210,4 @@ test("a held call carries the hold classes of every check that holds it", async 
 		["shell.write", "host.private"],
 		undefined,
 	]);
-});
+}, 30_000);

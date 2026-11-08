@@ -31,7 +31,11 @@ import { coding } from "./coding-plugin.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf } from "./repo-shelf.ts";
 import { REPO_TOOLS } from "./repo-tools.ts";
+import { until } from "./testing/until.ts";
 
+const FAUX_PROVIDER = fileURLToPath(
+	new URL("./testing/faux-provider.ts", import.meta.url),
+);
 const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -502,15 +506,12 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 	const repoDir = await shelf.add("sample/project");
 	const agentDir = join(dir, "login");
 	mkdirSync(agentDir);
-	const extension = fileURLToPath(
-		new URL("./testing/faux-provider.ts", import.meta.url),
-	);
 	for (const answer of ["approved", "declined", "held"] as const) {
 		const marker = join(repoDir, "..", "approval-marker.txt");
 		rmSync(marker, { force: true });
 		let reviewed = 0;
 		const heard: string[] = [];
-		const worker = new PiCodingWorker({ agentDir, packages: [extension] });
+		const worker = new PiCodingWorker({ agentDir, packages: [FAUX_PROVIDER] });
 		const job: CodingJob & { dir: string } = {
 			...request(),
 			id: 1,
@@ -546,16 +547,13 @@ test("real out-of-process Pi worker requests host approval and cannot execute a 
 		expect(() => process.kill(pid, 0)).toThrow();
 		if (answer !== "approved") expect(report).toContain("Do not retry");
 	}
-});
+}, 60_000);
 
 test("a worker is told its scratch dir, and a write inside it runs without asking the owner", async () => {
 	const { shelf, dir } = await fixture();
 	const repoDir = await shelf.add("sample/project");
 	const agentDir = join(dir, "login");
 	mkdirSync(agentDir);
-	const extension = fileURLToPath(
-		new URL("./testing/faux-provider.ts", import.meta.url),
-	);
 	// The faux model writes next to the clone, which here is the scratch dir.
 	const scratchDir = realpathSync(join(repoDir, ".."));
 	const marker = join(scratchDir, "approval-marker.txt");
@@ -563,7 +561,7 @@ test("a worker is told its scratch dir, and a write inside it runs without askin
 	let reviewed = 0;
 	const worker = new PiCodingWorker({
 		agentDir,
-		packages: [extension],
+		packages: [FAUX_PROVIDER],
 		scratchDir,
 	});
 	const report = await worker.run(
@@ -584,20 +582,17 @@ test("a worker is told its scratch dir, and a write inside it runs without askin
 	expect(existsSync(marker)).toBe(true);
 	// The worker is told where its scratch dir is, without the task having to say so.
 	expect(report).toContain("scratchPrompt=true");
-});
+}, 30_000);
 
 test("a host words what the worker reads when a call is declined or held", async () => {
 	const { shelf, dir } = await fixture();
 	const repoDir = await shelf.add("sample/project");
 	const agentDir = join(dir, "login");
 	mkdirSync(agentDir);
-	const extension = fileURLToPath(
-		new URL("./testing/faux-provider.ts", import.meta.url),
-	);
 	for (const answer of ["declined", "held"] as const) {
 		const worker = new PiCodingWorker({
 			agentDir,
-			packages: [extension],
+			packages: [FAUX_PROVIDER],
 			blockText: (kind, action) =>
 				`Host wording for ${kind}: it would ${action}.`,
 		});
@@ -615,7 +610,7 @@ test("a host words what the worker reads when a call is declined or held", async
 		expect(report).toContain(`Host wording for ${answer}: it would write`);
 		expect(report).not.toContain("Do not retry");
 	}
-});
+}, 60_000);
 
 test("metadata never follows links or reads directories, FIFOs or bytes past its limit", async () => {
 	const { shelf, dir } = await fixture();
@@ -1402,7 +1397,7 @@ test("repo_task records the starting conversation and says when a task waits in 
 		"Queued coding task #2 in sample/project at position 1",
 	);
 	expect(await call()).toContain("All 1 coding workers are busy");
-	await Bun.sleep(50);
+	await until(() => jobs[0], "the first worker started"); // after a real worktree
 	expect(jobs[0]?.starter).toEqual({
 		channel: "test:room",
 		speaker: {

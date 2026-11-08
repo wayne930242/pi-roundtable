@@ -259,14 +259,20 @@ export const eventLog: string[] = [];
 const PLUGIN_SELECTION = { tools: ["memory_add"], groups: ["workspace"] };
 
 /**
- * Waits until every queued channel task has settled and every active agent has its avatar,
- * which startup draws in the background; a fixed sleep was too short on a slow runner.
+ * Waits until every queued channel task has settled, every active agent has its avatar, which
+ * startup draws in the background, and every temp knight whose task ended is stamped finished
+ * (the stamp is written after the turn, off the queue; with an action held, a knight stays
+ * working); a fixed sleep was too short on a slow runner.
  */
 export async function settle(): Promise<void> {
 	const deadline = Date.now() + 10_000;
 	const quiet = () =>
 		queue.busy().length === 0 &&
-		store.agents().every((a) => a.status !== "active" || a.avatarHash);
+		store.agents().every((a) => a.status !== "active" || a.avatarHash) &&
+		(runtime.held.size > 0 ||
+			store
+				.agents()
+				.every((a) => !a.parent || a.status !== "active" || a.finishedAt));
 	while (!quiet() && Date.now() < deadline) await Bun.sleep(5);
 	// Work the last task queued is still finishing.
 	await Bun.sleep(20);

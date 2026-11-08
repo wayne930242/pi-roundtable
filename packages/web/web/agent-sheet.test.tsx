@@ -14,6 +14,7 @@ import {
 	q,
 	SCOUT,
 	settle,
+	settled,
 	setupAgentSheet,
 	submit,
 	tabNamed,
@@ -70,7 +71,10 @@ test("the sheet is a wide sheet titled Edit knight, with the knight's fields, ch
 	// The look is a tab of its own, drawn when it is shown.
 	expect(q(".agent-sheet .creator")).toBeNull();
 	await page.click(tabNamed("Look"));
-	await page.act(() => settle(80));
+	await settled(
+		() => q(".agent-sheet .creator"),
+		"the Look tab draws the creator",
+	);
 	expect(q(".agent-sheet .creator")).not.toBeNull();
 });
 
@@ -147,7 +151,10 @@ test("the review lists a changed name and model beside the prompt diff", async (
 test("the prompt opens in a full-screen editor that edits the same text", async () => {
 	await open();
 	await page.click(button("Full screen"));
-	await settle(40);
+	await settled(
+		() => q<HTMLDialogElement>("dialog.sheet.full")?.open,
+		"the full-screen editor opens",
+	);
 	const full = q<HTMLDialogElement>("dialog.sheet.full");
 	expect(full?.open).toBe(true);
 	expect(full?.getAttribute("aria-label")).toBe("Prompt");
@@ -161,7 +168,10 @@ test("the prompt opens in a full-screen editor that edits the same text", async 
 	await page.click(
 		full?.querySelector<HTMLElement>(".sheet-head button") ?? null,
 	);
-	await page.act(() => settle(300));
+	await settled(
+		() => q("dialog.sheet.full")?.hasAttribute("open") === false,
+		"the full-screen editor closes",
+	);
 	expect(q("dialog.sheet.full")?.hasAttribute("open")).toBe(false);
 	// The agent sheet itself stays open under it.
 	expect(q<HTMLDialogElement>("dialog.sheet.wide")?.open).toBe(true);
@@ -287,7 +297,10 @@ test("History says so when no change was kept, and shows a failure to read it", 
 					new Event("cancel", { bubbles: true, cancelable: true }),
 				);
 		});
-		await page.act(() => settle(300));
+		await settled(
+			() => !q(".history")?.closest("dialog")?.open,
+			"the history sheet closes",
+		);
 		await openHistory();
 		expect(q(".history .failure")?.textContent).toBe("history is down");
 	} finally {
@@ -304,8 +317,10 @@ test("Escape in the full-screen editor closes only the editor", async () => {
 			new Event("cancel", { bubbles: true, cancelable: true }),
 		);
 	});
-	await page.act(() => settle(300));
-	expect(q("dialog.sheet.full")?.hasAttribute("open")).toBe(false);
+	await settled(
+		() => q("dialog.sheet.full")?.hasAttribute("open") === false,
+		"the full-screen editor closes",
+	);
 	expect(q<HTMLDialogElement>("dialog.sheet.wide")?.open).toBe(true);
 });
 
@@ -316,7 +331,10 @@ test("the notifications switch mutes the room for every owner and shows the bell
 		const toggle = q<HTMLButtonElement>(".agent-sheet [role=switch]");
 		expect(toggle?.getAttribute("aria-checked")).toBe("true");
 		await page.click(toggle);
-		await settle(20);
+		await settled(
+			() => setMute.mock.calls.length > 0,
+			"the switch asks the server",
+		);
 		expect(setMute).toHaveBeenCalledWith(SCOUT, true);
 		expect(q(".agent-sheet [role=switch]")?.getAttribute("aria-checked")).toBe(
 			"false",
@@ -353,7 +371,7 @@ test("Change look after Edit knight for the same knight scrolls to the creator",
 		await open();
 		expect(scrolled).toHaveLength(0);
 		await page.act(() => openAgentSheet("scout", { look: true }));
-		await page.act(() => settle(80));
+		await settled(() => scrolled.length > 0, "the creator scrolls into view");
 		expect(scrolled).toHaveLength(1);
 		expect(scrolled[0]?.querySelector(".creator")).not.toBeNull();
 	} finally {
@@ -366,14 +384,20 @@ test("opening the sheet again for the same agent reads the profile again, and ke
 	expect(agent).toHaveBeenCalledTimes(1);
 	agent.mockResolvedValue(profile({ displayName: "Scout Prime" }));
 	await page.act(() => openAgentSheet("scout"));
-	await page.act(() => settle(80));
+	await settled(
+		() => agent.mock.calls.length === 2,
+		"the profile is read again",
+	);
 	expect(agent).toHaveBeenCalledTimes(2);
 	expect(q<HTMLInputElement>(".agent-sheet input")?.value).toBe("Scout Prime");
 	// An edit that is not saved survives the next ask.
 	await typeInto(q<HTMLInputElement>(".agent-sheet input"), "Scout Two");
 	agent.mockResolvedValue(profile({ displayName: "Scout Third" }));
 	await page.act(() => openAgentSheet("scout"));
-	await page.act(() => settle(80));
+	await settled(
+		() => agent.mock.calls.length === 3,
+		"the profile is read a third time",
+	);
 	expect(agent).toHaveBeenCalledTimes(3);
 	expect(q<HTMLInputElement>(".agent-sheet input")?.value).toBe("Scout Two");
 });
@@ -390,10 +414,11 @@ test("the system Back takes the sheet away with the page it was opened on", asyn
 		window.location.hash = "#/rooms";
 	});
 	// The browser reports the new address a moment later.
-	for (let waited = 0; waited < 3000 && currentAgentSheet(); waited += 50)
-		await page.act(() => settle(50));
-	await page.act(() => settle(300));
-	expect(q<HTMLDialogElement>("dialog.sheet.wide")?.open).toBe(false);
+	await settled(() => !currentAgentSheet(), "the sheet is let go");
+	await settled(
+		() => q<HTMLDialogElement>("dialog.sheet.wide")?.open === false,
+		"the sheet closes with its page",
+	);
 	expect(currentAgentSheet()).toBeUndefined();
 });
 
@@ -428,7 +453,14 @@ test("#/agent/<name> stands in for the agent's room, with the sheet open and no 
 			<Host />
 		</>,
 	);
-	await page.act(() => settle(120));
+	await settled(
+		() => window.location.hash === `#/room/${encodeURIComponent(SCOUT)}`,
+		"the old page stands in for the room",
+	);
+	await settled(
+		() => q<HTMLDialogElement>("dialog.sheet")?.open,
+		"the sheet opens",
+	);
 	expect(window.location.hash).toBe(`#/room/${encodeURIComponent(SCOUT)}`);
 	// The link's own entry was replaced, not added to.
 	expect(window.history.length).toBe(afterLink);
@@ -441,7 +473,7 @@ test("#/agent/<name> for an agent that is not listed goes to the room list", asy
 	store.dispatch({ type: "rooms_loaded", rooms: [] });
 	window.location.hash = "#/agent/ghost";
 	await page.render(<AgentPage name="ghost" />);
-	await page.act(() => settle(60));
+	await settled(() => window.location.hash === "#/rooms", "the room list");
 	expect(window.location.hash).toBe("#/rooms");
 });
 
@@ -463,7 +495,10 @@ test("the header's name opens the sheet while the picture stays the drawer's but
 	try {
 		window.innerWidth = 390;
 		await page.render(<Room />);
-		await page.act(() => settle(60));
+		await settled(
+			() => q("button.room-name")?.textContent === "Scout",
+			"the header",
+		);
 		const name = q<HTMLButtonElement>("button.room-name");
 		expect(name?.textContent).toBe("Scout");
 		expect(name?.getAttribute("aria-haspopup")).toBe("dialog");
@@ -472,7 +507,10 @@ test("the header's name opens the sheet while the picture stays the drawer's but
 			"Switch rooms",
 		);
 		await page.click(name);
-		await page.act(() => settle(80));
+		await settled(
+			() => q<HTMLDialogElement>("dialog.sheet.wide")?.open,
+			"the name opens the sheet",
+		);
 		expect(q<HTMLDialogElement>("dialog.sheet.wide")?.open).toBe(true);
 		expect(q(".room-muted")).toBeNull();
 	} finally {
@@ -490,7 +528,7 @@ test("a muted room shows the bell-slash in its header, and the room menu has the
 	try {
 		store.dispatch({ type: "rooms_loaded", rooms: [view({ muted: true })] });
 		await page.render(<Room />);
-		await page.act(() => settle(60));
+		await settled(() => q(".room-muted"), "the bell-slash");
 		expect(q(".room-muted")?.getAttribute("aria-label")).toBe(
 			"Notifications are off",
 		);
@@ -501,9 +539,12 @@ test("a muted room shows the bell-slash in its header, and the room menu has the
 		const toggle = q<HTMLButtonElement>("#room-menu-mute");
 		expect(toggle?.getAttribute("aria-checked")).toBe("false");
 		await page.click(toggle);
-		await page.act(() => settle(20));
+		await settled(
+			() => setMute.mock.calls.length > 0,
+			"the switch asks the server",
+		);
 		expect(setMute).toHaveBeenCalledWith(SCOUT, false);
-		expect(q(".room-muted")).toBeNull();
+		await settled(() => !q(".room-muted"), "the bell-slash goes");
 	} finally {
 		messages.mockRestore();
 		setMute.mockRestore();
@@ -534,7 +575,10 @@ test("a group's header name is a button that opens the group's sheet, not an age
 				<RoomPage roomKey="app:group.team" />
 			</ConfigContext.Provider>,
 		);
-		await page.act(() => settle(60));
+		await settled(
+			() => q("button.room-name")?.textContent === "Team",
+			"the group's header",
+		);
 		const name = q<HTMLButtonElement>("button.room-name");
 		expect(name?.textContent).toBe("Team");
 		expect(name?.title).toBe("Edit group");
@@ -561,10 +605,12 @@ test("Archive asks first, naming the agent, and archives it through the server",
 		await page.click(button("Archive Scout"));
 		// The sheet gives way to the question.
 		expect(currentAgentSheet()).toBeUndefined();
-		await page.act(() => settle(60));
-		const dialog = all<HTMLDialogElement>("dialog.sheet").find(
-			(one) => one.getAttribute("aria-label") === "Archive Scout?",
-		);
+		const question = () =>
+			all<HTMLDialogElement>("dialog.sheet").find(
+				(one) => one.getAttribute("aria-label") === "Archive Scout?",
+			);
+		await settled(() => question()?.open, "the question is asked");
+		const dialog = question();
 		expect(dialog?.open).toBe(true);
 		expect(archive).not.toHaveBeenCalled();
 		await page.click(
@@ -572,9 +618,16 @@ test("Archive asks first, naming the agent, and archives it through the server",
 				(one) => one.textContent === "Archive",
 			) ?? null,
 		);
-		await page.act(() => settle(60));
+		await settled(
+			() => archive.mock.calls.length > 0,
+			"the server is asked to archive",
+		);
 		expect(archive).toHaveBeenCalledWith("scout");
 		// The room is gone from the list, so the page leaves it.
+		await settled(
+			() => window.location.hash === "#/rooms",
+			"the page leaves the room",
+		);
 		expect(window.location.hash).toBe("#/rooms");
 	} finally {
 		archive.mockRestore();

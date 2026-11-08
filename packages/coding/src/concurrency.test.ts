@@ -20,6 +20,7 @@ import {
 	codingReport,
 } from "./coding-desk.ts";
 import { RepoShelf, WORKTREES_DIR } from "./repo-shelf.ts";
+import { until } from "./testing/until.ts";
 
 const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
@@ -356,7 +357,8 @@ test("setMaxWorkers starts queued tasks in order when raised, and when lowered k
 	expect(fifth.queuePosition).toBe(2);
 	releases.get(1)?.();
 	releases.get(2)?.();
-	await Bun.sleep(50);
+	// Finishing a worker integrates its branch with real git, so wait for the slot to drain.
+	await until(() => coding.workers().running === 1, "two workers finished");
 	// Two finished but one still runs, which is the limit: nothing more starts.
 	expect(order.toSorted()).toEqual([1, 2, 3]);
 	expect(coding.workers()).toEqual({ max: 1, running: 1, queued: 2 });
