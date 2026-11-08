@@ -97,7 +97,7 @@ Discord is optional: a host that leaves `discord` out starts with both plugins.
 `remoteMcp` still needs `http`, since its endpoints are on the `public` listener.
 What is missing then:
 
-- `mcpConnectors` adds no `/<root> connector` commands. The registry, `CONNECTORS`, and its `add`, `describe` and `remove` work as with Discord, so a host manages connectors through them, as the web app does.
+- `mcpConnectors` adds no `/<root> connector` commands. The registry, `CONNECTORS`, and its `add`, `describe`, `resync` and `remove` work as with Discord, so a host manages connectors through them, as the web app does.
 - `remoteMcp` adds no `/<root> mcp` commands and no `/mcp/discord/<token>` route, so no Discord channel tool is listed anywhere. `/mcp/personal` relays turns as with Discord. Channel grants stay stored, unused, and `REMOTE_MCP` still reads them.
 - With no agent server either (no `agents`), the default remote turns run on the core's runtime, and a relayed message does not confirm held actions.
 
@@ -110,6 +110,7 @@ What is missing then:
 | `contextForge.user` | `string` | required | The admin user the plugin acts as, an email address |
 | `serverPrefix` | `string` | `roundtable-conn-` | The start of every connector's virtual server name in ContextForge |
 | `maxToolName` | `number` | `45` | Tools whose names are longer are left out of a connector's server, since the model API limits a tool name (64 characters for Claude) and a client may add a prefix of its own |
+| `resyncIntervalMs` | `number` | `1200` | The least time between two admin requests of a resync, which makes five per connector: 50 a minute by default, half of ContextForge's limit, which locks the admin account (every MCP call uses it) for 15 minutes when exceeded. `0` turns pacing off |
 | `messages` | `Partial<ConnectorMessages>` | English | The Discord text and the registry's refusals, in your wording |
 
 It provides the `CONNECTORS` service (`Connectors`):
@@ -126,11 +127,17 @@ It provides the `CONNECTORS` service (`Connectors`):
 | `add({ name, url, description, header?, token? })` | Adds a connector as `/<root> connector add` does: no token is no authentication, a token alone is sent as `Authorization: Bearer`, and a header name sends the token in that header. The token goes to ContextForge only; the result, `{ connector, skipped }`, never holds it |
 | `describe(name, description)` | Changes a connector's purpose |
 | `remove(name)` | Deletes a connector, its virtual server, and its upstream server with its token |
+| `resync(name)` | Has ContextForge read the connector's upstream server again, then makes its virtual server serve the gateway's tools as they are now, with their hints: a tool the upstream renamed is attached, a removed one detached. The gateway, the virtual server, the token, the purpose and the stored row stay. Returns `{ connector, skipped, added, removed }`; `version` changes only when the tools or their hints did |
+| `resyncAll()` | `resync` for every connector, one after the other; a connector that cannot be read is logged, left as it was, and reported as `{ name, error }`. When ContextForge answers 429 it stops there without retrying: the connector and the ones after it keep their servers and are reported as not resynced (`resyncNotAttempted`) |
 
-A refusal from `add`, `describe` or `remove` is a `ConnectorError` whose message is the configured wording, ready to show the owner; it also carries `refusal: true` for a host that does not import the class.
+A refusal from `add`, `describe`, `resync` or `remove` is a `ConnectorError` whose message is the configured wording, ready to show the owner; it also carries `refusal: true` for a host that does not import the class.
 `list()` returns each connector's full URL, which may hold a credential in its path or query: show the owner `displayUrl(url, unreadable)` (exported), which keeps only the scheme and host.
 
-The plugin reads the stored connectors, and resolves each one's server in ContextForge, in its `preflight`, which the host runs after every plugin is set up and before any service starts or any listener opens: during `setup` `list()`, `servers()` and `profileSources()` are empty and `version` is 0, and `version` changes once the connectors are loaded. Read them from a service's `start`, or later (a turn, a command, a request); no command or turn arrives before they are loaded. `resolve(serverName)` and `token` work from setup. A host's `Roundtable.check()` runs no preflight, so it needs neither the database nor ContextForge. The runtime's startup tool probe runs before this preflight, so it does not see the connectors' servers: a `requiredTools` entry that only a connector's server provides fails the start; the first real session connects to them instead.
+A resync makes five ContextForge admin requests per connector, one after another (the refresh, the tool list, the server update, and reading the server back), and ContextForge limits its admin API (100 requests a minute on its default tier) and locks the admin account for 15 minutes when it is exceeded. A resync therefore waits `resyncIntervalMs` between requests, whichever connector they are for, and a 429 ends a `resyncAll` at once (a single `resync` fails with `ConnectorRateLimited`, a `ConnectorError`); neither retries. At the default pace a boot resync takes about six seconds per connector.
+Tools of a gateway are matched by the gateway ID ContextForge reports on each tool.
+A connector whose upstream no longer offers a usable tool is refused and keeps its virtual server.
+
+The plugin reads the stored connectors, and resolves each one's server in ContextForge, in its `preflight`, which the host runs after every plugin is set up and before any service starts or any listener opens: during `setup` `list()`, `servers()` and `profileSources()` are empty and `version` is 0, and `version` changes once the connectors are loaded. After loading, the preflight runs `resyncAll()`, so a tool its upstream renamed or removed since the connector was added is attached or detached by the time the host starts; a connector ContextForge cannot refresh is logged and keeps the server it has, and no connector is ever removed by it. Read them from a service's `start`, or later (a turn, a command, a request); no command or turn arrives before they are loaded. `resolve(serverName)` and `token` work from setup. A host's `Roundtable.check()` runs no preflight, so it needs neither the database nor ContextForge. The runtime's startup tool probe runs before this preflight, so it does not see the connectors' servers: a `requiredTools` entry that only a connector's server provides fails the start; the first real session connects to them instead.
 The plugin does not decide which agent uses which connector.
 The host reads the service, builds its own profiles, and compares `version` with the one it built at.
 A plugin registered after `mcpConnectors` can read the list like this:
@@ -183,6 +190,7 @@ The owner manages connectors on Discord with `/<root> connector`, where `<root>`
 | `add` | Opens a private form: name, MCP URL, purpose, and an optional token (sent as `Authorization: Bearer`, or under a header name you give). ContextForge stores the token encrypted; Discord shows the form's values to nobody else |
 | `list` | Lists the connectors with their tools; the URL is shown as scheme and host only, since some servers keep a credential in the path |
 | `describe` | Changes a connector's purpose |
+| `resync` | Reads the tools of one connector (or of every connector when none is named) from its server again and makes the virtual server serve them, so a tool the server renamed is attached without adding the connector again |
 | `remove` | Deletes the connector, its virtual server, and the upstream server with its token |
 
 ### `remoteMcp(options)`

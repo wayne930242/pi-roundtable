@@ -40,6 +40,9 @@ const FIELD = {
 
 const TOOL_PREVIEW = 12;
 
+const names = (tools: readonly string[]) =>
+	tools.map((t) => `\`${t}\``).join(" ");
+
 function connectorGroup(text: ConnectorMessages) {
 	const connector = (o: SlashCommandStringOption) =>
 		o
@@ -68,6 +71,18 @@ function connectorGroup(text: ConnectorMessages) {
 							.setDescription(text.newPurposeOption)
 							.setRequired(true)
 							.setMaxLength(1000),
+					),
+			)
+			.addSubcommand((sub) =>
+				sub
+					.setName("resync")
+					.setDescription(text.resyncDescription)
+					.addStringOption((o) =>
+						o
+							.setName("name")
+							.setDescription(text.resyncNameOption)
+							.setRequired(false)
+							.setAutocomplete(true),
 					),
 			)
 			.addSubcommand((sub) =>
@@ -186,6 +201,7 @@ export class ConnectorCommands {
 	async command(interaction: ChatInputCommandInteraction): Promise<void> {
 		const sub = interaction.options.getSubcommand(true);
 		if (sub === "list") return this.#list(interaction);
+		if (sub === "resync") return this.#resync(interaction);
 		const name = interaction.options.getString("name", true);
 		const text = this.#text;
 		if (sub === "describe") {
@@ -237,6 +253,43 @@ export class ConnectorCommands {
 				footer: text.addedFooter,
 			}),
 		);
+	}
+
+	/** One connector when the owner names it, every connector otherwise. */
+	async #resync(interaction: ChatInputCommandInteraction): Promise<void> {
+		const text = this.#text;
+		const name = interaction.options.getString("name");
+		const outcomes = name
+			? [
+					{
+						name,
+						...(await this.#owned(() => this.#registry.resync(name))),
+					},
+				]
+			: await this.#registry.resyncAll();
+		const sections = outcomes.length
+			? outcomes.flatMap((outcome) =>
+					"error" in outcome
+						? [text.resyncFailed(plain(outcome.name), plain(outcome.error))]
+						: [
+								[
+									section(outcome.connector, text),
+									text.resyncChanges(
+										names(outcome.added),
+										names(outcome.removed),
+									) || text.resyncUnchanged,
+									...(outcome.skipped.length
+										? [text.skippedTools(names(outcome.skipped))]
+										: []),
+								].join("\n"),
+							],
+				)
+			: [text.listEmpty(this.#root)];
+		await replyWithPanels(interaction, {
+			title: name ? text.resyncedTitle : text.resyncedAllTitle,
+			sections,
+			footer: text.resyncedFooter,
+		});
 	}
 
 	async #list(interaction: ChatInputCommandInteraction): Promise<void> {

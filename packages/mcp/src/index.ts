@@ -5,6 +5,8 @@ export type {
 	Connector,
 	ConnectorProfileSource,
 	NewConnector,
+	Resynced,
+	ResyncOutcome,
 } from "./connectors/connector-registry.ts";
 export { ConnectorError } from "./connectors/connector-registry.ts";
 export type {

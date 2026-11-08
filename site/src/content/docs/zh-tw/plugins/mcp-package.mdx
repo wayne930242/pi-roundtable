@@ -65,7 +65,7 @@ export default {
 ## Connectors
 
 `/roundtable connector add` 會開一個私人表單，讓你填 server 位址和 token。
-`list`、`describe` 和 `remove` 用來管理已加入的 connector。
+`list`、`describe`、`resync` 和 `remove` 用來管理已加入的 connector；`resync` 會重新向 connector 的伺服器讀取工具（沒指定名稱就處理全部），伺服器改過名的工具不必重新加入 connector 就會接上。
 只有 owner 能用這些指令。
 
 [ContextForge](https://github.com/IBM/mcp-context-forge) 保管每台上游 server 和它的 token。

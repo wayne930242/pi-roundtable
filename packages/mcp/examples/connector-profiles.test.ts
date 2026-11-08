@@ -27,6 +27,10 @@ test("the routing plugin builds a line per connector from the service", async ()
 			throw new Error("not used");
 		},
 		remove: async () => {},
+		resync: async () => {
+			throw new Error("not used");
+		},
+		resyncAll: async () => [],
 	};
 	const harness = await testPlugin(
 		connectorRouting((lines) => seen.push(lines)),

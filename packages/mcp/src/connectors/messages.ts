@@ -14,7 +14,10 @@ export interface ConnectorMessages {
 	listDescription: string;
 	describeDescription: string;
 	removeDescription: string;
+	resyncDescription: string;
 	nameOption: string;
+	/** The connector option of `resync`, which may be left empty. */
+	resyncNameOption: string;
 	newPurposeOption: string;
 
 	modalTitle: string;
@@ -46,6 +49,16 @@ export interface ConnectorMessages {
 	addedTitle: string;
 	addedFooter: string;
 	skippedTools(names: string): string;
+	resyncedTitle: string;
+	resyncedAllTitle: string;
+	resyncedFooter: string;
+	/** What a resync changed in a connector's tools; `added` and `removed` are lists of tool names, empty when none. */
+	resyncChanges(added: string, removed: string): string;
+	resyncUnchanged: string;
+	/** One connector of a resync of all that could not be refreshed; its tools are as before. */
+	resyncFailed(name: string, reason: string): string;
+	/** A connector a resync of all did not try, because ContextForge's request limit was reached on an earlier one. */
+	resyncNotAttempted: string;
 
 	/** Between a connector's name and its address in the list; the English default is two spaces. */
 	labelSeparator: string;
@@ -55,6 +68,8 @@ export interface ConnectorMessages {
 	upstreamUrlUnreadable(url: string): string;
 	/** ContextForge accepted a new upstream server but returned no gateway ID. */
 	contextForgeNoGatewayId: string;
+	/** ContextForge could not refresh an upstream server's tools; `detail` is its reason. */
+	contextForgeRefreshFailed(detail: string): string;
 	/** ContextForge accepted a new virtual server but returned no ID. */
 	contextForgeNoServerId: string;
 	/** ContextForge refused an admin request; `detail` is its reason, with credentials masked. */
@@ -101,7 +116,10 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 	describeDescription:
 		"Change a connector's purpose, which the agent uses to decide when to call it",
 	removeDescription: "Delete a connector and its token",
+	resyncDescription:
+		"Read a connector's tools from its server again, or every connector's when none is named",
 	nameOption: "Connector",
+	resyncNameOption: "Connector (leave empty for all)",
 	newPurposeOption: "The new purpose",
 
 	modalTitle: "Add an MCP connector",
@@ -131,7 +149,7 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 	listEmpty: (root) =>
 		`No connectors yet. Add one with \`/${root} connector add\`.`,
 	listFooter: (root) =>
-		`\`/${root} connector add\` adds one; \`describe\` changes its purpose; \`remove\` deletes the connector and its token.`,
+		`\`/${root} connector add\` adds one; \`describe\` changes its purpose; \`resync\` reads its tools again; \`remove\` deletes the connector and its token.`,
 	purposeUpdatedTitle: "Purpose updated",
 	purposeUpdatedFooter:
 		"From the next message on, the agent follows the new purpose.",
@@ -143,11 +161,26 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 		"From the next message on, questions that need it go to this connector's tools.",
 	skippedTools: (names) =>
 		`**Skipped tools**  Their names are too long for the model: ${names}`,
+	resyncedTitle: "Connector resynced",
+	resyncedAllTitle: "Connectors resynced",
+	resyncedFooter:
+		"From the next message on, the agent sees the tools as listed here.",
+	resyncChanges: (added, removed) =>
+		[added && `**Added**  ${added}`, removed && `**Removed**  ${removed}`]
+			.filter(Boolean)
+			.join("\n"),
+	resyncUnchanged: "-# The tools are as before.",
+	resyncFailed: (name, reason) =>
+		`**${name}** could not be resynced; its tools are as before: ${reason}`,
+	resyncNotAttempted:
+		"Not resynced: ContextForge's request limit was reached, so its tools are as before. Try again in a few minutes.",
 
 	labelSeparator: "  ",
 	serverDescription: (name, description) => `Connector ${name}: ${description}`,
 	upstreamUrlUnreadable: (url) => `Cannot parse the upstream URL: ${url}`,
 	contextForgeNoGatewayId: "ContextForge did not return the gateway ID.",
+	contextForgeRefreshFailed: (detail) =>
+		`ContextForge could not read the server's tools again: ${detail}`,
 	contextForgeNoServerId: "ContextForge did not return the virtual server ID.",
 	contextForgeRefused: (status, detail) =>
 		`ContextForge answered ${status}: ${detail}`,

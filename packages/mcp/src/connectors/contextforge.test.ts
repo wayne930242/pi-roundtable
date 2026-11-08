@@ -180,6 +180,70 @@ describe("ContextForgeAdmin reads", () => {
 	});
 });
 
+describe("ContextForgeAdmin resync calls", () => {
+	/** Records each request and answers with `reply`. */
+	const recording = (reply: unknown) => {
+		const seen: { method: string; path: string; body: unknown }[] = [];
+		const fetchImpl = (async (url: string, init?: RequestInit) => {
+			seen.push({
+				method: String(init?.method),
+				path: new URL(url).pathname,
+				body: init?.body ? JSON.parse(String(init.body)) : undefined,
+			});
+			return new Response(JSON.stringify(reply));
+		}) as unknown as typeof fetch;
+		return { seen, admin: new ContextForgeAdmin("http://cf", "t", fetchImpl) };
+	};
+
+	test("a tool carries the gateway it belongs to", async () => {
+		const { admin } = recording([
+			{ id: "1", name: "n-a", gatewaySlug: "n", gatewayId: "gw1" },
+			{ id: "2", name: "n-b", gatewaySlug: "n" },
+		]);
+		expect(await admin.tools()).toEqual([
+			{ id: "1", name: "n-a", gatewaySlug: "n", gatewayId: "gw1" },
+			{ id: "2", name: "n-b", gatewaySlug: "n" },
+		]);
+	});
+
+	test("refreshGateway posts the gateway's refresh and nothing else", async () => {
+		const { admin, seen } = recording({ gatewayId: "gw/1", success: true });
+		await admin.refreshGateway("gw/1", "https://x.test/mcp");
+		expect(seen).toEqual([
+			{
+				method: "POST",
+				path: "/gateways/gw%2F1/tools/refresh",
+				body: undefined,
+			},
+		]);
+	});
+
+	test("a refresh that did not succeed is an error that never carries the upstream's credential", async () => {
+		const { admin } = recording({
+			success: false,
+			error: "cannot reach https://x.test/s/path-secret-22/mcp",
+		});
+		const error = await admin
+			.refreshGateway("gw1", "https://x.test/s/path-secret-22/mcp")
+			.catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(ContextForgeError);
+		expect(String(error)).toContain("cannot reach");
+		expect(String(error)).not.toContain("path-secret-22");
+	});
+
+	test("setServerTools puts only the tool IDs", async () => {
+		const { admin, seen } = recording({ id: "sv1" });
+		await admin.setServerTools("sv1", ["t1", "t2"]);
+		expect(seen).toEqual([
+			{
+				method: "PUT",
+				path: "/servers/sv1",
+				body: { associated_tools: ["t1", "t2"] },
+			},
+		]);
+	});
+});
+
 describe("ContextForge errors in the host's wording", () => {
 	const words = connectorMessages({
 		upstreamUrlUnreadable: (url) => `U:${url}`,

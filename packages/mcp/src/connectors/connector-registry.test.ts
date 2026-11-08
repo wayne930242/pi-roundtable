@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SQL } from "bun";
-import type { VirtualServer } from "pi-roundtable/kit";
+import type { McpToolHints, VirtualServer } from "pi-roundtable/kit";
 import {
 	describeDb,
 	openTestStore,
@@ -10,6 +10,7 @@ import {
 } from "pi-roundtable/testing";
 import {
 	ConnectorError,
+	ConnectorRateLimited,
 	ConnectorRegistry,
 	DEFAULT_MAX_TOOL_NAME,
 	DEFAULT_SERVER_PREFIX,
@@ -19,19 +20,51 @@ import {
 	ContextForgeError,
 	type GatewayTool,
 	type UpstreamAuth,
+	VirtualServerRequestError,
 } from "./contextforge.ts";
 import { CONNECTOR_MESSAGES } from "./messages.ts";
 
 /** ContextForge in memory: gateways bring the tools a test gives them. */
 class FakeAdmin {
 	upstream: Record<string, string[]> = {};
+	/** The MCP hints ContextForge holds for a tool, by its full name. */
+	hints: Record<string, McpToolHints> = {};
 	refuse: string | undefined;
-	gateways = new Map<string, { slug: string; auth: UpstreamAuth }>();
+	/** Upstream URLs whose refresh ContextForge refuses. */
+	refreshRefused = new Map<string, string>();
+	/** Upstream URLs whose refresh ContextForge answers with 429. */
+	refreshLimited = new Set<string>();
+	gateways = new Map<
+		string,
+		{ slug: string; url: string; auth: UpstreamAuth }
+	>();
 	servers = new Map<string, { name: string; toolIds: string[] }>();
+	calls: string[] = [];
+	/** The most calls that were in flight at once. */
+	peak = 0;
+	#active = 0;
 	#tools: GatewayTool[] = [
 		{ id: "g1", name: "google-send-gmail-message", gatewaySlug: "google" },
 	];
 	#next = 0;
+
+	async #call<T>(label: string, run: () => T): Promise<T> {
+		this.calls.push(label);
+		this.peak = Math.max(this.peak, ++this.#active);
+		await Bun.sleep(2);
+		this.#active -= 1;
+		return run();
+	}
+
+	#bring(id: string, slug: string, url: string) {
+		for (const tool of this.upstream[url] ?? [])
+			this.#tools.push({
+				id: `${id}:${tool}`,
+				name: `${slug}-${tool}`,
+				gatewaySlug: slug,
+				gatewayId: id,
+			});
+	}
 
 	async createGateway(gateway: {
 		name: string;
@@ -40,17 +73,34 @@ class FakeAdmin {
 	}) {
 		if (this.refuse) throw new ContextForgeError(this.refuse);
 		const id = `gw${++this.#next}`;
-		this.gateways.set(id, { slug: gateway.name, auth: gateway.auth });
-		for (const tool of this.upstream[gateway.url] ?? [])
-			this.#tools.push({
-				id: `${id}:${tool}`,
-				name: `${gateway.name}-${tool}`,
-				gatewaySlug: gateway.name,
-			});
+		this.gateways.set(id, {
+			slug: gateway.name,
+			url: gateway.url,
+			auth: gateway.auth,
+		});
+		this.#bring(id, gateway.name, gateway.url);
 		return { id, slug: gateway.name };
 	}
 	async tools() {
-		return this.#tools;
+		return this.#call("tools", () => this.#tools);
+	}
+	async refreshGateway(id: string, _url: string) {
+		await this.#call(`refresh ${id}`, () => undefined);
+		const gateway = this.gateways.get(id);
+		if (!gateway) throw new ContextForgeError("no such gateway");
+		const refused = this.refreshRefused.get(gateway.url);
+		if (refused !== undefined) throw new ContextForgeError(refused);
+		if (this.refreshLimited.has(gateway.url))
+			throw new ContextForgeError("rate limit exceeded", 429);
+		// What ContextForge keeps of a gateway's tools is what its upstream still offers.
+		this.#tools = this.#tools.filter((t) => t.gatewayId !== id);
+		this.#bring(id, gateway.slug, gateway.url);
+	}
+	async setServerTools(id: string, toolIds: string[]) {
+		await this.#call(`set ${id}`, () => undefined);
+		const server = this.servers.get(id);
+		if (!server) throw new ContextForgeError("no such server");
+		server.toolIds = toolIds;
 	}
 	async createServer(name: string, _description: string, toolIds: string[]) {
 		const id = `sv${++this.#next}`;
@@ -68,12 +118,17 @@ class FakeAdmin {
 	resolve = async (name: string): Promise<VirtualServer> => {
 		const server = [...this.servers.values()].find((s) => s.name === name);
 		if (!server) throw new Error(`no server ${name}`);
+		const tools = this.#tools
+			.filter((t) => server.toolIds.includes(t.id))
+			.map((t) => t.name);
+		const hints = Object.fromEntries(
+			tools.flatMap((t) => (this.hints[t] ? [[t, this.hints[t]]] : [])),
+		);
 		return {
 			name,
 			url: `http://cf/servers/${name}/mcp`,
-			tools: this.#tools
-				.filter((t) => server.toolIds.includes(t.id))
-				.map((t) => t.name),
+			tools,
+			...(Object.keys(hints).length > 0 ? { hints } : {}),
 		};
 	};
 }
@@ -83,11 +138,16 @@ describeDb("PostgreSQL", () => {
 	let admin: FakeAdmin;
 	const opened: TestStore<ConnectorRegistry>[] = [];
 
-	async function open(): Promise<TestStore<ConnectorRegistry>> {
+	async function open(
+		extra: { resyncIntervalMs?: number } = {},
+	): Promise<TestStore<ConnectorRegistry>> {
 		const registry = await openTestStore(ConnectorRegistry, {
 			admin,
-			resolve: admin.resolve,
+			// The fake's resolve can be replaced by a test, so it is read when the registry asks.
+			resolve: (name) => admin.resolve(name),
 			logger: silentLogger(),
+			resyncIntervalMs: 0,
+			...extra,
 		});
 		opened.push(registry);
 		// The plugin reads the stored connectors when the host starts.
@@ -203,6 +263,273 @@ describeDb("PostgreSQL", () => {
 			await expect(registry.remove("notion")).rejects.toThrow(
 				CONNECTOR_MESSAGES.unknownConnector("notion"),
 			);
+		});
+
+		describe("resync", () => {
+			const renamed = ["search", "find-page"];
+
+			test("a renamed tool attaches with its hints and a removed one detaches, while the connector stays as it was", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				const gatewayId = [...admin.gateways.keys()][0];
+				const serverId = [...admin.servers.keys()][0];
+				const before = registry.version;
+				admin.upstream[notion.url] = renamed;
+				admin.hints["notion-find-page"] = { readOnlyHint: true };
+
+				const result = await registry.resync("notion");
+
+				expect(result.added).toEqual(["notion-find-page"]);
+				expect(result.removed).toEqual(["notion-get-page"]);
+				expect(result.skipped).toEqual([]);
+				expect(registry.servers()[0]?.tools).toEqual([
+					"notion-search",
+					"notion-find-page",
+				]);
+				expect(registry.servers()[0]?.hints).toEqual({
+					"notion-find-page": { readOnlyHint: true },
+				});
+				expect(registry.version).toBe(before + 1);
+				// The same gateway, virtual server, token, and purpose.
+				expect([...admin.gateways.keys()]).toEqual([gatewayId as string]);
+				expect([...admin.servers.keys()]).toEqual([serverId as string]);
+				expect([...admin.gateways.values()][0]?.auth).toEqual(notion.auth);
+				const [connector] = registry.list();
+				expect(connector).toMatchObject({
+					name: "notion",
+					description: notion.description,
+					gatewayId,
+					serverId,
+				});
+				// The stored row is untouched, and a restart reads the new tools.
+				const reopened = await open();
+				expect(reopened.list()[0]).toMatchObject({ gatewayId, serverId });
+				expect(reopened.servers()[0]?.tools).toEqual([
+					"notion-search",
+					"notion-find-page",
+				]);
+			});
+
+			test("nothing to change leaves the version alone; changed hints alone bump it", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				const before = registry.version;
+				const same = await registry.resync("notion");
+				expect([same.added, same.removed]).toEqual([[], []]);
+				expect(registry.version).toBe(before);
+				admin.hints["notion-search"] = { destructiveHint: true };
+				await registry.resync("notion");
+				expect(registry.version).toBe(before + 1);
+				expect(registry.servers()[0]?.hints).toEqual({
+					"notion-search": { destructiveHint: true },
+				});
+			});
+
+			test("skipped names are reported as at add", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				const long = "x".repeat(DEFAULT_MAX_TOOL_NAME);
+				admin.upstream[notion.url] = ["search", long];
+				const result = await registry.resync("notion");
+				expect(result.skipped).toEqual([`notion-${long}`]);
+				expect(registry.servers()[0]?.tools).toEqual(["notion-search"]);
+			});
+
+			test("a refresh ContextForge refuses leaves the server as it was", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				const before = registry.version;
+				admin.refreshRefused.set(notion.url, "upstream is down");
+				admin.upstream[notion.url] = renamed;
+				const failed = registry.resync("notion");
+				await expect(failed).rejects.toBeInstanceOf(ConnectorError);
+				await expect(failed).rejects.toThrow("upstream is down");
+				expect(registry.version).toBe(before);
+				expect(registry.servers()[0]?.tools).toEqual([
+					"notion-search",
+					"notion-get-page",
+				]);
+				expect(admin.calls.some((c) => c.startsWith("set "))).toBe(false);
+			});
+
+			test("an upstream left with no tool keeps the old server, and so does a failed read of it", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				admin.upstream[notion.url] = [];
+				await expect(registry.resync("notion")).rejects.toThrow(
+					CONNECTOR_MESSAGES.noTools,
+				);
+				expect(admin.calls.some((c) => c.startsWith("set "))).toBe(false);
+				expect(registry.servers()[0]?.tools).toHaveLength(2);
+				expect([...admin.servers.values()][0]?.toolIds).toHaveLength(2);
+			});
+
+			test("resyncAll reports each connector, logs a failure, and removes none", async () => {
+				admin.upstream["https://mcp.other.test/mcp"] = ["list"];
+				const registry = await open();
+				await registry.add(notion);
+				await registry.add({
+					...notion,
+					name: "other",
+					url: "https://mcp.other.test/mcp",
+				});
+				admin.upstream[notion.url] = renamed;
+				admin.refreshRefused.set("https://mcp.other.test/mcp", "gone");
+				const outcomes = await registry.resyncAll();
+				expect(outcomes).toMatchObject([
+					{ name: "notion", added: ["notion-find-page"] },
+					{ name: "other", error: "gone" },
+				]);
+				expect(registry.list().map((c) => c.name)).toEqual(["notion", "other"]);
+				expect(registry.servers().map((s) => s.tools)).toEqual([
+					["notion-search", "notion-find-page"],
+					["other-list"],
+				]);
+				expect(admin.servers.size).toBe(2);
+			});
+
+			test("resyncs run one after the other", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				admin.peak = 0;
+				await Promise.all([
+					registry.resync("notion"),
+					registry.resync("notion"),
+					registry.resyncAll(),
+				]);
+				expect(admin.peak).toBe(1);
+			});
+
+			test("a connector removed while a resync waits is refused, not revived", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				const waiting = registry.resyncAll();
+				const queued = registry.resync("notion");
+				await registry.remove("notion");
+				await waiting;
+				await expect(queued).rejects.toThrow(
+					CONNECTOR_MESSAGES.unknownConnector("notion"),
+				);
+				expect(registry.list()).toEqual([]);
+			});
+
+			test("an unknown name is refused before ContextForge is asked", async () => {
+				const registry = await open();
+				await expect(registry.resync("nope")).rejects.toThrow(
+					CONNECTOR_MESSAGES.unknownConnector("nope"),
+				);
+				expect(admin.calls).toEqual([]);
+			});
+
+			describe("when ContextForge answers 429", () => {
+				const other = "https://mcp.other.test/mcp";
+				const third = "https://mcp.third.test/mcp";
+
+				async function three() {
+					admin.upstream[other] = ["list"];
+					admin.upstream[third] = ["read"];
+					const registry = await open();
+					await registry.add(notion);
+					await registry.add({ ...notion, name: "other", url: other });
+					await registry.add({ ...notion, name: "third", url: third });
+					for (const url of [notion.url, other, third])
+						admin.upstream[url] = ["renamed"];
+					admin.calls.length = 0;
+					return registry;
+				}
+
+				test("resyncAll stops at the first one, keeps every old server, and reports the rest as not resynced", async () => {
+					const registry = await three();
+					admin.refreshLimited.add(other);
+					const before = registry.version;
+					const outcomes = await registry.resyncAll();
+					expect(outcomes).toMatchObject([
+						{ name: "notion", added: ["notion-renamed"] },
+						{ name: "other", error: "rate limit exceeded" },
+						{ name: "third", error: CONNECTOR_MESSAGES.resyncNotAttempted },
+					]);
+					// notion took five requests, other's refresh was the sixth; third was never asked.
+					expect(admin.calls).toEqual([
+						expect.stringMatching(/^refresh /),
+						"tools",
+						expect.stringMatching(/^set /),
+						expect.stringMatching(/^refresh /),
+					]);
+					expect(registry.version).toBe(before + 1);
+					expect(registry.servers().map((s) => s.tools)).toEqual([
+						["notion-renamed"],
+						["other-list"],
+						["third-read"],
+					]);
+					expect(registry.list().map((c) => c.name)).toEqual([
+						"notion",
+						"other",
+						"third",
+					]);
+				});
+
+				test("a 429 on the read of the virtual server stops it just the same", async () => {
+					const registry = await three();
+					admin.resolve = async () => {
+						throw new VirtualServerRequestError(429, "limit");
+					};
+					const outcomes = await registry.resyncAll();
+					expect(outcomes).toMatchObject([
+						{ name: "notion", error: "limit" },
+						{ name: "other", error: CONNECTOR_MESSAGES.resyncNotAttempted },
+						{ name: "third", error: CONNECTOR_MESSAGES.resyncNotAttempted },
+					]);
+					expect(
+						admin.calls.filter((c) => c.startsWith("refresh ")),
+					).toHaveLength(1);
+				});
+
+				test("resync of one connector fails with ConnectorRateLimited and asks once", async () => {
+					const registry = await three();
+					admin.refreshLimited.add(notion.url);
+					await expect(registry.resync("notion")).rejects.toBeInstanceOf(
+						ConnectorRateLimited,
+					);
+					expect(admin.calls).toHaveLength(1);
+					expect(registry.servers()[0]?.tools).toEqual([
+						"notion-search",
+						"notion-get-page",
+					]);
+				});
+
+				test("another refusal does not stop the rest", async () => {
+					const registry = await three();
+					admin.refreshRefused.set(notion.url, "gone");
+					const outcomes = await registry.resyncAll();
+					expect(outcomes).toMatchObject([
+						{ name: "notion", error: "gone" },
+						{ name: "other", added: ["other-renamed"] },
+						{ name: "third", added: ["third-renamed"] },
+					]);
+				});
+			});
+
+			test("requests are spaced by resyncIntervalMs, across resyncs", async () => {
+				const registry = await open({ resyncIntervalMs: 40 });
+				await registry.add(notion);
+				const started = Date.now();
+				await registry.resync("notion");
+				await registry.resync("notion");
+				// Two resyncs take ten slots; the first request waits for none, and the last one starts eight slots in.
+				expect(Date.now() - started).toBeGreaterThanOrEqual(8 * 40 - 20);
+			});
+
+			test("a resync asks ContextForge for a refresh, the tools, and one update", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				admin.calls.length = 0;
+				await registry.resync("notion");
+				expect(admin.calls).toEqual([
+					`refresh ${[...admin.gateways.keys()][0]}`,
+					"tools",
+					`set ${[...admin.servers.keys()][0]}`,
+				]);
+			});
 		});
 	});
 });

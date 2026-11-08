@@ -58,7 +58,8 @@ async function getJson(
 		signal: AbortSignal.timeout(15_000),
 	});
 	if (!response.ok) {
-		throw new ConfigError(
+		throw new VirtualServerRequestError(
+			response.status,
 			text.virtualServerRequestFailed(
 				url,
 				response.status,
@@ -67,6 +68,16 @@ async function getJson(
 		);
 	}
 	return response.json();
+}
+
+/** A read of the gateway's servers or a server's tools that it refused; `status` is its HTTP status. */
+export class VirtualServerRequestError extends ConfigError {
+	constructor(
+		readonly status: number,
+		message: string,
+	) {
+		super(message);
+	}
 }
 
 const HINT_KEYS = [
@@ -140,7 +151,15 @@ export async function resolveVirtualServer(
 }
 
 /** A request ContextForge refused or could not complete; the message is safe to show the owner. */
-export class ContextForgeError extends Error {}
+export class ContextForgeError extends Error {
+	/** The HTTP status ContextForge answered, when it did. */
+	readonly status?: number;
+
+	constructor(message: string, status?: number) {
+		super(message);
+		if (status !== undefined) this.status = status;
+	}
+}
 
 /** How ContextForge authenticates to an upstream MCP server. */
 export type UpstreamAuth =
@@ -172,6 +191,8 @@ export interface GatewayTool {
 	id: string;
 	name: string;
 	gatewaySlug: string;
+	/** The gateway the tool belongs to; absent when ContextForge does not say. */
+	gatewayId?: string;
 }
 
 /** The admin API calls that add and remove owner connectors. */
@@ -247,7 +268,16 @@ export class ContextForgeAdmin {
 					typeof tool.id === "string" &&
 					typeof tool.name === "string" &&
 					typeof tool.gatewaySlug === "string"
-						? [{ id: tool.id, name: tool.name, gatewaySlug: tool.gatewaySlug }]
+						? [
+								{
+									id: tool.id,
+									name: tool.name,
+									gatewaySlug: tool.gatewaySlug,
+									...(typeof tool.gatewayId === "string"
+										? { gatewayId: tool.gatewayId }
+										: {}),
+								},
+							]
 						: [],
 				)
 			: [];
@@ -328,6 +358,38 @@ export class ContextForgeAdmin {
 		return created.id;
 	}
 
+	/**
+	 * Makes ContextForge read the upstream server's tools again: a tool it no longer offers is
+	 * removed, a new one is added. `upstreamUrl` only masks a credential in an error.
+	 */
+	async refreshGateway(id: string, upstreamUrl: string): Promise<void> {
+		const result = await this.#send(
+			"POST",
+			`/gateways/${encodeURIComponent(id)}/tools/refresh`,
+			undefined,
+			60_000,
+			urlSecrets(upstreamUrl),
+		);
+		if (isRecord(result) && result.success === false)
+			throw new ContextForgeError(
+				this.#text.contextForgeRefreshFailed(
+					detailOf(
+						masked(
+							typeof result.error === "string" ? result.error : "",
+							urlSecrets(upstreamUrl),
+						),
+					),
+				),
+			);
+	}
+
+	/** Replaces the tools a virtual server serves; its name, description, and ID stay. */
+	async setServerTools(id: string, toolIds: string[]): Promise<void> {
+		await this.#send("PUT", `/servers/${encodeURIComponent(id)}`, {
+			associated_tools: toolIds,
+		});
+	}
+
 	async deleteServer(id: string): Promise<void> {
 		await this.#send("DELETE", `/servers/${encodeURIComponent(id)}`);
 	}
@@ -360,6 +422,7 @@ export class ContextForgeAdmin {
 					response.status,
 					detailOf(masked(text, secrets)),
 				),
+				response.status,
 			);
 		if (!text) return undefined;
 		try {

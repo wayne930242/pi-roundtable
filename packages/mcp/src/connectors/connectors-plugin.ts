@@ -14,6 +14,8 @@ import {
 	ConnectorRegistry,
 	DEFAULT_MAX_TOOL_NAME,
 	DEFAULT_SERVER_PREFIX,
+	type Resynced,
+	type ResyncOutcome,
 } from "./connector-registry.ts";
 import {
 	ContextForgeAdmin,
@@ -41,6 +43,12 @@ export interface McpConnectorsOptions {
 	serverPrefix?: string;
 	/** Tools whose names are longer are left out of a connector's server; default 45. */
 	maxToolName?: number;
+	/**
+	 * The least time in milliseconds between two admin requests of a resync, which makes five per
+	 * connector; default 1200 (50 a minute, half of ContextForge's limit of 100, which locks the admin
+	 * account for 15 minutes when exceeded). A resync that meets a 429 stops there and does not retry.
+	 */
+	resyncIntervalMs?: number;
 	/** The Discord text and the registry's refusals, in your wording; English by default. */
 	messages?: Partial<ConnectorMessages>;
 }
@@ -72,6 +80,15 @@ export interface Connectors {
 	describe(name: string, description: string): Promise<Connector>;
 	/** Deletes a connector, its virtual server, and its upstream server with its token. */
 	remove(name: string): Promise<void>;
+	/**
+	 * Has ContextForge read a connector's upstream server again and makes its virtual server serve the
+	 * tools it has now, with their hints, as `/<root> connector resync <name>` does; the connector, its
+	 * token, and its virtual server stay. The host does this for every connector at start. A refusal
+	 * is a `ConnectorError` and leaves the connector as it was.
+	 */
+	resync(name: string): Promise<Resynced>;
+	/** Resyncs every connector in turn; one that cannot be read is reported in its outcome and left as it was. */
+	resyncAll(): Promise<ResyncOutcome[]>;
 }
 
 /** A new connector as the owner gives it; `header` and `token` are optional. */
@@ -85,9 +102,12 @@ export interface ConnectorInput {
 
 /** The registry's management, with the header and token rules of the Discord form. */
 export function connectorManagement(
-	registry: Pick<ConnectorRegistry, "add" | "describe" | "remove">,
+	registry: Pick<
+		ConnectorRegistry,
+		"add" | "describe" | "remove" | "resync" | "resyncAll"
+	>,
 	text: ConnectorMessages,
-): Pick<Connectors, "add" | "describe" | "remove"> {
+): Pick<Connectors, "add" | "describe" | "remove" | "resync" | "resyncAll"> {
 	return {
 		add: async (input) =>
 			registry.add({
@@ -102,6 +122,8 @@ export function connectorManagement(
 			}),
 		describe: (name, description) => registry.describe(name, description),
 		remove: (name) => registry.remove(name),
+		resync: (name) => registry.resync(name),
+		resyncAll: () => registry.resyncAll(),
 	};
 }
 
@@ -124,7 +146,7 @@ function checkOptions({ contextForge }: McpConnectorsOptions): string {
 
 /**
  * The owner's MCP connectors: ContextForge holds each upstream server and its token, a table
- * holds what the host needs to route to it, and `/<root> connector` adds and removes them.
+ * holds what the host needs to route to it, and `/<root> connector` adds, resyncs and removes them.
  * Provides `CONNECTORS`. Holds a call to a tool its server marks `destructiveHint: true` or
  * `readOnlyHint: false` (rule `mcp-hints`, which yolo mode never approves); a tool that declares
  * neither runs unasked.
@@ -159,6 +181,9 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				logger,
 				serverPrefix: options.serverPrefix ?? DEFAULT_SERVER_PREFIX,
 				maxToolName: options.maxToolName ?? DEFAULT_MAX_TOOL_NAME,
+				...(options.resyncIntervalMs === undefined
+					? {}
+					: { resyncIntervalMs: options.resyncIntervalMs }),
 				messages: text,
 			});
 			// Without Discord the connectors are managed through CONNECTORS alone.
@@ -179,8 +204,13 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				},
 				...connectorManagement(registry, text),
 			});
-			// Nothing is added but what preflight reads.
-			load = () => registry.load();
+			// Nothing is added but what preflight reads. Each connector is then read from ContextForge again,
+			// so a tool its upstream renamed since the connector was added is attached; a connector that
+			// cannot be read keeps the server it has.
+			load = async () => {
+				await registry.load();
+				await registry.resyncAll();
+			};
 			return {
 				holdRules: [
 					toolHintsHoldRule({

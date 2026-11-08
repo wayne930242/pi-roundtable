@@ -22,10 +22,12 @@ function fakeRegistry() {
 	const added: NewConnector[] = [];
 	const described: [string, string][] = [];
 	const removed: string[] = [];
+	const resynced: string[] = [];
 	return {
 		added,
 		described,
 		removed,
+		resynced,
 		registry: {
 			add: async (input: NewConnector) => {
 				added.push(input);
@@ -37,6 +39,19 @@ function fakeRegistry() {
 			},
 			remove: async (name: string) => {
 				removed.push(name);
+			},
+			resync: async (name: string) => {
+				resynced.push(name);
+				return {
+					connector: connector(name),
+					skipped: [],
+					added: [],
+					removed: [],
+				};
+			},
+			resyncAll: async () => {
+				resynced.push("*");
+				return [];
 			},
 		},
 	};
@@ -94,6 +109,14 @@ describe("connector management", () => {
 		await manage.remove("notion");
 		expect(described).toEqual([["notion", "Docs"]]);
 		expect(removed).toEqual(["notion"]);
+	});
+
+	test("resync and resyncAll reach the registry", async () => {
+		const { registry, resynced } = fakeRegistry();
+		const manage = connectorManagement(registry, CONNECTOR_MESSAGES);
+		expect((await manage.resync("notion")).connector.name).toBe("notion");
+		expect(await manage.resyncAll()).toEqual([]);
+		expect(resynced).toEqual(["notion", "*"]);
 	});
 });
 

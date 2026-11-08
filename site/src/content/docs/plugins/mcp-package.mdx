@@ -65,7 +65,7 @@ You can use either plugin on its own.
 ## Connectors
 
 `/roundtable connector add` opens a private form for the server's address and token.
-`list`, `describe` and `remove` manage what you added.
+`list`, `describe`, `resync` and `remove` manage what you added; `resync` reads a connector's tools from its server again (every connector's when none is named), so a tool the server renamed is attached without adding the connector again.
 Only the owner can use these commands.
 
 [ContextForge](https://github.com/IBM/mcp-context-forge) keeps each upstream server and its token.
