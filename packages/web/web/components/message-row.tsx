@@ -15,6 +15,7 @@ import {
 	type RoomMessage,
 } from "../../src/api-types.ts";
 import { store, useSelector } from "../lib/app-store.ts";
+import { BlockScopeContext } from "../lib/block-scope.ts";
 import { ConfigContext } from "../lib/config.ts";
 import { clock } from "../lib/format.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
@@ -120,6 +121,8 @@ export const MessageRow = memo(function MessageRow(props: {
 	timeZone: string;
 	/** The room takes a reply, so a message can be quoted into its box. */
 	quotable: boolean;
+	/** The interactive blocks of an agent's reply may be answered here: the row is of the room's current conversation, in a room that takes messages. */
+	answerable?: boolean;
 }) {
 	const { message } = props;
 	const surface = useContext(ConfigContext)?.app?.surface;
@@ -221,7 +224,13 @@ export const MessageRow = memo(function MessageRow(props: {
 				) : null}
 				<div className="bubble">
 					<FilesJump files={message.files} />
-					{message.text ? <MessageMarkdown source={message.text} /> : null}
+					{message.text ? (
+						<BlockScopeContext.Provider
+							value={{ message, open: props.answerable === true }}
+						>
+							<MessageMarkdown source={message.text} />
+						</BlockScopeContext.Provider>
+					) : null}
 					<Files files={message.files} message={message} />
 				</div>
 				{props.below}

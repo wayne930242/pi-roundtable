@@ -86,10 +86,40 @@ graph TD
  }
 \`\`\`
 
-\`\`\`form
-title: Pick one
-questions:
-  - {name: store, label: Which store?, choices: [SQLite, Postgres]}
+\`\`\`options
+- {title: SQLite, recommended: true, body: Embedded, pros: [no server], cons: [one writer]}
+- {title: Postgres, body: A server to run, pros: [many writers], cons: [more to operate]}
 \`\`\`
 
-That last block was a form: the app does not draw those yet, so it reads as text and you answer it by typing.`;
+\`\`\`form
+title: Decide the store
+submit: Send decision
+questions:
+  - {name: store, label: Which store?, required: true, choices: [{value: sqlite, label: SQLite}, {value: pg, label: Postgres}]}
+  - {name: extras, label: Which extras?, type: multi, required: true, choices: [{value: cache, label: Cache}, {value: queue, label: Queue}, {value: search, label: Search}]}
+  - {name: note, label: Anything else?, type: text}
+\`\`\`
+
+\`\`\`checklist
+title: Before the release
+items:
+  - {name: tests, label: Tests pass, checked: true}
+  - {name: docs, label: Docs are updated}
+  - {name: notes, label: Release notes are written}
+\`\`\`
+
+\`\`\`suggest
+- Ship it
+- Wait for the vendor
+- {label: Ask Ada, text: Please ask Ada to decide}
+\`\`\`
+
+\`\`\`review
+title: Two logo drafts
+pick: Favourite
+items:
+  - {name: A, body: Round and warm}
+  - {name: B, body: Sharp and cold, page: draft-b.html}
+\`\`\`
+
+The last five blocks are answered here: the answer is sent to me as your next message.`;
