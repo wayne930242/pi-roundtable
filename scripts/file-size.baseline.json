@@ -16,7 +16,7 @@
 	"packages/sandbox/src/pi-broker.ts": 1035,
 	"packages/web/scripts/fixture-app.ts": 926,
 	"packages/web/src/api-types.ts": 1538,
-	"packages/web/src/app/app-socket.test.ts": 2426,
+	"packages/web/src/app/app-socket.test.ts": 2428,
 	"packages/web/src/app/app.ts": 581,
 	"packages/web/src/app/desk.ts": 573,
 	"packages/web/src/app/push.test.ts": 746,
