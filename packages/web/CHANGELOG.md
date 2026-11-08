@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The plugin provides `ROOM_LAYOUT` with its rooms pane, so agents place rooms in the room list's folders: `agent_create` and `group_create` take `group`, `agent_list` shows the folders and pins, and `room_arrange` sorts rooms into folders. The writes run under the layout's lock and every open page updates.
+
 ## [0.38.1] - 2026-11-08
 
 ### Fixed

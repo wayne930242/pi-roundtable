@@ -10,6 +10,7 @@ import type {
 	IdentityService,
 	Logger,
 	Migration,
+	RoomLayoutService,
 	ScheduleStore,
 	WebSocketRoute,
 } from "pi-roundtable";
@@ -44,6 +45,7 @@ import { FileDir } from "./files.ts";
 import { postHelpersEnded } from "./helpers-ended.ts";
 import { RoomLayout } from "./layout.ts";
 import { Presence } from "./presence.ts";
+import { roomLayoutService } from "./room-layout-service.ts";
 import { RoomLog } from "./room-log.ts";
 import { Rooms, roomModeOf } from "./rooms.ts";
 import { AppApi, type AppApiOptions, partsOf } from "./routes.ts";
@@ -176,6 +178,8 @@ export class OwnerApp {
 	readonly websocket: WebSocketRoute<AppSocket>;
 	/** Reaches an owner through the app: a line in the home room, and a push to their devices. */
 	readonly directChannel: DirectChannelProvider;
+	/** The room groups the agent tools place rooms in, provided as `ROOM_LAYOUT`. */
+	readonly roomLayout: RoomLayoutService;
 	readonly #api: AppApi;
 	readonly #push: PushApi;
 	readonly #mounted: NoticesMount;
@@ -365,6 +369,13 @@ export class OwnerApp {
 			},
 			// The agent rooms are the owners'; where there are several, they can leave each other notes.
 			readers: async () => (await identity.owners()).length > 1,
+		});
+		this.roomLayout = roomLayoutService({
+			layout: new RoomLayout(options.database),
+			surface: options.surface,
+			directory: agents.directory,
+			rooms,
+			changed: options.changed,
 		});
 		hostApp = new HostApp({
 			surface: options.surface,

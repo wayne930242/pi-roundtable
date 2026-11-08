@@ -85,6 +85,8 @@ export async function bootE(options: {
 	/** Plugins besides the console. */
 	plugins?: RoundtablePlugin[];
 	dataDir?: string;
+	/** A host without Discord, whose agents and groups live in their rooms alone. */
+	local?: boolean;
 }): Promise<EHost> {
 	const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "e-host-"));
 	const socket = join(dataDir, "public.sock");
@@ -111,9 +113,18 @@ export async function bootE(options: {
 		...options.console,
 	} as WebConsoleOptions;
 	const host = await testHost({
+		...(options.local ? { discord: false as const } : {}),
 		config: {
 			dataDir,
-			discord: { token: "token", guild: GUILD, entryChannel: ENTRY_CHANNEL },
+			...(options.local
+				? {}
+				: {
+						discord: {
+							token: "token",
+							guild: GUILD,
+							entryChannel: ENTRY_CHANNEL,
+						},
+					}),
 			http: { publicUrl: "https://bot.example.com", socketPath: socket },
 			access: {
 				owners: [
@@ -134,7 +145,7 @@ export async function bootE(options: {
 					displayName: "Guide",
 					prompt: "You guide.",
 					avatarPrompt: "A guide",
-					channelId: ENTRY_CHANNEL,
+					...(options.local ? {} : { channelId: ENTRY_CHANNEL }),
 				},
 			],
 		} as never,

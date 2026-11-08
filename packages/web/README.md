@@ -200,6 +200,8 @@ Until the owners arrange something, the page is the plain list it always was; th
 
 The layout lives in three additive tables created by the plugin's migration `web-room-layout`: `web_room_folders`, `web_room_folder_rooms` and `web_room_pins`. Every write takes one advisory lock and rewrites the positions densely, so two devices editing at once leave no gap and no duplicate.
 
+Agents arrange the list too. With the rooms pane the plugin provides the core's `ROOM_LAYOUT`, which reads and changes the folders by agent and group names: `agent_create` and `group_create` take `group`, the folder the new room goes into (made when missing; left out, the room stays in Ungrouped), `agent_list` shows the folders and the pins, and `room_arrange` sorts rooms into folders and orders them. Its writes take the same lock and keep the same rules (Home and dispatch threads stay where they are, a temp knight follows its knight), and every open page reads the room list again, as after an owner's write.
+
 ### Keyboard shortcuts
 
 | Keys (Mac / elsewhere) | What they do |

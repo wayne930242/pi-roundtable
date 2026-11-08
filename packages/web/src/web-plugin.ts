@@ -9,6 +9,7 @@ import {
 	MODES,
 	PROFILES,
 	PROMPTS,
+	ROOM_LAYOUT,
 	type RoundtablePlugin,
 	SCHEDULES,
 	SKILLS,
@@ -74,7 +75,7 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	return definePlugin({
 		name: "web-console",
 		...(migrations.length > 0 ? { migrations } : {}),
-		provides: [WEB_APP],
+		provides: rooms ? [WEB_APP, ROOM_LAYOUT] : [WEB_APP],
 		// `none` and `password` speak for one principal through this identity; a verifier or a sign-in brings its own.
 		...(auth.mode !== "none" && auth.mode !== "password"
 			? {}
@@ -439,6 +440,7 @@ async function build(settings: ResolvedOptions, context: Context) {
 				})
 			: undefined;
 	if (app) {
+		services.provide(ROOM_LAYOUT, app.roomLayout);
 		listeners.push(() => app.changed());
 		sessionEnded = (id) => app.sessionEnded(id);
 	}
