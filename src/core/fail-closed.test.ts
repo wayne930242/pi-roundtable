@@ -50,6 +50,8 @@ const ALLOWED: Record<string, string> = {
 		"a Discord webhook's report is the host's own turn at the owner tier (OD-5)",
 	'src/core/modules/background/background-turns.ts: tier: "owner"':
 		"a logged error's report is the host's own turn at the owner tier (OD-5)",
+	'packages/web/src/testing/app-fixture.ts: tier: "owner"':
+		"the app suites' owner scope, a test fixture",
 	'packages/mcp/src/remote-mcp/default-conversation.ts: tier: "owner"':
 		"REMOTE_SPEAKER, deprecated and no longer used for a turn",
 	'packages/web/src/console-api.ts: ?? "owner"':
