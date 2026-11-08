@@ -94,6 +94,13 @@ afterEach(async () => {
 const settle = (ms = 40) =>
 	new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** Waits until `done` holds, for what an animation's end sets off, which a busy machine reaches late. */
+const until = (done: () => boolean, ms = 4000) =>
+	page.act(async () => {
+		const stop = Date.now() + ms;
+		while (!done() && Date.now() < stop) await settle(20);
+	});
+
 async function show(rooms: RoomView[] = defaultRooms()) {
 	await page.render(
 		<ConfigContext.Provider value={config}>
@@ -328,8 +335,9 @@ test("the card slides out and the list closes the gap unless the person asked fo
 	// It leaves first; the server hears of it once it has gone.
 	expect(card.style.transform).toBe("translate3d(110%, 0, 0)");
 	expect(send).not.toHaveBeenCalled();
-	await page.act(() => settle(420));
+	await until(() => send.mock.calls.length > 0);
 	expect(send).toHaveBeenCalledWith(OLD);
+	await until(() => !listed().includes("Earlier job"));
 	expect(listed()).not.toContain("Earlier job");
 });
 
