@@ -1415,7 +1415,7 @@ test("repo_task records the starting conversation and says when a task waits in 
 	const service = harness.contribution.services?.find(
 		(item) => item.name === "coding-desk",
 	);
-	// A shutdown waits for the running worker and the queued task, which it would otherwise lose.
-	expect(service?.busy?.()).toEqual(["test:room", "test:room"]);
+	// A shutdown waits for the running worker; the queued task is dropped when the drain begins.
+	expect(service?.busy?.()).toEqual(["test:room"]);
 	release.resolve("done");
 });
