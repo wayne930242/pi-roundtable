@@ -85,7 +85,7 @@ The page has a Modern look and a Camelot look (parchment by day, a night castle 
 
 A permanent knight's room takes JSON posts from outside, as a Discord webhook's post in its channel does: `POST <mountPath>/hooks/<id>/<token>` with `{ "content": "...", "username": "..." }` (or any JSON, shown as a fenced block, at most 16 KB, 30 posts a minute) shows in the room marked **Webhook** and starts the knight's report turn, as untrusted input.
 The path needs no session, so a sign-in proxy must let `<mountPath>/hooks/` through; `webhookOrigin` names a separate public hostname for the URL.
-The owner makes and revokes webhooks in the knight's sheet (**More**), and the knight with `webhook_create`, `webhook_list` and `webhook_revoke`, for its own room only.
+The owner makes and revokes webhooks in the knight's sheet (**More**) or, for every knight at once, on the **Webhooks** page (`#/webhooks`, the pane `webhooks`; a host with an explicit `panes` list adds it), and the knight with `webhook_create`, `webhook_list` and `webhook_revoke`, for its own room only.
 The URL is shown once and only the token's hash is stored.
 
 ## Install on a device and notifications
@@ -115,7 +115,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `routing` | `hash` | `path` preserves mount-relative page links and history navigation. |
 | `admission` | `owners` | `owners` lets in only owners; `access` lets in everyone `IDENTITY` admits on the surface (owners, admins, members). See Members and the gate. |
 | `modes` | on | `false` leaves out the yolo and long-running switches; `PUT api/rooms/<key>/mode` answers 404. |
-| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes`, `presets` | Ordered subset of those panes plus `skills` and `connectors`; `presets` lists every knight's temp-knight presets; `schedules`, `table`, `workspace` and `presets` need `rooms`, and `workspace` needs a place to show. An explicit list is kept as written. With `admission: "access"` the default adds `profile`, and `{ owner, admin?, member }` chooses per tier; of the owners' panes only `table` may be named for a member or an admin (with that tier's `rooms`). |
+| `panes` | `rooms`, `table`, `workspace`, `overview`, `schedules`, `conversations`, `notes`, `presets`, `webhooks` | Ordered subset of those panes plus `skills` and `connectors`; `presets` lists every knight's temp-knight presets, `webhooks` every knight's incoming webhooks; `schedules`, `table`, `workspace`, `presets` and `webhooks` need `rooms`, and `workspace` needs a place to show. An explicit list is kept as written. With `admission: "access"` the default adds `profile`, and `{ owner, admin?, member }` chooses per tier; of the owners' panes only `table` may be named for a member or an admin (with that tier's `rooms`). |
 | `workspace` | the agents' directories | What the Files pane shows. `workspace.roots` adds places, each with `workspace.roots.id`, `workspace.roots.label`, `workspace.roots.dir` and `workspace.roots.writable` (false unless set); `workspace.agents` and `workspace.scratch` set to `false` leave the agents' working or scratch directory out. A `dir` that is or contains `dataDir` stops the start. |
 | `surface` | `app` | Key prefix of the app's rooms. Changing it starts every room over. |
 | `cardGraceSeconds` | `120` | How long a turn waits on a card, above 0 and at most 3600. |
