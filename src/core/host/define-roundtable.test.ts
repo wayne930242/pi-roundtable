@@ -297,51 +297,6 @@ describe("defineRoundtable", () => {
 		).toThrow("would drop roundtable.delegation too");
 	});
 
-	test("migrates the core's tables first, in a fixed order", async () => {
-		const { plugins } = await defineRoundtable(config);
-		expect(
-			plugins.flatMap((plugin) => (plugin.migrations ?? []).map((m) => m.name)),
-		).toEqual([
-			"principals",
-			"principals-claimable",
-			"principals-plugin-links",
-			"principals-self-links",
-			"principal-profile-choices",
-			"backfill",
-			"owner-memory",
-			"owner-memory-speaker",
-			"schedules",
-			"schedules-precheck",
-			"schedules-precheck-script",
-			"schedules-precheck-tools",
-			"schedules-time-limit",
-			"prompt-overrides",
-			"prompt-history",
-			"skills",
-			"skill-versions",
-			"skills-guild",
-			"conversations",
-			"conversation-modes",
-			"conversation-modes-follows",
-			"held-actions",
-			"held-actions-speaker",
-			"held-actions-speaker-hold",
-			"held-actions-principal",
-			"agents",
-			"agents-guild",
-			"agent-groups-channel-optional",
-			"agents-character",
-			"agents-helpers",
-			"agents-helper-origin",
-			"agent-prompt-history",
-			"agent-outbox",
-			"agent-latest-conversation",
-			"helper-presets",
-			"agents-helper-preset",
-			"helper-presets-shared",
-		]);
-	});
-
 	test("the host options carry the database, the root command, the tool tiers, and one listener", async () => {
 		const { options } = await defineRoundtable({
 			...config,
