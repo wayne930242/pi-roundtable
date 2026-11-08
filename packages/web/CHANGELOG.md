@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - A queued message that carries the answer to a block cannot be edited, as its block would keep showing the old pick: `edit_queued` is refused with the new code `answer_locked`, `RoomMessage.answer` marks such a message, and the page offers only Cancel for it (the ↑ shortcut skips it). Cancelling still opens the block again.
+- The migration `web-room-block-answers-message-index` adds the `(message_id)` index to `web_room_block_answers`, so deleting a message no longer scans the table; databases already on 0.40.0 get it too.
+- When sending an answer fails and the block opens again, every device is shown the reply without the answer, so a device that was refused as `answered` opens the block too.
 
 ## [0.40.0] - 2026-11-08
 

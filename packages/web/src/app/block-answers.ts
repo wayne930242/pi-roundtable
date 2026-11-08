@@ -37,9 +37,15 @@ export class BlockAnswers {
 					answer_message_id bigint,
 					UNIQUE (room, message_id, block)
 				)`;
-			// The cascade from a deleted message looks its rows up by message id, which the unique key (led by room) does not serve.
-			await sql`CREATE INDEX IF NOT EXISTS web_room_block_answers_message ON web_room_block_answers (message_id)`;
 			await sql`CREATE INDEX IF NOT EXISTS web_room_block_answers_answer ON web_room_block_answers (room, answer_message_id) WHERE answer_message_id IS NOT NULL`;
+		},
+	};
+
+	/** The index the cascade from a deleted message looks its rows up by; the unique key (led by room) does not serve it. A migration of its own, as web-room-block-answers was released without it. */
+	static readonly messageIndexMigration: Migration = {
+		name: "web-room-block-answers-message-index",
+		up: async (sql) => {
+			await sql`CREATE INDEX IF NOT EXISTS web_room_block_answers_message ON web_room_block_answers (message_id)`;
 		},
 	};
 

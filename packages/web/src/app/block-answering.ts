@@ -128,6 +128,7 @@ export class BlockAnswering {
 				"an answer to a block was not taken",
 			);
 			await log.answers.release(room.key, reply.id, block.index);
+			await this.#showReopened(room.key, reply.id);
 			return refused("not_accepted");
 		}
 		// The answer is sent: from here the block stays answered, whatever the bookkeeping does.
@@ -141,6 +142,19 @@ export class BlockAnswering {
 			);
 		}
 		return { ok: true, message: { ...sent.message, answer: true } };
+	}
+
+	/** Shows every socket the reply without the released answer, so a device refused as answered opens the block again. */
+	async #showReopened(room: ChannelKey, message: number): Promise<void> {
+		try {
+			const open = await this.#deps.log.answerable(room, message);
+			if (open) this.#deps.surface.showChange(open);
+		} catch (error) {
+			this.#deps.logger.warn(
+				{ room, message, err: error },
+				"a released answer to a block was not shown open",
+			);
+		}
 	}
 
 	/** Records which message carries the answer; a failure is logged, as the answer is sent by then and the block stays answered. */

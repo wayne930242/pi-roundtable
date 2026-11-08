@@ -102,6 +102,8 @@ export class RoomLog {
 
 	/** The table of the blocks the owner answered. */
 	static readonly blockAnswersMigration: Migration = BlockAnswers.migration;
+	static readonly blockAnswersMessageIndexMigration: Migration =
+		BlockAnswers.messageIndexMigration;
 
 	/** Its jsonb columns stored as the JSON values themselves, not as the text of them. */
 	static readonly jsonValuesMigration: Migration = jsonValuesMigration(

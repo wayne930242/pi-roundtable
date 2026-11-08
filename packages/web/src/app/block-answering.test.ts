@@ -95,6 +95,7 @@ describeDb("the owner's answer to an interactive block", () => {
 			RoomLog.startOverMigration,
 			RoomLog.deliveryMigration,
 			RoomLog.blockAnswersMigration,
+			RoomLog.blockAnswersMessageIndexMigration,
 		])
 			await m.up(sql);
 		log = new RoomLog(sql);
@@ -422,6 +423,9 @@ describeDb("the owner's answer to an interactive block", () => {
 			code: "not_accepted",
 		});
 		expect((await log.get(ROOM, message.id))?.answers).toBeUndefined();
+		// Every socket gets the row without the answer, so a device refused as answered reopens.
+		expect(shown.at(-1)?.id).toBe(message.id);
+		expect(shown.at(-1)?.answers).toBeUndefined();
 		sendError = undefined;
 		expect((await answer(frame(message.id, 0, pick("SQLite")))).ok).toBe(true);
 	});
