@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { peerRange, staleDocRanges } from "./docs-files.ts";
 
 interface Manifest {
 	name: string;
@@ -47,9 +48,8 @@ export function releasePackages(root: string, tag: string): ReleasePackage[] {
 		throw new ReleaseContractError(
 			`Tag ${tag} must match core v${core.version}`,
 		);
-	const minor = Number(version[2]);
-	const peer = `>=${version[1]}.${minor}.0 <${version[1]}.${minor + 1}.0`;
-	return readdirSync(join(root, "packages"), { withFileTypes: true })
+	const peer = peerRange(core.version);
+	const packages = readdirSync(join(root, "packages"), { withFileTypes: true })
 		.filter((entry) => entry.isDirectory())
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((entry) => {
@@ -79,6 +79,34 @@ export function releasePackages(root: string, tag: string): ReleasePackage[] {
 				);
 			return { name: pkg.name, path };
 		});
+	const stale = staleDocRanges(root);
+	if (stale.length > 0)
+		throw new ReleaseContractError(
+			`Docs state a peer range no manifest declares: ${stale.join(", ")}`,
+		);
+	for (const file of [
+		"CHANGELOG.md",
+		...packages.map((pkg) => `${pkg.path}/CHANGELOG.md`),
+	])
+		if (!hasReleaseHeading(root, file, core.version))
+			throw new ReleaseContractError(
+				`${file} has no ## [${core.version}] heading`,
+			);
+	return packages;
+}
+
+/** Whether the changelog at `file` has a heading for the release, `## [X.Y.Z] - date`. */
+function hasReleaseHeading(
+	root: string,
+	file: string,
+	version: string,
+): boolean {
+	const path = join(root, file);
+	if (!existsSync(path)) return false;
+	const heading = `## [${version}]`;
+	return readFileSync(path, "utf8")
+		.split("\n")
+		.some((line) => line === heading || line.startsWith(`${heading} - `));
 }
 
 if (import.meta.main) {

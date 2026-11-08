@@ -1,6 +1,8 @@
 # Agent notes
 
 Release steps live in `.github/PACKAGE-RELEASES.md`; read it before bumping versions or pushing a tag.
+Never edit a `CHANGELOG.md` for a change that is not yet released: add `changes/unreleased/<branch>.md` (format in `changes/README.md`; `type: none` when no user sees the change). A pull request that changes shipped source without one fails CI. `bun scripts/release.ts <version>` assembles the fragments and moves every version and range; it commits, tags and pushes nothing.
+A new migration needs its id recorded: `bun scripts/migration-ids.ts --record` (the baseline test fails until then, and refuses a renamed or removed id).
 
 ## Layout
 
