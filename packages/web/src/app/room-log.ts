@@ -303,15 +303,23 @@ export class RoomLog {
 	/** The messages with the blocks the owner answered in each of them. */
 	async #answered(messages: RoomMessage[]): Promise<RoomMessage[]> {
 		const replies = messages.filter((one) => one.kind === "agent");
-		const [first] = replies;
-		if (!first) return messages;
-		const found = await this.answers.of(
-			first.room,
-			replies.map((one) => one.id),
-		);
+		const owners = messages.filter((one) => one.kind === "owner");
+		const [any] = messages;
+		if (!any || (replies.length === 0 && owners.length === 0)) return messages;
+		const [found, carrying] = await Promise.all([
+			this.answers.of(
+				any.room,
+				replies.map((one) => one.id),
+			),
+			this.answers.carriedBy(
+				any.room,
+				owners.map((one) => one.id),
+			),
+		]);
 		return messages.map((one) => {
 			const answers = found.get(one.id);
-			return answers ? { ...one, answers } : one;
+			if (answers) return { ...one, answers };
+			return carrying.has(one.id) ? { ...one, answer: true as const } : one;
 		});
 	}
 

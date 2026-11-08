@@ -21,8 +21,7 @@ import { translate as t } from "./messages.ts";
 import { changeMode } from "./modes.ts";
 import { setRoomMuted } from "./mute.ts";
 import { placementItems } from "./placement-items.ts";
-import { canChangeQueued, cancelQueued } from "./queued-actions.ts";
-import { askQueuedEdit } from "./queued-edit.ts";
+import { queuedItems } from "./queued-actions.ts";
 import { askRoomConfirm } from "./room-confirm.ts";
 import { fileUrl } from "./rooms.ts";
 import { navigate } from "./router.ts";
@@ -319,23 +318,7 @@ export function messageMenu(
 	source: HTMLElement,
 	quotable: boolean,
 ): MenuSpec {
-	const items: MenuItem[] = canChangeQueued(message)
-		? [
-				{
-					id: "edit-queued",
-					label: t("Edit"),
-					icon: "notes",
-					run: () => askQueuedEdit(message),
-				},
-				{
-					id: "cancel-queued",
-					label: t("Cancel"),
-					icon: "close",
-					tone: "danger",
-					run: () => cancelQueued(message),
-				},
-			]
-		: [];
+	const items = queuedItems(message);
 	items.push(
 		{
 			id: "copy",

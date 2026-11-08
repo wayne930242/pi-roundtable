@@ -261,6 +261,67 @@ describeDb("an interactive block answered over a real host", () => {
 		tab.close();
 	});
 
+	test("a queued answer cannot be edited, since its block would keep the old pick; cancelling it still reopens the block", async () => {
+		const tab = await open();
+		const reply = await asked(tab, "ask-edit", OPTIONS("first", "second"));
+		const release = holdTurn("hold-edit-answer");
+		const mark = tab.frames.length;
+		tab.send({
+			type: "send",
+			id: "h3",
+			room: SCOUT,
+			text: "hold-edit-answer",
+		});
+		await waitFor(tab, activity(SCOUT, { typing: true }), mark);
+		tab.send(answerOf(reply, "second", "a-edit"));
+		const accepted = await waitFor(
+			tab,
+			(frame) => frame.type === "accepted" && frame.id === "a-edit",
+		);
+		if (accepted.type !== "accepted") throw new Error("expected accepted");
+		const queued = await waitFor(
+			tab,
+			(frame) =>
+				frame.type === "edited" &&
+				frame.message.id === accepted.message.id &&
+				frame.message.delivery === "queued",
+		);
+		if (queued.type !== "edited") throw new Error("expected edited");
+		// The page hides Edit by this mark.
+		expect(queued.message.answer).toBe(true);
+		const before = tab.frames.length;
+		tab.send({
+			type: "edit_queued",
+			room: SCOUT,
+			message: accepted.message.id,
+			text: "something else entirely",
+		});
+		const refused = await waitFor(tab, ofType("refused"), before);
+		expect(refused).toMatchObject({ code: "answer_locked" });
+		const stored = (await history()).find(
+			(one) => one.id === accepted.message.id,
+		);
+		expect(stored?.text).toBe(accepted.message.text);
+		expect(stored?.answer).toBe(true);
+		expect(
+			(await history()).find((one) => one.id === reply.id)?.answers,
+		).toEqual([{ block: 0, fields: [["picked", "second"]] }]);
+		tab.send({
+			type: "cancel_queued",
+			room: SCOUT,
+			message: accepted.message.id,
+		});
+		await waitFor(
+			tab,
+			(frame) =>
+				frame.type === "edited" &&
+				frame.message.id === reply.id &&
+				frame.message.answers === undefined,
+		);
+		release();
+		tab.close();
+	});
+
 	test("a block of an earlier conversation and a room that is not the app's are refused", async () => {
 		const tab = await open();
 		const reply = await asked(tab, "ask-old", OPTIONS("a", "b"));

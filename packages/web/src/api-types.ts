@@ -9,6 +9,11 @@ import type {
 	RoomBlockAnswer,
 } from "./block-answer-types.ts";
 import type {
+	HostAuthorKind,
+	PictureRef,
+	RoomIntercom,
+} from "./message-types.ts";
+import type {
 	CardAnswer,
 	ClosedCard,
 	PromptAnswer,
@@ -17,6 +22,7 @@ import type {
 } from "./prompt-types.ts";
 
 export type * from "./block-answer-types.ts";
+export type * from "./message-types.ts";
 export type * from "./preset-types.ts";
 export type * from "./prompt-types.ts";
 
@@ -510,24 +516,9 @@ export interface RoomMessage {
 	delivery?: "steered" | "queued" | "cancelled";
 	/** An `agent` message: the interactive blocks the owner has answered, which the page shows locked with what was sent. */
 	answers?: RoomBlockAnswer[];
+	/** An `owner` message: it carries the answer to a block, so it cannot be edited while it waits; cancelling it opens the block again. */
+	answer?: true;
 }
-
-/** What an agents' message card shows besides its text: which way it went and the other agent. */
-export interface RoomIntercom {
-	/** `sent`: the author's request; `answered`: the answer that came back; `failed`: none came. */
-	kind: "sent" | "answered" | "failed";
-	/** The agent the request went to, which also gives the answer. */
-	peer: { name: string; displayName: string };
-}
-
-/** The kinds of author a host room's messages come from. */
-export type HostAuthorKind = "external" | "member" | "assistant" | "notice";
-
-/** A picture the page may draw: a stored file, a person's picture, or initials; never an outside URL. */
-export type PictureRef =
-	| { file: string }
-	| { principal: string }
-	| { initials: string; color: string };
 
 /** A button a host card or header offers, and the form it opens first. */
 export interface HostActionView {
@@ -1224,6 +1215,8 @@ export type RefusalCode =
 	| "not_accepted"
 	/** A queued message was cancelled or edited too late: its turn has started, or it was never queued. */
 	| "not_queued"
+	/** A queued message that carries the answer to a block cannot be edited, as its block would keep the old pick; cancel it instead. */
+	| "answer_locked"
 	/** A required onboarding step stands undone, so the frame is not taken yet. */
 	| "gated";
 

@@ -89,6 +89,8 @@ async function apply(
 					"unknown",
 			),
 		);
+	// The block shows what the answer picked; a changed text would leave it showing the old pick.
+	if (stored.answer) return "answer_locked";
 	const text = frame.text.trim();
 	if (text.length > MAX_MESSAGE_CHARS) return "too_long";
 	if (text === "" && stored.files.length === 0) return "empty";

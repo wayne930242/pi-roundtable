@@ -13,7 +13,7 @@ import { store } from "./app-store.ts";
 import { collapsedNow } from "./folds.ts";
 import { unreadOf } from "./host-state.ts";
 import { composingKey } from "./ime.ts";
-import { canChangeQueued } from "./queued-actions.ts";
+import { canEditQueued } from "./queued-actions.ts";
 import { askQueuedEdit } from "./queued-edit.ts";
 import { neighbour, roomStops, type Stop } from "./room-order.ts";
 import { activityAt, waitingCards } from "./rooms.ts";
@@ -90,7 +90,7 @@ function latestQueued() {
 	const route = currentRoute();
 	if (route.pane !== "room" || route.key === undefined) return undefined;
 	const messages = store.getState().rooms[route.key]?.messages ?? [];
-	return messages.findLast(canChangeQueued);
+	return messages.findLast(canEditQueued);
 }
 
 /** Whether `target` is a message box with nothing typed in it. */

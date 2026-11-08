@@ -102,6 +102,19 @@ export class BlockAnswers {
 		return row === undefined ? undefined : Number(row.message_id);
 	}
 
+	/** Which of the owner messages `answerMessages` carry the answer to a block. */
+	async carriedBy(
+		room: string,
+		answerMessages: readonly number[],
+	): Promise<Set<number>> {
+		if (answerMessages.length === 0) return new Set();
+		const rows: { answer_message_id: string | number | bigint }[] = await this
+			.#sql`
+			SELECT answer_message_id FROM web_room_block_answers
+			WHERE room = ${room} AND answer_message_id IN ${this.#sql(answerMessages)}`;
+		return new Set(rows.map((row) => Number(row.answer_message_id)));
+	}
+
 	/** The answers of the given messages of a room, by message id; a message with none is absent. */
 	async of(
 		room: string,

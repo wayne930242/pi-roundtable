@@ -11,6 +11,7 @@ const stored = partial<RoomMessage>({
 	kind: "owner",
 	principalId: "ada",
 	files: [],
+	answer: undefined,
 });
 
 /** Deps whose log write of the first text is slower than the second's, as two sockets' updates can be. */
@@ -61,4 +62,22 @@ test("a change that fails does not hold back the ones after it", async () => {
 	await expect(first).rejects.toThrow("log down");
 	expect(await second).toBeUndefined();
 	expect(log).toEqual(["B"]);
+});
+
+test("an edit of a message that carries a block answer is refused, and the host is not asked", async () => {
+	const { core, log, deps } = slowFirst();
+	const carrying = partial<QueuedFrameDeps>({
+		...deps,
+		surface: {
+			...deps.surface,
+			delivery: {
+				stored: async () => ({ ...stored, answer: true }),
+			} as never,
+		},
+	});
+	expect(await changeQueued(edit("other pick"), ada, carrying)).toBe(
+		"answer_locked",
+	);
+	expect(core).toEqual([]);
+	expect(log).toEqual([]);
 });

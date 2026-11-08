@@ -140,7 +140,7 @@ export class BlockAnswering {
 				"a sent answer to a block was not shown locked",
 			);
 		}
-		return { ok: true, message: sent.message };
+		return { ok: true, message: { ...sent.message, answer: true } };
 	}
 
 	/** Records which message carries the answer; a failure is logged, as the answer is sent by then and the block stays answered. */

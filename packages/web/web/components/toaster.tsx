@@ -30,6 +30,10 @@ function refusalText(code: RefusalCode): string {
 			);
 		case "not_queued":
 			return t("Its turn has already started, so it can no longer be changed.");
+		case "answer_locked":
+			return t(
+				"An answer cannot be edited. Cancel it, then answer the block again.",
+			);
 		case "gated":
 			return t("Finish setting up first.");
 	}

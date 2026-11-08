@@ -8,6 +8,8 @@ export const ZH_TW_ROWS: Readonly<Record<string, string>> = {
 	"Not sent yet": "尚未傳送",
 	"Not sent": "未傳送",
 	"Sending…": "傳送中…",
+	"An answer cannot be edited. Cancel it, then answer the block again.":
+		"答案無法編輯。請先取消，再重新回答。",
 	"This is exactly what will be sent:": "將傳送的內容如下：",
 	"Not sent: {reason}": "未傳送：{reason}",
 	"the answer does not fit this block": "回答與這個區塊不符",
