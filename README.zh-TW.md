@@ -47,7 +47,7 @@ Bun 會自己讀 `.env`，`.gitignore` 也已經擋掉它。
 | 變數 | 內容 |
 | --- | --- |
 | `DISCORD_TOKEN` | bot 的 token，在應用程式的 Bot 頁面取得 |
-| `DISCORD_GUILD_ID`、`DISCORD_ENTRY_CHANNEL_ID` | 伺服器，以及負責統籌的智慧體所在的頻道（開啟開發者模式後，按右鍵複製 id） |
+| `DISCORD_GUILD_ID`、`DISCORD_ENTRY_CHANNEL_ID` | 伺服器，以及負責統籌的智慧體所在的頻道（開啟開發者模式後，按右鍵複製 id）；設定裡兩者都不寫，agent 就留在 app 的房間 |
 | `OWNER_ID`、`OWNER_NAME` | 你自己：唯一能改動一切的人 |
 | `DATABASE_URL` | PostgreSQL；預設值與 `docker-compose.yml` 一致 |
 | `MODEL` | 智慧體使用的模型，格式為 `<provider>/<id>` |
@@ -190,12 +190,13 @@ export default {
 | `autonomy.yolo.questionGraceSeconds` | `30` | yolo 對話裡，`ask_user` 卡片讓這一輪等多久，5 到 600；沒回答時，這一輪照它自己的最佳選擇繼續，卡片仍然開著 |
 | `autonomy.yolo.timeoutCardSeconds` | `60` | yolo 對話裡，逾時卡片等多久，10 到 3600；沒回答時，這一輪就像按了「繼續」一樣接著做，最多到 `autonomy.longRunning.maxSeconds` |
 
-沒有 `discord` 時，只要 `agents` 列了 agent，它們就在支援房間的 surface（例如 pi-roundtable-web）裡運作；沒有任何 surface 支援房間時 host 拒絕啟動：
+沒有 `discord`，或有 `discord` 但沒有 `discord.guild` 時，只要 `agents` 列了 agent，它們就在支援房間的 surface（例如 pi-roundtable-web）裡運作；沒有任何 surface 支援房間時 host 拒絕啟動：
 
 | 設定 | 預設 | 說明 |
 | --- | --- | --- |
-| `agents` | 無 | 第一批團隊，只建立一次。沒有 `discord` 時，種子沒有 `channelId`，團隊的資料列記在 id `local` 之下 |
-| `coordinator` | `agents` 的第一位 | 沒有 `discord` 時，接手主人一般請求的 agent，不能被封存。有 `discord` 時設它會出錯：由入口頻道的 agent 協調 |
+| `discord.guild` | 無 | agent server 的伺服器，agent 的頻道、分類與 `#dashboard` 都在這裡；需要 `discord.entryChannel` 與 `http.publicUrl`。不設時，bot 仍在它加入的每個伺服器服務外掛的 claim、斜線指令與主人的私訊，團隊則像沒有 `discord` 時一樣住在 app 的房間：必須設 `agents`，設 `entryChannel` 會出錯 |
+| `agents` | 無 | 第一批團隊，只建立一次。沒有 `discord.guild` 時，種子沒有 `channelId`，團隊的資料列記在 id `local` 之下 |
+| `coordinator` | `agents` 的第一位 | 沒有 `discord.guild` 時，接手主人一般請求的 agent，不能被封存。有 `discord.guild` 時設它會出錯：由入口頻道的 agent 協調 |
 | `skills` | 有 `agents` 時開啟 | 技能 addon；沒有 `discord` 時，只有 `agents` 列了 agent 才會開 |
 | `helpers` | 每位騎士 4 位、全站 12 位，結束 24 小時後封存 | 臨時騎士：騎士用 `helper_create` 為單一任務做出、完成後用 `helper_end` 清掉的幫手。設定為 `{ perParent, perHost, archiveFinishedAfterHours }`；`false` 兩個工具都不提供 |
 

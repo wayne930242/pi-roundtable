@@ -7,6 +7,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- A Discord bot whose agent team lives only in the app: leave `discord.guild` out and keep `agents`. Discord stays connected for the plugins' claims, the globally registered slash commands and the owner's direct messages, and the team runs as on a host without Discord: id `local`, rooms only, the coordinator `coordinator` names, no agent channels, categories, `#dashboard`, entry channel or agent threads, and no guild asked for on the agents' behalf. `discord.entryChannel` without `discord.guild` is a `ConfigError`, and so is leaving out both the guild and `agents` unless `agentServer: false`; `http.publicUrl` is required only with the guild.
+
+### Changed
+
+- `DiscordConfig.guild` and `ResolvedDiscord.guild` are optional, `agentServer: false` included.
+- A team without Discord channels is no longer offered `channel_arrange` or `channel_read`, and its `agent_create` and `group_create` take no `category`; before, they were offered and refused.
+
 - pi-roundtable-web: a Webhooks page (`#/webhooks`, under More) lists and manages every knight's incoming webhooks in one place, from the new owner route `GET api/webhooks`. Its pane is `webhooks`; a host with an explicit `panes` list adds it itself, as with `presets`.
 
 - pi-roundtable-coding: a coding task can be cancelled. `repo_task_cancel { repo, id, reason? }` drops a queued task before it runs, or stops a running worker the way a timeout does, closing the held actions it waited on; the stopped worker's commits stay on its branch and worktree, not merged into the clone, and its report says "cancelled by <name>" and names both. `repo_task_list { repo? }` lists running and queued tasks. An agent sees and cancels its own tasks, an owner any. The Settings page "Coding workers" lists the tasks with an owner-only Cancel action. `CodingDesk.cancel(id, by)` answers a `CancelResult` and `CodingDesk.tasks()` lists the tasks; `REPO_TOOLS` and `RepoToolName` gain the two names, and the `repo_task` result mentions `repo_task_cancel`.

@@ -50,7 +50,7 @@ Bun loads `.env` by itself, and `.gitignore` keeps it out of Git.
 | Variable | What it is |
 | --- | --- |
 | `DISCORD_TOKEN` | The bot's token, from the application's Bot page |
-| `DISCORD_GUILD_ID`, `DISCORD_ENTRY_CHANNEL_ID` | The server and the channel where the coordinating agent lives (turn on Developer Mode, then right-click to copy ids) |
+| `DISCORD_GUILD_ID`, `DISCORD_ENTRY_CHANNEL_ID` | The server and the channel where the coordinating agent lives (turn on Developer Mode, then right-click to copy ids); leave both out of the configuration to keep the agents in the app's rooms |
 | `OWNER_ID`, `OWNER_NAME` | You: the one person who can change everything |
 | `DATABASE_URL` | PostgreSQL; the default matches `docker-compose.yml` |
 | `MODEL` | The agents' model, `<provider>/<id>` |
@@ -195,12 +195,13 @@ A turn works 10 minutes by default before it asks you whether to go on, and 30 m
 | `autonomy.yolo.questionGraceSeconds` | `30` | In a yolo conversation, how long an `ask_user` card holds the turn, 5 to 600; unanswered, the turn goes on with its own best choice and the card stays open |
 | `autonomy.yolo.timeoutCardSeconds` | `60` | In a yolo conversation, how long the timeout card waits, 10 to 3600; unanswered, the turn goes on as if you pressed Continue, up to `autonomy.longRunning.maxSeconds` |
 
-Without `discord` the agents still run when `agents` lists them, in the rooms of a surface that hosts them, such as pi-roundtable-web; the host refuses to start when none does:
+Without `discord`, or with `discord` but no `discord.guild`, the agents still run when `agents` lists them, in the rooms of a surface that hosts them, such as pi-roundtable-web; the host refuses to start when none does:
 
 | Setting | Default | What it is |
 | --- | --- | --- |
-| `agents` | none | The first team, created once. Without `discord`, a seed has no `channelId` and the team's rows are kept under the id `local` |
-| `coordinator` | the first of `agents` | Without `discord`, the agent the owner's general requests come to; it cannot be archived. With `discord` it is an error: the entry channel's agent coordinates |
+| `discord.guild` | none | The agent server's guild, where the agents' channels, categories and `#dashboard` live; needs `discord.entryChannel` and `http.publicUrl`. Left out, the bot keeps serving the plugins' claims, slash commands and the owner's direct messages in every guild it is in, and the team lives in the app's rooms as without `discord`: `agents` is required and `entryChannel` is an error |
+| `agents` | none | The first team, created once. Without `discord.guild`, a seed has no `channelId` and the team's rows are kept under the id `local` |
+| `coordinator` | the first of `agents` | Without `discord.guild`, the agent the owner's general requests come to; it cannot be archived. With `discord.guild` it is an error: the entry channel's agent coordinates |
 | `skills` | on with `agents` | The skills addon; without `discord` it is on only when `agents` lists some |
 | `helpers` | 4 per knight, 12 in all, archived 24 hours after finishing | Temp knights, the helpers a knight makes with `helper_create` for one task and clears with `helper_end`: `{ perParent, perHost, archiveFinishedAfterHours }`; `false` offers neither tool |
 
