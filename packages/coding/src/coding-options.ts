@@ -34,7 +34,9 @@ export type RepoToolName =
 	| "repo_add"
 	| "repo_change_report"
 	| "repo_push"
-	| "repo_task";
+	| "repo_task"
+	| "repo_task_list"
+	| "repo_task_cancel";
 /** Trusted wording of one repository tool, as the model reads it; unset fields keep the defaults. */
 export interface CodingToolText {
 	description?: string;
