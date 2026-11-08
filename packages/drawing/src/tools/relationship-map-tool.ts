@@ -10,6 +10,7 @@ import {
 	NODE_TYPES,
 	renderRelationshipMap,
 } from "../relationship-map.ts";
+import type { ToolWording } from "../tool-text.ts";
 import {
 	type ImageToolEnv,
 	imageTool,
@@ -19,6 +20,7 @@ import {
 
 export function relationshipMapTool(
 	env: ImageToolEnv,
+	text: ToolWording,
 	random: Random,
 	limits: RelationshipMapLimits = {},
 	permissive = false,
@@ -28,38 +30,38 @@ export function relationshipMapTool(
 	return imageTool(
 		{
 			name: "relationship_map",
-			description:
-				"Draw a hand-drawn relationship map of characters (pc, npc) and factions, with typed relationships between them, and attach it to your reply as an image.",
+			description: text.description,
 			parameters: strictObject({
-				title: Type.Optional(Type.String({ maxLength: maxTitle })),
+				title: Type.Optional(
+					Type.String({ maxLength: maxTitle, ...text.about("title") }),
+				),
 				nodes: Type.Array(
 					strictObject({
 						id: Type.String({
 							minLength: permissive ? 0 : 1,
 							maxLength: maxText,
-							description: "Character or faction name.",
+							...text.about("nodes.id"),
 						}),
-						type: literals(NODE_TYPES),
+						type: literals(NODE_TYPES, text.about("nodes.type")),
 						label: Type.Optional(
 							Type.String({
 								maxLength: maxText,
-								description: "A sub-label such as a role.",
+								...text.about("nodes.label"),
 							}),
 						),
 					}),
-					{ minItems: 1, maxItems: MAX_NODES },
+					{ minItems: 1, maxItems: MAX_NODES, ...text.about("nodes") },
 				),
 				edges: Type.Array(
 					strictObject({
-						from: Type.String({ description: "The id of a node." }),
-						to: Type.String({ description: "The id of another node." }),
-						type: literals(
-							EDGE_TYPES,
-							"romantic: arrow; entanglement: dashed arrow; bond: plain line; faction: dashed arrow; hostile: arrows both ways.",
+						from: Type.String(text.about("edges.from")),
+						to: Type.String(text.about("edges.to")),
+						type: literals(EDGE_TYPES, text.about("edges.type")),
+						label: Type.Optional(
+							Type.String({ maxLength: maxText, ...text.about("edges.label") }),
 						),
-						label: Type.Optional(Type.String({ maxLength: maxText })),
 					}),
-					{ maxItems: MAX_EDGES },
+					{ maxItems: MAX_EDGES, ...text.about("edges") },
 				),
 			}),
 			draw: (args) => ({

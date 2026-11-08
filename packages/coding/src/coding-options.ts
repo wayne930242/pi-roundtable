@@ -44,27 +44,44 @@ export interface CodingToolText {
 	parameters?: Record<string, string>;
 }
 export interface CodingPresentation {
-	/** The repo_list result; unset: the managed clones as JSON. */
+	/**
+	 * The repo_list result; unset: the managed clones as JSON. `defaultText` is that default, so a
+	 * hook can append to it.
+	 */
 	list?(
 		repos: (RepoSummary & { skills: string[] })[],
 		context: { shelfDir: string; fetched: boolean },
+		defaultText: string,
 	): string;
-	/** Separate the owner's posted record from the model's shipping instructions. */
+	/**
+	 * Separate the owner's posted record from the model's shipping instructions. `defaults` is the
+	 * package's own pair, so a hook can append to either.
+	 */
 	changeReport?(
 		report: ChangeReport,
 		direct: boolean,
+		defaults: { post: string; result: string },
 	): { post: string; result: string };
-	taskStarted?(job: CodingJob, skippedSkills: string[]): string;
-	/** The repo_task result for a task waiting for a worker slot, at `position` (from 1) in the queue. */
+	/** The repo_task result for a started task; `defaultText` is the package's, which names `repo_task_cancel`. */
+	taskStarted?(
+		job: CodingJob,
+		skippedSkills: string[],
+		defaultText: string,
+	): string;
 	/**
 	 * Wording of the Settings page, keyed by its English text, such as
 	 * `{ "Coding workers": "..." }`; it wins over the built-in zh-TW wording, key by key.
 	 */
 	messages?: Readonly<Record<string, string>>;
+	/**
+	 * The repo_task result for a task waiting for a worker slot, at `position` (from 1) in the
+	 * queue; `defaultText` is the package's.
+	 */
 	taskQueued?(
 		job: CodingJob,
 		position: number,
 		skippedSkills: string[],
+		defaultText: string,
 	): string;
 }
 export interface CodingOptions {

@@ -6,6 +6,13 @@ import {
 } from "pi-roundtable";
 import { type Deck, DeckError, loadDecks } from "./cards/deck.ts";
 import type { Random } from "./random.ts";
+import {
+	checkToolNames,
+	type DrawingToolName,
+	type DrawingToolText,
+	type ToolWording,
+	toolWording,
+} from "./tool-text.ts";
 import { drawCardsTool } from "./tools/draw-cards-tool.ts";
 import type { ImageToolEnv } from "./tools/image-tool.ts";
 import {
@@ -63,6 +70,14 @@ export interface DrawingOptions {
 	 * refused with a message the model can correct.
 	 */
 	permissive?: boolean;
+	/**
+	 * Trusted wording of the tools' descriptions and arguments, such as
+	 * `{ relationship_map: { description: "…", parameters: { "nodes.id": "…" } } }`; unset text
+	 * keeps `DEFAULT_DRAWING_TOOL_TEXT`. It never changes a tool's arguments. A tool or argument
+	 * the plugin does not have stops the start. A `draw_cards` description the host sets replaces
+	 * the package's, including the list of decks it ends with.
+	 */
+	toolText?: Partial<Record<DrawingToolName, DrawingToolText>>;
 }
 
 function readDecks(deckDir: string): Deck[] {
@@ -89,35 +104,48 @@ export function drawing(options: DrawingOptions = {}) {
 					throw new PluginError(
 						`plugin drawing: mapLimits.${name} must be a whole number of at least 1; got ${limit}.`,
 					);
+			checkToolNames(options.toolText ?? {});
 			// Read at setup, so a wrong deck directory stops the start with a message that names this plugin.
 			const decks = options.deckDir ? readDecks(options.deckDir) : [];
 			const env: ImageToolEnv = {
 				minTier: options.minTier ?? "member",
 			};
-			return {
-				tools: [
-					relationshipMapTool(
-						env,
-						random,
-						options.mapLimits,
-						options.permissive,
-					),
-					magicCircleTool(env),
-					sigilTool(env, options.permissive),
-					sacredGeometryTool(env, options.permissive),
-					...(decks.length > 0
-						? [
-								drawCardsTool(
-									decks,
-									env,
-									random,
-									options.cardPresentation,
-									options.permissive,
-								),
-							]
-						: []),
-				],
+			const worded: ToolWording[] = [];
+			const text = (tool: DrawingToolName) => {
+				const wording = toolWording(tool, options.toolText?.[tool]);
+				worded.push(wording);
+				return wording;
 			};
+			const tools = [
+				relationshipMapTool(
+					env,
+					text("relationship_map"),
+					random,
+					options.mapLimits,
+					options.permissive,
+				),
+				magicCircleTool(env, text("magic_circle_generate")),
+				sigilTool(env, text("sigil_generate"), options.permissive),
+				sacredGeometryTool(
+					env,
+					text("sacred_geometry_generate"),
+					options.permissive,
+				),
+				...(decks.length > 0
+					? [
+							drawCardsTool(
+								decks,
+								env,
+								text("draw_cards"),
+								random,
+								options.cardPresentation,
+								options.permissive,
+							),
+						]
+					: []),
+			];
+			for (const wording of worded) wording.check();
+			return { tools };
 		},
 	});
 }
