@@ -1,4 +1,5 @@
 import type { ResolvedHelpers } from "../config/helpers.ts";
+import type { RoomLayoutService } from "../contract/room-layout.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { ThinkingSetting } from "../domain/models.ts";
 import type { ToolSelection } from "../domain/sessions.ts";
@@ -70,6 +71,8 @@ export interface AgentTeamOptions
 	 * defaults apply.
 	 */
 	helpers?: ResolvedHelpers | false;
+	/** The app's room groups, read at each call; absent or undefined, the tools refuse a room group. */
+	rooms?: () => RoomLayoutService | undefined;
 }
 
 /** What the team's collaborators share: its options, its turns, and its change signal. */

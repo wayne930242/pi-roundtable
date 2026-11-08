@@ -26,6 +26,8 @@ import {
 } from "./agent-tool-schema.ts";
 import type { HelperFields, PresetAction } from "./helper-preset-ops.ts";
 import { helperToolDefs } from "./helper-tools.ts";
+import { placedAfter, ROOM_GROUP, roomToolDefs } from "./room-tools.ts";
+import type { RoomOps } from "./team-rooms.ts";
 
 /** The tool that hands a request to another agent; a group seat has none. */
 export const MESSAGE_AGENT_TOOL = "message_agent";
@@ -54,12 +56,13 @@ export const AGENT_TOOLS = [
 	"group_update",
 	"archive",
 	"channel_arrange",
+	"room_arrange",
 	"channel_read",
 ] as const;
 
 /**
  * The tools a temp knight's turns do not get: making knights, temp knights or groups, archiving,
- * arranging channels, and scheduling, which would leave work behind with no one to end it.
+ * arranging channels and rooms, and scheduling, which would leave work behind with no one to end it.
  */
 export const WITHHELD_FROM_HELPERS: readonly string[] = [
 	"agent_create",
@@ -68,6 +71,7 @@ export const WITHHELD_FROM_HELPERS: readonly string[] = [
 	"group_update",
 	"archive",
 	"channel_arrange",
+	"room_arrange",
 	"schedule_create",
 ];
 
@@ -163,7 +167,7 @@ export interface AgentOps {
 
 const category = (kind: "Agents" | "Groups") =>
 	Type.String({
-		description: `The category its channel opens under: ${kind} (the default) or ${kind}-<suffix>, such as ${kind}-work; made when missing. Keep to the categories agent_list shows unless a new one fits better.`,
+		description: `Discord only: the category its channel opens under, ${kind} (the default) or ${kind}-<suffix>, such as ${kind}-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group.`,
 	});
 const MEMBERS = Type.Array(Type.String(), {
 	minItems: MIN_GROUP_MEMBERS,
@@ -177,13 +181,15 @@ type AgentToolDef = TextToolDef<(typeof AGENT_TOOLS)[number]>;
 export interface AgentToolOptions {
 	/** Whether the skills addon is on; without it agent_create takes no skills. */
 	skills: boolean;
+	/** The app's room groups; without them `group` and room_arrange are refused. */
+	rooms?: RoomOps;
 }
 
 function toolDefs(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	owner: OwnerIdentity,
-	{ skills: skillsOn }: AgentToolOptions,
+	{ skills: skillsOn, rooms }: AgentToolOptions,
 ): AgentToolDef[] {
 	const o = ownerWords(owner);
 	const defs: AgentToolDef[] = [
@@ -191,9 +197,13 @@ function toolDefs(
 			name: "agent_list",
 			label: "List agents",
 			description:
-				"List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels.",
+				"List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels; then the web app's room groups in order with their rooms, and its pinned rooms.",
 			parameters: Type.Object({}),
-			run: () => ops.list(),
+			run: async () => {
+				const list = await ops.list();
+				const groups = await rooms?.listText();
+				return groups ? `${list}\n\n${groups}` : list;
+			},
 		},
 		{
 			name: "agent_get",
@@ -264,6 +274,7 @@ function toolDefs(
 					description: "Its opening task, self-contained.",
 				}),
 				category: Type.Optional(category("Agents")),
+				group: Type.Optional(ROOM_GROUP),
 				long_running: Type.Optional(
 					Type.Boolean({
 						description: `Turn on long-running mode for its conversations: its turns, such as the opening task, go on past the usual 10-minute limit by themselves, up to the host's cap (four hours by default). Set it for an agent whose tasks run long, such as research or large changes.`,
@@ -285,16 +296,19 @@ function toolDefs(
 				const skills = stringList(i, "skills");
 				const look = lookOf(i);
 				const longRunning = i.long_running === true;
-				return ops.create(scope, {
-					name: requiredString(i, "name"),
-					displayName: requiredString(i, "display_name"),
-					prompt: requiredString(i, "prompt"),
-					...(Object.keys(look).length > 0 ? { character: look } : {}),
-					task: requiredString(i, "task"),
-					...(category ? { category } : {}),
-					...(skills && skills.length > 0 ? { skills } : {}),
-					...(longRunning ? { longRunning } : {}),
-				});
+				const name = requiredString(i, "name");
+				return placedAfter(rooms, name, optionalString(i, "group"), () =>
+					ops.create(scope, {
+						name,
+						displayName: requiredString(i, "display_name"),
+						prompt: requiredString(i, "prompt"),
+						...(Object.keys(look).length > 0 ? { character: look } : {}),
+						task: requiredString(i, "task"),
+						...(category ? { category } : {}),
+						...(skills && skills.length > 0 ? { skills } : {}),
+						...(longRunning ? { longRunning } : {}),
+					}),
+				);
 			},
 		},
 		...helperToolDefs(ops, scope, skillsOn),
@@ -326,17 +340,21 @@ function toolDefs(
 				members: MEMBERS,
 				host: Type.Optional(NAME),
 				category: Type.Optional(category("Groups")),
+				group: Type.Optional(ROOM_GROUP),
 			}),
 			run: (i) => {
 				const host = optionalString(i, "host");
 				const category = optionalString(i, "category");
-				return ops.createGroup({
-					name: requiredString(i, "name"),
-					displayName: requiredString(i, "display_name"),
-					members: stringList(i, "members") ?? [],
-					...(host ? { host } : {}),
-					...(category ? { category } : {}),
-				});
+				const name = requiredString(i, "name");
+				return placedAfter(rooms, name, optionalString(i, "group"), () =>
+					ops.createGroup({
+						name,
+						displayName: requiredString(i, "display_name"),
+						members: stringList(i, "members") ?? [],
+						...(host ? { host } : {}),
+						...(category ? { category } : {}),
+					}),
+				);
 			},
 		},
 		{
@@ -401,6 +419,7 @@ function toolDefs(
 				);
 			},
 		},
+		...roomToolDefs(rooms, o.name),
 		{
 			name: "channel_read",
 			label: "Read channel",

@@ -122,6 +122,11 @@ export type {
 	ResolvedProviders,
 } from "./core/contract/providers.ts";
 export type {
+	RoomGroupsView,
+	RoomLayoutService,
+} from "./core/contract/room-layout.ts";
+export { ROOM_LAYOUT } from "./core/contract/room-layout.ts";
+export type {
 	AgentRuntime,
 	AgentSessions,
 	ContextUse,

@@ -377,6 +377,7 @@ describe("the agent tools, with and without an image provider", () => {
 				"color",
 				"task",
 				"category",
+				"group",
 				"long_running",
 				"skills",
 			]);

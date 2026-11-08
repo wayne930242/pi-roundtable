@@ -15,6 +15,7 @@ import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import type { ResolvedHelpers } from "../config/helpers.ts";
 import type { ResolvedRouting } from "../config/routing.ts";
+import { ROOM_LAYOUT } from "../contract/room-layout.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
@@ -353,6 +354,7 @@ export function agentServerPlugin(
 					: {}),
 				...(skills ? { skills } : {}),
 				modes: () => context.services.find(MODES),
+				rooms: () => context.services.find(ROOM_LAYOUT),
 				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
 				principals: () => context.services.find(IDENTITY),
 				logger,

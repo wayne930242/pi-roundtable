@@ -37,6 +37,7 @@ import {
 import { TeamLifecycle } from "./team-lifecycle.ts";
 import type { AgentTeamOptions, TeamContext } from "./team-options.ts";
 import { teamSystemPrompt } from "./team-prompt.ts";
+import { TeamRooms } from "./team-rooms.ts";
 import { teamSelection } from "./team-selection.ts";
 import { type TeamStatus, teamStatus } from "./team-status.ts";
 import {
@@ -176,6 +177,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	extension(scope: AgentTurnScope): ExtensionFactory {
 		return agentToolsExtension(this, scope, THE_SPEAKER, {
 			skills: this.#options.skills !== undefined,
+			rooms: new TeamRooms(this.#options.store, () => this.#options.rooms?.()),
 		});
 	}
 
