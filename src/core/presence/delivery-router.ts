@@ -50,7 +50,8 @@ export interface DeliveryRouter {
 
 export function deliveryRouter(
 	providers: () => readonly DirectChannelProvider[],
-	surfaces: Pick<SurfacePort, "sendReply"> & Partial<Pick<SurfacePort, "of">>,
+	surfaces: Pick<SurfacePort, "sendReply"> &
+		Partial<Pick<SurfacePort, "of" | "lang">>,
 	logger?: Pick<Logger, "warn">,
 ): DeliveryRouter {
 	const order = (origin: Origin): readonly DirectChannelProvider[] => {
@@ -127,7 +128,11 @@ export function deliveryRouter(
 				await surfaces.sendReply(reached.channel, {
 					// The text of a notice may be an agent's (the notify tool's), block fences included.
 					chunks: chunksFor(
-						supportOf(surfaces.of?.(reached.channel), reached.channel),
+						supportOf(
+							surfaces.of?.(reached.channel),
+							reached.channel,
+							surfaces.lang,
+						),
 						text,
 					),
 				});

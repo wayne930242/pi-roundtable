@@ -41,7 +41,7 @@
 	},
 	"dependencies": {
 		"jose": "6.2.12",
-		"pi-better-show": "0.2.0"
+		"pi-better-show": "0.3.0"
 	},
 	"peerDependencies": {
 		"pi-roundtable": ">=0.38.0 <0.39.0"

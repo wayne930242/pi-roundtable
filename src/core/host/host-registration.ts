@@ -311,7 +311,10 @@ export class Linkage {
 					);
 				return this.registry.surfaces;
 			},
-			{ deprecated: (message) => this.#deprecated(message) },
+			{
+				deprecated: (message) => this.#deprecated(message),
+				lang: this.#options.environment?.locale ?? "en",
+			},
 		);
 	}
 

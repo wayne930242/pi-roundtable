@@ -305,7 +305,11 @@ export class TeamTurns {
 
 	/** What the surface that serves the channel does there (see `supportOf`). */
 	#support(channel: ChannelKey) {
-		return supportOf(this.#options.surfaces?.of(channel), channel);
+		return supportOf(
+			this.#options.surfaces?.of(channel),
+			channel,
+			this.#options.surfaces?.lang,
+		);
 	}
 
 	/** The messages that carry an agent's text to the channel, cut for the surface that serves it. */

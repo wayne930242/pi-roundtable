@@ -78,7 +78,7 @@ export interface DispatchThreadsOptions {
 	 * the surface that serves the channel's prefix; a channel whose surface has none gets no thread.
 	 * Give this or `host`, not both.
 	 */
-	surfaces?: Pick<SurfacePort, "of">;
+	surfaces?: Pick<SurfacePort, "of" | "lang">;
 	/**
 	 * Discord's thread host, for the `discord:` channels only.
 	 *
@@ -248,9 +248,10 @@ export class DispatchThreads {
 		const { id } = parseChannelKey(channel);
 		let closed = false;
 		const send = threads.send?.bind(threads);
-		const { blocks, blockText } = supportOf(
+		const { blocks, blockText, lang } = supportOf(
 			this.#options.surfaces?.of(channel),
 			channel,
+			this.#options.surfaces?.lang,
 		);
 		const post = async (text: string) => {
 			try {
@@ -273,6 +274,7 @@ export class DispatchThreads {
 							// The poster cuts text for the surface the thread is on.
 							...(blocks ? { blocks } : {}),
 							...(blockText ? { blockText } : {}),
+							...(lang ? { lang } : {}),
 							post: (text: string) => send(id, text),
 						},
 					}
