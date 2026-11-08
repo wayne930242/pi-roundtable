@@ -234,6 +234,7 @@ export function agentServerPlugin(
 			const built: DiscordAgentTeam = new DiscordAgentTeam({
 				routes,
 				guildId: teamId,
+				discordGuild: options.guildId,
 				...(options.entryChannelId !== undefined
 					? { entryChannelId: options.entryChannelId }
 					: {}),

@@ -337,8 +337,10 @@ describe("the agent server without Discord", () => {
 			},
 		);
 		expect(plugin.migrations?.map((m) => m.name)).not.toContain("team-move");
-		await setUpLocal(plugin, ["app"]);
+		const { services } = await setUpLocal(plugin, ["app"]);
 		expect(opened).toEqual(["crew"]);
+		expect(services.get(AGENTS).team.guildId).toBe("crew");
+		expect(services.get(AGENTS).team.discordGuild).toBe("g1");
 	});
 
 	test("moves a former team's rows at every boot, clearing channel ids when it has no Discord channels", () => {

@@ -17,6 +17,8 @@ export interface AgentTeamOptions
 	 * rows the team keeps.
 	 */
 	guildId: string;
+	/** The Discord guild the team's channels live in, which is not the team's id when the host sets one; absent without Discord channels. */
+	discordGuild?: string | undefined;
 	/** The first team, read and inserted once on start; an agent already stored is never overwritten. */
 	seeds: () => readonly AgentSeed[];
 	/** Sections the plugins add to every agent turn's system prompt, read before each run. */

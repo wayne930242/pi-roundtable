@@ -26,8 +26,8 @@
 		"guild": 19
 	},
 	"src/core/agents/agent-team.ts": {
-		"discord-identifier": 3,
-		"guild": 2
+		"discord-identifier": 5,
+		"guild": 4
 	},
 	"src/core/agents/group-messages.ts": {
 		"guild": 17
@@ -61,7 +61,8 @@
 		"discord-identifier": 2
 	},
 	"src/core/agents/team-options.ts": {
-		"guild": 1
+		"guild": 2,
+		"discord-identifier": 1
 	},
 	"src/core/agents/team-status.ts": {
 		"discord-identifier": 2

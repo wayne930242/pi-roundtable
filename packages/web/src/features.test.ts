@@ -99,8 +99,11 @@ function fixture(
 		timeZone: "Asia/Taipei",
 		panes: ["overview", "notes", "conversations", "skills", "connectors"],
 		sessionsDir: `${fixtureSessions()}/sessions`,
-		team: partial<Pick<AgentTeam, "owns" | "status" | "guildId">>({
+		team: partial<
+			Pick<AgentTeam, "owns" | "status" | "guildId" | "discordGuild">
+		>({
 			guildId: "guild",
+			discordGuild: "guild",
 			owns: (key) =>
 				key === agent
 					? "agent"
@@ -199,8 +202,11 @@ describe("host feature ports", () => {
 			{},
 			{
 				roomSurface: "app",
-				team: partial<Pick<AgentTeam, "owns" | "status" | "guildId">>({
+				team: partial<
+					Pick<AgentTeam, "owns" | "status" | "guildId" | "discordGuild">
+				>({
 					guildId: "guild",
+					discordGuild: "guild",
 					owns: (key) =>
 						key === groupRoom || key === `discord:${GROUP_CHANNEL}`
 							? "group"

@@ -264,8 +264,10 @@ export interface AgentChange {
 
 /** The agent team as plugins use it: who is in it, what model they run, and their channels. */
 export interface AgentTeam extends HelperTeam {
-	/** The team's id: the Discord guild, or `"local"` on a host without Discord. */
+	/** The team's id: what its rows are stored under, the Discord guild's id unless the host sets one, else `"local"`. */
 	readonly guildId: string;
+	/** The Discord guild the team's channels live in; absent on a team without Discord channels. */
+	readonly discordGuild?: string | undefined;
 	/** Called when a turn starts or ends and when an agent or group changes. */
 	onChange(listener: () => void): void;
 	/** Every active agent and group, with what each is doing now. */
@@ -280,10 +282,7 @@ export interface AgentTeam extends HelperTeam {
 	 * Discord, the one `coordinator` names (the first seed by default); undefined while none is active.
 	 */
 	coordinator(): string | undefined;
-	/**
-	 * Every key an agent or group is addressed by: its Discord channel when it has one, then its
-	 * room on each surface with `agentRooms`; empty for an unknown name.
-	 */
+	/** Every key an agent or group is addressed by: its Discord channel, then its room on each `agentRooms` surface; empty for an unknown name. */
 	roomsOf(name: string): ChannelKey[];
 	/** The model and thinking setting of an agent's next run: its own, or the assistant's. */
 	modelOf(name: string): { model: string; thinking: ThinkingSetting };

@@ -51,8 +51,8 @@ const visitorOf = (person: FakePrincipal): Visitor => ({
 });
 const AS_OWNER = visitorOf(OWNER);
 
-const team = partial<Pick<AgentTeam, "status" | "owns" | "guildId">>({
-	guildId: "900000000000000099",
+const team = partial<AgentTeam>({
+	discordGuild: "900000000000000099",
 	owns: (key) =>
 		key === `discord:${AGENT_CHANNEL}`
 			? "agent"
@@ -206,35 +206,24 @@ describe("overview", () => {
 
 describe("overview of a team without Discord", () => {
 	test("a group with no channel is reported without a channelId", async () => {
-		const bare = partial<Pick<AgentTeam, "status" | "owns" | "guildId">>({
+		const crew = {
+			name: "crew",
+			displayName: "Crew",
+			members: ["Scout"],
+			host: "Scout",
+			busy: 0,
+		};
+		const bare = partial<AgentTeam>({
 			guildId: "local",
+			discordGuild: undefined,
 			owns: () => undefined,
-			status: async () => ({
-				agents: [],
-				groups: [
-					{
-						name: "crew",
-						displayName: "Crew",
-						members: ["Scout"],
-						host: "Scout",
-						busy: 0,
-					},
-				],
-			}),
+			status: async () => ({ agents: [], groups: [crew] }),
 		});
 		const { body } = await call<OverviewView>(
 			api({ team: bare }).api,
 			"overview",
 		);
-		expect(body.groups).toEqual([
-			{
-				name: "crew",
-				displayName: "Crew",
-				members: ["Scout"],
-				host: "Scout",
-				busy: 0,
-			},
-		]);
+		expect(body.groups).toEqual([crew]);
 	});
 });
 

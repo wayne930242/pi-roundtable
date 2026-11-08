@@ -60,7 +60,7 @@ afterEach(async () => {
 const teamChanges: (() => void)[] = [];
 const agents = servicePair(AGENTS, {
 	team: partial({
-		guildId: "900000000000000099",
+		discordGuild: "900000000000000099",
 		onChange: (listener: () => void) => teamChanges.push(listener),
 		owns: () => undefined,
 		status: async () => ({ agents: [], groups: [] }),
