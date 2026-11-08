@@ -77,6 +77,8 @@ export interface SettingsWebApp {
 }
 interface SettingsViewer {
 	tier: Tier;
+	/** The name the app shows for them, for a cancelled task's report. */
+	name?: string;
 }
 type SettingsResult =
 	| { ok: true; notice?: string }
@@ -90,6 +92,20 @@ export interface SettingsPage {
 		title: string;
 		sections: readonly (
 			| { kind: "markdown"; text: string }
+			| {
+					kind: "list";
+					title?: string;
+					rows: {
+						title: string;
+						subtitle?: string;
+						actions?: {
+							id: string;
+							label: string;
+							style?: "danger";
+							confirm?: string;
+						}[];
+					}[];
+			  }
 			| {
 					kind: "form";
 					action: string;
@@ -123,7 +139,7 @@ export const SETTINGS_PAGE_ID = "coding-workers";
 export function settingsWording(
 	locale: Locale,
 	messages: Readonly<Record<string, string>> = {},
-): (text: string, values?: Record<string, number>) => string {
+): (text: string, values?: Record<string, number | string>) => string {
 	const catalog = { ...(locale === "zh-TW" ? ZH_TW : {}), ...messages };
 	return (text, values = {}) =>
 		(catalog[text] ?? text).replace(/\{(\w+)\}/g, (whole, name: string) =>
@@ -156,6 +172,7 @@ export function settingsPage(
 							{ max, running, queued },
 						),
 					},
+					...taskList(desk, t),
 					{
 						kind: "form",
 						action: "save",
@@ -184,6 +201,34 @@ export function settingsPage(
 		act: async (viewer, action, input) => {
 			if (!owner(viewer))
 				return { ok: false, error: t("Only an owner changes this.") };
+			const cancel = /^cancel:(\d{1,9})$/.exec(action);
+			if (cancel) {
+				const id = Number(cancel[1]);
+				const result = await desk.cancel(
+					id,
+					viewer.name ? `${viewer.name} (web app)` : "an owner (web app)",
+				);
+				changed();
+				if (result.status === "refused")
+					return {
+						ok: false,
+						error: t("Coding task #{id} is no longer running or queued.", {
+							id,
+						}),
+					};
+				return {
+					ok: true,
+					notice:
+						result.status === "dropped"
+							? t("Coding task #{id} was dropped from the queue.", { id })
+							: result.branch
+								? t(
+										"Coding task #{id} was stopped; its commits stay on {branch}, not merged.",
+										{ id, branch: result.branch },
+									)
+								: t("Coding task #{id} was stopped.", { id }),
+				};
+			}
 			if (action !== "save")
 				return { ok: false, error: t("This page has no such action.") };
 			const text = input.maxWorkers;
@@ -211,6 +256,67 @@ export function settingsPage(
 			};
 		},
 	};
+}
+
+/** The running and queued tasks, each with a Cancel action; none when nothing runs or waits. */
+function taskList(
+	desk: CodingDesk,
+	t: ReturnType<typeof settingsWording>,
+): {
+	kind: "list";
+	title: string;
+	rows: {
+		title: string;
+		subtitle: string;
+		actions: {
+			id: string;
+			label: string;
+			style: "danger";
+			confirm: string;
+		}[];
+	}[];
+}[] {
+	const tasks = desk.tasks().slice(0, 100);
+	if (!tasks.length) return [];
+	return [
+		{
+			kind: "list",
+			title: t("Tasks"),
+			rows: tasks.map((task) => {
+				const { job } = task;
+				const id = job.id;
+				const who = job.agent ?? job.starter?.speaker.name ?? "";
+				return {
+					title: `#${id} ${job.repo}: ${job.task.split("\n", 1)[0] ?? ""}`,
+					subtitle:
+						task.status === "running"
+							? t("Running since {at}, started by {who}", {
+									at: job.startedAt.toISOString(),
+									who,
+								})
+							: t("Queued (position {position}) since {at}, started by {who}", {
+									position: task.queuePosition ?? 0,
+									at: (job.queuedAt ?? job.startedAt).toISOString(),
+									who,
+								}),
+					actions: [
+						{
+							id: `cancel:${id}`,
+							label: t("Cancel"),
+							style: "danger",
+							confirm:
+								task.status === "running"
+									? t(
+											"Stop coding task #{id}? Its commits stay on its branch, not merged.",
+											{ id },
+										)
+									: t("Drop coding task #{id} from the queue?", { id }),
+						},
+					],
+				};
+			}),
+		},
+	];
 }
 
 /** Registers the settings page when the web app is there; the web app must be registered first. */

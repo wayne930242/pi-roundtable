@@ -26,7 +26,6 @@ import {
 	loadBuiltInMessages,
 	setPresentation,
 	translate as t,
-	wording,
 } from "./lib/messages.ts";
 import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
@@ -35,7 +34,7 @@ import { isSearchKey } from "./lib/search-key.ts";
 import { initSkins } from "./lib/skins.ts";
 import { openCards, tabTitle, useTabUnread } from "./lib/tab-count.ts";
 import { setTheme, useTheme } from "./lib/theme.ts";
-import { MorePage, PANE_ICONS } from "./pages/more.tsx";
+import { MorePage, PANE_ICONS, PANE_LABELS } from "./pages/more.tsx";
 import { RoomPage } from "./pages/room.tsx";
 import { RoomsPage } from "./pages/rooms.tsx";
 
@@ -109,22 +108,6 @@ const SettingsPage = lazy(() =>
 const TablePage = lazy(() =>
 	import("./pages/table.tsx").then((m) => ({ default: m.TablePage })),
 );
-
-const LABELS: Record<PaneName | "settings" | "more", string> = {
-	overview: wording("Overview"),
-	conversations: wording("Conversations"),
-	notes: wording("Notes"),
-	skills: wording("Skills"),
-	presets: wording("Presets"),
-	connectors: wording("Connectors"),
-	rooms: wording("Rooms"),
-	schedules: wording("Schedules"),
-	table: wording("Round table"),
-	workspace: wording("Files"),
-	profile: wording("Profile"),
-	settings: wording("Settings"),
-	more: wording("More"),
-};
 
 export function App() {
 	const [config, setConfig] = useState<ConfigView>();
@@ -302,7 +285,7 @@ function Console({ config }: { config: ConfigView }) {
 		const all: NavItem[] = [
 			...config.panes.map((pane) => ({
 				pane,
-				label: t(LABELS[pane]),
+				label: t(PANE_LABELS[pane]),
 				icon: PANE_ICONS[pane],
 			})),
 			// The host's own pages stand beside the panes, under `p/<id>`.

@@ -13,4 +13,19 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Give a whole number from 1 to {most}.": "請輸入 1 到 {most} 的整數。",
 	"Up to {max} coding workers now run at once.":
 		"現在同時最多執行 {max} 個程式工作者。",
+	Tasks: "任務",
+	Cancel: "取消",
+	"Running since {at}, started by {who}": "自 {at} 執行中，由 {who} 啟動",
+	"Queued (position {position}) since {at}, started by {who}":
+		"自 {at} 排隊中（第 {position} 位），由 {who} 啟動",
+	"Stop coding task #{id}? Its commits stay on its branch, not merged.":
+		"要停止程式任務 #{id} 嗎？它的提交會留在自己的分支上，不會合併。",
+	"Drop coding task #{id} from the queue?": "要把程式任務 #{id} 移出佇列嗎？",
+	"Coding task #{id} is no longer running or queued.":
+		"程式任務 #{id} 已不在執行或排隊中。",
+	"Coding task #{id} was dropped from the queue.":
+		"程式任務 #{id} 已移出佇列。",
+	"Coding task #{id} was stopped; its commits stay on {branch}, not merged.":
+		"程式任務 #{id} 已停止；它的提交留在 {branch}，沒有合併。",
+	"Coding task #{id} was stopped.": "程式任務 #{id} 已停止。",
 };

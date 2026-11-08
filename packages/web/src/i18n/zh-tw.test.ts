@@ -56,7 +56,7 @@ describe("the built-in zh-TW catalog", () => {
 		// A call whose key is not a literal reads from a `wording(...)` table, the server's text, or a key built from the catalog.
 		expect([...client.dynamic].sort()).toEqual(
 			[
-				"web/app.tsx: t(LABELS[pane])",
+				"web/app.tsx: t(PANE_LABELS[pane])",
 				"web/components/agent-fields.tsx: t(AUTOMATIC)",
 				"web/components/agent-fields.tsx: t(THINKING_LABELS[level])",
 				"web/components/agent-fields.tsx: t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value)",

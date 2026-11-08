@@ -112,6 +112,15 @@ export class WebhookStore {
 		return rows.map(stored);
 	}
 
+	/** Every agent's live webhooks, by agent and then the oldest first. */
+	async listAll(): Promise<StoredWebhook[]> {
+		await this.sweep();
+		const rows: Row[] = await this.#sql`
+			SELECT * FROM web_webhooks WHERE revoked_at IS NULL
+			ORDER BY agent, created_at, id`;
+		return rows.map(stored);
+	}
+
 	/** Revokes one of the agent's webhooks; false when it has no live one of that id. */
 	async revoke(agent: string, id: string): Promise<boolean> {
 		const rows: Row[] = await this.#sql`

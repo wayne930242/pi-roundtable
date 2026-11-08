@@ -175,8 +175,8 @@ function discordAssembly(
 
 /**
  * The agent server and what only it uses, each in its place in the plugin list: the skills addon
- * and the seed agents. Its team lives in the Discord guild when there is one, and otherwise in
- * the rooms of the surfaces that host them.
+ * and the seed agents. Its team lives in the Discord guild `discord.guild` names when there is one,
+ * and otherwise in the rooms of the surfaces that host them.
  */
 interface AgentAssembly {
 	skills: RoundtablePlugin[];
@@ -215,7 +215,8 @@ function agentAssembly(
 				]
 			: [],
 		agentServer: agentServerPlugin({
-			...(discord
+			// Without the agent guild the team lives in the app's rooms, as on a host without Discord.
+			...(discord?.guild
 				? {
 						guildId: discord.guild,
 						...(discord.entryChannel

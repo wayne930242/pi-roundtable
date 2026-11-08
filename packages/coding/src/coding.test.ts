@@ -30,6 +30,7 @@ import {
 import { coding } from "./coding-plugin.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf } from "./repo-shelf.ts";
+import { REPO_TOOLS } from "./repo-tools.ts";
 
 const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
@@ -195,13 +196,7 @@ test("plugin push is held until owner approval, then pushes the reported SHA", a
 		{ surfaces: [chat] },
 	);
 	stops.push(() => harness.stop());
-	expect(harness.tools).toEqual([
-		"repo_list",
-		"repo_add",
-		"repo_change_report",
-		"repo_push",
-		"repo_task",
-	]);
+	expect(harness.tools).toEqual([...REPO_TOOLS]);
 	await harness.runTool("repo_add", { repo: "sample/project" });
 	await change(shelf.dirOf("sample/project"));
 	const before = await git(origin, "rev-parse", "main");

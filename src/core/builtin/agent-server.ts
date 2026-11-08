@@ -55,9 +55,9 @@ export const LOCAL_TEAM_ID = "local";
 
 export interface AgentServerOptions {
 	/**
-	 * The Discord guild the team lives in. Absent on a host without Discord: the team is then
-	 * `LOCAL_TEAM_ID`, it has no channels, and its agents live in the rooms of the surfaces that
-	 * host them.
+	 * The Discord guild the team lives in. Absent on a host without Discord, or whose bot has no
+	 * agent guild: the team is then `LOCAL_TEAM_ID`, it has no channels, and its agents live in the
+	 * rooms of the surfaces that host them.
 	 */
 	guildId?: string;
 	/** The channel the coordinator lives in; set with `guildId`, never with `coordinator`. */
@@ -217,7 +217,7 @@ export function agentServerPlugin(
 		preflight: () => {
 			if (hostsRooms && !hostsRooms())
 				throw new ConfigError(
-					"the agents need a surface that hosts their rooms, such as pi-roundtable-web, and none is installed. Without Discord channels there is nowhere to talk to them; add a plugin whose chat surface declares agentRooms: true, or configure discord.",
+					"the agents need a surface that hosts their rooms, such as pi-roundtable-web, and none is installed. Without Discord channels there is nowhere to talk to them; add a plugin whose chat surface declares agentRooms: true, or configure discord with its guild.",
 				);
 			// The surfaces the rules name exist only once every plugin has registered its own.
 			linkRoutes?.();
@@ -228,7 +228,12 @@ export function agentServerPlugin(
 			const schedules = context.services.get(SCHEDULES);
 			const connection = discord?.connection;
 			const { logger, providers, surfaces } = context;
-			if (!connection) hostsRooms = () => surfaces.roomSurfaces().length > 0;
+			// The team's Discord channels, in the agent guild; a bot without one serves only the plugins.
+			const channels =
+				connection && options.guildId
+					? connection.agentChannels(options.guildId)
+					: undefined;
+			if (!channels) hostsRooms = () => surfaces.roomSurfaces().length > 0;
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
 				skins: context.env.characterSkins,
@@ -293,7 +298,7 @@ export function agentServerPlugin(
 			linkRoutes = () =>
 				routes.validate({
 					names: surfaces.names?.() ?? [],
-					discordChannels: connection !== undefined,
+					discordChannels: channels !== undefined,
 				});
 			const built: DiscordAgentTeam = new DiscordAgentTeam({
 				routes,
@@ -319,9 +324,7 @@ export function agentServerPlugin(
 				shellUser: options.shellUser,
 				...(options.scratchDir ? { scratchDir: options.scratchDir } : {}),
 				store,
-				...(connection && options.guildId
-					? { channels: connection.agentChannels(options.guildId) }
-					: {}),
+				...(channels ? { channels } : {}),
 				studio,
 				...(options.refreshAvatars ? { refreshAvatars: true } : {}),
 				runtime: () => running,

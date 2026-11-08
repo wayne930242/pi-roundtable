@@ -33,6 +33,7 @@ import {
 import { checkCount, checkMaxWorkers } from "./limits.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf, reportPost } from "./repo-shelf.ts";
+import { taskTools } from "./task-tools.ts";
 import { workerHolds } from "./worker-holds.ts";
 
 export type {
@@ -419,6 +420,7 @@ export function coding(options: CodingOptions) {
 								const { speaker } = turn;
 								const job = await desk.start({
 									...run,
+									...(turn.agent ? { agent: turn.agent.name } : {}),
 									// Its modes follow the conversation this turn runs in, as the turn's own would.
 									...(speaker
 										? {
@@ -449,14 +451,15 @@ export function coding(options: CodingOptions) {
 											job.queuePosition,
 											skipped,
 										) ??
-										`Queued coding task #${job.id} in ${repo} at position ${job.queuePosition}: every worker slot is taken, and it starts on ${job.model} when one frees. Its report returns to ${job.channel}.${skippedText}`
+										`Queued coding task #${job.id} in ${repo} at position ${job.queuePosition}: every worker slot is taken, and it starts on ${job.model} when one frees. Its report returns to ${job.channel}; repo_task_cancel cancels it.${skippedText}`
 									);
 								return (
 									options.presentation?.taskStarted?.(job, skipped) ??
-									`Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}.${skippedText}`
+									`Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}, and repo_task_cancel cancels it.${skippedText}`
 								);
 							}),
 					}),
+					...taskTools(desk, refusal, describe, about, repoSchema),
 				],
 			};
 		},

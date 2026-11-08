@@ -5,4 +5,6 @@ export const REPO_TOOLS = [
 	"repo_change_report",
 	"repo_push",
 	"repo_task",
+	"repo_task_list",
+	"repo_task_cancel",
 ] as const;

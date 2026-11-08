@@ -18,7 +18,7 @@ export function opsOf(
 	if (agent !== undefined) {
 		if (!withDiscord)
 			throw new ConfigError(
-				'config ops.agent: the agents live in Discord, which is not configured. Report to a conversation a plugin\'s chat surface serves instead, with ops: { conversation: "<surface>:<id>" }; the web chat takes no error reports.',
+				'config ops.agent: the agents live in Discord, which is not configured or has no discord.guild. Report to a conversation a plugin\'s chat surface serves instead, with ops: { conversation: "<surface>:<id>" }; the web chat takes no error reports.',
 			);
 		return { agent };
 	}

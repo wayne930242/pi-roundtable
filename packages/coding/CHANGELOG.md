@@ -6,6 +6,12 @@
 
 - A coding worker's yolo mode never approves a call whose class ends in `.yolo-never` (`YOLO_NEVER_CLASS`), even when `autonomy.yolo.allow` names it, matching the core yolo approver.
 
+## [0.41.0] - 2026-11-08
+
+### Added
+
+- A coding task can be cancelled. `repo_task_cancel { repo, id, reason? }` drops a queued task before it runs, or stops a running worker the way a timeout does, closing the held actions it waited on; the stopped worker's commits stay on its branch and worktree, not merged into the clone, and its report says "cancelled by <name>" and names both. `repo_task_list { repo? }` lists running and queued tasks. An agent sees and cancels its own tasks, an owner any. The Settings page "Coding workers" lists the tasks with an owner-only Cancel action. `CodingDesk.cancel(id, by)` answers a `CancelResult` and `CodingDesk.tasks()` lists the tasks; `REPO_TOOLS` and `RepoToolName` gain the two names, and the `repo_task` result mentions `repo_task_cancel`.
+
 ## [0.40.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.40.0 (interactive blocks answered in the app, and chats that cannot show them say so); no package-specific behavior changes.

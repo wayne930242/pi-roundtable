@@ -11,7 +11,7 @@ const MAX_BODY_BYTES = 4096;
  * The owner's webhook routes, below the mount: `GET api/agents/:name/webhooks` lists a knight's
  * webhooks, `POST` there makes one and answers its URL this once, and `DELETE
  * api/agents/:name/webhooks/:id` revokes one. The authorization table lets only owners reach
- * them. Undefined for any other path.
+ * them, and `GET api/webhooks`, every knight's, for the Webhooks page. Undefined for any other path.
  */
 export async function webhookRoute(
 	webhooks: Webhooks,
@@ -19,10 +19,14 @@ export async function webhookRoute(
 	rest: string,
 	presentation: ConsolePresentation | undefined,
 ): Promise<Response | undefined> {
-	const matched = PATH.exec(rest);
-	if (!matched) return undefined;
 	const bad = (source: string, status: number) =>
 		json({ error: message(presentation, source) }, status);
+	if (rest === "api/webhooks")
+		return request.method === "GET"
+			? json({ webhooks: await webhooks.listAll() })
+			: bad("Method not allowed.", 405);
+	const matched = PATH.exec(rest);
+	if (!matched) return undefined;
 	let agent: string;
 	let id: string | undefined;
 	try {

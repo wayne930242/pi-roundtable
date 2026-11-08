@@ -17,9 +17,14 @@ import {
 export interface DiscordConfig {
 	/** The bot token; keep it in `.env`, not in this file. */
 	token: string;
-	/** The agent server's guild id. */
-	guild: string;
-	/** The channel the coordinator lives in. Required unless the configuration says `agentServer: false`, which has no coordinator. */
+	/**
+	 * The agent server's guild id: the agents' channels, categories, `#dashboard` and threads live
+	 * there. Left out, the bot serves only the plugins' claims and commands in the guilds it is in,
+	 * and the agent team lives in the app's rooms as on a host without Discord: `agents` is then
+	 * required, `coordinator` names the coordinator, and `entryChannel` is refused.
+	 */
+	guild?: string;
+	/** The channel the coordinator lives in. Required with `guild`, unless the configuration says `agentServer: false`, which has no coordinator. */
 	entryChannel?: string;
 	/** The root slash command, without the slash; default the lowercase assistant name. */
 	rootCommand?: string;
@@ -108,8 +113,9 @@ export interface DiscordConfig {
 /** The Discord settings with every default filled in. */
 export interface ResolvedDiscord {
 	token: string;
-	guild: string;
-	/** Undefined only with `agentServer: false`. */
+	/** Undefined when the agent team lives in the app's rooms. */
+	guild?: string;
+	/** Undefined with `agentServer: false` or without `guild`. */
 	entryChannel?: string;
 	rootCommand: string;
 	admin: boolean;
@@ -136,7 +142,7 @@ export function resolvedDiscord(
 ): ResolvedDiscord {
 	return {
 		token: discord.token,
-		guild: discord.guild,
+		...(discord.guild === undefined ? {} : { guild: discord.guild }),
 		...(discord.entryChannel === undefined
 			? {}
 			: { entryChannel: discord.entryChannel }),
@@ -194,7 +200,7 @@ const channelContextShape = shape({
 /** The Discord settings, at the top level or in a Discord adapter. */
 export const discordShape = shape({
 	token: text,
-	guild: text,
+	guild: optional(text),
 	entryChannel: optional(text),
 	rootCommand: optional(text),
 	admin: optional(bool),

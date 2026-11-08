@@ -12,6 +12,12 @@ export interface WebhookView {
 	once: boolean;
 }
 
+/** A webhook as the owner's Webhooks page lists it, with its knight. */
+export interface WebhookOverviewView extends WebhookView {
+	agent: string;
+	agentDisplayName: string;
+}
+
 /** What making a webhook answers: the webhook, and its URL, shown this once. */
 export interface CreatedWebhookView {
 	webhook: WebhookView;

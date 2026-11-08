@@ -9997,10 +9997,6 @@
 							"maxLength": 4000,
 							"description": "Its opening task, self-contained."
 						},
-						"category": {
-							"type": "string",
-							"description": "Discord only: the category its channel opens under, Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
-						},
 						"group": {
 							"type": "string",
 							"minLength": 1,
@@ -10274,71 +10270,6 @@
 				}
 			},
 			{
-				"name": "channel_arrange",
-				"description": "Sort agent and group channels into categories and order them, when the speaker asks. Agents go under Agents or Agents-<suffix>, groups under Groups or Groups-<suffix>; missing categories are made. The listed categories come first in the server in list order, then every other category as it was; in each listed category the listed channels come first in order, then its other channels as they were. Agents and Groups categories left empty are deleted. Any wrong entry refuses the whole call and nothing moves. Read the current layout with agent_list first.",
-				"parameters": {
-					"type": "object",
-					"required": [
-						"categories"
-					],
-					"properties": {
-						"categories": {
-							"type": "array",
-							"items": {
-								"type": "object",
-								"required": [
-									"category",
-									"channels"
-								],
-								"properties": {
-									"category": {
-										"type": "string",
-										"description": "Agents, Groups, or either with -<suffix>, the suffix 1 to 32 characters in any language."
-									},
-									"channels": {
-										"type": "array",
-										"items": {
-											"type": "string"
-										},
-										"minItems": 1,
-										"description": "Agent or group names (from agent_list), in the order they should appear."
-									}
-								}
-							},
-							"minItems": 1,
-							"description": "Categories in server order."
-						}
-					}
-				}
-			},
-			{
-				"name": "channel_read",
-				"description": "Read messages of a text channel or thread of the agent server, oldest first, each with its id, UTC time, author, text, and attachment names. Use it for the surroundings of a message the speaker forwarded to you: pass the source channel and the message id from the forwarded link. Read-only.",
-				"parameters": {
-					"type": "object",
-					"required": [
-						"channel"
-					],
-					"properties": {
-						"channel": {
-							"type": "string",
-							"description": "The channel as <#id> or its id."
-						},
-						"around": {
-							"type": "string",
-							"pattern": "^\\d+$",
-							"description": "A message id: read the messages around it instead of the latest."
-						},
-						"limit": {
-							"type": "integer",
-							"minimum": 1,
-							"maximum": 50,
-							"description": "Default 20."
-						}
-					}
-				}
-			},
-			{
 				"name": "compact_session",
 				"description": "Compact this session's own context: summarize the earlier conversation and drop the summarized messages, keeping the recent ones. The compaction is queued and runs after the current turn ends, so this tool returns immediately and the summary is not visible in this turn. Call it when the context is large enough to threaten the window, when the user or another agent asks this session to compact, or before starting unrelated work in the same session. When you are asked to compact BEFORE doing a piece of work, put that work in `resume` and make this call the last thing you do in the turn: end your reply right after it and start no part of the work. The work then runs in the next turn against the compacted context, which is the whole point of compacting first. Compaction is lossy: detail outside the summary and the kept recent messages is gone afterwards, so finish or write down in-flight work first. Do not call it more than once per turn.",
 				"parameters": {
@@ -10447,10 +10378,6 @@
 						"host": {
 							"type": "string",
 							"description": "An agent's name (lowercase, from agent_list), not its display name."
-						},
-						"category": {
-							"type": "string",
-							"description": "Discord only: the category its channel opens under, Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
 						},
 						"group": {
 							"type": "string",
