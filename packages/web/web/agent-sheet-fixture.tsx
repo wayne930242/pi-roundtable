@@ -73,6 +73,20 @@ export let page: TestPage;
 
 export const settle = (ms = 40) =>
 	new Promise<void>((resolve) => setTimeout(resolve, ms));
+/**
+ * Lets the page run, in `act`s, until `check` holds. A fixed `settle` guesses how long a promise,
+ * an effect or a lazy chunk takes; a loaded machine takes longer than the guess.
+ */
+export async function settled(
+	check: () => unknown,
+	what: string,
+	ms = 5000,
+): Promise<void> {
+	for (let waited = 0; !check(); waited += 20) {
+		if (waited >= ms) throw new Error(`never settled: ${what}`);
+		await page.act(() => settle(20));
+	}
+}
 export const q = <T extends Element = HTMLElement>(
 	selector: string,
 ): T | null => document.querySelector<T>(selector);
