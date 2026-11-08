@@ -13,8 +13,8 @@ import type {
 	ScheduleStore,
 	WebSocketRoute,
 } from "pi-roundtable";
-import { agentRoomKey, channelKey, isHelper, roomOf } from "pi-roundtable";
-import { APP_CLOSE_EXPIRED, HELPERS_ENDED } from "../api-types.ts";
+import { channelKey, isHelper, roomOf } from "pi-roundtable";
+import { APP_CLOSE_EXPIRED } from "../api-types.ts";
 import type { Authenticated, Authenticator } from "../auth/authenticator.ts";
 import type { ConsolePresentation } from "../features.ts";
 import type { Gate } from "../gate.ts";
@@ -41,6 +41,7 @@ import type { WebAppRegistry } from "../web-app.ts";
 import { CardLog } from "./card-log.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
+import { postHelpersEnded } from "./helpers-ended.ts";
 import { RoomLayout } from "./layout.ts";
 import { Presence } from "./presence.ts";
 import { RoomLog } from "./room-log.ts";
@@ -425,23 +426,7 @@ export class OwnerApp {
 			},
 			push,
 		});
-		// A knight clearing its own temp knights leaves a line in its room, with the undo.
-		agents.team.onHelpersEnded((event) => {
-			const named = event.names.map((name) => ({
-				name,
-				displayName: agents.directory.agent(name)?.displayName ?? name,
-			}));
-			void surface
-				.publish({
-					room: agentRoomKey(options.surface, event.parent),
-					kind: "system",
-					author: "Notice",
-					text: `${HELPERS_ENDED}${JSON.stringify(named)}`,
-				})
-				.catch((error) =>
-					logger.warn({ err: error }, "the temp knights' line was not posted"),
-				);
-		});
+		postHelpersEnded(agents, surface, options.surface, logger);
 		this.#api = new AppApi({
 			...(options.presentation ? { presentation: options.presentation } : {}),
 			...(options.timeZone ? { timeZone: options.timeZone } : {}),

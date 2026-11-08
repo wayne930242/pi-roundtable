@@ -45,6 +45,7 @@ import {
 import { loadVapid } from "./push/vapid.ts";
 import { accessVisitors, consoleVisitors } from "./visitors.ts";
 import { hostIcon, viewerOf, WEB_APP, WebAppRegistry } from "./web-app.ts";
+import { checkRegistered } from "./web-plugin-checks.ts";
 
 /** How often sessions past their limit are deleted: daily. */
 const SESSION_SWEEP_MS = 86_400_000;
@@ -503,23 +504,6 @@ async function build(settings: ResolvedOptions, context: Context) {
 		),
 		dashboard: [`Web console: ${settings.origin}${settings.mount}/`],
 	};
-}
-
-/** What the host registered, checked when the service starts: every provider onboarding names has its prover. */
-function checkRegistered(settings: ResolvedOptions, webApp: WebAppRegistry) {
-	if (
-		settings.onboarding.push !== "off" &&
-		(!settings.panes.includes("rooms") ||
-			(settings.push.sender === "internal" && !settings.push.subject))
-	)
-		throw new Error(
-			"web-console: onboarding.push asks people to turn push on, but push is off here. It needs the rooms pane and a push.subject (or an external sender)",
-		);
-	for (const provider of Object.keys(settings.onboarding.links))
-		if (!webApp.prover(provider))
-			throw new Error(
-				`web-console: onboarding.links names ${provider}, but no plugin registered a link prover for it (WEB_APP.registerLinkProver)`,
-			);
 }
 
 interface OidcParts {
