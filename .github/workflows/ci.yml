@@ -64,6 +64,22 @@ jobs:
         run: bun scripts/preflight-release.ts "v$(node -p 'require("./package.json").version')" --local
       - name: Scan the built bundles too
         run: bun scripts/scan-public.ts .
+  # A pull request that changes what a package ships adds a changes/unreleased fragment (changes/README.md).
+  fragment:
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - name: Require a changelog fragment for a change to shipped source
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bun scripts/check-fragments.ts "origin/$BASE_REF"
   # pi is a range dependency, so a pi-core bump only moves the lockfile and needs no release.
   # Merge it once the checks pass; a major bump crosses the range and stays for review.
   automerge-pi:

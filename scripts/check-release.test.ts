@@ -15,10 +15,21 @@ function fixture(run: (root: string) => void): void {
 			mkdirSync(join(root, "packages", name), { recursive: true });
 			writePackage(root, name);
 		}
+		for (const dir of [
+			"",
+			...["drawing", "coding", "web", "sandbox", "mcp"].map(
+				(n) => `packages/${n}`,
+			),
+		])
+			writeFileSync(join(root, dir, "CHANGELOG.md"), changelog("0.8.0"));
 		run(root);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+}
+
+function changelog(version: string): string {
+	return `# Changelog\n\n## [Unreleased]\n\n## [${version}] - 2026-01-01\n\n- Something.\n`;
 }
 
 function writePackage(
@@ -95,5 +106,44 @@ test("malformed manifests fail closed with a release-specific error", () => {
 				ReleaseContractError,
 			);
 		}
+	});
+});
+
+test("refuses a doc that states a peer range no manifest declares", () => {
+	fixture((root) => {
+		mkdirSync(join(root, "packages/web"), { recursive: true });
+		writeFileSync(
+			join(root, "packages/web/README.md"),
+			"Needs pi-roundtable `>=0.7.0 <0.8.0`.\n",
+		);
+		expect(() => releasePackages(root, "v0.8.0")).toThrow(
+			"packages/web/README.md:1 >=0.7.0 <0.8.0",
+		);
+		writeFileSync(
+			join(root, "packages/web/README.md"),
+			"Needs pi-roundtable `>=0.8.0 <0.9.0`.\n",
+		);
+		expect(releasePackages(root, "v0.8.0")).toHaveLength(5);
+	});
+});
+
+test("refuses a changelog without the release heading, the root's and every workspace's", () => {
+	fixture((root) => {
+		writeFileSync(join(root, "packages/mcp/CHANGELOG.md"), changelog("0.7.0"));
+		expect(() => releasePackages(root, "v0.8.0")).toThrow(
+			"packages/mcp/CHANGELOG.md has no ## [0.8.0] heading",
+		);
+		writeFileSync(join(root, "packages/mcp/CHANGELOG.md"), changelog("0.8.0"));
+		writeFileSync(
+			join(root, "CHANGELOG.md"),
+			"# Changelog\n\n## [Unreleased]\n",
+		);
+		expect(() => releasePackages(root, "v0.8.0")).toThrow(
+			"CHANGELOG.md has no ## [0.8.0] heading",
+		);
+		rmSync(join(root, "CHANGELOG.md"));
+		expect(() => releasePackages(root, "v0.8.0")).toThrow(
+			"CHANGELOG.md has no ## [0.8.0] heading",
+		);
 	});
 });
