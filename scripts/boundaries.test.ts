@@ -11,6 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import {
 	boundaryViolations,
 	coreCycles,
+	discordNames,
 	importsOf,
 	type Violation,
 } from "./boundaries.ts";
@@ -210,4 +211,45 @@ test("the imports that run leave out the type-only ones", () => {
 			true,
 		),
 	).toEqual(["a", "d", "e", "f"]);
+});
+
+test("the team code names Discord no more than the recorded allowlist, which only shrinks", () => {
+	const baseline = JSON.parse(
+		readFileSync(join(ROOT, "scripts/discord-names.baseline.json"), "utf8"),
+	);
+	// Exact: a new mention, or a recorded file that gained one, fails; a recorded one that shrank
+	// prompts lowering its count, or removing the file once it is clean. Move the name behind a
+	// surface contract rather than raise a count. `bun scripts/boundaries.ts --discord-names` prints the list.
+	expect(discordNames(ROOT)).toEqual(baseline);
+});
+
+test("agents, routing, and threads name no Discord surface, key, or guild; comments, messages, tests, and other directories may", () => {
+	const root = tree({
+		"src/core/agents/clean.ts": [
+			"// Discord and the guild are the adapter's: this comment names them freely.",
+			"export const note = 'A Discord channel';",
+			"export const room = (surface: string) => `$" + "{surface}:agent`;",
+		].join("\n"),
+		"src/core/agents/leaky.ts": [
+			'import { discordKey } from "./team-keys.ts";',
+			"export const key = discordKey('1');",
+			'export const same = (surface: string) => surface === "discord";',
+			'export const origin = (key: string) => key.startsWith("discord:");',
+			"export const scope = (guildId: string) => `guild_id = $" + "{guildId}`;",
+		].join("\n"),
+		"src/core/routing/leaky.ts":
+			'export const mention = (surface: string) => surface === "discord";',
+		"src/core/agents/leaky.test.ts": 'export const key = discordKey("1");',
+		"src/core/discord/surface.ts": 'export const key = discordKey("1");',
+		"src/core/threads/leaky.ts": "export const guild = { guildId: 1 }.guildId;",
+	});
+	expect(discordNames(root)).toEqual({
+		"src/core/agents/leaky.ts": {
+			"discord-identifier": 2,
+			"discord-surface": 2,
+			guild: 3,
+		},
+		"src/core/routing/leaky.ts": { "discord-surface": 1 },
+		"src/core/threads/leaky.ts": { guild: 3 },
+	});
 });

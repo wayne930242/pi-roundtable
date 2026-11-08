@@ -39,7 +39,6 @@ function roomsSetup(
 ) {
 	const answered: { channel: string; kind: string; files: string[] }[] = [];
 	const team = {
-		guildId: "1",
 		owns: (channel: string) =>
 			channel === "app:agent.coder" || channel === "other:agent.coder"
 				? ("agent" as const)
@@ -81,6 +80,7 @@ function roomsSetup(
 	};
 	const claim = agentClaim({
 		owner: TEST_OWNER,
+		discordGuild: "1",
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: { steer: async () => false, stop: () => true },

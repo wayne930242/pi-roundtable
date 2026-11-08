@@ -237,6 +237,7 @@ describe("the agent server's runtime", () => {
 			"helper-presets",
 			"agents-helper-preset",
 			"helper-presets-shared",
+			"team-move",
 		]);
 	});
 });
@@ -324,6 +325,32 @@ describe("the agent server without Discord", () => {
 		expect(registry.routes).toEqual([]);
 		expect(services.get(AGENTS).avatars.url("a".repeat(64))).toBe(
 			`/avatars/${"a".repeat(64)}.png`,
+		);
+	});
+
+	test("keeps its rows under the team id it is given, not the guild", async () => {
+		const opened: string[] = [];
+		const plugin = agentServerPlugin(
+			options({ teamId: "crew" }),
+			async (_context, teamId) => {
+				opened.push(teamId);
+				return stores;
+			},
+		);
+		const { services } = await setUpLocal(plugin, ["app"]);
+		expect(opened).toEqual(["crew"]);
+		expect(services.get(AGENTS).team.guildId).toBe("crew");
+		expect(services.get(AGENTS).team.discordGuild).toBe("g1");
+	});
+
+	test("moves a former team's rows after the team's tables, at every boot", () => {
+		const moving = agentServerPlugin(
+			local({ teamId: "crew", formerTeamIds: ["old-guild"] }),
+		);
+		const names = moving.migrations?.map((m) => m.name) ?? [];
+		expect(names.at(-1)).toBe("team-move");
+		expect(moving.migrations?.find((m) => m.name === "team-move")?.runs).toBe(
+			"every-boot",
 		);
 	});
 

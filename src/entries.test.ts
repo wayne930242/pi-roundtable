@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -13,6 +13,11 @@ import * as kit from "./kit/index.ts";
 import * as testing from "./testing.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
+// One declaration emit serves every test below; it blocks the event loop, so under load it is slow.
+let api: ApiReport;
+beforeAll(() => {
+	api = publicApi(ROOT);
+}, 120_000);
 const ENTRIES = {
 	main: "src/index.ts",
 	testing: "src/testing.ts",
@@ -111,7 +116,7 @@ test("the npm export map names only the published entries and the characters sty
 });
 
 test("published declarations match the signature report and the remaining leak baseline", () => {
-	const actual = publicApi(ROOT);
+	const actual = api;
 	const expected = JSON.parse(
 		readFileSync(resolve(ROOT, "scripts/public-api.report.json"), "utf8"),
 	) as ApiReport;
@@ -123,19 +128,19 @@ test("published declarations match the signature report and the remaining leak b
 	expect(actual.discordTypes).toEqual(expected.discordTypes);
 	for (const text of Object.values(actual.declarations))
 		expect(text).not.toContain("/internal/");
-}, 15_000);
+});
 
 test("published MemoryView exposes no guard-only legacyOwner attribution", () => {
-	const report = publicApi(ROOT);
+	const report = api;
 	expect(
 		report.declarations[
 			"src/core/runtime/extensions/private-memory.d.ts#MemoryView"
 		],
 	).not.toContain("legacyOwner");
-}, 15_000);
+});
 
 test("the main and kit declarations name no discord.js type; only the discord entry does", () => {
-	const { discordTypes } = publicApi(ROOT);
+	const { discordTypes } = api;
 	// Every type the two entries reach, through any declaration, is free of discord.js.
 	expect(discordTypes.main).toEqual([]);
 	expect(discordTypes.kit).toEqual([]);
@@ -143,7 +148,7 @@ test("the main and kit declarations name no discord.js type; only the discord en
 	const named = discordTypes.discord ?? [];
 	expect(named.length).toBeGreaterThan(0);
 	expect(named.some((use) => use.includes("discord.js:"))).toBe(true);
-}, 15_000);
+});
 
 test("shared protocol constants cannot mutate the host through kit or discord", () => {
 	for (const module of [kit, discord])

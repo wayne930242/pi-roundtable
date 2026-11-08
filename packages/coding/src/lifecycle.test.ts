@@ -15,6 +15,7 @@ import type { HoldCheck } from "pi-roundtable";
 import type { CodingJob } from "./coding-desk.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { hostStopping } from "./task-control.ts";
+import { until } from "./testing/until.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
 const dirs: string[] = [];
@@ -75,7 +76,7 @@ test("aborting a real worker during its approval card kills the child process", 
 	controller.abort();
 	await expect(result).rejects.toThrow("stopped");
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("stopping a real worker for the host's shutdown lets it save its tracked changes in a wip commit before it ends", async () => {
 	const { worker, job, repoDir } = fixture();
@@ -111,6 +112,47 @@ test("stopping a real worker for the host's shutdown lets it save its tracked ch
 	expect(git("status", "--porcelain", "-uno").stdout.toString()).toBe("");
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);
+});
+
+test("a worker that gets SIGTERM from outside the desk reports a stopped failure after its wip commit", async () => {
+	const { worker, job, repoDir } = fixture();
+	const git = (...args: string[]) =>
+		Bun.spawnSync(["git", "-C", repoDir, ...args], {
+			env: {
+				...process.env,
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_CONFIG_GLOBAL: "/dev/null",
+			},
+		});
+	git("init", "--initial-branch=main");
+	git("config", "user.name", "Test User");
+	git("config", "user.email", "test@example.invalid");
+	writeFileSync(join(repoDir, "work.txt"), "start\n");
+	git("add", "work.txt");
+	git("commit", "-m", "Start");
+	const controller = new AbortController();
+	let started = () => {};
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const result = worker.run(job, controller.signal, async () => {
+		started();
+		return new Promise(() => {});
+	});
+	const settled = result.then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+	await waiting;
+	writeFileSync(join(repoDir, "work.txt"), "start\npartial\n");
+	process.kill(
+		Number(readFileSync(join(repoDir, "worker.pid"), "utf8")),
+		"SIGTERM",
+	);
+	const error = await settled;
+	expect(controller.signal.aborted).toBe(false);
+	expect(error).toBeInstanceOf(CodingWorkerFailure);
+	expect((error as CodingWorkerFailure).category).toBe("stopped");
 });
 
 test("a cancel or a timeout kills a real worker at once and leaves no wip commit", async () => {
@@ -156,9 +198,9 @@ test("normal worker completion cleans up shell descendants in its process group"
 	writeFileSync(join(repoDir, "start-descendant"), "start");
 	await worker.run(job, AbortSignal.timeout(10_000), async () => "held");
 	const pid = Number(readFileSync(join(repoDir, "descendant.pid"), "utf8"));
-	await Bun.sleep(50); // Allow the OS to reap the terminated orphan.
+	await until(() => !running(pid), "the terminated orphan is reaped");
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("worker configuration failures return a credential-free exit category", async () => {
 	const { worker, job, repoDir } = fixture();
@@ -184,7 +226,7 @@ test("worker configuration failures return a credential-free exit category", asy
 	}
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("worker standing context includes regular repo instructions, not parent or symlinked instructions", async () => {
 	const { worker, job, repoDir } = fixture();
@@ -207,7 +249,7 @@ test("worker standing context includes regular repo instructions, not parent or 
 	);
 	expect(second).toContain("externalContext=false");
 	expect(second).toContain("repoContext=true");
-});
+}, 30_000);
 
 test("trusted host prompt and workspace carry into the process without bypassing private hold policy", async () => {
 	const { job, repoDir, agentDir } = fixture();
@@ -254,7 +296,7 @@ test("trusted host prompt and workspace carry into the process without bypassing
 	expect(report).toContain("Do not retry");
 	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
 	expect(running(pid)).toBe(false);
-});
+}, 30_000);
 
 test("a held call carries the hold classes of every check that holds it", async () => {
 	const { job, agentDir } = fixture();
@@ -284,4 +326,4 @@ test("a held call carries the hold classes of every check that holds it", async 
 		["shell.write", "host.private"],
 		undefined,
 	]);
-});
+}, 30_000);

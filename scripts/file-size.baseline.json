@@ -1,6 +1,6 @@
 {
-	"packages/coding/src/coding-desk.ts": 581,
-	"packages/coding/src/coding.test.ts": 1421,
+	"packages/coding/src/coding-desk.ts": 589,
+	"packages/coding/src/coding.test.ts": 1416,
 	"packages/coding/src/repo-shelf.ts": 806,
 	"packages/drawing/src/magic.ts": 533,
 	"packages/drawing/src/plugin.test.ts": 876,
@@ -26,7 +26,7 @@
 	"packages/web/src/app/workspace-files.ts": 1485,
 	"packages/web/src/auth/auth.test.ts": 934,
 	"packages/web/src/auth/oidc.ts": 649,
-	"packages/web/src/console-api.test.ts": 955,
+	"packages/web/src/console-api.test.ts": 944,
 	"packages/web/src/console-api.ts": 712,
 	"packages/web/src/edit-routes.test.ts": 1065,
 	"packages/web/src/host/host-app.test.ts": 2000,

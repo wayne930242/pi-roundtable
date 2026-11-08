@@ -101,8 +101,9 @@ async function windDown(dir: string): Promise<never> {
 			timeout: 3_000,
 		},
 	);
-	process.send?.({ type: "failure", message: "the worker was stopped" }, () =>
-		process.exit(1),
+	process.send?.(
+		{ type: "failure", message: "the worker was stopped", stopped: true },
+		() => process.exit(1),
 	);
 	// The parent kills the group if the message does not get out.
 	return new Promise<never>(() => {});

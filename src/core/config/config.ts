@@ -48,6 +48,7 @@ import {
 	routingOf,
 } from "./routing.ts";
 import type { SkillsConfig } from "./skills-config.ts";
+import { type ResolvedTeam, type TeamConfig, teamOf } from "./team.ts";
 
 export type { DiscordConfig };
 
@@ -177,6 +178,8 @@ export interface RoundtableConfig extends LimitsConfig, ShellEnvConfig {
 	 * the first. With `discord.guild` the agent in `discord.entryChannel` is the coordinator, and this key is refused.
 	 */
 	coordinator?: string;
+	/** Where the team's rows are stored, and the ids they moved from; see `TeamConfig`. */
+	team?: TeamConfig;
 	/**
 	 * How the agents' characters are drawn, everywhere the host draws them: the web console, its
 	 * round table and the agents' pictures on Discord. `skins` is exactly six `#rrggbb` skin tones
@@ -324,6 +327,7 @@ export interface ResolvedConfig extends ResolvedLimits {
 	agents: AgentSeed[];
 	/** The coordinator's name; set only without `discord.guild` and with `agents`: the configured one, else the first seed. */
 	coordinator?: string;
+	team: ResolvedTeam;
 	/** How the agents' characters are drawn: the six skin tones, the package's own unless `characters.skins` is set. */
 	characters: { skins: readonly Hex[]; refreshAvatars: boolean };
 	/** Undefined when no `http` is configured, and the host opens no `public` listener. */
@@ -456,6 +460,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		...(!agentGuild && config.agents?.[0]
 			? { coordinator: config.coordinator ?? config.agents[0].name }
 			: {}),
+		team: teamOf(config.team),
 		characters: {
 			skins: skinsOf(config.characters?.skins),
 			refreshAvatars: config.characters?.refreshAvatars ?? false,

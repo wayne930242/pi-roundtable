@@ -15,6 +15,10 @@ import { fakePushService, receiver } from "../testing/push.ts";
 
 const FCM = "https://fcm.googleapis.com/fcm/send/";
 
+/** The `HH:MM` on the wall clock of Asia/Taipei (UTC+8, no daylight saving) at a moment. */
+const taipeiClock = (ms: number): string =>
+	new Date(ms + 8 * 3_600_000).toISOString().slice(11, 16);
+
 describeDb("notices over a real host", () => {
 	const service = fakePushService();
 	let app: EHost;
@@ -280,8 +284,13 @@ describeDb("notices over a real host", () => {
 		const quiet = await rest(app, "push/prefs", {
 			method: "PUT",
 			who: "mel",
+			// Two hours either side of now, so the window holds at whatever hour the suite runs.
 			body: JSON.stringify({
-				quiet: { start: "00:00", end: "23:59", timeZone: "Asia/Taipei" },
+				quiet: {
+					start: taipeiClock(Date.now() - 2 * 3_600_000),
+					end: taipeiClock(Date.now() + 2 * 3_600_000),
+					timeZone: "Asia/Taipei",
+				},
 			}),
 		});
 		expect(((await quiet.json()) as PushPrefsView).quiet?.timeZone).toBe(

@@ -160,6 +160,7 @@ export class PiCodingWorker implements CodingWorker {
 		const prompt = this.#options.prompt?.(job.dir);
 		let report: string | undefined;
 		let failure: string | undefined;
+		let windedDown = false;
 		const child = Bun.spawn(
 			[
 				process.execPath,
@@ -218,6 +219,7 @@ export class PiCodingWorker implements CodingWorker {
 						value.type === "failure" &&
 						typeof value.message === "string"
 					) {
+						if (value.stopped === true) windedDown = true;
 						failure = value.message.slice(
 							0,
 							this.#options.diagnosticChars === undefined
@@ -305,6 +307,7 @@ export class PiCodingWorker implements CodingWorker {
 			if (signal.aborted) stop();
 			const code = await child.exited;
 			if (signal.aborted) throw new CodingWorkerFailure("stopped");
+			if (windedDown) throw new CodingWorkerFailure("stopped");
 			if (code !== 0)
 				throw new CodingWorkerFailure(
 					"exit",

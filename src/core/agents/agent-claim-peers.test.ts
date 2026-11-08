@@ -16,7 +16,6 @@ const peerSpeaker: Speaker = {
 
 function claimWith(answered: string[]) {
 	const team = {
-		guildId: "1",
 		owns: (channel: string) =>
 			channel === "discord:10" ? ("agent" as const) : undefined,
 		answerOwner: async (_c: string, speaker: Speaker, text: string) => {
@@ -29,6 +28,7 @@ function claimWith(answered: string[]) {
 	};
 	return agentClaim({
 		owner: TEST_OWNER,
+		discordGuild: "1",
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: { steer: async () => false, stop: () => true },

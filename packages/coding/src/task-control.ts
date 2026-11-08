@@ -93,6 +93,10 @@ export async function within<T>(
 /** What a report says in place of the worker's own when the host's shutdown stopped it. */
 export const interruptedText =
 	"the host shut down while the worker ran, so the worker was stopped; its commits were not merged into the clone";
+export const stoppedOutsideText =
+	"the worker was stopped by a signal from outside the desk; its commits were not merged into the clone";
+export const stoppedOutsideReason =
+	"the worker was stopped from outside the desk (a signal to its process); its tracked changes were saved in a wip: commit, untracked files were not, and the work stays on its branch and worktree";
 export const interruptedReason =
 	"the host shut down while the task ran; its tracked changes were saved in a wip: commit, untracked files were not, and the work stays on its branch and worktree";
 /**
@@ -108,9 +112,11 @@ export function notMergedReason(run: {
 	cancelledBy?: string | undefined;
 	interrupted?: boolean | undefined;
 	timedOut?: number | undefined;
+	stoppedOutside?: boolean | undefined;
 }): string {
 	if (run.cancelledBy !== undefined)
 		return `the task was cancelled by ${run.cancelledBy}`;
-	if (run.interrupted) return interruptedReason;
+	if (run.timedOut === undefined && run.interrupted) return interruptedReason;
+	if (run.stoppedOutside) return stoppedOutsideReason;
 	return `the worker was stopped${run.timedOut === undefined ? "" : ` after ${Math.round(run.timedOut / 60_000)} minutes without finishing`}; its work stays on its branch and worktree`;
 }

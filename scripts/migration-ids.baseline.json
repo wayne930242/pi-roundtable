@@ -75,5 +75,5 @@
 		"web-console/web-sessions-json-values",
 		"webchat/notices"
 	],
-	"everyBoot": ["identity/backfill"]
+	"everyBoot": ["identity/backfill", "agent-server/team-move"]
 }

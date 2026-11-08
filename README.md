@@ -202,6 +202,7 @@ Without `discord`, or with `discord` but no `discord.guild`, the agents still ru
 | `discord.guild` | none | The agent server's guild, where the agents' channels, categories and `#dashboard` live; needs `discord.entryChannel` and `http.publicUrl`. Left out, the bot keeps serving the plugins' claims, slash commands and the owner's direct messages in every guild it is in, and the team lives in the app's rooms as without `discord`: `agents` is required and `entryChannel` is an error |
 | `agents` | none | The first team, created once. Without `discord.guild`, a seed has no `channelId` and the team's rows are kept under the id `local` |
 | `coordinator` | the first of `agents` | Without `discord.guild`, the agent the owner's general requests come to; it cannot be archived. With `discord.guild` it is an error: the entry channel's agent coordinates |
+| `team.id`, `team.formerIds` | the `discord.guild` id, else `local`; none | The id the team's rows are stored under, independent of the guild, and the ids it was stored under before: their rows move to it at every boot, and without Discord channels lose their channel ids |
 | `skills` | on with `agents` | The skills addon; without `discord` it is on only when `agents` lists some |
 | `helpers` | 4 per knight, 12 in all, archived 24 hours after finishing | Temp knights, the helpers a knight makes with `helper_create` for one task and clears with `helper_end`: `{ perParent, perHost, archiveFinishedAfterHours }`; `false` offers neither tool |
 

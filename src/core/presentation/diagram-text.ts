@@ -52,6 +52,14 @@ function stop(current: Drawer): void {
 	if (drawer === current) drawer = undefined;
 }
 
+type Drawn = { text: string } | "refused" | "slow" | "unavailable";
+
+/** What a test replaces: the drawing itself and the clock that measures it, so no test depends on real elapsed time. */
+export interface DrawerSeams {
+	draw?: (source: string, waitMs: number) => Drawn;
+	now?: () => number;
+}
+
 /**
  * A drawer of Mermaid diagrams as Unicode box drawing for one reply: it gives undefined for a source
  * that cannot be shown right (see `mermaidText` of `pi-better-show/server`), is longer than
@@ -65,7 +73,11 @@ function stop(current: Drawer): void {
  * left undrawn for the budget, or because no worker could be started, is no verdict and is tried
  * again in a later reply.
  */
-export function diagramDrawer(): (source: string) => string | undefined {
+export function diagramDrawer(
+	seams: DrawerSeams = {},
+): (source: string) => string | undefined {
+	const drawOne = seams.draw ?? draw;
+	const now = seams.now ?? (() => performance.now());
 	let left = DIAGRAM_TEXT_DEADLINE_MS;
 	let fresh = 0;
 	return (source) => {
@@ -82,9 +94,9 @@ export function diagramDrawer(): (source: string) => string | undefined {
 		if (fresh >= MAX_DRAWN_PER_REPLY || left <= 0) return undefined;
 		fresh += 1;
 		const waitMs = left;
-		const started = performance.now();
-		const result = draw(source, waitMs);
-		left -= performance.now() - started;
+		const started = now();
+		const result = drawOne(source, waitMs);
+		left -= now() - started;
 		if (typeof result === "object") remember(source, result.text);
 		else if (result === "refused") remember(source, null);
 		else if (result === "slow" && waitMs >= DIAGRAM_TEXT_DEADLINE_MS) {
@@ -110,10 +122,7 @@ function remember(source: string, text: string | null): void {
 		}
 }
 
-function draw(
-	source: string,
-	waitMs: number,
-): { text: string } | "refused" | "slow" | "unavailable" {
+function draw(source: string, waitMs: number): Drawn {
 	if (unavailable) return "unavailable";
 	drawer ??= start();
 	const current = drawer;

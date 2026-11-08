@@ -27,6 +27,7 @@ import {
 	interruptedText,
 	notMergedReason,
 	notStartedText,
+	stoppedOutsideText,
 	within,
 } from "./task-control.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
@@ -376,6 +377,7 @@ export class CodingDesk {
 		let cancel = () => {};
 		let interim: InterimPoster | undefined;
 		let timedOut: number | undefined;
+		let stoppedOutside = false;
 		let tree: WorkerTree | undefined;
 		let outcome: CodingResult["outcome"];
 		try {
@@ -487,17 +489,20 @@ export class CodingDesk {
 				"The worker failed; inspect the clone and worker configuration on the host.";
 			if (error instanceof AgentError) message = error.message;
 			if (error instanceof CodingWorkerFailure) {
+				if (error.category === "stopped" && !controller.signal.aborted)
+					stoppedOutside = true;
 				this.#options.logger.warn(
 					{ job: job.id, category: error.category, exitCode: error.exitCode },
 					"Coding worker failed.",
 				);
 			}
 			if (controller.signal.aborted) message = "the worker was stopped";
+			if (stoppedOutside) message = stoppedOutsideText;
+			if (run.interrupted) message = interruptedText;
 			if (timedOut !== undefined)
 				message = `the worker ran out of time (${Math.round(timedOut / 60_000)} minutes)`;
 			if (run.cancelledBy !== undefined)
 				message = cancelledText(run.cancelledBy);
-			if (run.interrupted) message = interruptedText;
 			outcome = { ok: false, error: message };
 		} finally {
 			cancel();
@@ -507,12 +512,15 @@ export class CodingDesk {
 		}
 		let integration: Integration | undefined;
 		// An aborted worker's commits stay on its branch for the owner to inspect, merge or delete.
-		if (tree && (controller.signal.aborted || run.interrupted))
+		if (
+			tree &&
+			(controller.signal.aborted || run.interrupted || stoppedOutside)
+		)
 			integration = {
 				status: "refused",
 				branch: tree.branch,
 				dir: tree.dir,
-				reason: notMergedReason({ ...run, timedOut }),
+				reason: notMergedReason({ ...run, timedOut, stoppedOutside }),
 			};
 		else if (tree)
 			try {

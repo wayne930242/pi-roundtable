@@ -35,7 +35,6 @@ function setup(
 	}[] = [];
 	const stopped: string[] = [];
 	const team = {
-		guildId: "1",
 		owns: (channel: string) =>
 			channel === "discord:10"
 				? ("agent" as const)
@@ -80,6 +79,7 @@ function setup(
 	});
 	const bare = agentClaim({
 		owner: TEST_OWNER,
+		discordGuild: "1",
 		...(speakers ? { speakers } : {}),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
@@ -600,4 +600,16 @@ test("the download limits of discord.attachmentDownload reach an agent's turn: a
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+test("a Discord channel is the agent server's by the guild its channels live in, not by the team id", () => {
+	const { claim } = setup(undefined, undefined, { discordGuild: "7" });
+	expect(claim.owns("discord:99", "7")).toBe(true);
+	expect(claim.owns("discord:99", "1")).toBe(false);
+	expect(claim.owns("discord:99", undefined)).toBe(false);
+});
+
+test("without a Discord guild no space makes a channel the agent server's", () => {
+	const { claim } = setup(undefined, undefined, { discordGuild: undefined });
+	expect(claim.owns("discord:99", "1")).toBe(false);
 });

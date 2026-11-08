@@ -33,8 +33,8 @@ function claimOf(
 ) {
 	return agentClaim({
 		owner: TEST_OWNER,
+		discordGuild: "1",
 		team: {
-			guildId: "1",
 			owns: (channel: string) =>
 				channel === "discord:2000" || channel === "app:agent.infra"
 					? ("agent" as const)

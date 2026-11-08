@@ -7,6 +7,7 @@ A new migration needs its id recorded: `bun scripts/migration-ids.ts --record` (
 ## Layout
 
 - `src/core` holds no source file of its own; a new file goes into its layer's directory. `kernel/` imports nothing else of the core, the area directories (`agents/`, `routing/`, `identity/`, `modules/*`, ...) build on it, `plugin-api/` is what a plugin is written against, and `host/` assembles the host: only `host/` and `testing/` import it. `scripts/boundaries.ts` checks these directions, and that no two core directories import each other at run time; break a new cycle by moving the shared name down a layer.
+- `src/core/agents`, `routing`, and `threads` are the team's and work for any channel type: they name no Discord (`discordKey`, `"discord"`, `guild`). `scripts/discord-names.baseline.json` records the mentions still there, each file at its count; a count may only go down, so put a new place behind the surface contract rather than raise one, and lower or remove the entry when a file shrinks (`bun scripts/boundaries.ts --discord-names` prints the current list).
 - No TypeScript file under `src`, `packages`, `scripts`, or `examples` passes 500 lines (700 for a test). `scripts/file-size.baseline.json` records the files already over, each at its count; a count may only go down, so split a file rather than raise it, and lower or remove its entry when it shrinks (`bun scripts/file-size.ts` prints the current list).
 
 ## Tests

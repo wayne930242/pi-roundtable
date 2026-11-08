@@ -91,6 +91,10 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#options.guildId;
 	}
 
+	get discordGuild(): string | undefined {
+		return this.#options.discordGuild;
+	}
+
 	/** Called when a turn starts or ends and when an agent or group changes. */
 	onChange(listener: () => void): void {
 		this.#listeners.push(listener);
@@ -105,10 +109,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return teamStatus(this.#context);
 	}
 
-	/**
-	 * The agent or group that owns a channel of the agent server: by Discord channel, or by room on
-	 * a surface that hosts rooms.
-	 */
+	/** The agent or group that owns a channel of the agent server, by Discord channel or by room. */
 	owns(channel: ChannelKey): "agent" | "group" | undefined {
 		const { store, surfaces } = this.#options;
 		return channelOwner(
@@ -120,10 +121,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		);
 	}
 
-	/**
-	 * The name of the coordinator: the agent in the entry channel, or, on a host without Discord,
-	 * the one the configuration names; undefined while none is active.
-	 */
+	/** The coordinator's name: the entry channel's agent, else the configured one; undefined while none is active. */
 	coordinator(): string | undefined {
 		return coordinatorOf(this.#options.store, this.#options)?.name;
 	}

@@ -67,6 +67,11 @@ export interface RoutesOptions {
 	/** The conversation an agent last ran a turn in. */
 	latest?: (agent: string) => ChannelKey | undefined;
 	logger?: RoutesLogger;
+	/**
+	 * Whether the team has Discord channels; default true. A team without them has no Discord place
+	 * for an agent: a channel id still stored on a row, such as one a former guild left, is ignored.
+	 */
+	discordChannels?: boolean;
 }
 
 /** What the surfaces the host registered can hold, read when the agent server links. */
@@ -88,10 +93,24 @@ export class Routes implements RoutingTable {
 	readonly #routing: ResolvedRouting | undefined;
 	readonly #options: RoutesOptions;
 	readonly #warned = new Set<string>();
+	readonly #discordChannels: boolean;
 
 	constructor(options: RoutesOptions) {
 		this.#options = options;
 		this.#routing = options.routing;
+		this.#discordChannels = options.discordChannels ?? true;
+	}
+
+	/** The agent's places in order, its Discord channel first when the team has Discord channels. */
+	#keys(name: string): ChannelKey[] {
+		const keys = keysOf(
+			this.#options.store,
+			name,
+			this.#options.roomSurfaces(),
+		);
+		return this.#discordChannels
+			? keys
+			: keys.filter((key) => parseChannelKey(key).surface !== "discord");
 	}
 
 	/**
@@ -121,7 +140,9 @@ export class Routes implements RoutingTable {
 				? (rooms[0] as string)
 				: surface;
 		if (wanted === "discord")
-			return agent.channelId ? discordKey(agent.channelId) : undefined;
+			return agent.channelId && this.#discordChannels
+				? discordKey(agent.channelId)
+				: undefined;
 		return rooms.includes(wanted) ? agentRoomKey(wanted, name) : undefined;
 	}
 
@@ -143,7 +164,7 @@ export class Routes implements RoutingTable {
 				"the agent has no place on its primary surface; its auto place is used",
 			);
 		}
-		return keysOf(this.#options.store, name, this.#options.roomSurfaces())[0];
+		return this.#keys(name)[0];
 	}
 
 	/**
@@ -225,11 +246,7 @@ export class Routes implements RoutingTable {
 			from === undefined ? undefined : parseChannelKey(from).surface;
 		if (to === "latest" && surface !== undefined) {
 			const last = latest?.(name);
-			const keys = keysOf(
-				this.#options.store,
-				name,
-				this.#options.roomSurfaces(),
-			);
+			const keys = this.#keys(name);
 			if (
 				last !== undefined &&
 				keys.includes(last) &&
