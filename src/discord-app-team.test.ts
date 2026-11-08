@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { DiscordAgentTeam } from "./core/agents/agent-team.ts";
 import type { InboundMessage } from "./core/contract/channels.ts";
 import type { AgentRuntime } from "./core/contract/runtime.ts";
 import type { ChatSurface } from "./core/contract/surface.ts";
@@ -116,7 +117,7 @@ test("Roundtable.check() passes for Discord without an agent guild", async () =>
 describeDb(
 	"an agent team in the app on a host whose Discord has no agent guild",
 	() => {
-		test("boots, keeps the plugins' commands, never asks Discord for the agents' guild, and runs the team in rooms", async () => {
+		test("boots, keeps the plugins' commands, never asks Discord for the agents' channels, and runs the team in rooms", async () => {
 			const asked: string[] = [];
 			const app = appSurface();
 			const host = await testHost({
@@ -125,10 +126,6 @@ describeDb(
 					agentChannels: (guildId) => {
 						asked.push(`channels ${guildId}`);
 						return {} as never;
-					},
-					agentDashboard: (guildId) => {
-						asked.push(`dashboard ${guildId}`);
-						return { show: async () => undefined } as never;
 					},
 				},
 				config: {
@@ -148,7 +145,9 @@ describeDb(
 				host.commands.composed().commands.map((command) => command.name),
 			).toContain("roundtable");
 
-			const tools = await registeredTools(team.extension(scope("scribe")));
+			const tools = await registeredTools(
+				(team as unknown as DiscordAgentTeam).extension(scope("scribe")),
+			);
 			const names = tools.map((tool) => tool.name);
 			expect(names).toContain("agent_list");
 			expect(names).toContain("helper_create");
