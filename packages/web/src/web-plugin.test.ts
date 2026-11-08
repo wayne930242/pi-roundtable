@@ -272,6 +272,7 @@ describe("refuses to start", () => {
 			"conversations",
 			"notes",
 			"presets",
+			"webhooks",
 		]);
 		const settings = resolveOptions(base());
 		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);

@@ -14,6 +14,7 @@ export const PANE_ICONS: Record<PaneName | "settings" | "more", IconName> = {
 	notes: "notes",
 	skills: "skills",
 	presets: "copy",
+	webhooks: "bolt",
 	connectors: "connectors",
 	settings: "settings",
 	more: "more",

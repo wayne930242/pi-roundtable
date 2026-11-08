@@ -43,4 +43,8 @@ export const ZH_TW_WEBHOOKS: Readonly<Record<string, string>> = {
 	"Revoke the webhook": "撤銷 Webhook",
 	"Revoke {name}? Its URL stops working at once.":
 		"要撤銷{name}嗎？它的網址會立即失效。",
+	// 所有騎士的 Webhook 頁面
+	"New webhook": "新增 Webhook",
+	"No webhooks yet. A webhook is a URL another service, such as CI, posts to, and what it posts shows in a knight's room.":
+		"還沒有 Webhook。Webhook 是一個網址，讓其他服務（例如 CI）發文到騎士的聊天室。",
 };

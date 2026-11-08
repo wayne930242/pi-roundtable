@@ -24,6 +24,8 @@ export const PAGE_ROUTES: Record<
 	onboarding: account,
 	// Every knight's temp-knight presets.
 	presets: lazy(() => import("../pages/presets.tsx")),
+	// Every knight's incoming webhooks.
+	webhooks: lazy(() => import("../pages/webhooks.tsx")),
 	// The host's own pages, `p/<id>`.
 	p: lazy(() => hostUi().then((ui) => ({ default: ui.HostPage }))),
 };

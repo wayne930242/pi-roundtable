@@ -116,6 +116,7 @@ const LABELS: Record<PaneName | "settings" | "more", string> = {
 	notes: wording("Notes"),
 	skills: wording("Skills"),
 	presets: wording("Presets"),
+	webhooks: wording("Webhooks"),
 	connectors: wording("Connectors"),
 	rooms: wording("Rooms"),
 	schedules: wording("Schedules"),

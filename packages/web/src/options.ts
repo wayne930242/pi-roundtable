@@ -478,6 +478,7 @@ const DEFAULT_OWNER_PANES: readonly PaneName[] = [
 	"conversations",
 	"notes",
 	"presets",
+	"webhooks",
 ];
 
 /** The panes a member is served by default, of those the owners have. */
@@ -512,6 +513,8 @@ function checkOwnerPanes(panes: readonly PaneName[]): PaneName[] {
 		fail("the workspace pane needs the rooms pane, which serves its API");
 	if (list.includes("presets") && !list.includes("rooms"))
 		fail("the presets pane needs the rooms pane, which serves its API");
+	if (list.includes("webhooks") && !list.includes("rooms"))
+		fail("the webhooks pane needs the rooms pane, which serves its API");
 	return list;
 }
 

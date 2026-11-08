@@ -30,6 +30,7 @@ export const PANES = [
 	"notes",
 	"skills",
 	"presets",
+	"webhooks",
 	"connectors",
 	"rooms",
 	"schedules",
@@ -44,6 +45,7 @@ export const OWNER_ONLY_PANES = [
 	"overview",
 	"skills",
 	"presets",
+	"webhooks",
 	"connectors",
 	"workspace",
 ] as const satisfies readonly PaneName[];
