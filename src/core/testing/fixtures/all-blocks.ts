@@ -47,6 +47,7 @@ export const BLOCK_SAMPLES: Record<BlockKind, string> = {
 		"  - {label: Bump version}",
 		"```",
 	].join("\n"),
+	tree: ["```tree", "repo/", "  src/ {changed} # core", "  README.md {new}", "```"].join("\n"),
 	table: [
 		"```table",
 		"columns: [name, size]",

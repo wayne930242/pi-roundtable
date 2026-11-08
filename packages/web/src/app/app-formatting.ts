@@ -12,6 +12,7 @@ export const APP_FORMATTING = [
 	"- `table`: YAML {columns: [name or {name, label, type: number|date}], rows: [[cell, ...]], sort: -column, filter: true}",
 	"- `steps`: YAML {items: [{title, status: done|doing|todo|blocked, when, body}]}",
 	"- `stats`: YAML list of {label, value, delta, tone, note}",
+	"- `tree`: a directory or structure view; one name per line, two spaces per level, a folder name ends with `/`, optional {new|changed|removed|focus|risk} tags and a trailing ` # note`",
 	"- `mindmap`: an indented Markdown list; the first item is the root",
 	"- `mermaid`: Mermaid source (flowchart, sequence, state, class, ER)",
 	"- `diff`: a unified diff",

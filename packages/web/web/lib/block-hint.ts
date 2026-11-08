@@ -5,4 +5,4 @@
  * `blocks.test.tsx` checks the kinds against `DISPLAY_KINDS` and `INTERACTIVE_KINDS`.
  */
 export const BLOCK_HINT =
-	/^ {0,3}(?:(?:```|~~~)\s*(?:alert|cards|mermaid|mindmap|diff|table|steps|stats|options|suggest|form|checklist|review)\b|>\s*\[!(?:note|tip|important|warning|caution)\])/im;
+	/^ {0,3}(?:(?:```|~~~)\s*(?:alert|cards|mermaid|mindmap|diff|table|steps|stats|tree|options|suggest|form|checklist|review)\b|>\s*\[!(?:note|tip|important|warning|caution)\])/im;

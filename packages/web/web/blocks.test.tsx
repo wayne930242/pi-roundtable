@@ -57,6 +57,10 @@ const SAMPLES: Record<string, { tag: string; source: string }> = {
 		tag: "pbs-options",
 		source: "```options\n- title: SQLite\n- title: Postgres\n```",
 	},
+	tree: {
+		tag: "pbs-tree",
+		source: "```tree\nrepo/\n  src/ {changed} # core\n```",
+	},
 	suggest: {
 		tag: "pbs-suggest",
 		source: "```suggest\n- Ship it\n- Wait\n```",
