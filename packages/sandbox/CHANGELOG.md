@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.39.0 (incoming webhooks for the knights' app rooms; agent tools place rooms in the app's room groups; the owner sets the coding worker limit in Settings); no package-specific behavior changes.
+
 ## [0.38.1] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.38.1 (a quote in one's own app bubble is readable in every look; a list a model sends as JSON text reaches a tool as the list, so `helper_end` by name works); no package-specific behavior changes.

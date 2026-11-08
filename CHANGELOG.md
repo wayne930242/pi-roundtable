@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-08
+
 ### Added
 
 - Agent tools place agents and groups in the web app's room groups. `agent_create` and `group_create` take `group`, the app group the new room goes into (made when missing); `category` stays Discord's alone, and a room without `group` stays ungrouped. `agent_list` ends with the app's groups, each with its rooms in order, and the pinned rooms. `room_arrange { groups: [{ group, names }] }` sorts rooms into the app's groups and orders them, with `channel_arrange`'s contract: the listed groups and rooms first, the rest where they were, and any wrong entry refuses the whole call. A host without the app's room list refuses `group` and `room_arrange`.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-08
+
 ### Added
 
 - The owner sets the coding workers' host-wide limit on the web app's Settings page ("Coding workers", owner only), which shows the running and queued counts; a save applies at once. `CodingDesk.setMaxWorkers(n)` (1 to 64) starts queued tasks in order when raised and lets running workers finish when lowered; `CodingDesk.workers()` reads the counts. With `settingsInDatabase: true` the limit is kept in the `coding_settings` table and wins over `maxWorkers` at setup. `maxWorkers` now refuses more than 64. The page ships zh-TW wording, and `presentation.messages` rewords it.
