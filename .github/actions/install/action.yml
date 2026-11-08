@@ -1,0 +1,39 @@
+---
+name: Install dependencies
+description: >-
+  Runs bun install with retries. The canvas package downloads a prebuilt binary from GitHub releases once, with a
+  30 second timeout and no retry; a failed download falls back to node-gyp, which fails without headers. A retry
+  starts from an empty node_modules and finds the finished download in the prebuild cache.
+inputs:
+  frozen:
+    description: Pass "false" to let bun install change the lockfile.
+    default: "true"
+  cache:
+    description: >-
+      Pass "true" to cache the canvas prebuilt and bun's package cache. Only for a job that publishes nothing:
+      prebuild-install does not check a checksum, so a cached binary is native code the job runs.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - if: inputs.cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0, zizmor: ignore[cache-poisoning]
+      with:
+        path: |
+          ~/.npm/_prebuilds
+          ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: bun-${{ runner.os }}-
+    - shell: bash
+      env:
+        FROZEN: ${{ inputs.frozen }}
+      run: |
+        args=()
+        [[ "$FROZEN" == true ]] && args+=(--frozen-lockfile)
+        for attempt in 1 2 3; do
+          bun install "${args[@]}" && exit 0
+          echo "::warning::bun install failed (attempt $attempt)"
+          rm -rf node_modules
+          sleep $((attempt * 20))
+        done
+        exit 1
