@@ -160,6 +160,10 @@ export function RoomLog(props: {
 		cardOrder: state.cardOrder,
 	}));
 	const characters = useCharacters();
+	// A thread, or a room that takes no message, shows its blocks read only.
+	const answerable = useSelector(
+		(state) => state.rooms[props.roomKey]?.view?.readOnly === false,
+	);
 	const items = useMemo(
 		() => timeline(parts, props.roomKey),
 		[parts, props.roomKey],
@@ -196,6 +200,7 @@ export function RoomLog(props: {
 										unread={props.decor?.unread?.(row.item.message) ?? false}
 										timeZone={config.timeZone}
 										quotable={props.quotable}
+										answerable={answerable}
 									/>
 								)}
 								{props.decor?.after?.(row.item.message)}

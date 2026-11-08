@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { DISPLAY_KINDS } from "pi-better-show";
+import { DISPLAY_KINDS, INTERACTIVE_KINDS } from "pi-better-show";
+import { blockAnswerCases } from "./block-answers.cases.tsx";
 import { MessageMarkdown } from "./components/message-markdown.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { BLOCK_HINT } from "./lib/block-hint.ts";
 import { setTheme } from "./lib/theme.ts";
 
+// The interactive blocks ask the page for its connection; `blockAnswerCases` (below) puts one in place for this whole file.
 let page: TestPage;
 beforeAll(async () => {
 	page = await openPage();
@@ -51,7 +53,30 @@ const SAMPLES: Record<string, { tag: string; source: string }> = {
 		tag: "pbs-stats",
 		source: "```stats\n- {label: Users, value: '1,204'}\n```",
 	},
+	options: {
+		tag: "pbs-options",
+		source: "```options\n- title: SQLite\n- title: Postgres\n```",
+	},
+	suggest: {
+		tag: "pbs-suggest",
+		source: "```suggest\n- Ship it\n- Wait\n```",
+	},
+	form: {
+		tag: "pbs-form",
+		source:
+			"```form\nquestions:\n  - {name: store, type: single, choices: [SQLite, Postgres]}\n```",
+	},
+	checklist: {
+		tag: "pbs-checklist",
+		source: "```checklist\nitems: [Tests, Docs]\n```",
+	},
+	review: {
+		tag: "pbs-review",
+		source: "```review\nitems:\n  - {name: A, body: First}\n```",
+	},
 };
+
+const KINDS = [...DISPLAY_KINDS, ...INTERACTIVE_KINDS];
 
 async function draw(source: string): Promise<HTMLElement> {
 	// The blocks are a lazy chunk; once it is loaded a message draws within a few ticks, load or not.
@@ -62,12 +87,12 @@ async function draw(source: string): Promise<HTMLElement> {
 }
 
 test("the app declares exactly the kinds the page draws", () => {
-	expect(Object.keys(SAMPLES).sort()).toEqual([...DISPLAY_KINDS].sort());
-	for (const kind of DISPLAY_KINDS)
+	expect(Object.keys(SAMPLES).sort()).toEqual([...KINDS].sort());
+	for (const kind of KINDS)
 		expect(BLOCK_HINT.test(SAMPLES[kind]?.source ?? "")).toBe(true);
 });
 
-for (const kind of DISPLAY_KINDS) {
+for (const kind of KINDS) {
 	test(`a ${kind} block in a message is drawn by its element, not shown as code`, async () => {
 		const sample = SAMPLES[kind];
 		if (!sample) throw new Error(kind);
@@ -116,13 +141,15 @@ test("a fence that is not closed yet stays a code block until it is", async () =
 	expect(after.querySelector("pre")).toBeNull();
 });
 
-test("a kind the app does not draw, and an ordinary code fence, stay code blocks", async () => {
+test("an ordinary code fence stays a code block, and a block outside a stored reply is drawn but takes no answer", async () => {
 	const root = await draw(
-		"```options\n- title: A\n- title: B\n```\n\n```ts\nconst x = 1;\n```",
+		"```ts\nconst x = 1;\n```\n\n```options\n- title: A\n- title: B\n```",
 	);
-	expect(root.querySelectorAll("pre")).toHaveLength(2);
-	expect(root.querySelector("[class*='pbs']")).toBeNull();
-	expect(root.querySelector("pbs-options")).toBeNull();
+	expect(root.querySelectorAll("pre")).toHaveLength(1);
+	expect(root.querySelector("pbs-options")).not.toBeNull();
+	expect(root.querySelector(".block-answer")?.getAttribute("data-state")).toBe(
+		"readonly",
+	);
 });
 
 test("a message without a block never loads the blocks", async () => {
@@ -171,3 +198,5 @@ test("a diagram over 8 KB is not requested: the element shows its source", async
 	expect(diagram).not.toBeNull();
 	expect(diagram?.shadowRoot?.querySelector("img")).toBeNull();
 });
+
+blockAnswerCases(() => page);

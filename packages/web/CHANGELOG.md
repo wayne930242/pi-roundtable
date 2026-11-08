@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The owner answers the interactive blocks of an agent's reply in the app. `options`, `suggest`, `form`, `checklist` and `review` are drawn by their elements and `AppSurface.blocks` lists them, so the model is told how to write each (`APP_FORMATTING` says to use `ask_user` when the turn must go on with the answer now, a block when the reply can end, and never `options` for several answers) and that the answer arrives as the owner's next message. An answer is sent as that message, by the path a typed one takes: it steers into a running turn, waits its turn or starts one, and the owner's bubble shows exactly the text the agent reads (`encodeAnswer`).
+- A block takes one answer. The new socket frame `block_answer` (`{type, id, room, message, block, answer: {kind, fields}}`; `accepted` answers it, `block_refused` refuses it with `code` and `reason`) finds the block again in the stored reply, checks the answer with `validateAnswer` and the block's own title, records `(room, message, block)` in the new table `web_room_block_answers` before anything is sent, and gives the record up when sending fails or the owner cancels the queued answer, so the block opens again. A second answer, from a second tap or device, is refused as `answered` with what answered the block. Only an owner answers, only a stored agent reply of the room's current conversation in a room that takes messages (not a thread, an earlier conversation, an agent-to-agent card, a note, a live or pending row), and never text that starts with `!` or `/`. (The ask_user card keeps its own `answer` frame.)
+- `RoomMessage.answers` (`{block, fields}[]`) carries the lock to history, live updates and the owner's other devices.
+- On the page a block sends nothing until the server has it: it shows "Sending…" and goes inert, then locks with what was sent; a refusal opens it again with the reason. A block that takes several values (`form` with a `multi` question, `checklist`, `review` with `pick`) sends only on its Send button, after a step that shows the exact text that goes; any other block shows that step when the text carries a value the owner was not shown (a choice value that differs from its label). Where a block cannot be answered it is drawn disabled, or locked with its answer. A review item's `image` loads only from a `file:<id>` of the app's file route; its `page` shows as a pointer to open it on the computer.
+
+### Changed
+
+- `pi-better-show` is pinned to 0.3.0. `APP_MIGRATIONS` moved to `app/migrations.ts` (still exported from `app/app.ts`), and the prompt-card types to `prompt-types.ts` (still exported from `api-types.ts`).
+
 ## [0.39.1] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.39.1 (the coding plugin reads its stored worker limit at start, so `Roundtable.check()` passes with `settingsInDatabase`); no package-specific behavior changes.
