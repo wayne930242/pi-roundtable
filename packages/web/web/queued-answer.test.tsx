@@ -17,7 +17,8 @@ import { startShortcuts } from "./lib/shortcuts.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
 
 // A queued message that carries the answer to a block can be cancelled but not edited.
-const ROOM = "app:agent.scout";
+// A room of its own: the store keeps the messages a room already holds, for the files that run after this one.
+const ROOM = "app:agent.queued-answer";
 const config: ConfigView = {
 	title: "Console",
 	panes: ["rooms"],
