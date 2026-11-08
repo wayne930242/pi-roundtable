@@ -11,6 +11,7 @@ import {
 	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { type BlockKind, INTERACTIVE_KINDS } from "pi-better-show";
 import { Type } from "typebox";
 import type { ChannelKey } from "./core/domain/conversation.ts";
 import { definePlugin } from "./core/plugin-api/define.ts";
@@ -19,6 +20,7 @@ import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 
 const TABLES = "Reply formatting (test chat): no Markdown tables.";
 const PLAIN = "Reply formatting (plain chat): plain text only.";
+const CANNOT = "This chat cannot show forms, option buttons or checklists.";
 
 /** Every string in a value, in order: the text of the request's system messages, however Pi lays them out. */
 function textOf(value: unknown): string[] {
@@ -36,7 +38,13 @@ const systemPrompt = (context: TranscriptContext): string =>
 	);
 
 /** Real Pi turns over a faux model that records the system prompt of each request it gets. */
-async function fixture(surfaces: { surface: string; formatting?: string }[]) {
+async function fixture(
+	surfaces: {
+		surface: string;
+		formatting?: string;
+		blocks?: readonly BlockKind[];
+	}[],
+) {
 	const dir = mkdtempSync(join(tmpdir(), "roundtable-formatting-"));
 	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
 	const prompts: string[] = [];
@@ -229,7 +237,7 @@ test("a turn's system prompt carries the guidance of the surface it replies on, 
 	}
 });
 
-test("a surface without guidance, and a channel with no surface, add nothing", async () => {
+test("a surface without guidance adds only the line about forms, and a channel with no surface adds nothing", async () => {
 	const f = await fixture([
 		{ surface: "tables", formatting: TABLES },
 		{ surface: "bare" },
@@ -238,9 +246,11 @@ test("a surface without guidance, and a channel with no surface, add nothing", a
 		const bare = await f.promptOn("bare:room");
 		expect(bare).toContain("You are the persona.");
 		expect(bare).not.toContain("Reply formatting");
+		expect(bare).toContain(CANNOT);
 		const unserved = await f.promptOn("schedule:nightly");
 		expect(unserved).toContain("You are the persona.");
 		expect(unserved).not.toContain("Reply formatting");
+		expect(unserved).not.toContain(CANNOT);
 	} finally {
 		await f.close();
 	}
@@ -266,6 +276,24 @@ test("a surface whose guidance is blank adds nothing", async () => {
 		expect(prompt).toContain("You are the persona.");
 		expect(prompt).not.toMatch(/You are the persona\.\s*\n\s*\n\s*$/);
 		expect(prompt.endsWith("\n")).toBe(false);
+	} finally {
+		await f.close();
+	}
+});
+
+test("a turn on a surface that cannot show forms is told so, and one on a surface that can is not", async () => {
+	const f = await fixture([
+		{ surface: "tables", formatting: TABLES, blocks: ["table"] },
+		{ surface: "forms", formatting: PLAIN, blocks: [...INTERACTIVE_KINDS] },
+	]);
+	try {
+		const onTables = await f.promptOn("tables:room");
+		expect(onTables).toContain(TABLES);
+		expect(onTables).toContain(CANNOT);
+		expect(onTables.indexOf(CANNOT)).toBeGreaterThan(onTables.indexOf(TABLES));
+		const onForms = await f.promptOn("forms:room");
+		expect(onForms).toContain(PLAIN);
+		expect(onForms).not.toContain(CANNOT);
 	} finally {
 		await f.close();
 	}

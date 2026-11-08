@@ -1,4 +1,4 @@
-import { type BlockKind, parse, toText } from "pi-better-show";
+import { type BlockKind, parse, type TextLang, toText } from "pi-better-show";
 import type { BlockSupport, BlockTextFlavor } from "../domain/block-support.ts";
 import { diagramDrawer } from "./diagram-text.ts";
 import { splitReply } from "./reply-splitter.ts";
@@ -29,18 +29,29 @@ export function textFor(
 	surface: BlockSupport | undefined,
 	text: string,
 ): string {
-	return convert(text, surface?.blocks ?? [], surface?.blockText ?? "discord");
+	return convert(
+		text,
+		surface?.blocks ?? [],
+		surface?.blockText ?? "discord",
+		surface?.lang,
+	);
 }
 
 function convert(
 	text: string,
 	draws: readonly BlockKind[],
 	flavor: BlockTextFlavor,
+	lang: TextLang | undefined,
 ): string {
 	const segments = parse(text);
 	const blocks = segments.filter((segment) => segment.type !== "markdown");
 	// Toward a surface that draws all of them the text is already right, and rejoining the
 	// segments would only change its spacing.
 	if (blocks.every((block) => draws.includes(block.kind))) return text;
-	return toText(segments, { flavor, mermaid: diagramDrawer(), keep: draws });
+	return toText(segments, {
+		flavor,
+		mermaid: diagramDrawer(),
+		keep: draws,
+		...(lang ? { lang } : {}),
+	});
 }

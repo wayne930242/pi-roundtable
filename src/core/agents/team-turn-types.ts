@@ -55,7 +55,13 @@ export interface TeamTurnsOptions {
 	 */
 	surfaces?: Pick<
 		SurfacePort,
-		"sendReply" | "interim" | "roomSurfaces" | "of" | "progress" | "groupRound"
+		| "sendReply"
+		| "interim"
+		| "roomSurfaces"
+		| "of"
+		| "lang"
+		| "progress"
+		| "groupRound"
 	>;
 	studio: Pick<AvatarStudio, "url">;
 	/**

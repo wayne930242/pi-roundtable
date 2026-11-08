@@ -4,7 +4,11 @@ import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface, SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey, OutboundReply } from "../domain/conversation.ts";
 import { silentLogger } from "../kernel/log.ts";
-import { ALL_BLOCKS_REPLY, fencesIn } from "../testing/fixtures/all-blocks.ts";
+import {
+	ALL_BLOCKS_REPLY,
+	BLOCK_SAMPLES,
+	fencesIn,
+} from "../testing/fixtures/all-blocks.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { conversationTurns } from "./conversation-turns.ts";
 
@@ -13,9 +17,11 @@ async function replyTo(
 	channel: ChannelKey,
 	surface: Pick<ChatSurface, "surface" | "blocks" | "blockText" | "support">,
 	text: string,
+	lang?: SurfacePort["lang"],
 ): Promise<OutboundReply[]> {
 	const replies: OutboundReply[] = [];
 	const surfaces = {
+		...(lang ? { lang } : {}),
 		of: (key: ChannelKey) =>
 			key.startsWith(`${surface.surface}:`)
 				? (surface as ChatSurface)
@@ -130,5 +136,20 @@ describe("a turn's reply on a surface", () => {
 			ALL_BLOCKS_REPLY,
 		);
 		expect(fencesIn(reply?.chunks.join("\n") ?? "")).toEqual(["diff"]);
+	});
+
+	test("an interactive block reaches Discord as the question to answer by typing, in the host's language", async () => {
+		const text = `Pick one.\n\n${BLOCK_SAMPLES.options}`;
+		const [english] = await replyTo("discord:1", { surface: "discord" }, text);
+		expect(english?.chunks.join("\n")).toContain("Reply with a number.");
+		const [chinese] = await replyTo(
+			"discord:1",
+			{ surface: "discord" },
+			text,
+			"zh-TW",
+		);
+		const asked = chinese?.chunks.join("\n") ?? "";
+		expect(asked).toContain("\u8acb\u56de\u8986\u7de8\u865f\u3002");
+		expect(asked).not.toContain("```options");
 	});
 });

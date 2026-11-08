@@ -8,7 +8,12 @@ import {
 	until,
 } from "./surface-contract-support.ts";
 
-/** The contract of a surface that lists `ChatSurface.blocks`: what it says it draws arrives whole. */
+/**
+ * The contract of a surface that lists `ChatSurface.blocks`: what it says it draws arrives whole.
+ * A surface that lists an interactive kind (`options`, `suggest`, `form`, `checklist`, `review`)
+ * also promises that the reader's answer reaches the agent as a message from them, sent the way
+ * typing it would be: the contract cannot drive a reader's click, so a surface's own tests show it.
+ */
 export const BLOCK_CHECKS: readonly {
 	name: string;
 	applies(subject: SurfaceContractSubject): boolean;

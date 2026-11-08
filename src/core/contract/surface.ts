@@ -1,4 +1,4 @@
-import type { BlockKind } from "pi-better-show";
+import type { BlockKind, TextLang } from "pi-better-show";
 import type {
 	BlockTextFlavor,
 	ChannelSupport,
@@ -140,7 +140,10 @@ export interface ChatSurface {
 	 * The display-block kinds this surface draws itself, such as `table` or `mermaid` (see
 	 * pi-better-show). A reply reaches `sendReply` whole, with the fences of those kinds intact; a
 	 * block of any other kind arrives as text, and a surface that lists none gets every block as
-	 * text. Absent = none.
+	 * text. Absent = none. Listing an interactive kind (`options`, `suggest`, `form`, `checklist`,
+	 * `review`) also promises that the surface hands the reader's answer to the agent as a message
+	 * from them, the way typing it would; a surface that cannot promise that leaves the kind out,
+	 * and core tells the model it cannot show forms, option buttons or checklists (see `blockNote`).
 	 */
 	readonly blocks?: readonly BlockKind[];
 	/**
@@ -148,6 +151,17 @@ export interface ChatSurface {
 	 * `diff` fence), `line` (plain text without Markdown markup), or `plain`. Absent = `discord`.
 	 */
 	readonly blockText?: BlockTextFlavor;
+	/**
+	 * The language a block this surface does not draw asks its reader to answer in, `en` or
+	 * `zh-TW`. Absent = the host's locale.
+	 */
+	readonly lang?: TextLang;
+	/**
+	 * `false` = this surface's `formatting` already says what it cannot do with forms, option
+	 * buttons and checklists, so core adds no line about them. Absent = core adds one to the
+	 * guidance of a turn when the surface does not draw every interactive kind.
+	 */
+	readonly blockNote?: false;
 	/**
 	 * What differs in one channel of this surface: its `formatting`, `blocks` or `blockText`
 	 * replace the surface's for a turn that replies there, such as a host's room on a surface that
@@ -239,6 +253,8 @@ export interface ChatSurface {
  * NotLinkedError, because the surfaces are collected once every plugin is set up.
  */
 export interface SurfacePort {
+	/** The host's locale: the language a block that reads as text asks its reader to answer in. */
+	readonly lang?: TextLang;
 	/** The surface that serves the channel's prefix; undefined when none does. */
 	of(channel: ChannelKey): ChatSurface | undefined;
 	/** Throws PluginError naming the prefix when no surface serves it. */
