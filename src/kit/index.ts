@@ -57,7 +57,11 @@ export {
 	THINKING_LEVELS,
 	thinkingLabel,
 } from "./domain.ts";
-export { HOLD_DESCRIBE_TIMEOUT_MS, holdChain } from "./holds.ts";
+export {
+	HOLD_DESCRIBE_TIMEOUT_MS,
+	holdChain,
+	YOLO_NEVER_CLASS,
+} from "./holds.ts";
 export type {
 	CodexFetch,
 	CodexImage,

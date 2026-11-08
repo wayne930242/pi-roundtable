@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A coding worker's yolo mode never approves a call whose class ends in `.yolo-never` (`YOLO_NEVER_CLASS`), even when `autonomy.yolo.allow` names it, matching the core yolo approver.
+
 ## [0.38.1] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.38.1 (a quote in one's own app bubble is readable in every look; a list a model sends as JSON text reaches a tool as the list, so `helper_end` by name works); no package-specific behavior changes.

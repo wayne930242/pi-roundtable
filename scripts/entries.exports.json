@@ -455,6 +455,7 @@
 			"SQUARE_PNG_MAX_SIDE",
 			"THINKING_LEVELS",
 			"YOLO_CARDED_SHELL_CLASSES",
+			"YOLO_NEVER_CLASS",
 			"activeToolsExtension",
 			"answersAuthor",
 			"approvalCard",

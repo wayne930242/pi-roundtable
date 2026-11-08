@@ -4894,6 +4894,7 @@ Import from the entries listed below; source area files are internal.
 | `JevJudgeOptions` | `pi-roundtable/kit` | type |
 | `McpEndpoint` | `pi-roundtable/kit` | type |
 | `McpToolHints` | `pi-roundtable/kit` | type |
+| `YOLO_NEVER_CLASS` | `pi-roundtable/kit` | value |
 | `ModelRef` | `pi-roundtable/kit` | type |
 | `OwnerIdentity` | `pi-roundtable/kit` | type |
 | `Notifier` | `pi-roundtable/kit` | type |

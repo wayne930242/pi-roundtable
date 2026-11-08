@@ -20,6 +20,7 @@ import {
 	promptSlot,
 	workTimeout,
 	YOLO_CARDED_SHELL_CLASSES,
+	YOLO_NEVER_CLASS,
 } from "pi-roundtable/kit";
 import type {
 	Integration,
@@ -260,6 +261,7 @@ export class CodingDesk {
 		const carded = new Set<string>(YOLO_CARDED_SHELL_CLASSES);
 		// The core's yolo rules: a carded class or rule never, an unclassed call only by its rule's name.
 		this.#yoloApproves = (id) => {
+			if (id.endsWith(`.${YOLO_NEVER_CLASS}`)) return false;
 			if (card.has(id) || card.has(ruleOf(id))) return false;
 			if (!id.includes(".")) return allow.has(id);
 			return !carded.has(id) || allow.has(id);

@@ -465,6 +465,31 @@ test("the starter's yolo mode approves a call it allows and still cards a carded
 	);
 });
 
+test("the starter's yolo mode never approves a yolo-never call, even when allowed", async () => {
+	const { shelf } = await fixture();
+	const NEVER: HeldCall = {
+		tool: "twst-approve-approve",
+		input: '{"kind":"live_order","id":"1"}',
+		action: "approve",
+		holdClasses: ["mcp-hints.yolo-never"],
+	};
+	const yolo = yoloDesk(
+		shelf,
+		[NEVER],
+		{ yolo: true, longRunning: false },
+		{
+			autonomy: {
+				yolo: { allow: ["mcp-hints", "mcp-hints.yolo-never"], card: [] },
+			},
+		},
+	);
+	await yolo.desk.start(request({ starter: OWNER_STARTER }));
+	await yolo.desk.idle();
+	expect(yolo.answers).toEqual(["declined"]);
+	expect(yolo.cards).toHaveLength(1);
+	expect(yolo.logged).toEqual([]);
+});
+
 test("yolo is read live, and acts only for an owner's turn other than the host's", async () => {
 	const { shelf } = await fixture();
 	const mode = { yolo: false, longRunning: false };
