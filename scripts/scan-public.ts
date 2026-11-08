@@ -170,6 +170,7 @@ const CREDENTIALS = [
 const CJK_DIRECTORIES = [
 	"src/core/i18n/",
 	"src/i18n/",
+	"packages/coding/src/i18n/",
 	"site/src/content/docs/zh-tw/",
 ];
 // The character catalog matches Chinese role words when it suggests a look, and its test checks that matching.

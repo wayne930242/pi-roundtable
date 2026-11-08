@@ -107,7 +107,12 @@ A worker that committed nothing leaves no worktree or branch behind.
 Integrations of one clone run one at a time, and wait for a report or push of it in progress.
 Reports and pushes refuse a repository only while an integration is changing its clone, not while workers run in their worktrees; the desk also refuses a second concurrent report or push of a repository and new coding tasks for it while one runs.
 
-At most `maxWorkers` workers (default 4) run at once on the host, across repositories and channels.
+At most `maxWorkers` workers (default 4, at most 64) run at once on the host, across repositories and channels.
+The owner can change the limit while the host runs: with the web console registered before this plugin, the owner-only Settings page "Coding workers" (`coding-workers`) shows the limit, the running and queued counts, and saves a new limit at once.
+A higher limit starts queued tasks now, in order; a lower one stops no running worker, and new tasks queue until fewer run.
+With `settingsInDatabase: true` the saved limit is kept in the host database (table `coding_settings`) and wins over `maxWorkers` at the next start; otherwise it lasts until the host stops.
+Hosts call `desk.setMaxWorkers(n)` for the same change in code, and `desk.workers()` reads `{ max, running, queued }`.
+The page has built-in zh-TW wording for a zh-TW host; `presentation.messages`, keyed by the English text, words it otherwise.
 Past that a task waits in a first-in, first-out queue of at most `maxQueued` tasks (default 16), and `repo_task` answers at once with its queue position; one more is refused.
 A queued task starts when a worker slot frees.
 On host stop queued tasks are dropped and each gets a report saying it never ran; the shutdown drain waits only for running workers.
@@ -222,7 +227,8 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `workerEnv` | `{}` | `{ pass? }`: more host variables the worker process gets for its model, beyond its `models.json` `$VAR`s, `CLAUDE_*` and `ANTHROPIC_*`; the worker's shell never gets them. |
 | `githubToken` | host `GH_TOKEN`, read at setup | A string, or a function read at each call, given as `GH_TOKEN` to the shelf's git and gh calls only (clone, fetch, push); a function returning undefined leaves gh to its own login. |
 | `timeoutMs` | `3600000` | Work-time limit in ms, excluding owner wait; 0 < value <= 2147483647. |
-| `maxWorkers` | `4` | Workers running at once on the host; a whole number of at least 1. |
+| `maxWorkers` | `4` | Workers running at once on the host; a whole number from 1 to 64. The owner can change it in Settings, and with `settingsInDatabase` a stored value wins over this one. |
+| `settingsInDatabase` | `false` | Keep the owner's worker limit in the host database (table `coding_settings`, migration `coding/settings`); needs a configured database. |
 | `maxQueued` | `16` | Tasks waiting for a worker slot; a whole number of at least 0. |
 | `modes` | none | The host's conversation modes (`peek`, optional `autoApproved`), for workers to follow their starter's yolo and long-running modes. |
 | `autonomy` | `{ yolo: { allow: [], card: [] }, longRunningMaxMs: 14400000 }` | The host's resolved autonomy limits those modes follow. |

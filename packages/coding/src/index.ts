@@ -18,10 +18,10 @@ export type {
 	CodingOptions,
 	CodingPresentation,
 	CodingRun,
-	CodingService,
 	CodingToolText,
 	RepoToolName,
-} from "./coding-plugin.ts";
+} from "./coding-options.ts";
+export type { CodingService } from "./coding-plugin.ts";
 export { CODING, coding } from "./coding-plugin.ts";
 export type { PiCodingWorkerOptions, WorkerEnv } from "./pi-coding-worker.ts";
 export { modelEnvNames, PiCodingWorker } from "./pi-coding-worker.ts";
