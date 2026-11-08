@@ -11,7 +11,7 @@ Opt-in options (below) can also sandbox a whole Discord server, share one worksp
 
 ## Requirements
 
-- Bun 1.4.4 or later and pi-roundtable `>=0.39.0 <0.40.0`.
+- Bun 1.4.4 or later and pi-roundtable `>=0.40.0 <0.41.0`.
 - A native Linux host with a local Docker daemon and a non-root service account permitted to run Docker.
 - The worker UID/GID match that account; root workers are refused.
 - A trusted OpenAI-compatible, non-streaming Chat Completions endpoint supporting function tools and `max_tokens`.

@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-08
+
 ### Added
 
 - The owner answers the interactive blocks of an agent's reply in the app. `options`, `suggest`, `form`, `checklist` and `review` are drawn by their elements and `AppSurface.blocks` lists them, so the model is told how to write each (`APP_FORMATTING` says to use `ask_user` when the turn must go on with the answer now, a block when the reply can end, and never `options` for several answers) and that the answer arrives as the owner's next message. An answer is sent as that message, by the path a typed one takes: it steers into a running turn, waits its turn or starts one, and the owner's bubble shows exactly the text the agent reads (`encodeAnswer`).
