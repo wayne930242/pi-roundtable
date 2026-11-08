@@ -17,6 +17,7 @@ import {
 	MAX_LASTING_WEBHOOKS,
 	MAX_WEBHOOK_MINUTES,
 	MAX_WEBHOOK_NAME,
+	type WebhookOverviewView,
 	type WebhookView,
 } from "./types.ts";
 
@@ -94,6 +95,23 @@ export class Webhooks {
 
 	async list(agent: string): Promise<WebhookView[]> {
 		return (await this.#options.store.list(agent)).map(viewOf);
+	}
+
+	/** The live webhooks of every active permanent knight, by knight and then the oldest first. */
+	async listAll(): Promise<WebhookOverviewView[]> {
+		return (await this.#options.store.listAll()).flatMap((hook) =>
+			this.permanent(hook.agent)
+				? [
+						{
+							agent: hook.agent,
+							agentDisplayName:
+								this.#options.directory.agent(hook.agent)?.displayName ??
+								hook.agent,
+							...viewOf(hook),
+						},
+					]
+				: [],
+		);
 	}
 
 	/** Makes a webhook of the agent's room; throws WebhookError for a name, expiry or count it refuses. */

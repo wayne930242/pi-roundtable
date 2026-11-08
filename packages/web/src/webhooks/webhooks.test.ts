@@ -337,4 +337,54 @@ describeDb("incoming webhooks", () => {
 		expect(await webhooks.list("infra")).toEqual([]);
 		expect(await call("GET", "api/agents/infra")).toBeUndefined();
 	});
+
+	test("`GET api/webhooks` lists every knight's live webhooks by knight, never a token or hash", async () => {
+		agents.set("coder", knight("coder", { displayName: "Coder" }));
+		const ci = await webhooks.create("infra", { name: "CI" }, "owner");
+		const first = await webhooks.create("coder", { name: "A" }, "coder");
+		const gone = await webhooks.create("coder", { name: "B" }, "owner");
+		await webhooks.create(
+			"coder",
+			{ name: "Soon", expiresInMinutes: 1 },
+			"owner",
+		);
+		await webhooks.revoke("coder", gone.webhook.id);
+		await sql`UPDATE web_webhooks SET expires_at = now() - interval '1 second' WHERE name = 'Soon'`;
+		const answer = await webhookRoute(
+			webhooks,
+			new Request(`${BASE}/api/webhooks`),
+			"api/webhooks",
+			undefined,
+		);
+		const text = (await answer?.text()) ?? "";
+		for (const made of [ci, first])
+			expect(text).not.toContain(made.url.split("/").pop() as string);
+		expect(text).not.toContain("hash");
+		const { webhooks: listed } = JSON.parse(text) as {
+			webhooks: Record<string, unknown>[];
+		};
+		expect(listed.map((one) => [one.agent, one.name])).toEqual([
+			["coder", "A"],
+			["infra", "CI"],
+		]);
+		expect(listed[0]).toMatchObject({
+			agentDisplayName: "Coder",
+			id: first.webhook.id,
+			createdBy: "coder",
+			once: false,
+			lastUsed: null,
+			expiresAt: null,
+		});
+		// The expired one was swept, as the per-knight list sweeps.
+		const [swept] =
+			await sql`SELECT revoked_at FROM web_webhooks WHERE name = 'Soon'`;
+		expect(swept.revoked_at).not.toBeNull();
+		const posted = await webhookRoute(
+			webhooks,
+			new Request(`${BASE}/api/webhooks`, { method: "POST" }),
+			"api/webhooks",
+			undefined,
+		);
+		expect(posted?.status).toBe(405);
+	});
 });
