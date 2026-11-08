@@ -110,6 +110,7 @@ interface WorkerMessage {
 	stopReason?: string;
 	text?: string;
 	name?: string;
+	stopped?: boolean;
 }
 function isMessage(value: unknown): value is WorkerMessage {
 	return (
