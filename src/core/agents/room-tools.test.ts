@@ -90,6 +90,7 @@ function tools(layout: RoomLayoutService | undefined, withRooms = true) {
 	} as unknown as ExtensionAPI;
 	agentToolsExtension(ops, SCOPE, TEST_OWNER, {
 		skills: false,
+		channels: true,
 		...(withRooms ? { rooms: new TeamRooms(store, () => layout) } : {}),
 	})(pi);
 	const call = (tool: string, params: Record<string, unknown>) => {

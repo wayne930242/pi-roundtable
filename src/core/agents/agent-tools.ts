@@ -183,13 +183,18 @@ export interface AgentToolOptions {
 	skills: boolean;
 	/** The app's room groups; without them `group` and room_arrange are refused. */
 	rooms?: RoomOps;
+	/** Whether the team has Discord channels; without them no `category`, channel_arrange or channel_read. */
+	channels: boolean;
 }
+
+/** The tools that work on the team's Discord channels, left out of a team without them. */
+const CHANNEL_TOOLS: readonly string[] = ["channel_arrange", "channel_read"];
 
 function toolDefs(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	owner: OwnerIdentity,
-	{ skills: skillsOn, rooms }: AgentToolOptions,
+	{ skills: skillsOn, rooms, channels }: AgentToolOptions,
 ): AgentToolDef[] {
 	const o = ownerWords(owner);
 	const defs: AgentToolDef[] = [
@@ -273,7 +278,7 @@ function toolDefs(
 					maxLength: 4000,
 					description: "Its opening task, self-contained.",
 				}),
-				category: Type.Optional(category("Agents")),
+				...(channels ? { category: Type.Optional(category("Agents")) } : {}),
 				group: Type.Optional(ROOM_GROUP),
 				long_running: Type.Optional(
 					Type.Boolean({
@@ -339,7 +344,7 @@ function toolDefs(
 				display_name: DISPLAY,
 				members: MEMBERS,
 				host: Type.Optional(NAME),
-				category: Type.Optional(category("Groups")),
+				...(channels ? { category: Type.Optional(category("Groups")) } : {}),
 				group: Type.Optional(ROOM_GROUP),
 			}),
 			run: (i) => {
@@ -481,5 +486,8 @@ export function agentToolsExtension(
 	owner: OwnerIdentity,
 	options: AgentToolOptions,
 ): ExtensionFactory {
-	return textToolsExtension(toolDefs(ops, scope, owner, options), AgentError);
+	const defs = toolDefs(ops, scope, owner, options).filter(
+		(def) => options.channels || !CHANNEL_TOOLS.includes(def.name),
+	);
+	return textToolsExtension(defs, AgentError);
 }

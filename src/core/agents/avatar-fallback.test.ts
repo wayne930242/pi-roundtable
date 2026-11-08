@@ -376,7 +376,7 @@ describe("the agent tools, with and without an image provider", () => {
 				"class",
 				"color",
 				"task",
-				"category",
+				// The team has no Discord channels, so no category.
 				"group",
 				"long_running",
 				"skills",
@@ -435,7 +435,10 @@ describe("the agent_create and agent_avatar tools pass looks to the team", () =>
 				) => Promise<unknown>;
 			}) => run.set(tool.name, (params) => tool.execute("id", params)),
 		} as unknown as ExtensionAPI;
-		agentToolsExtension(ops, SCOPE, TEST_OWNER, { skills: false })(pi);
+		agentToolsExtension(ops, SCOPE, TEST_OWNER, {
+			skills: false,
+			channels: true,
+		})(pi);
 		return { calls, run };
 	}
 

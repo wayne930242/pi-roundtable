@@ -177,6 +177,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	extension(scope: AgentTurnScope): ExtensionFactory {
 		return agentToolsExtension(this, scope, THE_SPEAKER, {
 			skills: this.#options.skills !== undefined,
+			channels: this.#options.channels !== undefined,
 			rooms: new TeamRooms(this.#options.store, () => this.#options.rooms?.()),
 		});
 	}
