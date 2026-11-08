@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFauxCore, fauxAssistantMessage } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { INTERACTIVE_KINDS } from "pi-better-show";
 import { Type } from "typebox";
 import type {
 	AgentRuntime,
@@ -227,6 +228,7 @@ describe("the runtime plugin", () => {
 						? {
 								surface: "chat",
 								formatting: "No tables.",
+								blocks: INTERACTIVE_KINDS,
 								support: (key: string) =>
 									key === "chat:quiet" ? { formatting: "Quiet." } : undefined,
 							}
@@ -237,7 +239,10 @@ describe("the runtime plugin", () => {
 		);
 		expect(deps?.formatting?.("chat:1")).toBe("No tables.");
 		expect(deps?.formatting?.("chat:quiet")).toBe("Quiet.");
-		expect(deps?.formatting?.("bare:1")).toBeUndefined();
+		// A surface that draws no interactive kind is told so, even with no guidance of its own.
+		expect(deps?.formatting?.("bare:1")).toStartWith(
+			"This chat cannot show forms, option buttons or checklists.",
+		);
 		expect(deps?.formatting?.("other:1")).toBeUndefined();
 	});
 

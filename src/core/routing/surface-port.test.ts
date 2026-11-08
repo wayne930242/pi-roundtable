@@ -227,3 +227,21 @@ test("a channel the surface says differs gets interim posts that draw nothing", 
 	expect(port.interim("app:agent.a")?.blocks).toEqual(["table"]);
 	expect(port.interim("app:host.1")?.blocks).toEqual([]);
 });
+
+test("the host's locale is the language of the interim posts' blocks that read as text, unless the surface says its own", () => {
+	const posts = { tools: false, post: async () => ({ edit: async () => {} }) };
+	const plain: ChatSurface = {
+		...recording("discord", []),
+		interim: () => posts,
+	};
+	const own: ChatSurface = {
+		...recording("app", []),
+		lang: "en",
+		interim: () => posts,
+	};
+	const port = surfacePort(() => [plain, own], { lang: "zh-TW" });
+	expect(port.lang).toBe("zh-TW");
+	expect(port.interim("discord:1")?.lang).toBe("zh-TW");
+	expect(port.interim("app:room")?.lang).toBe("en");
+	expect(surfacePort(() => [plain]).lang).toBeUndefined();
+});

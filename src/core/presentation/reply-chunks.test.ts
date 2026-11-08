@@ -52,6 +52,16 @@ describe("chunksFor", () => {
 		expect(chunk).toContain("Reply with a number.");
 	});
 
+	test("an interactive kind the surface does not draw asks in the surface's language", () => {
+		const text = ["Pick one.", BLOCK_SAMPLES.options].join("\n\n");
+		const zh = chunksFor({ ...drawing, lang: "zh-TW" }, text).join("\n");
+		expect(zh).toContain("\u8acb\u56de\u8986\u7de8\u865f\u3002");
+		expect(zh).not.toContain("Reply with a number.");
+		const en = chunksFor(drawing, text).join("\n");
+		expect(en).toContain("Reply with a number.");
+		expect(fencesIn(zh)).toEqual([]);
+	});
+
 	test("a declared kind that does not parse stays as it was written", () => {
 		const broken = "```table\ncolumns: [unclosed\n```";
 		expect(chunksFor(drawing, `Text.\n\n${broken}`)).toEqual([

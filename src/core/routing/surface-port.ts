@@ -1,3 +1,4 @@
+import type { TextLang } from "pi-better-show";
 import type { ChatSurface, SurfacePort } from "../contract/surface.ts";
 import { parseChannelKey } from "../contract/surface.ts";
 import { supportOf } from "../domain/block-support.ts";
@@ -13,6 +14,8 @@ import { PluginError } from "../kernel/errors.ts";
 export interface SurfacePortOptions {
 	/** Told when a caller uses a form that goes away, such as `prompts(channel, speaker)`. */
 	deprecated?(message: string): void;
+	/** The host's locale, the language a block that reads as text asks its reader to answer in. */
+	lang?: TextLang;
 }
 
 /**
@@ -38,6 +41,7 @@ export function surfacePort(
 		return surface;
 	};
 	return {
+		...(options.lang ? { lang: options.lang } : {}),
 		of,
 		sendReply: async (channel, reply) => {
 			const surface = served(channel);
@@ -67,11 +71,16 @@ export function surfacePort(
 			const posts = surface?.interim?.(channel, as);
 			if (!surface || !posts) return posts;
 			// The poster cuts text for the surface it posts on, which only the port knows.
-			const { blocks, blockText } = supportOf(surface, channel);
+			const { blocks, blockText, lang } = supportOf(
+				surface,
+				channel,
+				options.lang,
+			);
 			return {
 				...(posts.tools === undefined ? {} : { tools: posts.tools }),
 				...(blocks ? { blocks } : {}),
 				...(blockText ? { blockText } : {}),
+				...(lang ? { lang } : {}),
 				post: (text) => posts.post(text),
 			};
 		},

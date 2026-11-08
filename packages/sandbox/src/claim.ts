@@ -39,7 +39,7 @@ export interface SandboxClaimOptions {
 		Partial<Pick<SandboxChannelStore, "owns">>;
 	runtime: Pick<SandboxRuntime, "runTurn" | "stop" | "startFresh">;
 	surfaces: Pick<SurfacePort, "sendReply" | "startTyping"> &
-		Partial<Pick<SurfacePort, "of">>;
+		Partial<Pick<SurfacePort, "of" | "lang">>;
 	/** Told of a failed turn, with what failed (a sandbox error, or replyText's own throw). */
 	reportFailure?: (channel: ChannelKey, error: unknown) => void;
 	replyText?: SandboxReplyText;
@@ -183,6 +183,7 @@ export function sandboxClaim(options: SandboxClaimOptions): ChannelClaim {
 								supportOf(
 									options.surfaces.of?.(message.channel),
 									message.channel,
+									options.surfaces.lang,
 								),
 								posted,
 							),

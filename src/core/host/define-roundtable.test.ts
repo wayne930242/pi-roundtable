@@ -456,6 +456,29 @@ describe("defineRoundtable", () => {
 		}
 	});
 
+	test("the surfaces carry the host's locale as the language of a block that reads as text", async () => {
+		const { options } = await defineRoundtable({ ...config, locale: "zh-TW" });
+		let seen: string | undefined;
+		const host = new Roundtable(
+			{ logger: silentLogger(), environment: options.environment },
+			[
+				{
+					name: "probe",
+					setup: ({ surfaces }) => {
+						seen = surfaces.lang;
+						return { events: {} };
+					},
+				},
+			],
+		);
+		try {
+			await host.run();
+			expect(seen).toBe("zh-TW");
+		} finally {
+			await host.shutdown("test");
+		}
+	});
+
 	test("defining two hosts leaves the process alone and each keeps its own environment", async () => {
 		const agentDirBefore = process.env.PI_CODING_AGENT_DIR;
 		const zoneBefore = timeZone();

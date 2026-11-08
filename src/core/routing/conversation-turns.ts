@@ -251,7 +251,10 @@ export function conversationTurns(
 				else
 					await surfaces.sendReply(
 						channel,
-						replyBody(result, supportOf(surfaces.of(channel), channel)),
+						replyBody(
+							result,
+							supportOf(surfaces.of(channel), channel, surfaces.lang),
+						),
 					);
 			} catch (error) {
 				logger.error({ channel, kind, err: error }, "reply not posted");
