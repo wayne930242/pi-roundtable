@@ -86,6 +86,7 @@ import { type ToolTierTable, toolTiers } from "./core/runtime/tool-tiers.ts";
 import { PERSONAL_TARGET } from "./core/shared/personal-target.ts";
 import { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
+import { memberOf } from "./core/testing/partial.ts";
 import {
 	callRegisteredTool,
 	registeredTools,
@@ -587,7 +588,7 @@ export async function testPlugin(
 				? [
 						agentClaim({
 							owner,
-							discordGuild: agentServer.team.discordGuild,
+							discordGuild: memberOf(agentServer.team, "discordGuild"),
 							// SAFETY: the claim reads the concrete team's members (owns, answerOwner, answerGroup, answerBackground, startFresh), which a test that gives a team for it supplies.
 							team: agentServer.team as never,
 							runtime: {

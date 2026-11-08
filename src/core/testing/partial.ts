@@ -19,3 +19,11 @@ export function partial<T extends object>(given: Partial<T>): T {
 		},
 	}) as T;
 }
+
+/** A member of an object that may be a `partial()` stand-in: its value, or undefined when the stand-in was not given it. */
+export function memberOf<T extends object, K extends keyof T>(
+	object: T,
+	member: K,
+): T[K] | undefined {
+	return Reflect.has(object, member) ? object[member] : undefined;
+}
