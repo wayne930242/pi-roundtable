@@ -64,6 +64,9 @@ test("the page builds with relative URLs only, and every file it names is in the
  * The 50 bytes after that are a webhook's post in a room (7 bytes over): the message row draws an
  * `integration` message's author with the shared Badge and a plain icon; the webhooks section
  * of the knight's sheet is lazy.
+ * The 100 bytes after that are answering a display block (72 over): the message row hands the
+ * block its answer and room, and the store takes the `block_refused` frame and a message's
+ * `answers`; the block's answer controls, their step and wording are in the lazy blocks chunk.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -80,7 +83,8 @@ const FIRST_LOAD_BASELINE =
 	150 +
 	150 +
 	600 +
-	50;
+	50 +
+	100;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
