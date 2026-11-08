@@ -72,6 +72,7 @@ test("the page builds with relative URLs only, and every file it names is in the
  * The 100 bytes after that are the Webhooks pane (89 over): its name, label, icon and lazy route,
  * and the preload table naming the webhook parts the page shares with the knight's sheet; the
  * page and those parts are lazy.
+ * The 3 bytes after that are the two branches compressing together.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -90,7 +91,7 @@ const FIRST_LOAD_BASELINE =
 	600 +
 	50 +
 	100 +
-	150;
+	153;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 

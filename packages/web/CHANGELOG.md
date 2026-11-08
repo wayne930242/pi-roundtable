@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-08
+
 ### Added
 
 - A queued message that carries the answer to a block cannot be edited, as its block would keep showing the old pick: `edit_queued` is refused with the new code `answer_locked`, `RoomMessage.answer` marks such a message, and the page offers only Cancel for it (the ↑ shortcut skips it). Cancelling still opens the block again.

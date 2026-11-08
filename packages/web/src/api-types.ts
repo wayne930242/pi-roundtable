@@ -8,12 +8,12 @@ import type {
 	BlockRefusalCode,
 	RoomBlockAnswer,
 } from "./block-answer-types.ts";
-import type { PaneName } from "./panes.ts";
 import type {
 	HostAuthorKind,
 	PictureRef,
 	RoomIntercom,
 } from "./message-types.ts";
+import type { PaneName } from "./panes.ts";
 import type {
 	CardAnswer,
 	ClosedCard,

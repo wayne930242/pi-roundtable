@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.42.0 (interactive display blocks answered in the app, hold rules yolo mode never approves, and MCP tool hints); no package-specific behavior changes.
+
 ## [0.41.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.41.0 (an agent team that lives in the app on a Discord host without an agent guild); no package-specific behavior changes.

@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-08
+
 ### Added
 
 - The `tree` display block (`pi-better-show` 0.4.0) is drawn: the web app shows it as a directory tree, Discord and LINE get its ASCII drawing, and the web app's formatting guide describes it.
