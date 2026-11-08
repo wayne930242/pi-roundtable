@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.39.1] - 2026-11-08
+
+### Fixed
+
+- With `settingsInDatabase: true` the stored worker limit is read when the coding-desk service starts, not during setup, so `Roundtable.check()` (which refuses a database query in setup) passes and the host boots.
+
 ## [0.39.0] - 2026-11-08
 
 ### Added
