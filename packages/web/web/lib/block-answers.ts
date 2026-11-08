@@ -65,6 +65,11 @@ export function reopenBlock(key: string): void {
 	if (cells.delete(key)) changed();
 }
 
+/** The server's record of the answer reached the page: its lock replaces the one this page made. A block on its way stays so. */
+export function settleBlock(key: string): void {
+	if (cells.get(key)?.state === "done" && cells.delete(key)) changed();
+}
+
 /** Forgets every cell, for tests. */
 export function resetBlockCells(): void {
 	cells.clear();

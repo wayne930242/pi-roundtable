@@ -6,6 +6,16 @@ import type {
 	RoomMessage,
 	ServerFrame,
 } from "../src/api-types.ts";
+import {
+	CHECKLIST,
+	FORM,
+	HIDDEN_FORM,
+	MULTI_FORM,
+	OPTIONS,
+	REVIEW,
+	SUGGEST,
+	WORDY_SUGGEST,
+} from "./block-answers.fixtures.ts";
 import { LiveRow, MessageRow, PendingRow } from "./components/message-row.tsx";
 import { RoomLog } from "./components/room-log.tsx";
 import type { TestPage } from "./dom.ts";
@@ -14,58 +24,6 @@ import { type BlockReply, resetBlockCells } from "./lib/block-answers.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { frameListeners } from "./lib/frame-taps.ts";
 import { type AppConnection, setConnection } from "./lib/socket.ts";
-
-const OPTIONS = [
-	"```options",
-	"- title: SQLite",
-	"- title: Postgres",
-	"```",
-].join("\n");
-const SUGGEST = ["```suggest", "- Ship it", "- Wait", "```"].join("\n");
-const FORM = [
-	"```form",
-	"title: Stores",
-	"questions:",
-	"  - name: store",
-	"    type: single",
-	"    required: true",
-	"    choices: [{value: SQLite, label: SQLite}, {value: Postgres, label: Postgres}]",
-	"```",
-].join("\n");
-const HIDDEN_FORM = [
-	"```form",
-	"questions:",
-	"  - name: db",
-	"    label: Which database",
-	"    type: single",
-	"    choices: [{value: pg-17-prod, label: Postgres}, {value: lite, label: SQLite}]",
-	"```",
-].join("\n");
-const MULTI_FORM = [
-	"```form",
-	"title: Extras",
-	"questions:",
-	"  - name: extras",
-	"    type: multi",
-	"    required: true",
-	"    choices: [{value: Cache, label: Cache}, {value: Queue, label: Queue}]",
-	"```",
-].join("\n");
-const CHECKLIST = [
-	"```checklist",
-	"title: Before the release",
-	"items: [Tests, Docs]",
-	"```",
-].join("\n");
-const REVIEW = [
-	"```review",
-	"title: Two logos",
-	"pick: true",
-	"items:",
-	"  - {name: A, body: First, image: 'file:logo-a'}",
-	"  - {name: B, body: Second, image: 'https://example.test/b.png', page: proto.html}",
-	"```",
-].join("\n");
 
 const settle = (ms = 40) =>
 	new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -234,6 +192,20 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 		expect(root.querySelector(".block-confirm")).toBeNull();
 	});
 
+	test("a suggestion chip whose text is not its label shows the exact text first instead of sending", async () => {
+		const root = await draw(row(reply(WORDY_SUGGEST)));
+		const chips = shadow(root, "pbs-suggest").querySelectorAll("[part=chip]");
+		await click(chips[0]);
+		expect(calls).toHaveLength(0);
+		expect(root.querySelector(".block-confirm-text")?.textContent).toBe(
+			"Yes. I approve deleting the staging database, go ahead",
+		);
+		// A chip that says what it sends still goes at once.
+		await click(chips[1]);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.answer.fields).toEqual([["text", "Wait"]]);
+	});
+
 	test("a form with a multi question sends nothing on a pick, shows every chosen value, and sends only on Send", async () => {
 		const root = await draw(row(reply(MULTI_FORM)));
 		const form = shadow(root, "pbs-form");
@@ -315,7 +287,7 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 		);
 	});
 
-	test("a review with a pick shows what will be sent, its images go only through the app's file route, and a page is a pointer", async () => {
+	test("a review with a pick shows what will be sent, its images go only through the app's file route (a dotted id gets none), and a page is a pointer", async () => {
 		const root = await draw(row(reply(REVIEW)));
 		const review = shadow(root, "pbs-review");
 		const images = [...review.querySelectorAll("img")].map((img) =>
@@ -328,6 +300,49 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 		await click(review.querySelector("[part=submit]"));
 		expect(calls).toHaveLength(0);
 		expect(root.querySelector(".block-confirm")).not.toBeNull();
+	});
+
+	test("a block locked from this page opens again when the owner cancels the answer: the row comes back without the lock", async () => {
+		const message = reply(OPTIONS);
+		const root = await draw(row(message));
+		await click(shadow(root, "pbs-options").querySelector("[part=pick]"));
+		await page.act(() => settle());
+		expect(slot(root).dataset.state).toBe("answered");
+		// A redraw before the server's record reaches the page keeps the lock; the cancel then removes the record.
+		await draw(row(message), true);
+		expect(slot(root).dataset.state).toBe("answered");
+		const recorded = {
+			...message,
+			answers: [{ block: 0, fields: [["picked", "SQLite"]] as BlockFields }],
+		};
+		await draw(row(recorded), true);
+		expect(slot(root).dataset.state).toBe("answered");
+		await draw(row(message), true);
+		expect(slot(root).dataset.state).toBe("open");
+		// And it takes the answer again.
+		await click(shadow(root, "pbs-options").querySelector("[part=pick]"));
+		await page.act(() => settle());
+		expect(calls).toHaveLength(2);
+	});
+
+	test("the server's record may reach the page before its accepted frame, and the cancel still reopens the block", async () => {
+		const gate = Promise.withResolvers<BlockReply>();
+		nextReply = () => gate.promise;
+		const message = reply(OPTIONS);
+		const root = await draw(row(message));
+		await click(shadow(root, "pbs-options").querySelector("[part=pick]"));
+		await draw(
+			row({
+				...message,
+				answers: [{ block: 0, fields: [["picked", "SQLite"]] }],
+			}),
+			true,
+		);
+		gate.resolve({ ok: true });
+		await page.act(() => settle());
+		expect(slot(root).dataset.state).toBe("answered");
+		await draw(row(message), true);
+		expect(slot(root).dataset.state).toBe("open");
 	});
 
 	test("a refusal opens the block again with the reason, and a second answer can follow", async () => {

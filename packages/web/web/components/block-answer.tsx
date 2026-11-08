@@ -15,6 +15,7 @@ import {
 	lockBlock,
 	pendBlock,
 	reopenBlock,
+	settleBlock,
 	useBlockCell,
 } from "../lib/block-answers.ts";
 import { BlockScopeContext } from "../lib/block-scope.ts";
@@ -42,12 +43,18 @@ function severalValues(segment: BlockSegment): boolean {
 /**
  * Whether the answer would carry text the owner was not shown as it goes: a picked choice whose
  * value is not its label, a checklist item whose name is not its label, a question key that is not
- * a plain identifier and not its label as drawn. (A choice not picked may ask once more than it
+ * a plain identifier and not its label as drawn, a suggestion whose text is not its label. (A choice not picked may ask once more than it
  * needs; that costs one tap.)
  */
 function hidden(segment: BlockSegment, fields: Answer["fields"]): boolean {
 	if (segment.kind === "checklist")
 		return segment.data.items.some((item) => differs(item.name, item.label));
+	if (segment.kind === "suggest")
+		return segment.data.items.some(
+			(item) =>
+				item.text !== inlinePlain(item.label) &&
+				fields.some(([, value]) => value === item.text),
+		);
 	if (segment.kind !== "form") return false;
 	return segment.data.questions.some(
 		(one) =>
@@ -117,6 +124,11 @@ export function AnswerBlock({ segment }: { segment: BlockSegment }) {
 	const locked =
 		recorded?.fields ?? (cell?.state === "done" ? cell.fields : undefined);
 	const pending = cell?.state === "pending";
+	// This page's own lock only bridges to the server's record; from then on the record alone decides, so a cancel that removes it reopens the block.
+	const bridging = cell?.state === "done";
+	useEffect(() => {
+		if (key !== undefined && recorded && bridging) settleBlock(key);
+	}, [key, recorded, bridging]);
 	const open = scope?.open === true && locked === undefined;
 	const [check, setCheck] = useState<
 		{ body: BlockAnswerBody; text: string } | undefined

@@ -34,12 +34,15 @@ function diagramUrl(
 	return `api/diagram?scheme=${scheme}&s=${encoded}`;
 }
 
+/** `file:` and an id of letters, digits, `_` and `-`: no dots, so no path segment such as `..`. */
+const FILE_REF = /^file:[A-Za-z0-9_-]+$/;
+
 /**
  * A review item's image, only through the app's own file route: the id of a file the agent
  * attached (`file:<id>`), never an address the agent wrote.
  */
 function imageUrl(ref: string): string | undefined {
-	return ref.startsWith("file:") && ref.length > 5
+	return FILE_REF.test(ref)
 		? `api/files/${encodeURIComponent(ref.slice(5))}`
 		: undefined;
 }

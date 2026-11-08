@@ -77,7 +77,7 @@ export class BlockAnswering {
 		send: (
 			room: ChannelKey,
 			text: string,
-			stored: (message: RoomMessage) => void,
+			stored: (message: RoomMessage) => void | Promise<void>,
 		) => Promise<void>,
 	): Promise<BlockOutcome> {
 		const { rooms, log, surface } = this.#deps;
@@ -116,8 +116,10 @@ export class BlockAnswering {
 		if (!taken.created) return refused("answered", undefined, taken.fields);
 		const sent: { message?: RoomMessage } = {};
 		try {
-			await send(room.key, text, (message) => {
+			await send(room.key, text, async (message) => {
 				sent.message = message;
+				// Linked before the host hears of the message, so a cancel of it finds the row to release.
+				await this.#link(room.key, reply.id, block.index, message.id);
 			});
 			if (!sent.message) throw new Error("the answer was not stored");
 		} catch (error) {
@@ -130,15 +132,31 @@ export class BlockAnswering {
 		}
 		// The answer is sent: from here the block stays answered, whatever the bookkeeping does.
 		try {
-			await log.answers.link(room.key, reply.id, block.index, sent.message.id);
 			const locked = await log.answerable(room.key, reply.id);
 			if (locked) surface.showChange(locked);
 		} catch (error) {
 			this.#deps.logger.warn(
 				{ room: room.key, message: reply.id, err: error },
-				"a sent answer to a block was not linked to its message",
+				"a sent answer to a block was not shown locked",
 			);
 		}
 		return { ok: true, message: sent.message };
+	}
+
+	/** Records which message carries the answer; a failure is logged, as the answer is sent by then and the block stays answered. */
+	async #link(
+		room: ChannelKey,
+		message: number,
+		block: number,
+		answer: number,
+	): Promise<void> {
+		try {
+			await this.#deps.log.answers.link(room, message, block, answer);
+		} catch (error) {
+			this.#deps.logger.warn(
+				{ room, message, err: error },
+				"a sent answer to a block was not linked to its message",
+			);
+		}
 	}
 }

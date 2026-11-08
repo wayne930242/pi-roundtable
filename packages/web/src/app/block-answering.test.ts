@@ -82,7 +82,7 @@ describeDb("the owner's answer to an interactive block", () => {
 		answering.answer(f, who, async (room, text, stored) => {
 			if (sendError) throw sendError;
 			sent.push({ room, text });
-			stored({ id: nextAnswerId++ } as RoomMessage);
+			await stored({ id: nextAnswerId++ } as RoomMessage);
 		});
 
 	beforeAll(async () => {
@@ -157,6 +157,35 @@ describeDb("the owner's answer to an interactive block", () => {
 		expect(page.messages.find((one) => one.id === message.id)?.answers).toEqual(
 			stored?.answers,
 		);
+	});
+
+	test("the answer is linked to its message in the same step the message is stored, before the host gets it", async () => {
+		const message = await reply(OPTIONS);
+		let linked: unknown;
+		const outcome = await answering.answer(
+			frame(message.id, 0, pick("SQLite")),
+			OWNER,
+			async (_room, _text, stored) => {
+				await stored({ id: 4242 } as RoomMessage);
+				// Here the host would get the message and may queue it: a cancel must find the row.
+				[linked] =
+					await sql`SELECT answer_message_id FROM web_room_block_answers WHERE message_id = ${message.id}`;
+			},
+		);
+		expect(outcome.ok).toBe(true);
+		expect(
+			Number((linked as { answer_message_id: unknown }).answer_message_id),
+		).toBe(4242);
+	});
+
+	test("a message's answers are found by message id without a scan of the table", async () => {
+		const rows =
+			await sql`SELECT indexdef FROM pg_indexes WHERE tablename = 'web_room_block_answers'`;
+		expect(
+			rows.some((row: { indexdef: string }) =>
+				/\(message_id\)/.test(row.indexdef),
+			),
+		).toBe(true);
 	});
 
 	test("a second answer to the same block is refused with the first one's fields, and sends nothing", async () => {

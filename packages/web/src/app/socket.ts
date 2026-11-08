@@ -652,7 +652,7 @@ export class SocketRoute {
 		text: string,
 		files: readonly RoomFile[],
 		except?: AppSocket,
-		stored?: (message: RoomMessage) => void,
+		stored?: (message: RoomMessage) => void | Promise<void>,
 	): Promise<void> {
 		return say(this.#options, room, who, text, files, except, stored);
 	}

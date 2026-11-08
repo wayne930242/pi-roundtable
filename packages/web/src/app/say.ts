@@ -48,7 +48,7 @@ export async function keepNote(
 /**
  * Takes a message of the owner into a room: stores it, shows it to the other sockets, and
  * hands it to the host as the owner's. `files` are uploads the sender claimed, which move to
- * the stored files once the message is stored. `stored` hears the stored message before the
+ * the stored files once the message is stored. `stored` hears the stored message, and is waited for, before the
  * host does, so a reply cannot overtake it.
  */
 export async function say(
@@ -58,7 +58,7 @@ export async function say(
 	text: string,
 	files: readonly RoomFile[],
 	except?: AppSocket,
-	stored?: (message: RoomMessage) => void,
+	stored?: (message: RoomMessage) => void | Promise<void>,
 ): Promise<void> {
 	const { surface, uploads } = deps;
 	if (!who.actor)
@@ -77,7 +77,7 @@ export async function say(
 		except,
 	);
 	uploads.use(files.map((file) => file.id));
-	stored?.(message);
+	await stored?.(message);
 	const inbound: InboundMessage = {
 		channel: room,
 		messageId: coreMessageId(message.id),
