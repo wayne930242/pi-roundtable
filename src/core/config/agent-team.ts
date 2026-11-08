@@ -8,8 +8,8 @@ interface AgentTeamKeys {
 }
 
 /**
- * Refuses what the agent team needs and a host without Discord lacks, naming the key; and the
- * coordinator, which only a host without Discord names: with Discord it is the entry channel's agent.
+ * Refuses what the agent team needs and a team without Discord channels lacks, naming the key; and
+ * the coordinator, which only such a team names: in the agent guild it is the entry channel's agent.
  */
 export function checkAgentTeamKeys(
 	config: AgentTeamKeys,
@@ -19,7 +19,7 @@ export function checkAgentTeamKeys(
 	if (config.coordinator !== undefined) {
 		if (withDiscord)
 			throw new ConfigError(
-				"config coordinator: the entry channel's agent is the coordinator with discord. Remove coordinator, or move the agent to discord.entryChannel.",
+				"config coordinator: the entry channel's agent is the coordinator with discord.guild. Remove coordinator, or move the agent to discord.entryChannel.",
 			);
 		if (seeds.length === 0)
 			throw new ConfigError(
@@ -34,12 +34,53 @@ export function checkAgentTeamKeys(
 	const placed = seeds.findIndex((seed) => seed.channelId !== undefined);
 	if (placed >= 0)
 		throw new ConfigError(
-			`config agents[${placed}].channelId: a Discord channel, and Discord is not configured. Remove channelId, or configure discord.`,
+			`config agents[${placed}].channelId: a Discord channel, and the agents have none (no discord, or no discord.guild). Remove channelId, or configure discord with its guild.`,
 		);
 	if (config.skills && seeds.length === 0)
 		throw new ConfigError(
 			"config skills: the skills are the agents', and this host has none: without discord they need agents. Configure agents or discord, or remove skills.",
 		);
+}
+
+/** The keys of the configuration that say whether the agents have Discord channels. */
+interface AgentGuildKeys {
+	discord?: { guild?: string; entryChannel?: string };
+	http?: { publicUrl?: string };
+	agents?: readonly unknown[];
+}
+
+/**
+ * Whether the agent team lives in the Discord guild `discord.guild` names; refuses what that
+ * guild needs and lacks, and an entry channel without it. Without `discord.guild` the bot still
+ * serves the plugins, and the team lives in the app's rooms, as on a host without Discord.
+ */
+export function checkAgentGuild(
+	config: AgentGuildKeys,
+	agentServer: boolean,
+): boolean {
+	const { discord } = config;
+	if (!discord) return false;
+	if (discord.guild === undefined) {
+		if (discord.entryChannel !== undefined)
+			throw new ConfigError(
+				"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out, so the agents live in the app's rooms. Remove entryChannel and name the coordinator with coordinator, or add discord.guild.",
+			);
+		if (agentServer && (config.agents?.length ?? 0) === 0)
+			throw new ConfigError(
+				"config discord.guild: left out, so the agents live in the app's rooms, and agents configures none. Add agents, add discord.guild for an agent server in Discord, or set agentServer: false for a host without agents.",
+			);
+		return false;
+	}
+	if (!agentServer) return true;
+	if (!discord.entryChannel)
+		throw new ConfigError(
+			"config discord.entryChannel: required, expected the id of the channel the coordinator lives in. Add it to roundtable.config.ts, leave out discord.guild for agents that live in the app, or set agentServer: false for a host without agents.",
+		);
+	if (!config.http?.publicUrl)
+		throw new ConfigError(
+			"config http.publicUrl: required with discord, expected the public address that reaches the bot; Discord fetches the agents' avatars from it. Add it to roundtable.config.ts.",
+		);
+	return true;
 }
 
 /** The keys of the configuration, as written, that only the agent server uses. */

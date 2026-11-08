@@ -167,7 +167,7 @@ export interface ResolvedRouting {
 
 /** What the rest of the configuration says that the block is checked against. */
 export interface RoutingContext {
-	/** Whether Discord is configured, so agents have Discord channels. */
+	/** Whether the agents have Discord channels: Discord is configured with `discord.guild`. */
 	withDiscord: boolean;
 	/** Whether the agent server runs: only then do agents and their places exist. */
 	agentServer: boolean;
@@ -261,8 +261,8 @@ export function routingOf(
 		if (named[0] || surfaces.discord)
 			throw refuse(
 				named[0] ?? "routing.surfaces.discord",
-				"names the discord surface, and Discord is not configured",
-				"Name a surface that hosts rooms instead, or configure discord",
+				"names the discord surface, and Discord is not configured or has no discord.guild, so the agents have no Discord channels",
+				"Name a surface that hosts rooms instead, or configure discord with its guild",
 			);
 	}
 	return {

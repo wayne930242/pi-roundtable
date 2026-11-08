@@ -31,9 +31,11 @@ describe("agentServer: false", () => {
 		expect(config.http).toBeUndefined();
 	});
 
-	test("the guild stays required", () => {
+	test("the guild may be left out, as the host has no agents", () => {
 		const { guild: _, ...noGuild } = guest.discord as { guild: string };
-		expect(refusal({ ...guest, discord: noGuild })).toContain("discord.guild");
+		const config = resolveConfig({ ...guest, discord: noGuild });
+		expect(config.discord?.guild).toBeUndefined();
+		expect(config.agentServer).toBe(false);
 	});
 
 	test("a configured entry channel and public URL are still accepted", () => {

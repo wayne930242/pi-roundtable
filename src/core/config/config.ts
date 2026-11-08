@@ -26,7 +26,11 @@ import {
 	type ResolvedDiscord,
 	resolvedDiscord,
 } from "./adapters.ts";
-import { checkAgentServerOff, checkAgentTeamKeys } from "./agent-team.ts";
+import {
+	checkAgentGuild,
+	checkAgentServerOff,
+	checkAgentTeamKeys,
+} from "./agent-team.ts";
 import type { AttachmentsConfig } from "./attachments.ts";
 import { configSchema, DRAIN_LIMIT_MS } from "./config-schema.ts";
 import type { ConversationsConfig } from "./conversations.ts";
@@ -164,13 +168,13 @@ export interface RoundtableConfig extends LimitsConfig, ShellEnvConfig {
 	prompts?: { shared: string; guest?: string };
 	/**
 	 * The first team, created once; an agent already stored is never overwritten. Without `discord`
-	 * the team lives in the rooms of a surface that hosts them, so a seed has no `channelId`.
+	 * or `discord.guild` the team lives in the rooms of a surface that hosts them: a seed has no `channelId`.
 	 */
 	agents?: AgentSeed[];
 	/**
-	 * Without `discord`, the name of the agent that coordinates the team: the one the owner's
-	 * general requests come to, which cannot be archived. It must be one of `agents`; default the
-	 * first. With `discord` the agent in `discord.entryChannel` is the coordinator, and this key is refused.
+	 * Without `discord` or `discord.guild`, the name of the agent that coordinates the team: the one
+	 * the owner's general requests come to, which cannot be archived. It must be one of `agents`; default
+	 * the first. With `discord.guild` the agent in `discord.entryChannel` is the coordinator, and this key is refused.
 	 */
 	coordinator?: string;
 	/**
@@ -318,7 +322,7 @@ export interface ResolvedConfig extends ResolvedLimits {
 	toolTiers: Record<string, Tier>;
 	prompts: { shared?: string; guest?: string };
 	agents: AgentSeed[];
-	/** The coordinator's name; set only without `discord` and with `agents`: the configured one, else the first seed. */
+	/** The coordinator's name; set only without `discord.guild` and with `agents`: the configured one, else the first seed. */
 	coordinator?: string;
 	/** How the agents' characters are drawn: the six skin tones, the package's own unless `characters.skins` is set. */
 	characters: { skins: readonly Hex[]; refreshAvatars: boolean };
@@ -376,26 +380,19 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 	const { discord, http } = config;
 	const agentServer = config.agentServer !== false;
 	if (!agentServer) checkAgentServerOff(config);
-	if (discord && agentServer && !discord.entryChannel)
-		throw new ConfigError(
-			"config discord.entryChannel: required, expected the id of the channel the coordinator lives in. Add it to roundtable.config.ts, or set agentServer: false for a host without agents.",
-		);
-	if (discord && agentServer && !http?.publicUrl)
-		throw new ConfigError(
-			"config http.publicUrl: required with discord, expected the public address that reaches the bot; Discord fetches the agents' avatars from it. Add it to roundtable.config.ts.",
-		);
-	checkAgentTeamKeys(config, discord !== undefined);
+	// Whether the agents have Discord channels: with `discord.guild`, else they live in the app's rooms.
+	const agentGuild = checkAgentGuild(config, agentServer);
+	checkAgentTeamKeys(config, agentGuild);
 	const slug =
 		discord?.rootCommand ?? name.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
 	const routing = routingOf(config.routing, {
-		withDiscord: discord !== undefined,
+		withDiscord: agentGuild,
 		agentServer:
-			agentServer &&
-			(discord !== undefined || (config.agents?.length ?? 0) > 0),
+			agentServer && (agentGuild || (config.agents?.length ?? 0) > 0),
 		topLevelOps: config.ops !== undefined,
 	});
 	const ops =
-		opsOf(config.ops, discord !== undefined) ?? opsOfPlace(routing?.places.ops);
+		opsOf(config.ops, agentGuild) ?? opsOfPlace(routing?.places.ops);
 	const access = accessOf(config, discord !== undefined);
 	const { primaryOwner } = access;
 	return {
@@ -452,13 +449,12 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 		prompts: config.prompts ?? {},
 		agents: config.agents ?? [],
 		agentServer:
-			agentServer &&
-			(discord !== undefined || (config.agents?.length ?? 0) > 0),
+			agentServer && (agentGuild || (config.agents?.length ?? 0) > 0),
 		agentTools:
 			typeof config.agentServer === "object"
 				? config.agentServer.tools
 				: "full",
-		...(!discord && config.agents?.[0]
+		...(!agentGuild && config.agents?.[0]
 			? { coordinator: config.coordinator ?? config.agents[0].name }
 			: {}),
 		characters: {
