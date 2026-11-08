@@ -2,13 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
-	mkdtempSync,
 	realpathSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ChatSurface, OwnerPrompts } from "pi-roundtable";
@@ -31,73 +29,24 @@ import { coding } from "./coding-plugin.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf } from "./repo-shelf.ts";
 import { REPO_TOOLS } from "./repo-tools.ts";
+import {
+	change,
+	fixture,
+	git,
+	identity,
+	removeTemp,
+	temp,
+} from "./testing/repo-fixture.ts";
 import { until } from "./testing/until.ts";
 
 const FAUX_PROVIDER = fileURLToPath(
 	new URL("./testing/faux-provider.ts", import.meta.url),
 );
-const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
 afterEach(async () => {
 	for (const stop of stops.splice(0)) await stop();
-	for (const dir of dirs.splice(0))
-		rmSync(dir, { recursive: true, force: true });
+	removeTemp();
 });
-function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "coding-test-"));
-	dirs.push(dir);
-	return dir;
-}
-async function git(dir: string, ...args: string[]): Promise<string> {
-	const child = Bun.spawn(["git", "-C", dir, ...args], {
-		stdout: "pipe",
-		stderr: "pipe",
-		env: {
-			...process.env,
-			GIT_CONFIG_NOSYSTEM: "1",
-			GIT_CONFIG_GLOBAL: "/dev/null",
-		},
-	});
-	const [out, err, code] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
-	if (code) throw new Error(err);
-	return out.trim();
-}
-async function fixture() {
-	const dir = temp();
-	const origin = join(dir, "origin.git");
-	const seed = join(dir, "seed");
-	mkdirSync(origin);
-	mkdirSync(seed);
-	await git(origin, "init", "--bare", "--initial-branch=main");
-	await git(seed, "init", "--initial-branch=main");
-	await identity(seed);
-	writeFileSync(
-		join(seed, "README.md"),
-		"# Example\n\nAn example repository.\n",
-	);
-	await git(seed, "add", "README.md");
-	await git(seed, "commit", "-m", "Initial");
-	await git(seed, "remote", "add", "origin", origin);
-	await git(seed, "push", "-u", "origin", "main");
-	const shelf = new RepoShelf(join(dir, "shelf"), async (_repo, path) => {
-		await git(dir, "clone", origin, path);
-		await identity(path);
-	});
-	return { dir, origin, seed, shelf };
-}
-async function identity(dir: string) {
-	await git(dir, "config", "user.name", "Test User");
-	await git(dir, "config", "user.email", "test@example.invalid");
-}
-async function change(dir: string, filename = "change.txt") {
-	writeFileSync(join(dir, filename), "A change.\n");
-	await git(dir, "add", filename);
-	await git(dir, "commit", "-m", `Add ${filename}`);
-}
 function gate<T>() {
 	let resolve = (_value: T) => {};
 	const promise = new Promise<T>((done) => {
@@ -357,10 +306,8 @@ test("missing, declined and failed cards fail closed, and a repository takes a s
 	await shelf.add("sample/project");
 	for (const mode of ["missing", "declined", "failed"] as const) {
 		const delivered = gate<CodingResult>();
-		// Git does not take two worktrees cut at once from one clone ("failed to read
-		// .git/worktrees/N/commondir"), so each start waits until the worker before it is running.
+		// Git cannot cut two worktrees at once from one clone: each start waits for the worker before it.
 		const running = [gate<void>(), gate<void>()];
-		const proceed = gate<void>();
 		let started = 0;
 		const desk = new CodingDesk({
 			shelf,
@@ -379,17 +326,15 @@ test("missing, declined and failed cards fail closed, and a repository takes a s
 			worker: {
 				run: async (_job, _signal, review) => {
 					running[started++]?.resolve();
-					await proceed.promise;
+					await running[1]?.promise;
 					return `${await review({ tool: "bash", input: "{}", action: "risky operation" })}`;
 				},
 			},
 		});
 		await desk.start(request());
 		await running[0]?.promise;
-		// A second worker on the same repository starts in its own worktree, while the first still works.
+		// A second worker on the same repository starts in its own worktree.
 		expect((await desk.start(request())).queuePosition).toBeUndefined();
-		await running[1]?.promise;
-		proceed.resolve();
 		const result = await delivered.promise;
 		await desk.idle();
 		// A declined call is settled; only an unanswered one is held for the report.
