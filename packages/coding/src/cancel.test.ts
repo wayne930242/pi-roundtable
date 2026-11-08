@@ -25,6 +25,7 @@ import { type SettingsPage, WEB_APP } from "./coding-settings.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf } from "./repo-shelf.ts";
 import { cancelTask, listTasks } from "./task-tools.ts";
+import { until } from "./testing/until.ts";
 
 const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
@@ -270,10 +271,13 @@ test("cancelling a real worker ends its Pi session process and the shell process
 	expect([alive(session), alive(shell)]).toEqual([true, true]);
 	const result = await desk.cancel(1, "Olive");
 	expect(result).toMatchObject({ status: "stopped", settled: true });
-	await Bun.sleep(50); // Allow the OS to reap the killed group.
+	await until(
+		() => !alive(session) && !alive(shell),
+		"the killed group is reaped",
+	);
 	expect([alive(session), alive(shell)]).toEqual([false, false]);
 	await desk.idle();
-});
+}, 30_000);
 
 test("a held action the cancelled worker waits on is closed", async () => {
 	const { shelf } = await fixture();
