@@ -331,3 +331,46 @@ describe("hold classes", () => {
 		).rejects.toThrow("down");
 	});
 });
+
+describe("a rule that yolo never approves", () => {
+	const never: HoldRule = {
+		name: "hints",
+		yolo: "never",
+		describe: (tool) => (tool === "x" ? "do x" : undefined),
+		holdClasses: () => ["hints.safe", "hints.other"],
+	};
+
+	test("its call is unclassed whatever classes it reports", () => {
+		expect(holdChain([never]).classesOf?.("x", {}, {})).toEqual([
+			"hints.yolo-never",
+		]);
+	});
+
+	test("it keeps the mark when another rule holds the call too", () => {
+		const shell: HoldRule = {
+			name: "shell",
+			describe: () => "also",
+			holdClasses: () => ["shell.push"],
+		};
+		expect(holdChain([shell, never]).classesOf?.("x", {}, {})).toEqual([
+			"shell.push",
+			"hints.yolo-never",
+		]);
+	});
+
+	test("in a turn, classes named by its description are ignored too", async () => {
+		const named: HoldRule = {
+			name: "hints",
+			yolo: "never",
+			describe: () => "x",
+			describeInTurn: () => ({ text: "x", classes: ["hints.safe"] }),
+		};
+		const held = await holdChain([named]).inTurnWithClasses?.(
+			"x",
+			{},
+			{},
+			{} as ToolTurn,
+		);
+		expect(held?.classes).toEqual(["hints.yolo-never"]);
+	});
+});

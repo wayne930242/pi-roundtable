@@ -67,6 +67,52 @@ describe("resolveVirtualServer", () => {
 		});
 	});
 
+	test("keeps each tool's boolean hints from a ContextForge response", async () => {
+		const server = await resolveVirtualServer(
+			"http://cf:4444",
+			"t",
+			"twst",
+			fake({
+				"/servers": [{ id: "b2", name: "twst" }],
+				"/servers/b2/tools": [
+					{
+						name: "twst-trade-get-today-signal",
+						annotations: { readOnlyHint: true, destructiveHint: false },
+					},
+					{
+						name: "twst-approve-approve",
+						annotations: {
+							readOnlyHint: false,
+							destructiveHint: true,
+							idempotentHint: false,
+							openWorldHint: true,
+							title: "Approve",
+							a2a_agent_id: "x",
+							extra: true,
+						},
+					},
+					{ name: "twst-trade-empty", annotations: {} },
+					{ name: "twst-trade-null", annotations: null },
+					{ name: "twst-trade-bad", annotations: { readOnlyHint: "yes" } },
+					{ name: "twst-trade-none" },
+				],
+			}),
+		);
+		expect(server.hints).toEqual({
+			"twst-trade-get-today-signal": {
+				readOnlyHint: true,
+				destructiveHint: false,
+			},
+			"twst-approve-approve": {
+				readOnlyHint: false,
+				destructiveHint: true,
+				idempotentHint: false,
+				openWorldHint: true,
+			},
+		});
+		expect(server.tools).toHaveLength(6);
+	});
+
 	test("a missing server is a ConfigError", async () => {
 		expect(
 			resolveVirtualServer("http://cf", "t", "x", fake({ "/servers": [] })),

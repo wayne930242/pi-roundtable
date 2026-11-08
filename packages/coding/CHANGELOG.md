@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- A coding worker's yolo mode never approves a call whose class ends in `.yolo-never` (`YOLO_NEVER_CLASS`), even when `autonomy.yolo.allow` names it, matching the core yolo approver.
+
 ## [0.39.0] - 2026-11-08
 
 ### Added

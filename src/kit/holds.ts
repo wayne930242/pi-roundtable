@@ -5,4 +5,5 @@
 export {
 	HOLD_DESCRIBE_TIMEOUT_MS,
 	holdChain,
+	YOLO_NEVER_CLASS,
 } from "../core/plugin-api/holds.ts";

@@ -10,6 +10,7 @@ import type { Locale } from "../i18n/index.ts";
 import type { JudgeModel } from "../judging/model-judge.ts";
 import { MigrationError, PluginError } from "../kernel/errors.ts";
 import type { Logger } from "../kernel/log.ts";
+import type { Autonomy } from "../modes/autonomy.ts";
 import type {
 	AgentTools,
 	RoundtablePlugin,
@@ -63,6 +64,11 @@ export interface RoundtableOptions {
 	 * the peers' messages at `peerMessageChars`; `defineRoundtable` does both.
 	 */
 	peerBots?: PeerBotsConfig;
+	/**
+	 * What yolo mode may approve. Stops the start when `autonomy.yolo.allow` names a hold rule that
+	 * yolo mode never approves (`HoldRule.yolo`).
+	 */
+	autonomy?: Pick<Autonomy, "yolo">;
 	/** The model the default judge asks, when no plugin provides a judge. */
 	judgeModel?: JudgeModel;
 	/**

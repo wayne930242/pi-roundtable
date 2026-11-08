@@ -20,6 +20,7 @@ import {
 	promptSlot,
 	workTimeout,
 	YOLO_CARDED_SHELL_CLASSES,
+	YOLO_NEVER_CLASS,
 } from "pi-roundtable/kit";
 import { checkCount, checkMaxWorkers, checkTime } from "./limits.ts";
 import type {
@@ -239,6 +240,7 @@ export class CodingDesk {
 		const carded = new Set<string>(YOLO_CARDED_SHELL_CLASSES);
 		// The core's yolo rules: a carded class or rule never, an unclassed call only by its rule's name.
 		this.#yoloApproves = (id) => {
+			if (id.endsWith(`.${YOLO_NEVER_CLASS}`)) return false;
 			if (card.has(id) || card.has(ruleOf(id))) return false;
 			if (!id.includes(".")) return allow.has(id);
 			return !carded.has(id) || allow.has(id);
@@ -258,10 +260,7 @@ export class CodingDesk {
 		const { size: running } = this.#running;
 		return { max: this.#maxWorkers, running, queued: this.#queue.length };
 	}
-	/**
-	 * Changes how many workers run at once, 1 to 64. A higher limit starts queued tasks now, in
-	 * order; a lower one stops no running worker, and new tasks queue until fewer run.
-	 */
+	/** Sets the workers run at once, 1 to 64: a higher limit starts queued tasks now; a lower one stops none. */
 	setMaxWorkers(max: number): void {
 		checkMaxWorkers(max);
 		this.#maxWorkers = max;

@@ -9,10 +9,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A chat that cannot show an interactive block no longer lets the model believe its reader can fill one in. Core closes the formatting guidance of a turn on any surface whose `blocks` lack an interactive kind (`options`, `suggest`, `form`, `checklist`, `review`) with one line: the chat cannot show forms, option buttons or checklists, so ask in plain text; such a block is shown as text and answered by typing. Discord, LINE, the web chat and a host's room get it without editing their own strings; a surface whose guidance already says so sets `ChatSurface.blockNote: false`. A surface that lists an interactive kind in `blocks` promises that the reader's answer reaches the agent as a message from them.
 - A block that reads as text asks in the host's language: `ChatSurface.lang` (`en` or `zh-TW`) and `SurfacePort.lang`, the locale the host was defined with, reach `supportOf(surface, channel, lang)`, `chunksFor` and `textFor`. The reply instructions of `options`, `form`, `review`, `suggest` and `checklist` read in Traditional Chinese for a `zh-TW` host.
+- The `tree` display block (`pi-better-show` 0.4.0) is drawn: the web app shows it as a directory tree, Discord and LINE get its ASCII drawing, and the web app's formatting guide describes it.
+- `HoldRule.yolo: "never"` marks a hold rule whose calls yolo mode never approves, whatever the configuration says: its calls carry the class `<rule>.yolo-never`, which the yolo approver always cards (`YOLO_NEVER_CLASS` in `pi-roundtable/kit` names the suffix, so a plugin with its own yolo check, such as `pi-roundtable-coding`, refuses it too), and the host refuses to start when `autonomy.yolo.allow` names the rule or one of its classes (`RoundtableOptions.autonomy`, which `defineRoundtable` fills from `autonomy`). An unattended turn still fails a held call closed.
+- `VirtualServer.hints` (`McpToolHints` in `pi-roundtable/kit`) lists each tool's MCP safety hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) by tool name. It is optional; `mcpExtension` ignores it.
 
 ### Changed
 
-- `pi-better-show` is pinned to 0.3.0.
+- `pi-better-show` is pinned to 0.4.0.
 
 ## [0.39.0] - 2026-11-08
 

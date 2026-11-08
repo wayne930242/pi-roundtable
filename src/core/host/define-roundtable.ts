@@ -319,6 +319,7 @@ export async function defineRoundtable(
 	return {
 		options: {
 			logger,
+			autonomy: config.autonomy,
 			environment: {
 				locale: config.locale,
 				timeZone: config.timeZone,

@@ -71,6 +71,15 @@ export interface ConnectorMessages {
 	virtualServerMissing(name: string): string;
 	/** The virtual server exists but serves no tools; raised at startup. */
 	virtualServerNoTools(name: string): string;
+	/**
+	 * What an owner's approval card says about a tool call held because its server's hints mark it
+	 * destructive (`"destructive"`) or not read-only (`"writes"`); the card lists the input beside it.
+	 */
+	toolHintHold(
+		tool: string,
+		server: string,
+		why: "destructive" | "writes",
+	): string;
 }
 
 export const CONNECTOR_MESSAGES: ConnectorMessages = {
@@ -149,6 +158,8 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 	virtualServerMissing: (name) =>
 		`ContextForge has no virtual server named ${name}`,
 	virtualServerNoTools: (name) => `virtual server ${name} serves no tools`,
+	toolHintHold: (tool, server, why) =>
+		`call ${tool} on ${server}, which its server marks ${why === "destructive" ? "destructive" : "not read-only"}`,
 };
 
 /** The English text with the host's own wording laid over it. */

@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { ConfigError } from "pi-roundtable";
-import type { VirtualServer } from "pi-roundtable/kit";
+import type { McpToolHints, VirtualServer } from "pi-roundtable/kit";
 import { CONNECTOR_MESSAGES, type ConnectorMessages } from "./messages.ts";
 
 function base64url(value: string | Buffer): string {
@@ -69,6 +69,34 @@ async function getJson(
 	return response.json();
 }
 
+const HINT_KEYS = [
+	"readOnlyHint",
+	"destructiveHint",
+	"idempotentHint",
+	"openWorldHint",
+] as const;
+
+/**
+ * The boolean MCP hints of each tool in a `/servers/<id>/tools` response, by tool name. ContextForge
+ * returns them as `annotations` in MCP's camelCase beside keys of its own, which are ignored; a tool
+ * whose annotations are absent, empty, or hold no boolean hint gets no entry.
+ */
+function hintsOf(tools: unknown): Record<string, McpToolHints> {
+	const hints: Record<string, McpToolHints> = {};
+	if (!Array.isArray(tools)) return hints;
+	for (const tool of tools) {
+		if (!isRecord(tool) || typeof tool.name !== "string") continue;
+		if (!isRecord(tool.annotations)) continue;
+		const own: McpToolHints = {};
+		for (const key of HINT_KEYS) {
+			const value = tool.annotations[key];
+			if (typeof value === "boolean") own[key] = value;
+		}
+		if (Object.keys(own).length > 0) hints[tool.name] = own;
+	}
+	return hints;
+}
+
 /** Finds a virtual server by name and lists the tool names it serves. */
 export async function resolveVirtualServer(
 	baseUrl: string,
@@ -102,7 +130,13 @@ export async function resolveVirtualServer(
 		: [];
 	if (names.length === 0)
 		throw new ConfigError(text.virtualServerNoTools(name));
-	return { name, url: `${baseUrl}/servers/${server.id}/mcp`, tools: names };
+	const hints = hintsOf(tools);
+	return {
+		name,
+		url: `${baseUrl}/servers/${server.id}/mcp`,
+		tools: names,
+		...(Object.keys(hints).length > 0 ? { hints } : {}),
+	};
 }
 
 /** A request ContextForge refused or could not complete; the message is safe to show the owner. */

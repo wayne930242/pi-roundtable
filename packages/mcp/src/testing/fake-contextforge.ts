@@ -1,8 +1,11 @@
 /** A ContextForge in memory, served over HTTP: the admin calls the connectors plugin makes. */
 export interface FakeContextForge {
 	url: string;
-	/** What an upstream URL offers, by tool name; a gateway added for the URL brings these tools. */
-	upstream: Record<string, string[]>;
+	/**
+	 * What an upstream URL offers; a gateway added for the URL brings these tools. A tool is its name,
+	 * or its name with the MCP `annotations` ContextForge stores and lists for it, as it does in camelCase.
+	 */
+	upstream: Record<string, (string | { name: string; annotations: object })[]>;
 	gateways: Map<string, { name: string; url: string; authType?: string }>;
 	servers: Map<
 		string,
@@ -17,6 +20,7 @@ interface Tool {
 	id: string;
 	name: string;
 	gatewaySlug: string;
+	annotations: object;
 }
 
 export function fakeContextForge(): FakeContextForge {
@@ -48,12 +52,15 @@ export function fakeContextForge(): FakeContextForge {
 						? { authType: body.auth_type }
 						: {}),
 				});
-				for (const tool of state.upstream[String(body.url)] ?? [])
+				for (const tool of state.upstream[String(body.url)] ?? []) {
+					const upstream = typeof tool === "string" ? { name: tool } : tool;
 					tools.push({
-						id: `${id}:${tool}`,
-						name: `${name}-${tool}`,
+						id: `${id}:${upstream.name}`,
+						name: `${name}-${upstream.name}`,
 						gatewaySlug: name,
+						annotations: "annotations" in upstream ? upstream.annotations : {},
 					});
+				}
 				return json({ id, slug: name });
 			}
 			if (pathname === "/servers" && request.method === "POST") {
