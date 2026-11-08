@@ -505,16 +505,11 @@ function checkPaneList(panes: readonly PaneName[], label: string): PaneName[] {
 /** The panes of the owners, as before: what the other panes need of them is checked here. */
 function checkOwnerPanes(panes: readonly PaneName[]): PaneName[] {
 	const list = checkPaneList(panes, "panes");
-	if (list.includes("schedules") && !list.includes("rooms"))
-		fail("the schedules pane needs the rooms pane, which serves its API");
+	for (const pane of ["schedules", "workspace", "presets", "webhooks"] as const)
+		if (list.includes(pane) && !list.includes("rooms"))
+			fail(`the ${pane} pane needs the rooms pane, which serves its API`);
 	if (list.includes("table") && !list.includes("rooms"))
 		fail("the table pane needs the rooms pane, whose agents it seats");
-	if (list.includes("workspace") && !list.includes("rooms"))
-		fail("the workspace pane needs the rooms pane, which serves its API");
-	if (list.includes("presets") && !list.includes("rooms"))
-		fail("the presets pane needs the rooms pane, which serves its API");
-	if (list.includes("webhooks") && !list.includes("rooms"))
-		fail("the webhooks pane needs the rooms pane, which serves its API");
 	return list;
 }
 

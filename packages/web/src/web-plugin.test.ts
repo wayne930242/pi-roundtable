@@ -261,9 +261,8 @@ describe("refuses to start", () => {
 	});
 
 	test("without a list of panes the console serves the owner app first", () => {
-		expect(
-			resolveOptions({ ...base(), panes: undefined } as never).panes,
-		).toEqual([
+		const { panes } = resolveOptions({ ...base(), panes: undefined } as never);
+		expect(panes).toEqual([
 			"rooms",
 			"table",
 			"workspace",
