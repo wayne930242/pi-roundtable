@@ -133,7 +133,9 @@ export function agentServerPlugin(
 			moveTeam({
 				from: options.formerTeamIds ?? [],
 				to: teamId,
-				clearChannels: options.guildId === undefined,
+				...(options.guildId === undefined
+					? { clearChannels: true }
+					: { discordGuild: options.guildId }),
 			}),
 		],
 		provides: [AGENTS],

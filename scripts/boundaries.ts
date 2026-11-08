@@ -300,8 +300,8 @@ export type DiscordName = "discord-identifier" | "discord-surface" | "guild";
 /**
  * How many times each file of the team code (`agents`, `routing`, `threads`; tests and their fixtures excluded) names
  * Discord: an identifier with "discord" in it (`discordKey`), the string `"discord"` or one that
- * starts `"discord:"`, and "guild" in an identifier, string, or template. Comments and prose
- * messages do not count. A file that names none is left out. D4 of the core refactor plan: the
+ * starts `"discord:"`, and "guild" in an identifier, any string, or template. Only comments
+ * do not count. A file that names none is left out. D4 of the core refactor plan: the
  * team code works for any surface, so the count may only shrink, down to nothing.
  */
 export function discordNames(

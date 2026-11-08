@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeEach, expect, spyOn, test } from "bun:test";
 import type { SQL } from "bun";
 import { agentMigrations } from "../agents/agent-schema.ts";
 import { describeDb, migratedPool } from "../testing/database.ts";
@@ -47,7 +47,17 @@ describeDb("moveTeam", () => {
 	});
 
 	afterAll(async () => {
-		await sql?.close();
+		if (sql) {
+			for (const table of [
+				"agents",
+				"agent_groups",
+				"agent_group_messages",
+				"agent_group_cursors",
+				"discord_grants",
+			])
+				await sql.unsafe(`DROP TABLE IF EXISTS ${table}`);
+			await sql.close();
+		}
 	});
 
 	test("moves a former team's rows to the team id and leaves other guilds' rows", async () => {
@@ -93,6 +103,61 @@ describeDb("moveTeam", () => {
 		const [group] =
 			await sql`SELECT channel_id FROM agent_groups WHERE name = 'council'`;
 		expect(group.channel_id).toBeNull();
+	});
+
+	test("a team with Discord clears the channel ids of rows from a former id that is not its guild", async () => {
+		await insertAgent(OTHER, "from-other", "103");
+		await moveTeam({
+			from: [FORMER, OTHER],
+			to: "local",
+			discordGuild: OTHER,
+		}).up(sql);
+		const rows = await sql`SELECT name, channel_id FROM agents
+			WHERE guild_id = 'local' ORDER BY name`;
+		expect(
+			rows.map((r: { name: string; channel_id: string | null }) => [
+				r.name,
+				r.channel_id,
+			]),
+		).toEqual([
+			["both", null],
+			["elsewhere", "102"],
+			["from-other", "103"],
+			["moved", null],
+		]);
+	});
+
+	test("a team without Discord channels also clears the channel ids its own rows hold, moved or not", async () => {
+		await sql`UPDATE agents SET channel_id = '555' WHERE guild_id = 'local'`;
+		await moveTeam({ from: [], to: "local", clearChannels: true }).up(sql);
+		const [own] =
+			await sql`SELECT channel_id FROM agents WHERE guild_id = 'local'`;
+		expect(own.channel_id).toBeNull();
+		const [other] =
+			await sql`SELECT channel_id FROM agents WHERE guild_id = ${OTHER}`;
+		expect(other.channel_id).toBe("102");
+	});
+
+	test("two former ids that hold the same key: the first listed wins, the boot does not fail", async () => {
+		await insertAgent(OTHER, "moved", "104");
+		await moveTeam({ from: [OTHER, FORMER], to: "local" }).up(sql);
+		const [row] = await sql`SELECT channel_id FROM agents
+			WHERE guild_id = 'local' AND name = 'moved'`;
+		expect(row.channel_id).toBe("104");
+		expect(await namesOf(FORMER)).toEqual(["both", "moved"]);
+	});
+
+	test("warns, naming the rows that stay under a former id", async () => {
+		const warn = spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			await moveTeam({ from: [FORMER], to: "local" }).up(sql);
+			expect(warn).toHaveBeenCalled();
+			const text = warn.mock.calls.map((call) => call.join(" ")).join("\n");
+			expect(text).toContain("agents");
+			expect(text).toContain("both");
+		} finally {
+			warn.mockRestore();
+		}
 	});
 
 	test("moves nothing when the former id is the team id", async () => {
