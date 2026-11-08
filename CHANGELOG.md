@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - pi-roundtable-web: a Webhooks page (`#/webhooks`, under More) lists and manages every knight's incoming webhooks in one place, from the new owner route `GET api/webhooks`. Its pane is `webhooks`; a host with an explicit `panes` list adds it itself, as with `presets`.
 - pi-roundtable-coding: a coding task can be cancelled. `repo_task_cancel { repo, id, reason? }` drops a queued task before it runs, or stops a running worker the way a timeout does, closing the held actions it waited on; the stopped worker's commits stay on its branch and worktree, not merged into the clone, and its report says "cancelled by <name>" and names both. `repo_task_list { repo? }` lists running and queued tasks. An agent sees and cancels its own tasks, an owner any. The Settings page "Coding workers" lists the tasks with an owner-only Cancel action. `CodingDesk.cancel(id, by)` answers a `CancelResult` and `CodingDesk.tasks()` lists the tasks; `REPO_TOOLS` and `RepoToolName` gain the two names, and the `repo_task` result mentions `repo_task_cancel`.
 
+### Fixed
+
+- pi-roundtable-mcp: `mcpConnectors` and `remoteMcp` start on a host without Discord: neither requires `DISCORD` any more, both read it with `services.find`. Without Discord the connectors add no slash commands and keep `CONNECTORS` and its management; remote MCP adds no `/<root> mcp` commands and no `/mcp/discord/<token>` route, serves `/mcp/personal`, keeps channel grants stored but unused, and with no agent server runs its default turns on the core's runtime. With Discord nothing changes.
+
 ### Changed
 
 - `DiscordConfig.guild` and `ResolvedDiscord.guild` are optional, `agentServer: false` included.

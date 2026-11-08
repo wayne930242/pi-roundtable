@@ -42,7 +42,7 @@ The channel grants of `/mcp/discord/<token>` do not become per-principal grants 
 ## Configure
 
 List the plugins in `roundtable.config.ts`.
-Both read the Discord connection, so they go after the built-in plugins, which is where `plugins` puts them.
+Both read the Discord connection when the host has one, so they go after the built-in plugins, which is where `plugins` puts them.
 Credentials come from the environment; nothing secret belongs in the file.
 
 <!-- example: examples/roundtable.config.ts -->
@@ -90,6 +90,16 @@ export default {
 } satisfies RoundtableConfig;
 ```
 <!-- /example -->
+
+### Without Discord
+
+Discord is optional: a host that leaves `discord` out starts with both plugins.
+`remoteMcp` still needs `http`, since its endpoints are on the `public` listener.
+What is missing then:
+
+- `mcpConnectors` adds no `/<root> connector` commands. The registry, `CONNECTORS`, and its `add`, `describe` and `remove` work as with Discord, so a host manages connectors through them, as the web app does.
+- `remoteMcp` adds no `/<root> mcp` commands and no `/mcp/discord/<token>` route, so no Discord channel tool is listed anywhere. `/mcp/personal` relays turns as with Discord. Channel grants stay stored, unused, and `REMOTE_MCP` still reads them.
+- With no agent server either (no `agents`), the default remote turns run on the core's runtime, and a relayed message does not confirm held actions.
 
 ### `mcpConnectors(options)`
 

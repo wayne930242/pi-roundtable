@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `mcpConnectors` and `remoteMcp` start on a host without Discord: neither requires `DISCORD` any more, both read it with `services.find`. Without Discord the connectors add no slash commands and keep `CONNECTORS` and its management; remote MCP adds no `/<root> mcp` commands and no `/mcp/discord/<token>` route, serves `/mcp/personal`, keeps channel grants stored but unused, and with no agent server runs its default turns on the core's runtime. With Discord nothing changes.
+
 ## [0.41.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.41.0 (an agent team that lives in the app on a Discord host without an agent guild); no package-specific behavior changes.
