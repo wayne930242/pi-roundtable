@@ -89,3 +89,9 @@ export async function within<T>(
 		clearTimeout(timer);
 	}
 }
+
+/** What a report says in place of the worker's own when the host's shutdown stopped it. */
+export const interruptedText =
+	"the host shut down while the worker ran, so the worker was stopped; its commits were not merged into the clone";
+export const interruptedReason =
+	"the host shut down while the task ran; its work stays on its branch and worktree";

@@ -58,4 +58,49 @@ describe("ChannelQueue", () => {
 		expect(ran).toEqual(["running"]);
 		expect(queue.busy()).toEqual([]);
 	});
+
+	test("a task started inside finishing() is still admitted once the queue is closed, until it is sealed", async () => {
+		const queue = new ChannelQueue();
+		queue.close();
+		const seen: boolean[] = [];
+		const ran = await queue.finishing(async () => {
+			seen.push(queue.closed);
+			return queue.run("discord:1", async () => {
+				// What the admitted task awaits is admitted too: the report turn checks `closed` itself.
+				await Bun.sleep(0);
+				seen.push(queue.closed);
+				return "report";
+			});
+		});
+		expect(ran).toBe("report");
+		expect(seen).toEqual([false, false]);
+		// Outside the scope the queue is still closed, and ordinary tasks are refused.
+		expect(queue.closed).toBe(true);
+		await expect(queue.run("discord:1", async () => 1)).rejects.toBeInstanceOf(
+			HostStoppingError,
+		);
+		queue.seal();
+		await expect(
+			queue.finishing(() => queue.run("discord:1", async () => 1)),
+		).rejects.toBeInstanceOf(HostStoppingError);
+		await queue.finishing(async () => void seen.push(queue.closed));
+		expect(seen.at(-1)).toBe(true);
+	});
+
+	test("a task admitted by finishing() that waits behind a running one still starts after the close", async () => {
+		const queue = new ChannelQueue();
+		let release = () => {};
+		const running = queue.run(
+			"discord:1",
+			() => new Promise<void>((resolve) => (release = resolve)),
+		);
+		await Bun.sleep(0);
+		const report = queue.finishing(() =>
+			queue.run("discord:1", async () => "report"),
+		);
+		queue.close();
+		release();
+		await running;
+		expect(await report).toBe("report");
+	});
 });

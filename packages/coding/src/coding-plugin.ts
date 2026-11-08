@@ -30,6 +30,7 @@ import {
 	memorySettings,
 	registerSettingsPage,
 } from "./coding-settings.ts";
+import type { CodingResult } from "./desk-types.ts";
 import { checkCount, checkMaxWorkers } from "./limits.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf, reportPost } from "./repo-shelf.ts";
@@ -126,6 +127,18 @@ export function coding(options: CodingOptions) {
 					diagnosticChars: options.diagnosticChars,
 					holds: workerHolds(options.holds, () => context.sessions().holds),
 				});
+			const deliverReport =
+				options.onResult ??
+				(async (result: CodingResult) => {
+					await context.surfaces.sendReply(result.job.channel, {
+						chunks: [
+							codingReport(
+								result,
+								zonedStamp(result.job.startedAt, context.env.timeZone),
+							),
+						],
+					});
+				});
 			const desk = new CodingDesk({
 				shelf,
 				worker,
@@ -147,18 +160,9 @@ export function coding(options: CodingOptions) {
 					? { interimPrimaryChars: options.interimPrimaryChars }
 					: {}),
 				prompts: (channel) => context.surfaces.prompts(channel),
-				deliver:
-					options.onResult ??
-					(async (result) => {
-						await context.surfaces.sendReply(result.job.channel, {
-							chunks: [
-								codingReport(
-									result,
-									zonedStamp(result.job.startedAt, context.env.timeZone),
-								),
-							],
-						});
-					}),
+				// A report of work that ends while the host drains still gets through the closed queue.
+				deliver: (result) =>
+					context.queue.finishing(() => deliverReport(result)),
 			});
 			const ship = <T>(repo: string, operation: () => Promise<T>) =>
 				desk.ship(repo, operation);
@@ -204,8 +208,11 @@ export function coding(options: CodingOptions) {
 						name: "coding-desk",
 						// The stored limit is read at start: setup must not query the database.
 						start: () => applyStoredLimit(store, desk, context.logger),
-						// The host names the channels whose work a shutdown waits for or aborts.
-						busy: () => desk.runningChannels(),
+						// The host names the channels whose work a shutdown waits for or aborts: running and
+						// queued tasks, and reports still going out.
+						busy: () => desk.busyChannels(),
+						// At the drain limit workers are told to stop, and their reports go out, before stop.
+						abort: () => desk.interrupt(),
 						stop: () => desk.stop(),
 					},
 				],

@@ -69,6 +69,41 @@ export function codingWorkerPrompt(dir: string): string {
 		"Report changes and reasons, commits, checks and outcomes, held actions, and remaining work.",
 	].join("\n\n");
 }
+/** The running session, for a stop to end its turn. */
+let working: { abort(): Promise<void> } | undefined;
+/**
+ * The host asked the worker to stop (SIGTERM): it ends its turn, keeps the tracked changes it
+ * made in a commit on its own branch, and exits, so the report can say where the work is.
+ */
+async function windDown(dir: string): Promise<never> {
+	// A turn waiting for an approval never answers its abort, so the commit does not wait long for it.
+	await Promise.race([
+		working?.abort().catch(() => undefined),
+		Bun.sleep(1_000),
+	]);
+	Bun.spawnSync(
+		[
+			"git",
+			"commit",
+			"--all",
+			"--no-verify",
+			"--message",
+			"wip: the host shut down while this task ran",
+		],
+		{
+			cwd: dir,
+			stdin: "ignore",
+			stdout: "ignore",
+			stderr: "ignore",
+			timeout: 3_000,
+		},
+	);
+	process.send?.({ type: "failure", message: "the worker was stopped" }, () =>
+		process.exit(1),
+	);
+	// The parent kills the group if the message does not get out.
+	return new Promise<never>(() => {});
+}
 const answers = new Map<
 	number,
 	(answer: HeldCallAnswer, reason?: string) => void
@@ -84,6 +119,7 @@ async function run({
 	scratchDir,
 	shellEnv,
 }: StartMessage): Promise<string> {
+	process.once("SIGTERM", () => void windDown(job.dir));
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
 		modelsPath: join(agentDir, "models.json"),
@@ -161,6 +197,7 @@ async function run({
 		sessionManager: SessionManager.inMemory(job.dir),
 		settingsManager: SettingsManager.inMemory({}),
 	});
+	working = session;
 	// Only what the host's progress posts read crosses: a message's text, never its thinking.
 	if (progress)
 		session.subscribe((event) => {

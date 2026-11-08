@@ -1,20 +1,13 @@
-import {
-	type ChannelKey,
-	type HeldCall,
-	SYSTEM_PRINCIPAL,
-} from "pi-roundtable";
+import type { ChannelKey, HeldCall } from "pi-roundtable";
 import {
 	AgentError,
 	approvalCard,
 	approvalDetails,
 	InterimPoster,
-	type PromptSlot,
 	promptSlot,
-	workTimeout,
-	YOLO_CARDED_SHELL_CLASSES,
-	YOLO_NEVER_CLASS,
 } from "pi-roundtable/kit";
 import { codingReport } from "./coding-report.ts";
+import { DeskModes } from "./desk-modes.ts";
 import type {
 	CodingDeskOptions,
 	CodingJob,
@@ -22,13 +15,15 @@ import type {
 	CodingStart,
 	HeldCallAnswer,
 } from "./desk-types.ts";
-import { checkCount, checkMaxWorkers, checkTime } from "./limits.ts";
+import { checkCount, checkMaxWorkers } from "./limits.ts";
 import type { Integration, RepoState, WorkerTree } from "./repo-shelf.ts";
 import {
 	type CancelResult,
 	type CodingTask,
 	cancelledText,
 	droppedText,
+	interruptedReason,
+	interruptedText,
 	within,
 } from "./task-control.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
@@ -62,19 +57,8 @@ function bounded(text: string, max: number): string {
 		: text;
 }
 
-const DEFAULT_TIMEOUT_MS = 3_600_000;
-/** The core's default long-running ceiling, four hours. */
-const DEFAULT_LONG_RUNNING_MS = 4 * 60 * 60_000;
-/** How often a run past its own limit looks again at the starter's long-running mode. */
-const LONG_RUNNING_STEP_MS = 60_000;
 const DEFAULT_MAX_WORKERS = 4;
 const DEFAULT_MAX_QUEUED = 16;
-
-/** The rule a class belongs to: the part before its first dot, or a rule's bare name. */
-function ruleOf(id: string): string {
-	const dot = id.indexOf(".");
-	return dot === -1 ? id : id.slice(0, dot);
-}
 
 interface Running {
 	job: CodingJob;
@@ -82,6 +66,8 @@ interface Running {
 	done?: Promise<void>;
 	/** Who cancelled it; its branch is then kept, not merged. */
 	cancelledBy?: string;
+	/** The host's shutdown told it to stop; its branch is then kept, not merged. */
+	interrupted?: boolean;
 	/** Resolves with its kept commits once the worker settles. */
 	settled?: Promise<string[]>;
 	settle?: (commits: string[]) => void;
@@ -98,8 +84,7 @@ export class CodingDesk {
 	readonly #options: CodingDeskOptions;
 	#maxWorkers: number;
 	readonly #maxQueued: number;
-	readonly #longRunningMs: number;
-	readonly #yoloApproves: (id: string) => boolean;
+	readonly #modes: DeskModes;
 	/** Every run until its report is delivered, for idle(). */
 	readonly #pending = new Set<Promise<void>>();
 	readonly #running = new Map<number, Running>();
@@ -110,28 +95,16 @@ export class CodingDesk {
 	readonly #integrating = new Set<string>();
 	/** Reports and pushes in progress, by repository. */
 	readonly #shipping = new Map<string, Promise<unknown>>();
+	/** The channels of reports being delivered, one entry each, until `deliver` settles. */
+	readonly #delivering: ChannelKey[] = [];
 	#nextId = 1;
 	#stopped = false;
 	constructor(options: CodingDeskOptions) {
-		checkTime("timeoutMs", options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-		const longRunning =
-			options.autonomy?.longRunningMaxMs ?? DEFAULT_LONG_RUNNING_MS;
-		checkTime("autonomy.longRunningMaxMs", longRunning);
+		this.#modes = new DeskModes(options);
 		this.#maxWorkers = options.maxWorkers ?? DEFAULT_MAX_WORKERS;
 		this.#maxQueued = options.maxQueued ?? DEFAULT_MAX_QUEUED;
 		checkMaxWorkers(this.#maxWorkers);
 		checkCount("maxQueued", this.#maxQueued, 0);
-		this.#longRunningMs = longRunning;
-		const allow = new Set(options.autonomy?.yolo?.allow ?? []);
-		const card = new Set(options.autonomy?.yolo?.card ?? []);
-		const carded = new Set<string>(YOLO_CARDED_SHELL_CLASSES);
-		// The core's yolo rules: a carded class or rule never, an unclassed call only by its rule's name.
-		this.#yoloApproves = (id) => {
-			if (id.endsWith(`.${YOLO_NEVER_CLASS}`)) return false;
-			if (card.has(id) || card.has(ruleOf(id))) return false;
-			if (!id.includes(".")) return allow.has(id);
-			return !carded.has(id) || allow.has(id);
-		};
 		this.#options = options;
 	}
 	/** The channels of running workers, which a shutdown waits for; queued tasks are not among them. */
@@ -141,6 +114,17 @@ export class CodingDesk {
 	/** The channels of queued tasks, in queue order. */
 	queuedChannels(): ChannelKey[] {
 		return this.#queue.map((job) => job.channel);
+	}
+	/**
+	 * The channels of work a shutdown waits for: running and queued tasks, and the reports of
+	 * finished ones still being delivered, which a stop must not cut off.
+	 */
+	busyChannels(): ChannelKey[] {
+		return [
+			...this.runningChannels(),
+			...this.queuedChannels(),
+			...this.#delivering,
+		];
 	}
 	/** Workers allowed at once, and how many run and wait now. */
 	workers(): { max: number; running: number; queued: number } {
@@ -246,6 +230,24 @@ export class CodingDesk {
 			settled: commits !== undefined,
 		};
 	}
+	/**
+	 * The host's drain ran out of time: tells each running worker to stop, as a cancel does, so its
+	 * commits stay on its branch and its report names the worktree, and drops the queued tasks with
+	 * a report that they never ran. Starts nothing more. Whether any task was told.
+	 */
+	interrupt(): boolean {
+		this.#stopped = true;
+		const queued = this.#queue.splice(0);
+		for (const job of queued) this.#track(this.#drop(job));
+		let told = queued.length > 0;
+		for (const run of this.#running.values()) {
+			if (run.interrupted) continue;
+			run.interrupted = true;
+			run.controller.abort();
+			told = true;
+		}
+		return told;
+	}
 	/** Stops the running workers and drops the queued tasks, telling each that it never ran. */
 	async stop(): Promise<void> {
 		this.#stopped = true;
@@ -330,7 +332,7 @@ export class CodingDesk {
 		error = "the host stopped before this queued task started; nothing ran, so start it again",
 	): Promise<void> {
 		try {
-			await this.#options.deliver({
+			await this.#deliver({
 				job,
 				outcome: { ok: false, error },
 				held: [],
@@ -343,66 +345,14 @@ export class CodingDesk {
 			);
 		}
 	}
-	/** Whether the starter's modes may act: only for an owner other than the host's own principal. */
-	#modeOf(job: CodingJob): { yolo: boolean; longRunning: boolean } {
-		const { modes } = this.#options;
-		const speaker = job.starter?.speaker;
-		if (
-			!modes ||
-			!job.starter ||
-			speaker?.tier !== "owner" ||
-			speaker.principalId === SYSTEM_PRINCIPAL
-		)
-			return { yolo: false, longRunning: false };
-		const mode = modes.peek(job.starter.channel);
-		return { yolo: mode.yolo === true, longRunning: mode.longRunning === true };
-	}
-	/** Whether the starter's yolo mode approves the call now, as it would in that conversation. */
-	#yolo(job: CodingJob, call: HeldCall): boolean {
-		if (!this.#modeOf(job).yolo || call.approverIds !== undefined) return false;
-		const classes = call.holdClasses;
-		if (!classes?.length || !classes.every(this.#yoloApproves)) return false;
-		const { starter } = job;
-		if (!starter) return false;
+	/** Delivers a report, which a shutdown waits for meanwhile. */
+	async #deliver(result: CodingResult): Promise<void> {
+		this.#delivering.push(result.job.channel);
 		try {
-			this.#options.modes?.autoApproved?.({
-				channel: starter.channel,
-				tool: call.tool,
-				action: `coding #${job.id} in ${job.repo}: ${call.action}`,
-				classes: [...classes],
-				principalId: starter.speaker.principalId,
-				at: new Date(),
-			});
-		} catch {
-			this.#options.logger.warn(
-				{ job: job.id },
-				"Recording a yolo approval failed.",
-			);
+			await this.#options.deliver(result);
+		} finally {
+			this.#delivering.splice(this.#delivering.indexOf(result.job.channel), 1);
 		}
-		return true;
-	}
-	/**
-	 * The worker's work-time budget: `timeoutMs`, then, while the starter's long-running mode is
-	 * on, further steps up to `autonomy.longRunningMaxMs` in all. Card waits never count.
-	 */
-	#budget(
-		job: CodingJob,
-		slot: PromptSlot,
-		expire: (workedMs: number) => void,
-	): () => void {
-		const base = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		let worked = 0;
-		let cancel = () => {};
-		const phase = (ms: number) => {
-			cancel = workTimeout(ms, slot, () => {
-				worked += ms;
-				if (this.#modeOf(job).longRunning && worked < this.#longRunningMs)
-					phase(Math.min(LONG_RUNNING_STEP_MS, this.#longRunningMs - worked));
-				else expire(worked);
-			});
-		};
-		phase(base);
-		return () => cancel();
 	}
 	/** Integrations of one clone run one after another, and never during its report or push. */
 	async #integrate(tree: WorkerTree): Promise<Integration> {
@@ -432,8 +382,7 @@ export class CodingDesk {
 	}
 	async #run(job: CodingJob, run: Running): Promise<void> {
 		const { controller } = run;
-		const { shelf, worker, prompts, threads, threadText, deliver } =
-			this.#options;
+		const { shelf, worker, prompts, threads, threadText } = this.#options;
 		const slot = promptSlot();
 		const held: string[] = [];
 		const autoApproved: string[] = [];
@@ -489,13 +438,13 @@ export class CodingDesk {
 				`Coding worker #${job.id}`,
 				poster ? () => poster.flush() : undefined,
 			);
-			cancel = this.#budget(job, slot, (worked) => {
+			cancel = this.#modes.budget(job, slot, (worked) => {
 				timedOut = worked;
 				controller.abort();
 			});
 			const review = async (call: HeldCall): Promise<HeldCallAnswer> => {
 				// The starter's yolo mode answers for a call it may approve, read at the time of the call.
-				if (!controller.signal.aborted && this.#yolo(job, call)) {
+				if (!controller.signal.aborted && this.#modes.yolo(job, call)) {
 					if (autoApproved.length < maxHeldEntries)
 						autoApproved.push(
 							bounded(
@@ -567,6 +516,7 @@ export class CodingDesk {
 				message = `the worker ran out of time (${Math.round(timedOut / 60_000)} minutes)`;
 			if (run.cancelledBy !== undefined)
 				message = cancelledText(run.cancelledBy);
+			if (run.interrupted) message = interruptedText;
 			outcome = { ok: false, error: message };
 		} finally {
 			cancel();
@@ -575,13 +525,16 @@ export class CodingDesk {
 			await interim?.flush();
 		}
 		let integration: Integration | undefined;
-		// A cancelled worker's commits stay on its branch for the owner to inspect, merge or delete.
-		if (tree && run.cancelledBy !== undefined)
+		// A cancelled or interrupted worker's commits stay on its branch for the owner to inspect, merge or delete.
+		if (tree && (run.cancelledBy !== undefined || run.interrupted))
 			integration = {
 				status: "refused",
 				branch: tree.branch,
 				dir: tree.dir,
-				reason: `the task was cancelled by ${run.cancelledBy}`,
+				reason:
+					run.cancelledBy === undefined
+						? interruptedReason
+						: `the task was cancelled by ${run.cancelledBy}`,
 			};
 		else if (tree)
 			try {
@@ -645,6 +598,6 @@ export class CodingDesk {
 		run.settle?.(commits);
 		// The work is over: free the slot and the repository before the report turn, so that turn can ship it.
 		this.#free(job);
-		await deliver(result);
+		await this.#deliver(result);
 	}
 }

@@ -19,7 +19,12 @@ import type {
 import { RUNTIME } from "../plugin-api/services.ts";
 import type { ToolTierTable } from "../runtime/tool-tiers.ts";
 import type { ShellEnvConfig } from "../shared/child-env.ts";
-import { type DrainOptions, drainWork, stopTurns } from "./drain.ts";
+import {
+	abortServices,
+	type DrainOptions,
+	drainWork,
+	stopTurns,
+} from "./drain.ts";
 import { attempt, startInBackground } from "./host-background.ts";
 import { Linkage, type RegistrationReport } from "./host-registration.ts";
 
@@ -282,14 +287,20 @@ export class Roundtable {
 				...this.#link.queue.busy(),
 				...this.#started.flatMap((service) => service.busy?.() ?? []),
 			],
-			// A turn the limit finds still running is stopped, as the owner's stop would.
-			abort: () =>
-				stopTurns(
+			// A turn the limit finds still running is stopped, as the owner's stop would, and a
+			// service is told to stop its own work before it is stopped.
+			abort: () => {
+				const turns = stopTurns(
 					this.#link.queue.busy(),
 					(channel) => this.#link.router?.stop(channel as ChannelKey) ?? false,
 					logger,
-				),
+				);
+				const services = abortServices(this.#started, logger);
+				return turns || services;
+			},
 		});
+		// Only what ran before the drain ended finishes; nothing delivered later starts.
+		this.#link.queue.seal();
 		if (left.length > 0) {
 			logger.warn(
 				{ aborted: left },

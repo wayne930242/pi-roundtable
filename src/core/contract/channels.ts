@@ -427,6 +427,13 @@ export type MessageObserver = (
 /** The host's channel queue, as plugins use it. */
 export interface QueuePort {
 	run<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T>;
+	/**
+	 * Runs `task` as the delivery of work the shutdown drain waits for, such as a coding worker's
+	 * report: a queue task it starts, and what that task awaits, is admitted although the host is
+	 * shutting down, `closed` reads false there, and the drain waits for it as for any task. It
+	 * ends when the drain does; after that the task is refused as any other.
+	 */
+	finishing<T>(task: () => Promise<T>): Promise<T>;
 	/** Tasks of the channel running or waiting. */
 	size(channel: ChannelKey): number;
 	/** Channels with a task running or waiting. */

@@ -54,6 +54,14 @@ export interface Service {
 	stop?(): Promise<void> | void;
 	/** Work still running or waiting, one entry each; the shutdown drain waits until every list is empty. */
 	busy?(): string[];
+	/**
+	 * Tells the work `busy` still lists to stop, when the drain limit runs out with some of it
+	 * running: gently, so it can save what it has and report, as the owner's stop does a turn.
+	 * Returns whether it told any. The host then waits for the abort grace (`drain.abortGraceMs`)
+	 * for `busy` to empty, and stops the services after that, so `stop` may kill what is left.
+	 * A throw is logged and the shutdown goes on.
+	 */
+	abort?(): boolean;
 }
 
 /** How a service's background start ended. */

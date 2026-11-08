@@ -49,6 +49,11 @@ export interface PiCodingWorkerOptions {
 	workerEnv?: WorkerEnv;
 	/** What the worker's shell gets besides `SHELL_ENV_NAMES`, as the agents' shell; default the host's `env.shellEnv`. */
 	shellEnv?: ShellEnv;
+	/**
+	 * How long a stopped worker gets to save its work and exit after SIGTERM before its process
+	 * group is killed; default 5,000. 0 kills it at once.
+	 */
+	stopGraceMs?: number;
 }
 
 /** Host variables a coding worker's process gets for its model and Pi runtime, by name. */
@@ -281,9 +286,21 @@ export class PiCodingWorker implements CodingWorker {
 				/* The group has already exited. */
 			}
 		};
-		signal.addEventListener("abort", kill, { once: true });
+		// SIGTERM first, so the worker saves what it has; the group is killed when it ends or the grace runs out.
+		const stop = () => {
+			const grace = this.#options.stopGraceMs ?? 5_000;
+			if (grace <= 0) return kill();
+			try {
+				process.kill(child.pid, "SIGTERM");
+			} catch {
+				/* The worker has already exited. */
+			}
+			const timer = setTimeout(kill, grace);
+			void child.exited.then(() => clearTimeout(timer));
+		};
+		signal.addEventListener("abort", stop, { once: true });
 		try {
-			if (signal.aborted) kill();
+			if (signal.aborted) stop();
 			const code = await child.exited;
 			if (signal.aborted) throw new CodingWorkerFailure("stopped");
 			if (code !== 0)
@@ -296,7 +313,7 @@ export class PiCodingWorker implements CodingWorker {
 			if (!report?.trim()) throw new CodingWorkerFailure("missing-report");
 			return report;
 		} finally {
-			signal.removeEventListener("abort", kill);
+			signal.removeEventListener("abort", stop);
 			kill(); // Also remove shell descendants the task left running.
 		}
 	}

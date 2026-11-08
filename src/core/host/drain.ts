@@ -1,5 +1,6 @@
 import { DRAIN_LIMIT_MS } from "../config/config-schema.ts";
 import type { Logger } from "../kernel/log.ts";
+import type { Service } from "../plugin-api/plugin.ts";
 
 /** How long work that was told to stop gets to end before the shutdown goes on without it. */
 const ABORT_GRACE_MS = 10_000;
@@ -54,6 +55,34 @@ export async function drainWork(
 	// Work nothing could be told to stop would only be waited for in vain.
 	if (abort(left)) await waitUntilIdle({ ...waiting, limitMs: abortGraceMs });
 	return left;
+}
+
+/**
+ * Tells each service that still has work to stop it, as `Service.abort` says; a failure is
+ * logged and the rest are still told. Whether any service told some work.
+ */
+export function abortServices(
+	services: readonly Pick<Service, "name" | "busy" | "abort">[],
+	logger: Logger,
+): boolean {
+	let told = false;
+	for (const service of services) {
+		if (!service.abort || !service.busy?.().length) continue;
+		try {
+			const aborted = service.abort();
+			logger.warn(
+				{ service: service.name, told: aborted },
+				"stopping the work",
+			);
+			told ||= aborted;
+		} catch (error) {
+			logger.error(
+				{ service: service.name, err: error },
+				"the work could not be stopped",
+			);
+		}
+	}
+	return told;
 }
 
 /**
