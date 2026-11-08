@@ -3,11 +3,13 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readFileSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { OwnerPrompts, ToolTurn } from "pi-roundtable";
 import { SYSTEM_PRINCIPAL } from "pi-roundtable";
 import { servicePair, silentLogger, testPlugin } from "pi-roundtable/testing";
@@ -20,6 +22,7 @@ import {
 } from "./coding-desk.ts";
 import { coding } from "./coding-plugin.ts";
 import { type SettingsPage, WEB_APP } from "./coding-settings.ts";
+import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf } from "./repo-shelf.ts";
 import { cancelTask, listTasks } from "./task-tools.ts";
 
@@ -77,6 +80,14 @@ async function fixture() {
 	});
 	const clone = await shelf.add("sample/project");
 	return { shelf, clone };
+}
+function alive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
 }
 function gate<T = void>() {
 	let resolve = (_value: T) => {};
@@ -220,6 +231,47 @@ test("a running task is aborted, keeps its commits unmerged, and frees its slot 
 	);
 	expect(report).toContain("Write work.txt");
 	await desk.cancel(2, "Olive");
+	await desk.idle();
+});
+
+test("cancelling a real worker ends its Pi session process and the shell processes it started", async () => {
+	const { shelf } = await fixture();
+	const dir = mkdtempSync(join(tmpdir(), "coding-cancel-pi-"));
+	dirs.push(dir);
+	const agentDir = join(dir, "login");
+	mkdirSync(agentDir);
+	const pi = new PiCodingWorker({
+		agentDir,
+		packages: [
+			fileURLToPath(new URL("./testing/faux-provider.ts", import.meta.url)),
+		],
+	});
+	const asking = gate<string>();
+	// The Pi session waits on its approval card, which nobody answers, until the cancel.
+	const worker: CodingWorker = {
+		run: (job, signal, _review, progress) => {
+			writeFileSync(join(job.dir, "start-descendant"), "start");
+			return pi.run(
+				job,
+				signal,
+				async () => {
+					asking.resolve(job.dir);
+					return new Promise(() => {});
+				},
+				progress,
+			);
+		},
+	};
+	const { desk } = makeDesk(shelf, worker);
+	await desk.start(request());
+	const workDir = await asking.promise;
+	const session = Number(readFileSync(join(workDir, "worker.pid"), "utf8"));
+	const shell = Number(readFileSync(join(workDir, "descendant.pid"), "utf8"));
+	expect([alive(session), alive(shell)]).toEqual([true, true]);
+	const result = await desk.cancel(1, "Olive");
+	expect(result).toMatchObject({ status: "stopped", settled: true });
+	await Bun.sleep(50); // Allow the OS to reap the killed group.
+	expect([alive(session), alive(shell)]).toEqual([false, false]);
 	await desk.idle();
 });
 
