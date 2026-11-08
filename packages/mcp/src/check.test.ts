@@ -67,6 +67,11 @@ const quietRuntime: RoundtablePlugin = {
 };
 
 async function check(...plugins: RoundtablePlugin[]) {
+	return checkOn(true, ...plugins);
+}
+
+/** The check on a host with the quiet Discord, or on one with no `discord` and no agent guild. */
+async function checkOn(withDiscord: boolean, ...plugins: RoundtablePlugin[]) {
 	const { options, plugins: defined } = await defineRoundtable(
 		{
 			owner: { id: "100000000000000001", name: "Ada" },
@@ -79,12 +84,20 @@ async function check(...plugins: RoundtablePlugin[]) {
 				publicUrl: "https://bot.example.test",
 				socketPath: join(dir, "public.sock"),
 			},
-			discord: {
-				token: "token",
-				guild: "900000000000000001",
-				entryChannel: "900000000000000002",
-			},
-			plugins: [quietDiscord, quietRuntime, ...plugins],
+			...(withDiscord
+				? {
+						discord: {
+							token: "token",
+							guild: "900000000000000001",
+							entryChannel: "900000000000000002",
+						},
+					}
+				: {}),
+			plugins: [
+				...(withDiscord ? [quietDiscord] : []),
+				quietRuntime,
+				...plugins,
+			],
 		},
 		{ logger: silentLogger() },
 	);
@@ -120,4 +133,31 @@ test("remote-mcp sets up without reading the stored principals", async () => {
 	expect(report.services).not.toContain("remote-principal");
 	expect(report.routes.some((route) => route.includes("/mcp/"))).toBe(true);
 	expect(REMOTE_MCP.id).toBeString();
+});
+
+test("both plugins set up on a host without Discord", async () => {
+	const report = await checkOn(
+		false,
+		mcpConnectors({
+			contextForge: {
+				url: "http://127.0.0.1:1",
+				jwtSecret: "secret",
+				user: "admin@example.com",
+			},
+		}),
+		remoteMcp({
+			dispatchToken: "dispatch-token-for-tests",
+			publicUrl: "https://bot.example.test",
+		}),
+	);
+	expect(report.plugins).toContain("mcp-connectors");
+	expect(report.plugins).toContain("remote-mcp");
+	expect(report.plugins).not.toContain("discord");
+	expect(report.routes.some((route) => route.includes("/mcp/personal"))).toBe(
+		true,
+	);
+	// No Discord, no channel endpoint.
+	expect(report.routes.some((route) => route.includes("/mcp/discord/"))).toBe(
+		false,
+	);
 });

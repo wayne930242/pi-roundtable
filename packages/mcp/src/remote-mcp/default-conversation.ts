@@ -51,8 +51,12 @@ export interface RemoteConversation {
 }
 
 type Parts = Pick<PluginContext, "queue" | "turns"> & {
-	/** The agent server, read once every plugin is set up (`services.lazy(AGENTS)`). */
-	server: () => AgentServer;
+	/**
+	 * The agent server, read once every plugin is set up (`services.lazy(AGENTS)`); on a host
+	 * without one, the core's runtime alone, so no relayed message confirms held actions.
+	 */
+	server: () => Pick<AgentServer, "runtime"> &
+		Partial<Pick<AgentServer, "approvals">>;
 };
 
 /**
@@ -76,6 +80,7 @@ export function defaultConversation({
 						const pending = await runtime.heldActions(channel);
 						const confirmed =
 							pending !== undefined &&
+							approvals !== undefined &&
 							(await approvals.approves(pending, text));
 						return turns.run({
 							channel,
