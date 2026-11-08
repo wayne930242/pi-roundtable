@@ -130,7 +130,7 @@ Cancelling frees the slot, so the next queued task starts; an unknown or finishe
 The Settings page `coding-workers` lists the running and queued tasks, each with a Cancel action that asks first; only an owner may use it.
 `desk.cancel(id, by)` does the same in code and answers a `CancelResult`: `dropped`, `stopped` (with `branch`, `dir`, `commits` and whether the worker `settled`), or `refused` with a reason; `desk.tasks()` lists the tasks.
 
-On host stop queued tasks are dropped and each gets a report saying it never ran; the shutdown drain waits only for running workers.
+On host stop queued tasks are dropped and each gets a report saying it never ran. The shutdown drain waits for running and queued tasks and for reports still being delivered; at the drain limit the desk stops each worker gently (SIGTERM, a `wip:` commit of its tracked changes, `stopGraceMs` before SIGKILL), keeps its branch and worktree unmerged, and reports where they are. Reports go out through the host queue's `finishing` lane, so they get through while the host is stopping.
 The worker's report includes its final answer, declined or unanswered actions, calls approved by yolo mode, what became of its branch, branch, HEAD, new commits and uncommitted files.
 Failures and timeouts also report the final Git state when it can be read.
 By default reports are sent to the caller's surface; `onResult(result)` can instead enqueue a background conversation turn through your host integration.
@@ -185,7 +185,7 @@ Card expiration is determined by the host's surface implementation, not this pac
 
 The worker runs in a fresh Bun child process with an unsaved Pi session and uses the public `runWorkerTask` helper.
 Timeout and shutdown kill its POSIX process group and wait for exit; normal completion also removes shell descendants left in that group.
-The service advertises running jobs through `busy()` so the host can drain them before shutdown; queued tasks are not among them.
+The service advertises running and queued jobs and unsent reports through `busy()` so the host can drain them before shutdown, and stops running workers through `abort()` at the drain limit.
 `CodingDesk.busy()` lists running and queued jobs, marking each queued one with its position, and `queuedChannels()` names the channels of queued tasks.
 Jobs are in memory; they do not resume after a crash.
 The injectable `worker` runner must observe aborts and settle its run; this is a trusted test/integration seam.
