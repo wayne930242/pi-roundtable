@@ -775,7 +775,8 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			return { ...state, refusal: undefined };
 		case "gate":
 			return { ...state, gate: action.steps };
-		// The host cards, the notices and the read marks are handled by the pages that show them.
+		// The host cards, the notices and the read marks are handled by the pages that show them; a refused block answer by the block that sent it.
+		case "block_refused":
 		case "host_card":
 		case "room_changed":
 		case "list_changed":

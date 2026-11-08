@@ -10,8 +10,12 @@ export const hostUi = () => import("../components/host-ui.tsx");
 const WANTED =
 	/^(host_|read$|message$|room_changed$|list_changed$|page_changed$)/;
 
+/** Hears every frame, for a lazy part that waits for the server's word, such as a block's answer. */
+export const frameListeners = new Set<(frame: ServerFrame) => void>();
+
 /** Hands a frame to the lazy code that keeps the read state, the host cards and the host lists. */
 export function tapFrame(frame: ServerFrame): void {
+	for (const listen of frameListeners) listen(frame);
 	if (WANTED.test(frame.type))
 		hostState().then(
 			(state) => state.onFrame(frame),

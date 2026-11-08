@@ -231,6 +231,17 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	"Not sent yet": "尚未傳送",
 	"Not sent": "未傳送",
 	"Sending…": "傳送中…",
+	"This is exactly what will be sent:": "將傳送的內容如下：",
+	"Not sent: {reason}": "未傳送：{reason}",
+	"the answer does not fit this block": "回答與這個區塊不符",
+	"Not sent: the answer is too long.": "未傳送：回答太長。",
+	"This message can no longer be answered here. Type your answer instead.":
+		"這則訊息已無法在此回答，請直接輸入你的回答。",
+	"This room does not take answers here. Type your answer instead.":
+		"這個房間無法在此回答，請直接輸入你的回答。",
+	"Not sent. Check the connection, then try again.":
+		"未傳送。請檢查連線後再試一次。",
+	"Prototype page, open it on the computer: ": "原型頁面，請在電腦上開啟：",
 	"Try again": "再試一次",
 	"Waiting to send…": "等待傳送…",
 	"Yolo mode approved: {action}": "Yolo 模式已核准：{action}",

@@ -28,7 +28,7 @@
 //   dispatch a coding job in a thread, with a card there     exchange  the agent asks the scout in a thread
 //   helpers  the agent makes four temp knights, one working for a long time, one waiting on a card, two done
 //   endhelpers  the agent archives its finished temp knights, as helper_end does
-//   blocks   a reply with a block of every kind the app draws (cards, table, steps, stats, mindmap, mermaid, diff, alert)
+//   blocks   a reply with a block of every kind the app draws, five of them answerable (options, form, checklist, suggest, review)
 // During a running turn (try `stream`), a message with "steer" in it is added to the turn; any other waits its own turn (queued).
 // Anything else gets a reply in Markdown. The control port sends a message as the owner:
 //   curl 'http://127.0.0.1:4181/say?room=app:agent.guide&text=approve'
