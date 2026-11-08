@@ -108,6 +108,12 @@ function hintsOf(tools: unknown): Record<string, McpToolHints> {
 	return hints;
 }
 
+/** `{ hints }` of one tool in a tools response, or nothing when it declares none. */
+function hintsField(tool: Record<string, unknown>): { hints?: McpToolHints } {
+	const hints = hintsOf([tool])[String(tool.name)];
+	return hints ? { hints } : {};
+}
+
 /** Finds a virtual server by name and lists the tool names it serves. */
 export async function resolveVirtualServer(
 	baseUrl: string,
@@ -193,6 +199,8 @@ export interface GatewayTool {
 	gatewaySlug: string;
 	/** The gateway the tool belongs to; absent when ContextForge does not say. */
 	gatewayId?: string;
+	/** The boolean MCP hints in the tool's `annotations`; absent when it has none. */
+	hints?: McpToolHints;
 }
 
 /** The admin API calls that add and remove owner connectors. */
@@ -276,6 +284,7 @@ export class ContextForgeAdmin {
 									...(typeof tool.gatewayId === "string"
 										? { gatewayId: tool.gatewayId }
 										: {}),
+									...hintsField(tool),
 								},
 							]
 						: [],
@@ -360,7 +369,7 @@ export class ContextForgeAdmin {
 
 	/**
 	 * Makes ContextForge read the upstream server's tools again: a tool it no longer offers is
-	 * removed, a new one is added. `upstreamUrl` only masks a credential in an error.
+	 * removed, together with its place on any virtual server, and a new one is added. `upstreamUrl` only masks a credential in an error.
 	 */
 	async refreshGateway(id: string, upstreamUrl: string): Promise<void> {
 		const result = await this.#send(

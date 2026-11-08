@@ -4,23 +4,32 @@ import type { VirtualServer } from "pi-roundtable/kit";
 import {
 	type Connector,
 	ConnectorError,
+	type ConnectorProfileSource,
 	ConnectorRateLimited,
+	type NewConnector,
 	type Resynced,
 	type ResyncOutcome,
 } from "./connector-results.ts";
 import {
+	isLockout,
+	provisionalServer,
+	ResyncGate,
+	sameServer,
+	usableTools,
+} from "./connector-resync.ts";
+import {
 	type ContextForgeAdmin,
 	ContextForgeError,
 	type GatewayTool,
-	type UpstreamAuth,
-	VirtualServerRequestError,
 } from "./contextforge.ts";
 import { CONNECTOR_MESSAGES, type ConnectorMessages } from "./messages.ts";
 
 export {
 	type Connector,
 	ConnectorError,
+	type ConnectorProfileSource,
 	ConnectorRateLimited,
+	type NewConnector,
 	type Resynced,
 	type ResyncOutcome,
 };
@@ -31,27 +40,6 @@ export const CONNECTOR_NAME = /^[a-z][a-z0-9-]{0,11}$/;
 export const DEFAULT_MAX_TOOL_NAME = 45;
 /** What a virtual server's name starts with, so ContextForge's own servers are never taken for a connector's. */
 export const DEFAULT_SERVER_PREFIX = "roundtable-conn-";
-
-/**
- * The pause between a resync's admin requests: 50 a minute. ContextForge allows 100 a minute, and
- * going over locks the admin account, which every MCP call of the host uses, for 15 minutes.
- */
-export const DEFAULT_RESYNC_INTERVAL_MS = 1200;
-
-export interface NewConnector {
-	name: string;
-	url: string;
-	description: string;
-	auth: UpstreamAuth;
-}
-
-/** An owner connector as a routing profile source: the general tools plus every tool of its virtual server. */
-export interface ConnectorProfileSource {
-	name: string;
-	description: string;
-	/** The connector's virtual server, which a profile lists among its MCP servers. */
-	serverName: string;
-}
 
 interface Row {
 	name: string;
@@ -85,6 +73,11 @@ export interface ConnectorRegistryOptions {
 	 * 1200 (50 a minute). A resync of a connector makes five. 0 turns pacing off.
 	 */
 	resyncIntervalMs?: number;
+	/**
+	 * How long resyncs are refused, without a request, after the gateway answered 429, 401, 403 or 423;
+	 * default 15 minutes, the time its lock on the admin account lasts.
+	 */
+	resyncLockoutMs?: number;
 	messages?: ConnectorMessages;
 }
 
@@ -101,13 +94,16 @@ export class ConnectorRegistry {
 	#version = 0;
 	/** The resync in progress or last done; the next one waits for it, so ContextForge sees one request at a time. */
 	#resyncing: Promise<unknown> = Promise.resolve();
-	/** When the next admin request of a resync may start. */
-	#nextRequestAt = 0;
+	readonly #gate: ResyncGate;
 
 	private constructor(sql: SQL, options: ConnectorRegistryOptions) {
 		this.#sql = sql;
 		this.#options = options;
 		this.#text = options.messages ?? CONNECTOR_MESSAGES;
+		this.#gate = new ResyncGate(
+			options.resyncIntervalMs,
+			options.resyncLockoutMs,
+		);
 	}
 
 	/** The registry's table; the host runs this before the registry attaches. */
@@ -293,27 +289,23 @@ export class ConnectorRegistry {
 		return { connector, skipped };
 	}
 
-	/** A gateway's tools that fit the name limit and those left out; a gateway with none to offer is refused. */
-	#usable(tools: GatewayTool[]): { usable: GatewayTool[]; skipped: string[] } {
-		const max = this.#options.maxToolName ?? DEFAULT_MAX_TOOL_NAME;
-		const usable = tools.filter((tool) => tool.name.length <= max);
-		const skipped = tools
-			.filter((tool) => tool.name.length > max)
-			.map((tool) => tool.name);
-		if (usable.length === 0)
-			throw new ConnectorError(
-				tools.length === 0
-					? this.#text.noTools
-					: this.#text.toolsTooLong(max, skipped),
-			);
-		return { usable, skipped };
+	/** A gateway's usable tools and the names left out, under this registry's limit and wording. */
+	#usable(tools: GatewayTool[]) {
+		return usableTools(
+			tools,
+			this.#options.maxToolName ?? DEFAULT_MAX_TOOL_NAME,
+			this.#text,
+		);
 	}
 
 	/**
 	 * Has ContextForge read the connector's upstream server again and makes its virtual server serve
 	 * the gateway's tools as they are now, with their hints. A renamed tool is attached, a removed one
-	 * detached; the gateway, the virtual server, the token, the purpose, and the stored row stay. A
-	 * refusal leaves the connector as it was.
+	 * detached; the gateway, the virtual server, the token, the purpose, and the stored row stay.
+	 * A failure before the refresh leaves the connector as it was. The refresh removes the tools the
+	 * upstream no longer offers from the virtual server, so a failure after it may leave the server with
+	 * fewer tools until the next resync; the cache lists the old and the new names meanwhile, so a hold
+	 * rule still finds every name the gateway may serve.
 	 */
 	async resync(name: string): Promise<Resynced> {
 		this.#get(name);
@@ -321,9 +313,9 @@ export class ConnectorRegistry {
 	}
 
 	/**
-	 * Resyncs every connector, one after the other, at the pace `resyncIntervalMs` sets. A connector that
-	 * cannot be read is logged and left as it was; none is removed. When ContextForge answers 429 the
-	 * rest are not tried: they keep their servers and are reported as not resynced.
+	 * Resyncs every connector, one after the other, at the pace `resyncIntervalMs` sets; a failure is
+	 * logged and reported, and none is removed. When the gateway answers 429, 401, 403 or 423 the rest
+	 * are reported as not resynced, and nothing is asked for `resyncLockoutMs`.
 	 */
 	async resyncAll(): Promise<ResyncOutcome[]> {
 		return this.#inTurn(async () => {
@@ -340,7 +332,7 @@ export class ConnectorRegistry {
 						const rest = names.slice(index + 1);
 						this.#options.logger.error(
 							{ connector: name, notResynced: rest, err: error },
-							"ContextForge rate limit reached; the remaining connectors are not resynced and keep their servers",
+							"ContextForge refused the admin account; the remaining connectors are not resynced and keep their servers",
 						);
 						for (const left of rest)
 							outcomes.push({
@@ -351,7 +343,7 @@ export class ConnectorRegistry {
 					}
 					this.#options.logger.error(
 						{ connector: name, err: error },
-						"connector could not be resynced; its tools are as before",
+						"connector could not be resynced",
 					);
 				}
 			}
@@ -367,63 +359,83 @@ export class ConnectorRegistry {
 	}
 
 	async #resync(name: string): Promise<Resynced> {
+		const connector = this.#get(name); // it may have been removed while this waited
+		if (this.#gate.locked)
+			throw new ConnectorRateLimited(this.#text.resyncNotAttempted);
+		try {
+			return await this.#sync(connector);
+		} catch (error) {
+			if (error instanceof ConnectorRateLimited) this.#gate.lock();
+			throw error;
+		}
+	}
+
+	async #sync(connector: Connector): Promise<Resynced> {
 		const { admin, resolve, logger } = this.#options;
-		// The connector may have been removed while this waited its turn.
-		const connector = this.#get(name);
-		await this.#paced(1);
+		const { name } = connector;
+		await this.#gate.pace(1);
 		await this.#contextForge(() =>
 			admin.refreshGateway(connector.gatewayId, connector.url),
 		);
-		await this.#paced(1);
-		const { usable, skipped } = this.#usable(
-			(await this.#contextForge(() => admin.tools())).filter(
-				(tool) => tool.gatewayId === connector.gatewayId,
-			),
-		);
-		await this.#paced(1);
-		await this.#contextForge(() =>
-			admin.setServerTools(
-				connector.serverId,
-				usable.map((tool) => tool.id),
-			),
-		);
-		// Reading a virtual server's tools takes two requests: its place in the list, then its tools.
-		await this.#paced(2);
-		const server = await resolve(this.serverName(name)).catch(
-			(error: unknown) => {
-				const message = error instanceof Error ? error.message : String(error);
-				throw rateLimited(error)
-					? new ConnectorRateLimited(message)
-					: new ConnectorError(message);
-			},
-		);
-		const before = connector.server;
-		const had = before?.tools ?? [];
-		const added = server.tools.filter((tool) => !had.includes(tool));
-		const removed = had.filter((tool) => !server.tools.includes(tool));
-		const changed =
-			!before ||
-			added.length > 0 ||
-			removed.length > 0 ||
-			JSON.stringify(before.hints ?? {}) !== JSON.stringify(server.hints ?? {});
-		if (this.#connectors.get(name) === connector) {
-			connector.server = server;
-			if (changed) this.#version += 1;
+		// From here a failure may leave the virtual server with fewer tools: the refresh dropped some.
+		try {
+			await this.#gate.pace(1);
+			const { usable, skipped } = this.#usable(
+				(await this.#contextForge(() => admin.tools())).filter(
+					(tool) => tool.gatewayId === connector.gatewayId,
+				),
+			);
+			const before = connector.server;
+			// The new names are served once the update lands, even if reading them back fails.
+			if (before) this.#show(connector, provisionalServer(before, usable));
+			await this.#gate.pace(1);
+			await this.#contextForge(() =>
+				admin.setServerTools(
+					connector.serverId,
+					usable.map((tool) => tool.id),
+				),
+			);
+			// Reading a virtual server takes two requests: the list, then its tools.
+			await this.#gate.pace(2);
+			const server = await resolve(this.serverName(name)).catch(
+				(error: unknown) => {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					throw isLockout(error)
+						? new ConnectorRateLimited(message)
+						: new ConnectorError(message);
+				},
+			);
+			const had = before?.tools ?? [];
+			const added = server.tools.filter((tool) => !had.includes(tool));
+			const removed = had.filter((tool) => !server.tools.includes(tool));
+			this.#show(connector, server);
+			logger.info(
+				{
+					connector: name,
+					tools: server.tools.length,
+					added,
+					removed,
+					skipped,
+				},
+				"connector resynced",
+			);
+			return { connector, skipped, added, removed };
+		} catch (error) {
+			logger.error(
+				{ connector: name, err: error },
+				"connector resync failed after ContextForge read its upstream; the virtual server may serve fewer tools until the next resync",
+			);
+			throw error;
 		}
-		logger.info(
-			{ connector: name, tools: server.tools.length, added, removed, skipped },
-			"connector resynced",
-		);
-		return { connector, skipped, added, removed };
 	}
 
-	/** Waits until the admin requests before this one are `resyncIntervalMs` apart from it; it then takes `requests` slots. */
-	async #paced(requests: number): Promise<void> {
-		const interval =
-			this.#options.resyncIntervalMs ?? DEFAULT_RESYNC_INTERVAL_MS;
-		const wait = this.#nextRequestAt - Date.now();
-		if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-		this.#nextRequestAt = Date.now() + requests * interval;
+	/** The connector's cache from now on; `version` changes when it differs. */
+	#show(connector: Connector, server: VirtualServer): void {
+		if (this.#connectors.get(connector.name) !== connector) return;
+		const before = connector.server;
+		connector.server = server;
+		if (!before || !sameServer(before, server)) this.#version += 1;
 	}
 
 	#get(name: string): Connector {
@@ -438,7 +450,7 @@ export class ConnectorRegistry {
 			return await call();
 		} catch (error) {
 			if (error instanceof ContextForgeError)
-				throw rateLimited(error)
+				throw isLockout(error)
 					? new ConnectorRateLimited(error.message)
 					: new ConnectorError(error.message);
 			throw error;
@@ -474,14 +486,6 @@ export class ConnectorRegistry {
 			}
 		}
 	}
-}
-
-function rateLimited(error: unknown): boolean {
-	return (
-		(error instanceof ContextForgeError ||
-			error instanceof VirtualServerRequestError) &&
-		error.status === 429
-	);
 }
 
 function fromRow(row: Row): Connector {

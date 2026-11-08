@@ -55,9 +55,9 @@ export interface ConnectorMessages {
 	/** What a resync changed in a connector's tools; `added` and `removed` are lists of tool names, empty when none. */
 	resyncChanges(added: string, removed: string): string;
 	resyncUnchanged: string;
-	/** One connector of a resync of all that could not be refreshed; its tools are as before. */
+	/** One connector of a resync that failed; `reason` is why. Once the gateway had read its upstream, the virtual server may serve fewer tools until the next resync. */
 	resyncFailed(name: string, reason: string): string;
-	/** A connector a resync of all did not try, because ContextForge's request limit was reached on an earlier one. */
+	/** A resync that sent no request, because the gateway refused the admin account (its request limit, or a lock) on an earlier one; the tools are as before. */
 	resyncNotAttempted: string;
 
 	/** Between a connector's name and its address in the list; the English default is two spaces. */
@@ -171,9 +171,9 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 			.join("\n"),
 	resyncUnchanged: "-# The tools are as before.",
 	resyncFailed: (name, reason) =>
-		`**${name}** could not be resynced; its tools are as before: ${reason}`,
+		`**${name}** could not be resynced: ${reason}. If the gateway had already read the server, the connector may offer fewer tools until the next resync.`,
 	resyncNotAttempted:
-		"Not resynced: ContextForge's request limit was reached, so its tools are as before. Try again in a few minutes.",
+		"Not resynced: ContextForge refused the admin account (its request limit, or a lock), so no request was sent and the tools are as before. Try again in about 15 minutes.",
 
 	labelSeparator: "  ",
 	serverDescription: (name, description) => `Connector ${name}: ${description}`,

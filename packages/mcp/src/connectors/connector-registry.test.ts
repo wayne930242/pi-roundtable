@@ -23,6 +23,7 @@ import {
 	VirtualServerRequestError,
 } from "./contextforge.ts";
 import { CONNECTOR_MESSAGES } from "./messages.ts";
+import { toolHintsHoldRule } from "./tool-hints.ts";
 
 /** ContextForge in memory: gateways bring the tools a test gives them. */
 class FakeAdmin {
@@ -34,6 +35,8 @@ class FakeAdmin {
 	refreshRefused = new Map<string, string>();
 	/** Upstream URLs whose refresh ContextForge answers with 429. */
 	refreshLimited = new Set<string>();
+	/** The status ContextForge refuses the refresh of the upstream URLs in `refreshLimited` with. */
+	limitStatus = 429;
 	gateways = new Map<
 		string,
 		{ slug: string; url: string; auth: UpstreamAuth }
@@ -82,7 +85,12 @@ class FakeAdmin {
 		return { id, slug: gateway.name };
 	}
 	async tools() {
-		return this.#call("tools", () => this.#tools);
+		return this.#call("tools", () =>
+			this.#tools.map((t) => ({
+				...t,
+				...(this.hints[t.name] ? { hints: this.hints[t.name] } : {}),
+			})),
+		);
 	}
 	async refreshGateway(id: string, _url: string) {
 		await this.#call(`refresh ${id}`, () => undefined);
@@ -91,7 +99,7 @@ class FakeAdmin {
 		const refused = this.refreshRefused.get(gateway.url);
 		if (refused !== undefined) throw new ContextForgeError(refused);
 		if (this.refreshLimited.has(gateway.url))
-			throw new ContextForgeError("rate limit exceeded", 429);
+			throw new ContextForgeError("rate limit exceeded", this.limitStatus);
 		// What ContextForge keeps of a gateway's tools is what its upstream still offers.
 		this.#tools = this.#tools.filter((t) => t.gatewayId !== id);
 		this.#bring(id, gateway.slug, gateway.url);
@@ -139,7 +147,7 @@ describeDb("PostgreSQL", () => {
 	const opened: TestStore<ConnectorRegistry>[] = [];
 
 	async function open(
-		extra: { resyncIntervalMs?: number } = {},
+		extra: { resyncIntervalMs?: number; resyncLockoutMs?: number } = {},
 	): Promise<TestStore<ConnectorRegistry>> {
 		const registry = await openTestStore(ConnectorRegistry, {
 			admin,
@@ -289,7 +297,8 @@ describeDb("PostgreSQL", () => {
 				expect(registry.servers()[0]?.hints).toEqual({
 					"notion-find-page": { readOnlyHint: true },
 				});
-				expect(registry.version).toBe(before + 1);
+				// The names were listed beside the old ones while the gateway changed, then alone.
+				expect(registry.version).toBe(before + 2);
 				// The same gateway, virtual server, token, and purpose.
 				expect([...admin.gateways.keys()]).toEqual([gatewayId as string]);
 				expect([...admin.servers.keys()]).toEqual([serverId as string]);
@@ -350,6 +359,27 @@ describeDb("PostgreSQL", () => {
 					"notion-get-page",
 				]);
 				expect(admin.calls.some((c) => c.startsWith("set "))).toBe(false);
+			});
+
+			test("a read-back that fails after the update still lists the new destructive tool, so it is held", async () => {
+				const registry = await open();
+				await registry.add(notion);
+				const before = registry.version;
+				admin.upstream[notion.url] = ["search", "wipe"];
+				admin.hints["notion-wipe"] = { destructiveHint: true };
+				admin.resolve = async () => {
+					throw new Error("timeout");
+				};
+				await expect(registry.resync("notion")).rejects.toThrow("timeout");
+				// The gateway serves the new names; the cache lists them beside the old ones.
+				expect(registry.servers()[0]?.tools).toEqual([
+					"notion-search",
+					"notion-get-page",
+					"notion-wipe",
+				]);
+				expect(registry.version).toBe(before + 1);
+				const rule = toolHintsHoldRule({ servers: () => registry.servers() });
+				expect(rule.describe("notion-wipe", {}, {})).toContain("notion-wipe");
 			});
 
 			test("an upstream left with no tool keeps the old server, and so does a failed read of it", async () => {
@@ -425,10 +455,10 @@ describeDb("PostgreSQL", () => {
 				const other = "https://mcp.other.test/mcp";
 				const third = "https://mcp.third.test/mcp";
 
-				async function three() {
+				async function three(extra: { resyncLockoutMs?: number } = {}) {
 					admin.upstream[other] = ["list"];
 					admin.upstream[third] = ["read"];
-					const registry = await open();
+					const registry = await open(extra);
 					await registry.add(notion);
 					await registry.add({ ...notion, name: "other", url: other });
 					await registry.add({ ...notion, name: "third", url: third });
@@ -455,7 +485,8 @@ describeDb("PostgreSQL", () => {
 						expect.stringMatching(/^set /),
 						expect.stringMatching(/^refresh /),
 					]);
-					expect(registry.version).toBe(before + 1);
+					// Both names were listed while notion changed, then the new one alone.
+					expect(registry.version).toBe(before + 2);
 					expect(registry.servers().map((s) => s.tools)).toEqual([
 						["notion-renamed"],
 						["other-list"],
@@ -495,6 +526,46 @@ describeDb("PostgreSQL", () => {
 						"notion-search",
 						"notion-get-page",
 					]);
+				});
+
+				test.each([401, 403, 423])(
+					"a %d from a locked or refused admin account stops it too",
+					async (status) => {
+						const registry = await three();
+						admin.limitStatus = status;
+						admin.refreshLimited.add(other);
+						const outcomes = await registry.resyncAll();
+						expect(outcomes).toMatchObject([
+							{ name: "notion" },
+							{ name: "other", error: "rate limit exceeded" },
+							{ name: "third", error: CONNECTOR_MESSAGES.resyncNotAttempted },
+						]);
+						expect(admin.calls).toHaveLength(4);
+					},
+				);
+
+				test("for the lockout time every resync is refused without a request, then asked again", async () => {
+					const registry = await three({ resyncLockoutMs: 60 });
+					admin.refreshLimited.add(notion.url);
+					await expect(registry.resyncAll()).resolves.toMatchObject([
+						{ name: "notion", error: "rate limit exceeded" },
+						{ name: "other", error: CONNECTOR_MESSAGES.resyncNotAttempted },
+						{ name: "third", error: CONNECTOR_MESSAGES.resyncNotAttempted },
+					]);
+					expect(admin.calls).toHaveLength(1);
+					admin.refreshLimited.clear();
+					await expect(registry.resync("other")).rejects.toThrow(
+						CONNECTOR_MESSAGES.resyncNotAttempted,
+					);
+					await expect(registry.resyncAll()).resolves.toMatchObject([
+						{ error: CONNECTOR_MESSAGES.resyncNotAttempted },
+						{ error: CONNECTOR_MESSAGES.resyncNotAttempted },
+						{ error: CONNECTOR_MESSAGES.resyncNotAttempted },
+					]);
+					expect(admin.calls).toHaveLength(1);
+					await Bun.sleep(70);
+					await registry.resync("other");
+					expect(admin.calls.length).toBeGreaterThan(1);
 				});
 
 				test("another refusal does not stop the rest", async () => {

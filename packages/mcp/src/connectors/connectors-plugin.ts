@@ -46,9 +46,14 @@ export interface McpConnectorsOptions {
 	/**
 	 * The least time in milliseconds between two admin requests of a resync, which makes five per
 	 * connector; default 1200 (50 a minute, half of ContextForge's limit of 100, which locks the admin
-	 * account for 15 minutes when exceeded). A resync that meets a 429 stops there and does not retry.
+	 * account for 15 minutes when exceeded). A resync that meets a 429 stops there, does not retry, and asks nothing more for `resyncLockoutMs`.
 	 */
 	resyncIntervalMs?: number;
+	/**
+	 * How long in milliseconds resyncs are refused, without a request, after the gateway answered 429,
+	 * 401, 403 or 423; default 15 minutes, the time its lock on the admin account lasts.
+	 */
+	resyncLockoutMs?: number;
 	/** The Discord text and the registry's refusals, in your wording; English by default. */
 	messages?: Partial<ConnectorMessages>;
 }
@@ -84,10 +89,12 @@ export interface Connectors {
 	 * Has ContextForge read a connector's upstream server again and makes its virtual server serve the
 	 * tools it has now, with their hints, as `/<root> connector resync <name>` does; the connector, its
 	 * token, and its virtual server stay. The host does this for every connector at start. A refusal
-	 * is a `ConnectorError` and leaves the connector as it was.
+	 * is a `ConnectorError`; one before the gateway read the upstream leaves the connector as it was, and
+	 * one after it may leave the virtual server with fewer tools until the next resync. A refused admin
+	 * account (429, 401, 403, 423) is a `ConnectorRateLimited`, and resyncs send nothing for a while after.
 	 */
 	resync(name: string): Promise<Resynced>;
-	/** Resyncs every connector in turn; one that cannot be read is reported in its outcome and left as it was. */
+	/** Resyncs every connector in turn; one that fails is reported in its outcome, and a refused admin account ends the run with the rest reported as not resynced. */
 	resyncAll(): Promise<ResyncOutcome[]>;
 }
 
@@ -184,6 +191,9 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				...(options.resyncIntervalMs === undefined
 					? {}
 					: { resyncIntervalMs: options.resyncIntervalMs }),
+				...(options.resyncLockoutMs === undefined
+					? {}
+					: { resyncLockoutMs: options.resyncLockoutMs }),
 				messages: text,
 			});
 			// Without Discord the connectors are managed through CONNECTORS alone.
@@ -205,8 +215,7 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				...connectorManagement(registry, text),
 			});
 			// Nothing is added but what preflight reads. Each connector is then read from ContextForge again,
-			// so a tool its upstream renamed since the connector was added is attached; a connector that
-			// cannot be read keeps the server it has.
+			// so a tool its upstream renamed since the connector was added is attached; a failure is logged.
 			load = async () => {
 				await registry.load();
 				await registry.resyncAll();

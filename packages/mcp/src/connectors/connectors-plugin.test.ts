@@ -10,7 +10,7 @@ import {
 import { fakeContextForge } from "../testing/fake-contextforge.ts";
 import { fakeInteraction } from "../testing/fake-interaction.ts";
 import { CONNECTOR_MODAL_ID } from "./connector-commands.ts";
-import { DEFAULT_RESYNC_INTERVAL_MS } from "./connector-registry.ts";
+import { DEFAULT_RESYNC_INTERVAL_MS } from "./connector-resync.ts";
 import { CONNECTORS, mcpConnectors } from "./connectors-plugin.ts";
 import { CONNECTOR_MESSAGES } from "./messages.ts";
 
@@ -267,7 +267,8 @@ describeDb("mcpConnectors on a host", () => {
 				"`notion-get-page`",
 			),
 		);
-		expect(connectors.version).toBe(version + 1);
+		// The old and new names were listed while the tools changed, then the new ones alone.
+		expect(connectors.version).toBe(version + 2);
 		expect(cf.requests).toEqual([
 			`POST /gateways/${gatewayId}/tools/refresh`,
 			"GET /tools",
@@ -485,7 +486,7 @@ describeDb("mcpConnectors on a host", () => {
 		expect(60_000 / DEFAULT_RESYNC_INTERVAL_MS).toBeLessThanOrEqual(60);
 	});
 
-	test("a 429 at boot stops the resync, keeps the old servers, and is not retried", async () => {
+	test("a 429 at boot stops the resync, keeps the old servers, and is not asked again", async () => {
 		const first = await boot({});
 		for (const name of ["alpha", "beta", "gamma"])
 			await addConnector(first, name, ["one"]);
@@ -504,14 +505,18 @@ describeDb("mcpConnectors on a host", () => {
 		// beta's tools request was the one refused; nothing was asked after it.
 		expect(cf.requests.length).toBe(base + 6 + 5 + 1 + 1);
 		expect(cf.requests.at(-1)).toBe("GET /tools");
-		// Asking again meets the limit at once, tries one request, and reports all three.
+		// The refusal is remembered: asking again sends nothing and reports all three as not resynced.
 		const before = cf.requests.length;
 		const outcomes = await connectors.resyncAll();
-		expect(cf.requests.length).toBe(before + 1);
+		expect(cf.requests.length).toBe(before);
 		expect(outcomes).toMatchObject([
-			{ name: "alpha", error: expect.stringContaining("429") },
+			{ name: "alpha", error: CONNECTOR_MESSAGES.resyncNotAttempted },
 			{ name: "beta", error: CONNECTOR_MESSAGES.resyncNotAttempted },
 			{ name: "gamma", error: CONNECTOR_MESSAGES.resyncNotAttempted },
 		]);
+		await expect(connectors.resync("alpha")).rejects.toThrow(
+			CONNECTOR_MESSAGES.resyncNotAttempted,
+		);
+		expect(cf.requests.length).toBe(before);
 	});
 });

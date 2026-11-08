@@ -8,7 +8,10 @@ export type {
 	Resynced,
 	ResyncOutcome,
 } from "./connectors/connector-registry.ts";
-export { ConnectorError } from "./connectors/connector-registry.ts";
+export {
+	ConnectorError,
+	ConnectorRateLimited,
+} from "./connectors/connector-registry.ts";
 export type {
 	ConnectorInput,
 	Connectors,

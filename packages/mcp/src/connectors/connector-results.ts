@@ -1,4 +1,5 @@
 import type { VirtualServer } from "pi-roundtable/kit";
+import type { UpstreamAuth } from "./contextforge.ts";
 
 /** What `resync` found for one connector. */
 export interface Resynced {
@@ -11,7 +12,7 @@ export interface Resynced {
 	removed: string[];
 }
 
-/** One connector of `resyncAll`: what changed, or why it could not be read and was left as it was. */
+/** One connector of `resyncAll`: what changed, or why it failed. */
 export type ResyncOutcome =
 	| ({ name: string } & Resynced)
 	| { name: string; error: string };
@@ -22,7 +23,7 @@ export class ConnectorError extends Error {
 	readonly refusal = true;
 }
 
-/** The gateway answered 429: its request limit is reached, and asking again at once only prolongs it. */
+/** The gateway refused the admin account (429, or 401, 403, 423 while it is locked); asking again at once only prolongs it, so resyncs send nothing for a while. */
 export class ConnectorRateLimited extends ConnectorError {}
 
 export interface Connector {
@@ -34,4 +35,19 @@ export interface Connector {
 	createdAt: Date;
 	/** The virtual server's endpoint and tools; absent when it could not be read. */
 	server?: VirtualServer;
+}
+
+export interface NewConnector {
+	name: string;
+	url: string;
+	description: string;
+	auth: UpstreamAuth;
+}
+
+/** An owner connector as a routing profile source: the general tools plus every tool of its virtual server. */
+export interface ConnectorProfileSource {
+	name: string;
+	description: string;
+	/** The connector's virtual server, which a profile lists among its MCP servers. */
+	serverName: string;
 }
