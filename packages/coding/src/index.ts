@@ -23,6 +23,7 @@ export type {
 } from "./coding-options.ts";
 export type { CodingService } from "./coding-plugin.ts";
 export { CODING, coding } from "./coding-plugin.ts";
+export { CODING_SETTINGS_MIGRATION } from "./coding-settings.ts";
 export type { PiCodingWorkerOptions, WorkerEnv } from "./pi-coding-worker.ts";
 export { modelEnvNames, PiCodingWorker } from "./pi-coding-worker.ts";
 export type {

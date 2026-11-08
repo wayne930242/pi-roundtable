@@ -228,7 +228,7 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `githubToken` | host `GH_TOKEN`, read at setup | A string, or a function read at each call, given as `GH_TOKEN` to the shelf's git and gh calls only (clone, fetch, push); a function returning undefined leaves gh to its own login. |
 | `timeoutMs` | `3600000` | Work-time limit in ms, excluding owner wait; 0 < value <= 2147483647. |
 | `maxWorkers` | `4` | Workers running at once on the host; a whole number from 1 to 64. The owner can change it in Settings, and with `settingsInDatabase` a stored value wins over this one. |
-| `settingsInDatabase` | `false` | Keep the owner's worker limit in the host database (table `coding_settings`, migration `coding/settings`); needs a configured database. |
+| `settingsInDatabase` | `false` | Keep the owner's worker limit in the host database (table `coding_settings`, migration `coding/settings`); needs a configured database. A host that wraps `coding()` in its own plugin declares `CODING_SETTINGS_MIGRATION` itself. |
 | `maxQueued` | `16` | Tasks waiting for a worker slot; a whole number of at least 0. |
 | `modes` | none | The host's conversation modes (`peek`, optional `autoApproved`), for workers to follow their starter's yolo and long-running modes. |
 | `autonomy` | `{ yolo: { allow: [], card: [] }, longRunningMaxMs: 14400000 }` | The host's resolved autonomy limits those modes follow. |
