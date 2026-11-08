@@ -16,4 +16,10 @@ export const APP_FORMATTING = [
 	"- `mermaid`: Mermaid source (flowchart, sequence, state, class, ER)",
 	"- `diff`: a unified diff",
 	"- `alert`: a quote that starts `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`, optionally followed by a title",
+	"Blocks the owner answers: these kinds show buttons or fields in this chat. Write one when you want a choice or some input and your reply can end there. The owner answers once, and the answer arrives as their next message, the way a typed one does; you do not get it inside this turn. When the turn must go on with the answer now, ask with `ask_user` instead.",
+	"- `options`: YAML list of {title, recommended, body, pros: [..], cons: [..]}; the owner picks one. Never use it when several may be chosen.",
+	"- `form`: YAML {title, submit, questions: [{name, label, type: single|multi|text, hint, required, other, choices: [{value, label, note, recommended}]}]}; use a `multi` question when several answers are allowed.",
+	"- `checklist`: YAML {title, submit, items: [string or {name, label, checked, note}]}; the owner ticks the items that apply.",
+	"- `suggest`: YAML list of strings or {label, text}; one tap sends that text as the owner's message.",
+	"- `review`: YAML {title, submit, pick, items: [{name, label, image, body}]}; the owner comments on each item and may pick a favourite. An `image` is a `file:` id of a file you attached.",
 ].join("\n");

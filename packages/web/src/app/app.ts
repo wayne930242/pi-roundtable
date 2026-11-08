@@ -9,7 +9,6 @@ import type {
 	EventSink,
 	IdentityService,
 	Logger,
-	Migration,
 	RoomLayoutService,
 	ScheduleStore,
 	WebSocketRoute,
@@ -24,7 +23,6 @@ import { HostApp } from "../host/host-app.ts";
 import { RoomReads } from "../host/reads.ts";
 import {
 	mountNotices,
-	NOTICE_MIGRATIONS,
 	type NoticesMount,
 	type NoticesMountOptions,
 } from "../notices/mount.ts";
@@ -39,6 +37,7 @@ import { PushSubscriptions } from "../push/subscriptions.ts";
 import { PushService } from "../push/triggers.ts";
 import type { Vapid } from "../push/vapid.ts";
 import type { WebAppRegistry } from "../web-app.ts";
+import { BlockAnswering } from "./block-answering.ts";
 import { CardLog } from "./card-log.ts";
 import { OwnerDesk } from "./desk.ts";
 import { FileDir } from "./files.ts";
@@ -56,33 +55,12 @@ import { WebThreads } from "./threads.ts";
 import { Uploads } from "./uploads.ts";
 import type { WorkspaceFiles } from "./workspace-files.ts";
 
+export { APP_MIGRATIONS } from "./migrations.ts";
+
 /** Changes closer together than this reach the sockets as one `changed` frame. */
 const CHANGED_COALESCE_MS = 250;
 /** How often old files are swept: hourly. */
 const SWEEP_EVERY_MS = 3_600_000;
-
-/** The tables the app keeps; the plugin lists them as its own migrations. */
-export const APP_MIGRATIONS: readonly Migration[] = [
-	RoomLog.migration,
-	RoomLog.hostMigration,
-	RoomLog.noteMigration,
-	RoomLog.intercomMigration,
-	RoomLog.startOverMigration,
-	RoomLog.jsonValuesMigration,
-	RoomLog.deliveryMigration,
-	HostCardLog.migration,
-	HostCardLog.keepMigration,
-	HostCardLog.jsonValuesMigration,
-	RoomReads.migration,
-	CardLog.migration,
-	CardLog.jsonValuesMigration,
-	WebThreads.migration,
-	WebThreads.dismissedMigration,
-	PushSubscriptions.migration,
-	PushMutes.migration,
-	RoomLayout.migration,
-	...NOTICE_MIGRATIONS,
-];
 
 export interface OwnerAppOptions {
 	/** The host's wording, for the refusals the API answers with. */
@@ -409,6 +387,7 @@ export class OwnerApp {
 			surface,
 			desk,
 			rooms,
+			blockAnswers: new BlockAnswering({ rooms, log, surface, logger }),
 			uploads,
 			presence,
 			registry,

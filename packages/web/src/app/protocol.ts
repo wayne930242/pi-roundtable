@@ -1,5 +1,6 @@
 import { QUESTIONNAIRE_LIMITS } from "pi-roundtable";
 import {
+	type BlockAnswerBody,
 	type ClientFrame,
 	type FormInput,
 	MAX_MESSAGE_FILES,
@@ -42,6 +43,34 @@ function parseAnswer(value: unknown): PromptAnswer | undefined {
 		choices: choices as string[],
 		...(text === undefined ? {} : { text }),
 	};
+}
+
+/** The kinds of answer an interactive block takes; whether one fits its block is `validateAnswer`'s to say. */
+const ANSWER_KINDS = new Set<string>([
+	"pick",
+	"suggest",
+	"form",
+	"checklist",
+	"review",
+]);
+
+/** The most fields a frame may carry for one answer; `validateAnswer` holds the lower limit of the blocks. */
+const ANSWER_FIELDS = 512;
+
+/** A block's answer as the page sends it: the kind and the `[name, value]` pairs, nothing else. */
+function parseBlockAnswer(value: unknown): BlockAnswerBody | undefined {
+	if (!isRecord(value) || !Array.isArray(value.fields)) return undefined;
+	const { kind, fields } = value;
+	if (typeof kind !== "string" || !ANSWER_KINDS.has(kind)) return undefined;
+	if (fields.length > ANSWER_FIELDS) return undefined;
+	const pairs: BlockAnswerBody["fields"] = [];
+	for (const field of fields as unknown[]) {
+		if (!Array.isArray(field) || field.length !== 2) return undefined;
+		const [name, text] = field as unknown[];
+		if (!isText(name) || !isText(text)) return undefined;
+		pairs.push([name, text]);
+	}
+	return { kind: kind as BlockAnswerBody["kind"], fields: pairs };
 }
 
 /** The most fields and the longest value a form's input may carry. */
@@ -202,6 +231,24 @@ export function parseClientFrame(
 			return isId(value.room) && isMessageId(value.message)
 				? { type: "cancel_queued", room: value.room, message: value.message }
 				: undefined;
+		case "block_answer": {
+			const answer = parseBlockAnswer(value.answer);
+			return isId(value.id) &&
+				isId(value.room) &&
+				isMessageId(value.message) &&
+				Number.isSafeInteger(value.block) &&
+				(value.block as number) >= 0 &&
+				answer
+				? {
+						type: "block_answer",
+						id: value.id,
+						room: value.room,
+						message: value.message,
+						block: value.block as number,
+						answer,
+					}
+				: undefined;
+		}
 		case "approval":
 			return isId(value.prompt) && typeof value.approved === "boolean"
 				? { type: "approval", prompt: value.prompt, approved: value.approved }

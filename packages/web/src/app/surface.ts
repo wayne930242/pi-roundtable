@@ -1,4 +1,4 @@
-import { DISPLAY_KINDS } from "pi-better-show";
+import { DISPLAY_KINDS, INTERACTIVE_KINDS } from "pi-better-show";
 import {
 	type AttachmentContent,
 	type AttachmentRef,
@@ -110,8 +110,8 @@ export class AppSurface implements ChatSurface {
 	readonly label = "the web app";
 	readonly supportsFiles = true;
 	readonly formatting = APP_FORMATTING;
-	/** The display blocks the page draws itself (see pi-better-show); the interactive kinds arrive as text. */
-	readonly blocks = DISPLAY_KINDS;
+	/** The blocks the page draws itself (see pi-better-show); an interactive one is answered on the page and the answer is sent as the owner's next message. */
+	readonly blocks = [...DISPLAY_KINDS, ...INTERACTIVE_KINDS];
 	/**
 	 * A host's room is read by guests on a page that does not draw blocks, so it draws none and its
 	 * turns are told none (a `diff` fence still reads as code).
@@ -145,7 +145,7 @@ export class AppSurface implements ChatSurface {
 		this.delivery = new QueuedDelivery({
 			log: options.log,
 			isHostRoom: options.isHostRoom,
-			show: (stored) => this.#showChange(stored),
+			show: (stored) => this.showChange(stored),
 		});
 		if (options.channelContext) this.channelContext = options.channelContext;
 		this.threads = new AppSurfaceThreads({
@@ -202,11 +202,11 @@ export class AppSurface implements ChatSurface {
 		mark = false,
 	): Promise<void> {
 		const stored = await this.#options.log.edit(room, id, text, mark);
-		if (stored) this.#showChange(stored);
+		if (stored) this.showChange(stored);
 	}
 
 	/** Shows a stored message as it is now to the sockets that may have its room. */
-	#showChange(stored: RoomMessage): void {
+	showChange(stored: RoomMessage): void {
 		const { room } = stored;
 		const message = this.delivery.shown(stored);
 		this.#options.sockets.deliver(
