@@ -1,175 +1,55 @@
 import {
 	type ChannelKey,
-	type ConversationModes,
 	type HeldCall,
-	type InterimTextMode,
-	type Logger,
-	type OwnerPrompts,
 	SYSTEM_PRINCIPAL,
-	type ThinkingLevel,
-	type Tier,
 } from "pi-roundtable";
 import {
 	AgentError,
 	approvalCard,
 	approvalDetails,
-	type DispatchThread,
-	type DispatchThreads,
 	InterimPoster,
 	type PromptSlot,
 	promptSlot,
 	workTimeout,
 	YOLO_CARDED_SHELL_CLASSES,
 } from "pi-roundtable/kit";
-import { checkCount, checkMaxWorkers, checkTime } from "./limits.ts";
+import { codingReport } from "./coding-report.ts";
 import type {
-	Integration,
-	RepoShelf,
-	RepoState,
-	WorkerTree,
-} from "./repo-shelf.ts";
+	CodingDeskOptions,
+	CodingJob,
+	CodingResult,
+	CodingStart,
+	HeldCallAnswer,
+} from "./desk-types.ts";
+import { checkCount, checkMaxWorkers, checkTime } from "./limits.ts";
+import type { Integration, RepoState, WorkerTree } from "./repo-shelf.ts";
+import {
+	type CancelResult,
+	type CodingTask,
+	cancelledText,
+	droppedText,
+	within,
+} from "./task-control.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
+export { codingReport, integrationText } from "./coding-report.ts";
+export type {
+	CodingAutonomy,
+	CodingDeskOptions,
+	CodingJob,
+	CodingLimits,
+	CodingModes,
+	CodingProgress,
+	CodingResult,
+	CodingSpeaker,
+	CodingStart,
+	CodingStarter,
+	CodingThreadText,
+	CodingWorker,
+	HeldCallAnswer,
+} from "./desk-types.ts";
 export { checkLimit } from "./limits.ts";
 
-export type HeldCallAnswer = "approved" | "declined" | "held";
-/** Who spoke the turn that started a job, as yolo and long-running modes need to know. */
-export interface CodingSpeaker {
-	id: string;
-	principalId: string;
-	name?: string;
-	tier?: Tier;
-}
-/** The conversation whose turn started a job, whose modes the worker follows live. */
-export interface CodingStarter {
-	channel: ChannelKey;
-	speaker: CodingSpeaker;
-}
-export interface CodingJob {
-	id: number;
-	repo: string;
-	task: string;
-	channel: ChannelKey;
-	/** The calling turn's channel, where a progress thread opens. */
-	origin?: ChannelKey;
-	/** The conversation that started it; its yolo and long-running modes apply while it works. */
-	starter?: CodingStarter;
-	/** Host-resolved names of the skills carried to this run. */
-	skillNames?: string[];
-	/** Progress thread, when the surface supports one. */
-	thread?: DispatchThread;
-	model: string;
-	thinking: ThinkingLevel;
-	skillFiles: string[];
-	/** When it was asked for; a queued job starts later. */
-	queuedAt?: Date;
-	/** When its worker started. */
-	startedAt: Date;
-	startHead: string;
-	/** The worker's own branch, in its own worktree, once it has started. */
-	branch?: string;
-}
-/** A started or queued job, as `CodingDesk.start` answers. */
-export type CodingStart = CodingJob & {
-	/** Its place in the queue, from 1, when every worker slot is taken; absent when it started. */
-	queuePosition?: number;
-};
-/** What the worker writes and runs as it goes, for its thread's progress posts. */
-export interface CodingProgress {
-	/** A finished message of the worker's session: its role, stop reason, and text. */
-	messageEnd(message: {
-		role: string;
-		content?: unknown;
-		stopReason?: string;
-	}): void;
-	/** A tool the worker started. */
-	toolStart(name: string): void;
-}
-export interface CodingWorker {
-	/** `progress`, when given, hears the session's messages and tools as the worker goes. */
-	run(
-		job: CodingJob & { dir: string },
-		signal: AbortSignal,
-		review: (call: HeldCall) => Promise<HeldCallAnswer>,
-		progress?: CodingProgress,
-	): Promise<string>;
-}
-export interface CodingResult {
-	job: CodingJob;
-	outcome: { ok: true; report: string } | { ok: false; error: string };
-	held: string[];
-	/** Held calls the starter's yolo mode approved without a card. */
-	autoApproved?: string[];
-	state?: RepoState;
-	commits: string[];
-	/** How the worker's branch came back into the clone; absent when no worktree was made. */
-	integration?: Integration;
-}
-/** The conversations' modes, read live for each held call and at each work-time limit. */
-export type CodingModes = Pick<ConversationModes, "peek"> &
-	Partial<Pick<ConversationModes, "autoApproved">>;
-/**
- * The host's autonomy limits, as its `autonomy` config resolves them: what yolo may approve, and
- * how long a long-running run works in all.
- */
-export interface CodingAutonomy {
-	yolo?: { allow?: readonly string[]; card?: readonly string[] };
-	/** Default four hours; at most 2147483647. */
-	longRunningMaxMs?: number;
-}
-export interface CodingThreadText {
-	initial?(job: CodingJob): string;
-	held?(entry: string, job: CodingJob): string;
-	approvalTitle?(job: CodingJob): string;
-	report?(result: CodingResult): string;
-}
-export interface CodingDeskOptions {
-	shelf: Pick<
-		RepoShelf,
-		| "dirOf"
-		| "state"
-		| "addWorktree"
-		| "integrate"
-		| "treeState"
-		| "treeCommits"
-	>;
-	worker: CodingWorker;
-	prompts?(channel: ChannelKey): OwnerPrompts | undefined;
-	/** When configured, approval cards stay in the job's thread; no thread means held. */
-	threads?: Pick<DispatchThreads, "open">;
-	threadText?: CodingThreadText;
-	deliver(result: CodingResult): Promise<void>;
-	logger: Logger;
-	timeoutMs?: number;
-	limits?: CodingLimits;
-	/**
-	 * Whether the worker posts the text it writes before its report into its thread as it goes,
-	 * as the host's turns do; "on" by default. A thread whose host cannot edit its posts gets none.
-	 */
-	interimText?: InterimTextMode;
-	/** Length from which an intermediate text is posted as its own message; default 400. */
-	interimPrimaryChars?: number;
-	/** Workers running at once on the host, across repositories and channels; default 4. */
-	maxWorkers?: number;
-	/** Tasks waiting for a worker slot, first in first out; one more is refused. Default 16. */
-	maxQueued?: number;
-	/**
-	 * The conversations' modes: with them a worker follows the yolo and long-running modes of the
-	 * conversation that started it, read live, when an owner other than the host spoke that turn.
-	 */
-	modes?: CodingModes;
-	/** The host's autonomy limits for those modes; pass the same values its `autonomy` config sets. */
-	autonomy?: CodingAutonomy;
-}
-/** What a coding report keeps of a long run; each is a count of characters or entries, or `Infinity` for no bound. */
-export interface CodingLimits {
-	/** Longest worker report, and longest thread report; default 20,000 characters. */
-	reportChars?: number;
-	/** Held actions listed in the report, the rest counted; default 10. */
-	heldEntries?: number;
-	/** Longest held-action entry; default 1,000 characters. */
-	heldChars?: number;
-}
 export const MAX_CODING_TASK_CHARS = 8_000;
 const MAX_REPORT_CHARS = 20_000;
 const MAX_HELD_ENTRIES = 10;
@@ -199,6 +79,13 @@ interface Running {
 	job: CodingJob;
 	controller: AbortController;
 	done?: Promise<void>;
+	/** Who cancelled it; its branch is then kept, not merged. */
+	cancelledBy?: string;
+	/** Resolves with its kept commits once the worker settles. */
+	settled?: Promise<string[]>;
+	settle?: (commits: string[]) => void;
+	/** Its worktree, once made. */
+	dir?: string;
 }
 
 /**
@@ -314,6 +201,52 @@ export class CodingDesk {
 		// A run that ends starts the next queued one before it settles, so look again.
 		while (this.#pending.size) await Promise.all(this.#pending);
 	}
+	/** The running tasks, then the queued ones in queue order. */
+	tasks(): CodingTask[] {
+		return [
+			...[...this.#running.values()].map(({ job }) => ({
+				job,
+				status: "running" as const,
+			})),
+			...this.#queue.map((job, index) => ({
+				job,
+				status: "queued" as const,
+				queuePosition: index + 1,
+			})),
+		];
+	}
+	/**
+	 * Cancels a task: a queued one never starts; a running one is stopped as a timeout stops it,
+	 * and its commits stay on its branch and worktree, not merged. Waits up to `waitMs` for the
+	 * worker to settle; the report reaches `deliver` as for any run.
+	 */
+	async cancel(id: number, by: string, waitMs = 30_000): Promise<CancelResult> {
+		const queued = this.#queue.findIndex((job) => job.id === id);
+		if (queued !== -1) {
+			const [job] = this.#queue.splice(queued, 1);
+			if (!job) throw new Error("unreachable");
+			this.#track(this.#drop(job, droppedText(by)));
+			return { status: "dropped", job };
+		}
+		const run = this.#running.get(id);
+		if (!run || run.cancelledBy !== undefined)
+			return {
+				status: "refused",
+				reason: `No running or queued coding task #${id}; it may have finished already.`,
+			};
+		run.cancelledBy = by;
+		run.controller.abort();
+		const commits = run.settled && (await within(run.settled, waitMs));
+		const { job } = run;
+		return {
+			status: "stopped",
+			job,
+			...(job.branch ? { branch: job.branch } : {}),
+			...(run.dir ? { dir: run.dir } : {}),
+			commits: commits ?? [],
+			settled: commits !== undefined,
+		};
+	}
 	/** Stops the running workers and drops the queued tasks, telling each that it never ran. */
 	async stop(): Promise<void> {
 		this.#stopped = true;
@@ -361,15 +294,21 @@ export class CodingDesk {
 	#launch(job: CodingJob): void {
 		job.startedAt = new Date();
 		const run: Running = { job, controller: new AbortController() };
+		run.settled = new Promise((resolve) => {
+			run.settle = resolve;
+		});
 		this.#running.set(job.id, run);
-		run.done = this.#run(job, run.controller)
+		run.done = this.#run(job, run)
 			.catch(() => {
 				this.#options.logger.error(
 					{ job: job.id },
 					"Coding report delivery failed.",
 				);
 			})
-			.finally(() => this.#free(job));
+			.finally(() => {
+				run.settle?.([]);
+				this.#free(job);
+			});
 		this.#track(run.done);
 	}
 	/** Frees the job's slot and starts the next queued tasks. */
@@ -387,15 +326,14 @@ export class CodingDesk {
 			if (next) this.#launch(next);
 		}
 	}
-	async #drop(job: CodingJob): Promise<void> {
+	async #drop(
+		job: CodingJob,
+		error = "the host stopped before this queued task started; nothing ran, so start it again",
+	): Promise<void> {
 		try {
 			await this.#options.deliver({
 				job,
-				outcome: {
-					ok: false,
-					error:
-						"the host stopped before this queued task started; nothing ran, so start it again",
-				},
+				outcome: { ok: false, error },
 				held: [],
 				commits: [],
 			});
@@ -493,7 +431,8 @@ export class CodingDesk {
 				this.#integrations.delete(repo);
 		}
 	}
-	async #run(job: CodingJob, controller: AbortController): Promise<void> {
+	async #run(job: CodingJob, run: Running): Promise<void> {
+		const { controller } = run;
 		const { shelf, worker, prompts, threads, threadText, deliver } =
 			this.#options;
 		const slot = promptSlot();
@@ -514,6 +453,7 @@ export class CodingDesk {
 			tree = await shelf.addWorktree(job.repo, job.id);
 			job.startHead = tree.base.slice(0, 12);
 			job.branch = tree.branch;
+			run.dir = tree.dir;
 			if (controller.signal.aborted)
 				throw new AgentError("the worker was stopped");
 			if (threads) {
@@ -626,6 +566,8 @@ export class CodingDesk {
 			if (controller.signal.aborted) message = "the worker was stopped";
 			if (timedOut !== undefined)
 				message = `the worker ran out of time (${Math.round(timedOut / 60_000)} minutes)`;
+			if (run.cancelledBy !== undefined)
+				message = cancelledText(run.cancelledBy);
 			outcome = { ok: false, error: message };
 		} finally {
 			cancel();
@@ -634,7 +576,15 @@ export class CodingDesk {
 			await interim?.flush();
 		}
 		let integration: Integration | undefined;
-		if (tree)
+		// A cancelled worker's commits stay on its branch for the owner to inspect, merge or delete.
+		if (tree && run.cancelledBy !== undefined)
+			integration = {
+				status: "refused",
+				branch: tree.branch,
+				dir: tree.dir,
+				reason: `the task was cancelled by ${run.cancelledBy}`,
+			};
+		else if (tree)
 			try {
 				integration = await this.#integrate(tree);
 			} catch (error) {
@@ -693,51 +643,9 @@ export class CodingDesk {
 		} catch {
 			this.#options.logger.warn({ job: job.id }, "Coding thread close failed.");
 		}
+		run.settle?.(commits);
 		// The work is over: free the slot and the repository before the report turn, so that turn can ship it.
 		this.#free(job);
 		await deliver(result);
 	}
-}
-
-/** What became of the worker's branch, for the report. */
-export function integrationText(
-	integration: Integration | undefined,
-	branch: string | undefined,
-): string | undefined {
-	switch (integration?.status) {
-		case "merged":
-			return `Merged ${integration.branch}: rebased onto the clone's branch and fast-forwarded it.`;
-		case "nothing":
-			return `${branch ?? "The worker's branch"} added no commits; its worktree is removed.`;
-		case "conflict":
-			return `Rebasing ${integration.branch} onto the clone's branch conflicted in:\n${integration.files.join("\n") || "(files not listed)"}\nThe rebase was aborted and the clone is unchanged; the branch ${integration.branch} and its worktree ${integration.dir} are kept to resolve.`;
-		case "refused":
-			return `Not merged: ${integration.reason}\nThe branch ${integration.branch} and its worktree ${integration.dir} are kept.`;
-		default:
-			return undefined;
-	}
-}
-
-export function codingReport(result: CodingResult, started: string): string {
-	const { job, outcome, state, commits, held, autoApproved, integration } =
-		result;
-	const merge = integrationText(integration, job.branch);
-	return [
-		`## Coding task #${job.id}: ${job.repo}`,
-		`Started: ${started}`,
-		outcome.ok ? outcome.report : outcome.error,
-		"### Held",
-		held.length ? held.join("\n") : "None.",
-		...(autoApproved?.length
-			? ["### Approved by yolo mode", autoApproved.join("\n")]
-			: []),
-		"### Repository",
-		[
-			...(merge ? [merge] : []),
-			state
-				? `Branch ${state.branch}, HEAD ${state.head} (was ${job.startHead}).\nNew commits:\n${commits.join("\n") || "None."}\nUncommitted:\n${state.uncommitted.join("\n") || "None."}`
-				: "Unreadable.",
-		].join("\n"),
-		"Review the changes and checks, then use repo_change_report before repo_push.",
-	].join("\n\n");
 }

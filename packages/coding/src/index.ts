@@ -42,4 +42,5 @@ export {
 	WORKTREES_DIR,
 } from "./repo-shelf.ts";
 export { REPO_TOOLS } from "./repo-tools.ts";
+export type { CancelResult, CodingTask } from "./task-control.ts";
 export { CodingWorkerFailure } from "./worker-failure.ts";
