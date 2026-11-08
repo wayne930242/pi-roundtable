@@ -130,15 +130,11 @@ export function agentServerPlugin(
 		migrations: [
 			...PgAgentStore.migrations(teamId),
 			// After the agents' tables, and the prompts', skills' and conversations' before it.
-			...(options.formerTeamIds?.length
-				? [
-						moveTeam({
-							from: options.formerTeamIds,
-							to: teamId,
-							clearChannels: options.guildId === undefined,
-						}),
-					]
-				: []),
+			moveTeam({
+				from: options.formerTeamIds ?? [],
+				to: teamId,
+				clearChannels: options.guildId === undefined,
+			}),
 		],
 		provides: [AGENTS],
 		requires: [RUNTIME],

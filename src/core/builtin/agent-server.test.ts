@@ -237,6 +237,7 @@ describe("the agent server's runtime", () => {
 			"helper-presets",
 			"agents-helper-preset",
 			"helper-presets-shared",
+			"team-move",
 		]);
 	});
 });
@@ -336,14 +337,13 @@ describe("the agent server without Discord", () => {
 				return stores;
 			},
 		);
-		expect(plugin.migrations?.map((m) => m.name)).not.toContain("team-move");
 		const { services } = await setUpLocal(plugin, ["app"]);
 		expect(opened).toEqual(["crew"]);
 		expect(services.get(AGENTS).team.guildId).toBe("crew");
 		expect(services.get(AGENTS).team.discordGuild).toBe("g1");
 	});
 
-	test("moves a former team's rows at every boot, clearing channel ids when it has no Discord channels", () => {
+	test("moves a former team's rows after the team's tables, at every boot", () => {
 		const moving = agentServerPlugin(
 			local({ teamId: "crew", formerTeamIds: ["old-guild"] }),
 		);

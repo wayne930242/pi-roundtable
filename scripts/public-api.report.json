@@ -305,7 +305,6 @@
 			"THREADS": "src/core/plugin-api/services.d.ts#THREADS",
 			"TIERS": "src/core/identity/speakers.d.ts#TIERS",
 			"TeamAgentStatus": "src/core/agents/team-status.d.ts#AgentStatus",
-			"TeamConfig": "src/core/config/team.d.ts#TeamConfig",
 			"TeamStatus": "src/core/agents/team-status.d.ts#TeamStatus",
 			"ThinkingLevel": "src/core/domain/models.d.ts#ThinkingLevel",
 			"ThinkingSetting": "src/core/domain/models.d.ts#ThinkingSetting",
@@ -1462,6 +1461,15 @@
 			"id": "src/core/agents/helper-preset-ops.d.ts#PresetAction",
 			"references": [
 				"kit:AgentOps via src/core/agents/agent-tools.d.ts#AgentOps"
+			]
+		},
+		{
+			"id": "src/core/config/team.d.ts#TeamConfig",
+			"references": [
+				"main:RoundtableConfig via src/core/config/config.d.ts#RoundtableConfig",
+				"main:defineRoundtable via src/core/config/config.d.ts#RoundtableConfig",
+				"testing:TestHostOptions via src/core/config/config.d.ts#RoundtableConfig",
+				"testing:testHost via src/core/config/config.d.ts#RoundtableConfig"
 			]
 		},
 		{
