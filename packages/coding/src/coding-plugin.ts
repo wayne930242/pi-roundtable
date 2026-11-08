@@ -165,7 +165,6 @@ export function coding(options: CodingOptions) {
 			const store = options.settingsInDatabase
 				? databaseSettings(context.database())
 				: memorySettings();
-			await applyStoredLimit(store, desk, context.logger);
 			registerSettingsPage(
 				context,
 				desk,
@@ -202,6 +201,8 @@ export function coding(options: CodingOptions) {
 				services: [
 					{
 						name: "coding-desk",
+						// The stored limit is read at start: setup must not query the database.
+						start: () => applyStoredLimit(store, desk, context.logger),
 						// The host names the channels whose work a shutdown waits for or aborts.
 						busy: () => desk.runningChannels(),
 						stop: () => desk.stop(),
