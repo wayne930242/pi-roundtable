@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-08
+
+- Release in lockstep with pi-roundtable 0.41.0 (an agent team that lives in the app on a Discord host without an agent guild); no package-specific behavior changes.
+
 ## [0.40.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.40.0 (interactive blocks answered in the app, and chats that cannot show them say so); no package-specific behavior changes.

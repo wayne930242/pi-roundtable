@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-08
+
 ### Added
 
 - A Webhooks page (`#/webhooks`, under More) lists every knight's live incoming webhooks in one place, grouped by knight with its avatar: who made each, when, its last use and its expiry or one post. It revokes one with a confirm, makes one for a permanent knight picked with the shared picker (the URL shown once), and a knight's name opens its Edit knight sheet on the More tab. The new owner route `GET api/webhooks` answers `{ webhooks: [{ agent, agentDisplayName, id, name, createdBy, created, lastUsed, expiresAt, once }] }`, by knight and then age, never a token or hash, sweeping expired ones as the per-knight list does. The row and the form are the same components the knight's sheet shows.
