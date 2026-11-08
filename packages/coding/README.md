@@ -130,7 +130,7 @@ Cancelling frees the slot, so the next queued task starts; an unknown or finishe
 The Settings page `coding-workers` lists the running and queued tasks, each with a Cancel action that asks first; only an owner may use it.
 `desk.cancel(id, by)` does the same in code and answers a `CancelResult`: `dropped`, `stopped` (with `branch`, `dir`, `commits` and whether the worker `settled`), or `refused` with a reason; `desk.tasks()` lists the tasks.
 
-On host stop queued tasks are dropped and each gets a report saying it never ran; the shutdown drain waits only for running workers.
+On host stop queued tasks are dropped and each gets a report saying it never ran. When the shutdown drain begins, the desk starts no queued task: each is reported at once as "not started: host restarting, dispatch again after restart", and `repo_task` is refused with that message until the restart. The drain waits for the running workers and for reports still being delivered; at the drain limit the desk stops each worker gently (SIGTERM, a `wip:` commit of its tracked changes, `stopGraceMs` before SIGKILL), keeps its branch and worktree unmerged, and reports where they are; untracked files are not committed and are listed under Uncommitted. Only a host shutdown saves a `wip:` commit: a cancelled or timed-out worker is killed at once, and its branch is likewise kept, never merged. Reports go out through the host queue's `finishing` lane, so they get through while the host is stopping. `desk.stop()` waits at most `stopWaitMs` (15 seconds by default) for workers and reports, so a report turn still running then does not hold up the shutdown.
 The worker's report includes its final answer, declined or unanswered actions, calls approved by yolo mode, what became of its branch, branch, HEAD, new commits and uncommitted files.
 Failures and timeouts also report the final Git state when it can be read.
 By default reports are sent to the caller's surface; `onResult(result)` can instead enqueue a background conversation turn through your host integration.
@@ -184,8 +184,8 @@ A worker failure carries its exit category and numeric code; git and gh stderr a
 Card expiration is determined by the host's surface implementation, not this package.
 
 The worker runs in a fresh Bun child process with an unsaved Pi session and uses the public `runWorkerTask` helper.
-Timeout and shutdown kill its POSIX process group and wait for exit; normal completion also removes shell descendants left in that group.
-The service advertises running jobs through `busy()` so the host can drain them before shutdown; queued tasks are not among them.
+A timeout or cancel kills its POSIX process group; a host shutdown sends SIGTERM first, then `stopGraceMs` (5 seconds) before SIGKILL; both wait for exit; normal completion also removes shell descendants left in that group.
+The service advertises running jobs and unsent reports through `busy()` so the host can drain them before shutdown, stops queued tasks from starting through `beginDrain()`, and stops running workers through `abort()` at the drain limit.
 `CodingDesk.busy()` lists running and queued jobs, marking each queued one with its position, and `queuedChannels()` names the channels of queued tasks.
 Jobs are in memory; they do not resume after a crash.
 The injectable `worker` runner must observe aborts and settle its run; this is a trusted test/integration seam.
@@ -225,8 +225,8 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `adoptClones` | `[]` | Startup `{ from, repo }` moves of standalone clones; existing shelf destinations are never replaced. |
 | `resolveRun` | configured model/thinking, caller channel | Per-caller model, thinking, report channel and optional thread origin. |
 | `postChangeReport` | caller surface reply | Post the record using the calling identity and channel. |
-| `presentation` | English package text | Separate change-report post/result text, task-start/omitted-skill wording, queued-task wording (`taskQueued(job, position, skipped)`), and the `repo_list` result (`list(repos, { shelfDir, fetched })`). |
-| `toolText` | package wording | Trusted description and argument descriptions for each repository tool, as `{ repo_task: { description, parameters: { task: "…" } } }`; it never changes a tool's arguments or approval rules. |
+| `presentation` | English package text | Separate change-report post/result text, task-start/omitted-skill wording, queued-task wording (`taskQueued(job, position, skipped, defaultText)`), and the `repo_list` result (`list(repos, { shelfDir, fetched }, defaultText)`). Each hook is also given the package's own text (`taskStarted(job, skipped, defaultText)`, `changeReport(report, direct, { post, result })`), so a host can append to it, such as the clause that `repo_task_cancel` cancels the task, instead of copying it. |
+| `toolText` | package wording | Trusted description and argument descriptions for each repository tool, as `{ repo_task: { description, parameters: { task: "…" } } }`; it never changes a tool's arguments or approval rules. A host words only what differs: `DEFAULT_TOOL_TEXT`, exported by the package, holds the shipped wording of every tool, to compose on (`{ ...DEFAULT_TOOL_TEXT.repo_task, description: \`${DEFAULT_TOOL_TEXT.repo_task.description} …\` }`) or to compare against after an upgrade. Unset text follows the package. |
 | `threads` | none | Public `DispatchThreads`-compatible progress and approval thread port. |
 | `threadText` | English package text | Thread introduction, held-action notice, approval title and final report. |
 | `interimText` | `"on"` | `"off"` keeps the worker's progress out of its thread; pass the host config's `interimText` to follow it. |

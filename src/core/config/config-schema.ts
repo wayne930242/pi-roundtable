@@ -157,7 +157,7 @@ export const configSchema = shape({
 	ops: optional(shape({ agent: optional(text), conversation: optional(text) })),
 	routing: routingShape,
 	helpers: optional(helpersField),
-	drainSeconds: optional(integer(1, 3_600)),
+	drainSeconds: optional(integer(1, 14_400)),
 	...limitsShape,
 	interimText: optional(oneOf<InterimTextMode>("on", "off")),
 	interimPrimaryChars: optional(integer(1, 100_000)),

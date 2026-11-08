@@ -68,52 +68,34 @@ export async function cancelTask(
 export function taskTools(
 	desk: CodingDesk,
 	refusal: <T>(operation: () => Promise<T>) => Promise<T>,
-	describe: (tool: RepoToolName, fallback: string) => string,
-	about: (
-		tool: RepoToolName,
-		name: string,
-		fallback?: string,
-	) => { description?: string },
+	describe: (tool: RepoToolName) => string,
+	about: (tool: RepoToolName, name: string) => { description?: string },
 	repoSchema: (tool: RepoToolName) => TString,
 ): ToolContribution[] {
 	return [
 		defineTool({
 			name: "repo_task_list",
 			minTier: "owner",
-			description: describe(
-				"repo_task_list",
-				"List running and queued coding tasks with id, repository, who started each, when, and the first line of its task. An agent sees the tasks it started; an owner sees all.",
-			),
+			description: describe("repo_task_list"),
 			parameters: Type.Object({
-				repo: Type.Optional(
-					Type.String(
-						about(
-							"repo_task_list",
-							"repo",
-							"Only this repository, owner/repo.",
-						),
-					),
-				),
+				repo: Type.Optional(Type.String(about("repo_task_list", "repo"))),
 			}),
 			run: ({ repo }, turn) => refusal(async () => listTasks(desk, turn, repo)),
 		}),
 		defineTool({
 			name: "repo_task_cancel",
 			minTier: "owner",
-			description: describe(
-				"repo_task_cancel",
-				"Cancel a coding task by id. A queued task is dropped and never runs; a running worker is stopped, and its commits stay on its branch and worktree, not merged into the clone. An agent may cancel the tasks it started; an owner may cancel any.",
-			),
+			description: describe("repo_task_cancel"),
 			parameters: Type.Object({
 				repo: repoSchema("repo_task_cancel"),
 				id: Type.Integer({
 					minimum: 1,
-					...about("repo_task_cancel", "id", "The task's number, as #N."),
+					...about("repo_task_cancel", "id"),
 				}),
 				reason: Type.Optional(
 					Type.String({
 						maxLength: 200,
-						...about("repo_task_cancel", "reason", "Why, for its report."),
+						...about("repo_task_cancel", "reason"),
 					}),
 				),
 			}),

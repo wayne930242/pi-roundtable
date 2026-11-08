@@ -12,14 +12,14 @@ import { type Static, type TObject, type TProperties, Type } from "typebox";
 import Value from "typebox/value";
 import { DrawingError } from "../errors.ts";
 
-/** A string that is one of `values`, which the model reads as an enum. */
+/** A string that is one of `values`, which the model reads as an enum; `text` is the argument's `{ description }`. */
 export const literals = <T extends string>(
 	values: readonly T[],
-	description?: string,
+	text: { description?: string } = {},
 ) =>
 	Type.Union(
 		values.map((value) => Type.Literal(value)),
-		description ? { description } : {},
+		text,
 	);
 
 /** An argument object that refuses a name it does not know, so a misspelled argument is a refusal rather than a default. */
@@ -29,7 +29,9 @@ export const strictObject = <Properties extends TProperties>(
 
 export const BACKGROUNDS = ["dark", "white", "transparent"] as const;
 
-export const BACKGROUND = Type.Optional(literals(BACKGROUNDS, "Default dark."));
+/** The `background` argument, worded by `text`. */
+export const background = (text: { description?: string }) =>
+	Type.Optional(literals(BACKGROUNDS, text));
 
 /** What a drawing tool produced: the picture, the name it is attached under, and what the model reads back. */
 export interface Drawn {

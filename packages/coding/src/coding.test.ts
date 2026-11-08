@@ -349,7 +349,7 @@ test("work timeout excludes owner waiting, then aborts and reports state", async
 		ok: false,
 		error: expect.stringContaining("the worker ran out of time"),
 	});
-	expect(result.state?.branch).toBe("main");
+	expect(result.state?.branch).toBe("worker/1"); // kept unmerged: the state is its worktree's
 	expect(desk.busy()).toEqual([]);
 });
 test("missing, declined and failed cards fail closed, and a repository takes a second worker", async () => {
@@ -1421,7 +1421,7 @@ test("repo_task records the starting conversation and says when a task waits in 
 	const service = harness.contribution.services?.find(
 		(item) => item.name === "coding-desk",
 	);
-	// A shutdown waits for the running worker, not the queued task.
+	// A shutdown waits for the running worker; the queued task is dropped when the drain begins.
 	expect(service?.busy?.()).toEqual(["test:room"]);
 	release.resolve("done");
 });

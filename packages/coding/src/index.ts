@@ -43,4 +43,5 @@ export {
 } from "./repo-shelf.ts";
 export { REPO_TOOLS } from "./repo-tools.ts";
 export type { CancelResult, CodingTask } from "./task-control.ts";
+export { DEFAULT_TOOL_TEXT } from "./tool-text.ts";
 export { CodingWorkerFailure } from "./worker-failure.ts";

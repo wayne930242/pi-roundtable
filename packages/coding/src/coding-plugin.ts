@@ -30,10 +30,12 @@ import {
 	memorySettings,
 	registerSettingsPage,
 } from "./coding-settings.ts";
+import type { CodingResult } from "./desk-types.ts";
 import { checkCount, checkMaxWorkers } from "./limits.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
 import { RepoShelf, reportPost } from "./repo-shelf.ts";
 import { taskTools } from "./task-tools.ts";
+import { DEFAULT_TOOL_TEXT } from "./tool-text.ts";
 import { workerHolds } from "./worker-holds.ts";
 
 export type {
@@ -126,6 +128,18 @@ export function coding(options: CodingOptions) {
 					diagnosticChars: options.diagnosticChars,
 					holds: workerHolds(options.holds, () => context.sessions().holds),
 				});
+			const deliverReport =
+				options.onResult ??
+				(async (result: CodingResult) => {
+					await context.surfaces.sendReply(result.job.channel, {
+						chunks: [
+							codingReport(
+								result,
+								zonedStamp(result.job.startedAt, context.env.timeZone),
+							),
+						],
+					});
+				});
 			const desk = new CodingDesk({
 				shelf,
 				worker,
@@ -147,18 +161,13 @@ export function coding(options: CodingOptions) {
 					? { interimPrimaryChars: options.interimPrimaryChars }
 					: {}),
 				prompts: (channel) => context.surfaces.prompts(channel),
-				deliver:
-					options.onResult ??
-					(async (result) => {
-						await context.surfaces.sendReply(result.job.channel, {
-							chunks: [
-								codingReport(
-									result,
-									zonedStamp(result.job.startedAt, context.env.timeZone),
-								),
-							],
-						});
-					}),
+				// A report of work that ends while the host drains still gets through the closed queue.
+				deliver: (result) => {
+					const report = () => deliverReport(result);
+					return context.queue.finishing
+						? context.queue.finishing(report)
+						: report();
+				},
 			});
 			const ship = <T>(repo: string, operation: () => Promise<T>) =>
 				desk.ship(repo, operation);
@@ -190,22 +199,29 @@ export function coding(options: CodingOptions) {
 				}
 			};
 			const textOf = (tool: RepoToolName) => options.toolText?.[tool];
-			const describe = (tool: RepoToolName, fallback: string) =>
-				textOf(tool)?.description ?? fallback;
-			const about = (tool: RepoToolName, name: string, fallback?: string) => {
-				const description = textOf(tool)?.parameters?.[name] ?? fallback;
+			const describe = (tool: RepoToolName) =>
+				textOf(tool)?.description ?? DEFAULT_TOOL_TEXT[tool].description;
+			const about = (tool: RepoToolName, name: string) => {
+				const description =
+					textOf(tool)?.parameters?.[name] ??
+					DEFAULT_TOOL_TEXT[tool].parameters[name];
 				return description ? { description } : {};
 			};
 			const repoSchema = (tool: RepoToolName) =>
-				Type.String(about(tool, "repo", "A managed repository, owner/repo."));
+				Type.String(about(tool, "repo"));
 			return {
 				services: [
 					{
 						name: "coding-desk",
 						// The stored limit is read at start: setup must not query the database.
 						start: () => applyStoredLimit(store, desk, context.logger),
-						// The host names the channels whose work a shutdown waits for or aborts.
-						busy: () => desk.runningChannels(),
+						// The shutdown starts no queued task and refuses new ones; queued tasks are reported at once.
+						beginDrain: () => desk.beginDrain(),
+						// The host names the channels whose work a shutdown waits for or aborts: running tasks
+						// and reports still going out.
+						busy: () => desk.busyChannels(),
+						// At the drain limit workers are told to stop, and their reports go out, before stop.
+						abort: () => desk.interrupt(),
 						stop: () => desk.stop(),
 					},
 				],
@@ -265,10 +281,7 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_list",
 						minTier: "owner",
-						description: describe(
-							"repo_list",
-							"List managed clones, branch, upstream counts, dirty files, last commit, summary, CI hints and linked skills. Fetch first only when requested.",
-						),
+						description: describe("repo_list"),
 						parameters: Type.Object({
 							fetch: Type.Optional(Type.Boolean(about("repo_list", "fetch"))),
 						}),
@@ -280,23 +293,22 @@ export function coding(options: CodingOptions) {
 										skills: skills?.linkedFrom(repo.repo) ?? [],
 									}),
 								);
-								if (options.presentation?.list)
-									return options.presentation.list(repos, {
-										shelfDir: shelf.dir,
-										fetched: fetch === true,
-									});
-								return repos.length
+								const text = repos.length
 									? JSON.stringify(repos, null, 2)
 									: `No managed repositories in ${shelf.dir}; use repo_add.`;
+								return (
+									options.presentation?.list?.(
+										repos,
+										{ shelfDir: shelf.dir, fetched: fetch === true },
+										text,
+									) ?? text
+								);
 							}),
 					}),
 					defineTool({
 						name: "repo_add",
 						minTier: "owner",
-						description: describe(
-							"repo_add",
-							"Clone owner/repo into the shelf using the host's Git login (GitHub CLI by default).",
-						),
+						description: describe("repo_add"),
 						parameters: Type.Object({ repo: repoSchema("repo_add") }),
 						run: ({ repo }) =>
 							refusal(
@@ -306,10 +318,7 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_change_report",
 						minTier: "owner",
-						description: describe(
-							"repo_change_report",
-							"Fetch and report commits and changed files for the default branch. Requires a clean, ahead-only clone. Review checks before requesting this report.",
-						),
+						description: describe("repo_change_report"),
 						parameters: Type.Object({
 							repo: repoSchema("repo_change_report"),
 						}),
@@ -318,13 +327,16 @@ export function coding(options: CodingOptions) {
 								ship(repo, async () => {
 									const report = await shelf.report(repo);
 									const direct = ownerOwned(repo);
-									const text = options.presentation?.changeReport?.(
-										report,
-										direct,
-									) ?? {
+									const standard = {
 										post: reportPost(report, direct),
 										result: reportPost(report, direct),
 									};
+									const text =
+										options.presentation?.changeReport?.(
+											report,
+											direct,
+											standard,
+										) ?? standard;
 									if (options.postChangeReport)
 										await options.postChangeReport(turn, text.post);
 									else
@@ -338,10 +350,7 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_push",
 						minTier: "owner",
-						description: describe(
-							"repo_push",
-							"Push the SHA from the latest change report to its default branch, without force. Held for owner approval unless the trusted host policy explicitly marks the clone owner-owned.",
-						),
+						description: describe("repo_push"),
 						parameters: Type.Object({
 							repo: repoSchema("repo_push"),
 							sha: Type.String({
@@ -366,10 +375,7 @@ export function coding(options: CodingOptions) {
 					defineTool({
 						name: "repo_task",
 						minTier: "owner",
-						description: describe(
-							"repo_task",
-							"Start a background Pi coding worker on a clone. Each worker has its own worktree and branch, so several may work on one repository; when it finishes, its commits are rebased onto the clone and fast-forwarded, and a conflict keeps the branch and is reported. When every worker slot is taken the task waits in a queue. The worker reads repository instructions, edits, checks and commits; shipping uses a separate report and approval. Report returns to this channel.",
-						),
+						description: describe("repo_task"),
 						parameters: Type.Object({
 							repo: repoSchema("repo_task"),
 							task: Type.String({
@@ -444,18 +450,21 @@ export function coding(options: CodingOptions) {
 								const skippedText = skipped.length
 									? ` Unavailable implicit skills skipped: ${skipped.join(", ")}.`
 									: "";
-								if (job.queuePosition !== undefined)
+								if (job.queuePosition !== undefined) {
+									const queued = `Queued coding task #${job.id} in ${repo} at position ${job.queuePosition}: every worker slot is taken, and it starts on ${job.model} when one frees. Its report returns to ${job.channel}; repo_task_cancel cancels it.${skippedText}`;
 									return (
 										options.presentation?.taskQueued?.(
 											job,
 											job.queuePosition,
 											skipped,
-										) ??
-										`Queued coding task #${job.id} in ${repo} at position ${job.queuePosition}: every worker slot is taken, and it starts on ${job.model} when one frees. Its report returns to ${job.channel}; repo_task_cancel cancels it.${skippedText}`
+											queued,
+										) ?? queued
 									);
+								}
+								const started = `Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}, and repo_task_cancel cancels it.${skippedText}`;
 								return (
-									options.presentation?.taskStarted?.(job, skipped) ??
-									`Started coding task #${job.id} in ${repo} on ${job.model}; its report returns to ${job.channel}, and repo_task_cancel cancels it.${skippedText}`
+									options.presentation?.taskStarted?.(job, skipped, started) ??
+									started
 								);
 							}),
 					}),

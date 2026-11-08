@@ -12,6 +12,7 @@ import {
 import { DrawingError } from "../errors.ts";
 import type { CardPresentation } from "../plugin.ts";
 import type { Random } from "../random.ts";
+import type { ToolWording } from "../tool-text.ts";
 import {
 	type ImageToolEnv,
 	imageTool,
@@ -32,6 +33,7 @@ function describeDeck(deck: Deck): string {
 export function drawCardsTool(
 	decks: readonly Deck[],
 	env: ImageToolEnv,
+	text: ToolWording,
 	random: Random,
 	presentation: CardPresentation = {},
 	permissive = false,
@@ -41,48 +43,46 @@ export function drawCardsTool(
 	return imageTool(
 		{
 			name: "draw_cards",
-			description: `Draw cards from a full, freshly shuffled deck and attach a picture of the spread to your reply. Each draw is independent; pass exclude to leave cards out. Read the returned cards, not your own guess. Decks: ${decks.map(describeDeck).join("; ")}.`,
+			// The host's own description is whole; the package's names the decks it was given.
+			description:
+				text.custom ??
+				`${text.description} Decks: ${decks.map(describeDeck).join("; ")}.`,
 			parameters: strictObject({
 				deck: literals(
 					[first, ...rest].map((deck) => deck.id),
-					"The deck to draw from.",
+					text.about("deck"),
 				),
-				count: Type.Integer({ minimum: 1, maximum: MAX_DRAW }),
-				group: Type.Optional(
-					Type.String({
-						description:
-							"Draw only from the cards of this group of the deck, when the deck has groups.",
-					}),
-				),
+				count: Type.Integer({
+					minimum: 1,
+					maximum: MAX_DRAW,
+					...text.about("count"),
+				}),
+				group: Type.Optional(Type.String(text.about("group"))),
 				exclude: Type.Optional(
-					Type.Array(Type.String(), {
-						description: "Card ids to leave out, as the deck lists them.",
-					}),
+					Type.Array(Type.String(), text.about("exclude")),
 				),
 				allow_reversed: Type.Optional(
-					Type.Boolean({
-						description:
-							"Whether cards may come up reversed; the deck's own default when omitted.",
-					}),
+					Type.Boolean(text.about("allow_reversed")),
 				),
 				spread: Type.Optional(
 					Type.Array(
 						strictObject({
-							row: Type.Integer({ minimum: 0, maximum: MAX_GRID }),
-							col: Type.Integer({ minimum: 0, maximum: MAX_GRID }),
-							label: Type.String({
-								description: "What the position means, such as Past.",
+							row: Type.Integer({
+								minimum: 0,
+								maximum: MAX_GRID,
+								...text.about("spread.row"),
 							}),
+							col: Type.Integer({
+								minimum: 0,
+								maximum: MAX_GRID,
+								...text.about("spread.col"),
+							}),
+							label: Type.String(text.about("spread.label")),
 						}),
-						{
-							description:
-								"One position per card for a named spread; omit for plain rows.",
-						},
+						text.about("spread"),
 					),
 				),
-				question: Type.Optional(
-					Type.String({ description: "The question, shown on the picture." }),
-				),
+				question: Type.Optional(Type.String(text.about("question"))),
 			}),
 			draw: async (args, turn) => {
 				const deck = decks.find((candidate) => candidate.id === args.deck);

@@ -69,6 +69,45 @@ export function codingWorkerPrompt(dir: string): string {
 		"Report changes and reasons, commits, checks and outcomes, held actions, and remaining work.",
 	].join("\n\n");
 }
+/** The running session, for a stop to end its turn. */
+let working: { abort(): Promise<void> } | undefined;
+/** Set once the host's shutdown asked the worker to stop; the run's own report or failure then waits for it. */
+let winding: Promise<never> | undefined;
+/**
+ * The host's shutdown asked the worker to stop (SIGTERM; a cancel or a timeout kills instead): it
+ * ends its turn, keeps the tracked changes it made in a commit on its own branch, and exits, so
+ * the report can say where the work is. Untracked files are not committed; the report lists them.
+ */
+async function windDown(dir: string): Promise<never> {
+	// A turn waiting for an approval never answers its abort, so the commit does not wait long for it.
+	await Promise.race([
+		working?.abort().catch(() => undefined),
+		Bun.sleep(1_000),
+	]);
+	Bun.spawnSync(
+		[
+			"git",
+			"commit",
+			"--all",
+			"--no-verify",
+			"--message",
+			"wip: the host shut down while this task ran",
+		],
+		{
+			cwd: dir,
+			stdin: "ignore",
+			stdout: "ignore",
+			stderr: "ignore",
+			timeout: 3_000,
+		},
+	);
+	process.send?.(
+		{ type: "failure", message: "the worker was stopped", stopped: true },
+		() => process.exit(1),
+	);
+	// The parent kills the group if the message does not get out.
+	return new Promise<never>(() => {});
+}
 const answers = new Map<
 	number,
 	(answer: HeldCallAnswer, reason?: string) => void
@@ -84,6 +123,9 @@ async function run({
 	scratchDir,
 	shellEnv,
 }: StartMessage): Promise<string> {
+	process.once("SIGTERM", () => {
+		winding ??= windDown(job.dir);
+	});
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
 		modelsPath: join(agentDir, "models.json"),
@@ -161,6 +203,7 @@ async function run({
 		sessionManager: SessionManager.inMemory(job.dir),
 		settingsManager: SettingsManager.inMemory({}),
 	});
+	working = session;
 	// Only what the host's progress posts read crosses: a message's text, never its thinking.
 	if (progress)
 		session.subscribe((event) => {
@@ -205,17 +248,20 @@ if (process.send) {
 		} else if (message.type === "start" && !started) {
 			started = true;
 			void run(message as StartMessage).then(
-				(report) => {
+				async (report) => {
+					await winding;
 					process.send?.({ type: "report", report }, () => process.exit(0));
 				},
-				(error: unknown) =>
+				async (error: unknown) => {
+					await winding;
 					process.send?.(
 						{
 							type: "failure",
 							message: error instanceof Error ? error.message : String(error),
 						},
 						() => process.exit(1),
-					),
+					);
+				},
 			);
 		}
 	});

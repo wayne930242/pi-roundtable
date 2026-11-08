@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import type { HoldCheck } from "pi-roundtable";
 import type { CodingJob } from "./coding-desk.ts";
 import { PiCodingWorker } from "./pi-coding-worker.ts";
+import { hostStopping } from "./task-control.ts";
 import { until } from "./testing/until.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
@@ -76,6 +77,121 @@ test("aborting a real worker during its approval card kills the child process", 
 	await expect(result).rejects.toThrow("stopped");
 	expect(running(pid)).toBe(false);
 }, 30_000);
+
+test("stopping a real worker for the host's shutdown lets it save its tracked changes in a wip commit before it ends", async () => {
+	const { worker, job, repoDir } = fixture();
+	const git = (...args: string[]) =>
+		Bun.spawnSync(["git", "-C", repoDir, ...args], {
+			env: {
+				...process.env,
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_CONFIG_GLOBAL: "/dev/null",
+			},
+		});
+	git("init", "--initial-branch=main");
+	git("config", "user.name", "Test User");
+	git("config", "user.email", "test@example.invalid");
+	writeFileSync(join(repoDir, "work.txt"), "start\n");
+	git("add", "work.txt");
+	git("commit", "-m", "Start");
+	const controller = new AbortController();
+	let started = () => {};
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const result = worker.run(job, controller.signal, async () => {
+		started();
+		return new Promise(() => {});
+	});
+	await waiting;
+	writeFileSync(join(repoDir, "work.txt"), "start\npartial\n");
+	controller.abort(hostStopping);
+	await expect(result).rejects.toThrow("stopped");
+	const subjects = git("log", "--format=%s").stdout.toString().trim();
+	expect(subjects.split("\n")[0]).toStartWith("wip:");
+	expect(git("status", "--porcelain", "-uno").stdout.toString()).toBe("");
+	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
+	expect(running(pid)).toBe(false);
+});
+
+test("a worker that gets SIGTERM from outside the desk reports a stopped failure after its wip commit", async () => {
+	const { worker, job, repoDir } = fixture();
+	const git = (...args: string[]) =>
+		Bun.spawnSync(["git", "-C", repoDir, ...args], {
+			env: {
+				...process.env,
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_CONFIG_GLOBAL: "/dev/null",
+			},
+		});
+	git("init", "--initial-branch=main");
+	git("config", "user.name", "Test User");
+	git("config", "user.email", "test@example.invalid");
+	writeFileSync(join(repoDir, "work.txt"), "start\n");
+	git("add", "work.txt");
+	git("commit", "-m", "Start");
+	const controller = new AbortController();
+	let started = () => {};
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const result = worker.run(job, controller.signal, async () => {
+		started();
+		return new Promise(() => {});
+	});
+	const settled = result.then(
+		() => undefined,
+		(error: unknown) => error,
+	);
+	await waiting;
+	writeFileSync(join(repoDir, "work.txt"), "start\npartial\n");
+	process.kill(
+		Number(readFileSync(join(repoDir, "worker.pid"), "utf8")),
+		"SIGTERM",
+	);
+	const error = await settled;
+	expect(controller.signal.aborted).toBe(false);
+	expect(error).toBeInstanceOf(CodingWorkerFailure);
+	expect((error as CodingWorkerFailure).category).toBe("stopped");
+});
+
+test("a cancel or a timeout kills a real worker at once and leaves no wip commit", async () => {
+	const { worker, job, repoDir } = fixture();
+	const git = (...args: string[]) =>
+		Bun.spawnSync(["git", "-C", repoDir, ...args], {
+			env: {
+				...process.env,
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_CONFIG_GLOBAL: "/dev/null",
+			},
+		});
+	git("init", "--initial-branch=main");
+	git("config", "user.name", "Test User");
+	git("config", "user.email", "test@example.invalid");
+	writeFileSync(join(repoDir, "work.txt"), "start\n");
+	git("add", "work.txt");
+	git("commit", "-m", "Start");
+	const controller = new AbortController();
+	let started = () => {};
+	const waiting = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	const result = worker.run(job, controller.signal, async () => {
+		started();
+		return new Promise(() => {});
+	});
+	await waiting;
+	writeFileSync(join(repoDir, "work.txt"), "start\npartial\n");
+	controller.abort();
+	await expect(result).rejects.toThrow("stopped");
+	const subjects = git("log", "--format=%s").stdout.toString().trim();
+	expect(subjects).toBe("Start");
+	expect(git("status", "--porcelain", "-uno").stdout.toString()).toContain(
+		"work.txt",
+	);
+	const pid = Number(readFileSync(join(repoDir, "worker.pid"), "utf8"));
+	expect(running(pid)).toBe(false);
+});
 
 test("normal worker completion cleans up shell descendants in its process group", async () => {
 	const { worker, job, repoDir } = fixture();

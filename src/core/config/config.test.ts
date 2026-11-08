@@ -536,10 +536,10 @@ describe("a host without Discord", () => {
 		expect(resolveConfig({ ...headless, agents: [] }).agents).toEqual([]);
 	});
 
-	test("the shutdown drain waits three minutes unless the config says otherwise", () => {
+	test("the shutdown drain waits three minutes unless the config says otherwise, up to a coding task's budget and more", () => {
 		expect(resolveConfig(minimal).drainMs).toBe(180_000);
-		expect(resolveConfig({ ...minimal, drainSeconds: 45 }).drainMs).toBe(
-			45_000,
+		expect(resolveConfig({ ...minimal, drainSeconds: 3_900 }).drainMs).toBe(
+			3_900_000,
 		);
 		expect(refused({ ...minimal, drainSeconds: 0 })).toContain(
 			"config drainSeconds",

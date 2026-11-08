@@ -16,6 +16,7 @@ import type {
 	CodingWorker,
 	HeldCallAnswer,
 } from "./coding-desk.ts";
+import { hostStopping } from "./task-control.ts";
 import { CodingWorkerFailure } from "./worker-failure.ts";
 
 export interface PiCodingWorkerOptions {
@@ -49,6 +50,11 @@ export interface PiCodingWorkerOptions {
 	workerEnv?: WorkerEnv;
 	/** What the worker's shell gets besides `SHELL_ENV_NAMES`, as the agents' shell; default the host's `env.shellEnv`. */
 	shellEnv?: ShellEnv;
+	/**
+	 * How long a stopped worker gets to save its work and exit after SIGTERM before its process
+	 * group is killed; default 5,000. 0 kills it at once.
+	 */
+	stopGraceMs?: number;
 }
 
 /** Host variables a coding worker's process gets for its model and Pi runtime, by name. */
@@ -104,6 +110,7 @@ interface WorkerMessage {
 	stopReason?: string;
 	text?: string;
 	name?: string;
+	stopped?: boolean;
 }
 function isMessage(value: unknown): value is WorkerMessage {
 	return (
@@ -154,6 +161,7 @@ export class PiCodingWorker implements CodingWorker {
 		const prompt = this.#options.prompt?.(job.dir);
 		let report: string | undefined;
 		let failure: string | undefined;
+		let windedDown = false;
 		const child = Bun.spawn(
 			[
 				process.execPath,
@@ -212,6 +220,7 @@ export class PiCodingWorker implements CodingWorker {
 						value.type === "failure" &&
 						typeof value.message === "string"
 					) {
+						if (value.stopped === true) windedDown = true;
 						failure = value.message.slice(
 							0,
 							this.#options.diagnosticChars === undefined
@@ -281,11 +290,25 @@ export class PiCodingWorker implements CodingWorker {
 				/* The group has already exited. */
 			}
 		};
-		signal.addEventListener("abort", kill, { once: true });
+		// A host shutdown sends SIGTERM first, so the worker saves what it has; the group is killed when it ends
+		// or the grace runs out. A cancel or a timeout kills at once: that work is not saved or merged.
+		const stop = () => {
+			const grace = this.#options.stopGraceMs ?? 5_000;
+			if (grace <= 0 || signal.reason !== hostStopping) return kill();
+			try {
+				process.kill(child.pid, "SIGTERM");
+			} catch {
+				/* The worker has already exited. */
+			}
+			const timer = setTimeout(kill, grace);
+			void child.exited.then(() => clearTimeout(timer));
+		};
+		signal.addEventListener("abort", stop, { once: true });
 		try {
-			if (signal.aborted) kill();
+			if (signal.aborted) stop();
 			const code = await child.exited;
 			if (signal.aborted) throw new CodingWorkerFailure("stopped");
+			if (windedDown) throw new CodingWorkerFailure("stopped");
 			if (code !== 0)
 				throw new CodingWorkerFailure(
 					"exit",
@@ -296,7 +319,7 @@ export class PiCodingWorker implements CodingWorker {
 			if (!report?.trim()) throw new CodingWorkerFailure("missing-report");
 			return report;
 		} finally {
-			signal.removeEventListener("abort", kill);
+			signal.removeEventListener("abort", stop);
 			kill(); // Also remove shell descendants the task left running.
 		}
 	}

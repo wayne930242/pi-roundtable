@@ -135,6 +135,11 @@ export interface CodingDeskOptions {
 	/** Tasks waiting for a worker slot, first in first out; one more is refused. Default 16. */
 	maxQueued?: number;
 	/**
+	 * The most `stop()` waits for workers to end and their reports to go out; a report still going
+	 * then is left behind. Default 15 seconds.
+	 */
+	stopWaitMs?: number;
+	/**
 	 * The conversations' modes: with them a worker follows the yolo and long-running modes of the
 	 * conversation that started it, read live, when an owner other than the host spoke that turn.
 	 */

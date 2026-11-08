@@ -196,7 +196,8 @@ describe("shutdown drain", () => {
 		});
 		await holdATurn(s);
 		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
-		expect(s.log).toEqual(["start hold", "stop fake:room"]);
+		// Told at the limit, and again once the grace is over, for a turn begun in the meantime.
+		expect(s.log).toEqual(["start hold", "stop fake:room", "stop fake:room"]);
 		expect(aborted).toEqual([["fake:room"]]);
 		s.release();
 	});

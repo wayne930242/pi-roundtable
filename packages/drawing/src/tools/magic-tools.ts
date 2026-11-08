@@ -7,8 +7,9 @@ import {
 	renderSacredGeometry,
 	renderSigil,
 } from "../magic.ts";
+import type { ToolWording } from "../tool-text.ts";
 import {
-	BACKGROUND,
+	background,
 	type ImageToolEnv,
 	imageTool,
 	literals,
@@ -17,36 +18,32 @@ import {
 
 const SIZES = { small: 512, medium: 1024, large: 2048 } as const;
 
-export function magicCircleTool(env: ImageToolEnv) {
+export function magicCircleTool(env: ImageToolEnv, text: ToolWording) {
 	return imageTool(
 		{
 			name: "magic_circle_generate",
-			description:
-				"Draw a magic circle: a pentagram, hexagram, or Tree of Life, with optional elemental symbols at the quarters and text around the rim, and attach it to your reply as an image.",
+			description: text.description,
 			parameters: strictObject({
-				type: literals(CIRCLE_TYPES, "custom draws a pentagram."),
+				type: literals(CIRCLE_TYPES, text.about("type")),
 				style: Type.Optional(
-					literals(["traditional", "modern", "geometric"], "Line weight."),
+					literals(["traditional", "modern", "geometric"], text.about("style")),
 				),
 				elements: Type.Optional(
 					Type.Array(literals(["fire", "air", "water", "earth"]), {
 						maxItems: 4,
-						description: "Placed north, east, south, west in this order.",
+						...text.about("elements"),
 					}),
 				),
 				text: Type.Optional(
 					Type.String({
 						maxLength: MAX_CIRCLE_TEXT,
-						description: "Written around the rim.",
+						...text.about("text"),
 					}),
 				),
 				size: Type.Optional(
-					literals(
-						["small", "medium", "large"],
-						"512, 1024, or 2048 px; default medium.",
-					),
+					literals(["small", "medium", "large"], text.about("size")),
 				),
-				background: BACKGROUND,
+				background: background(text.about("background")),
 			}),
 			draw: (args) => ({
 				stem: "magic-circle",
@@ -65,18 +62,32 @@ export function magicCircleTool(env: ImageToolEnv) {
 	);
 }
 
-export function sigilTool(env: ImageToolEnv, permissive = false) {
+export function sigilTool(
+	env: ImageToolEnv,
+	text: ToolWording,
+	permissive = false,
+) {
 	return imageTool(
 		{
 			name: "sigil_generate",
-			description:
-				"Draw a sigil from an intention, by the chaos (letter elimination), rose cross, planetary, or geometric method, and attach it to your reply as an image.",
+			description: text.description,
 			parameters: strictObject({
-				intention: Type.String({ minLength: 1, maxLength: 200 }),
-				method: literals(["chaos", "rose_cross", "planetary", "geometric"]),
-				complexity: Type.Optional(literals(["simple", "elaborate"])),
-				style: Type.Optional(literals(["traditional", "modern"])),
-				background: BACKGROUND,
+				intention: Type.String({
+					minLength: 1,
+					maxLength: 200,
+					...text.about("intention"),
+				}),
+				method: literals(
+					["chaos", "rose_cross", "planetary", "geometric"],
+					text.about("method"),
+				),
+				complexity: Type.Optional(
+					literals(["simple", "elaborate"], text.about("complexity")),
+				),
+				style: Type.Optional(
+					literals(["traditional", "modern"], text.about("style")),
+				),
+				background: background(text.about("background")),
 			}),
 			draw: (args) => ({
 				stem: "sigil",
@@ -95,34 +106,35 @@ export function sigilTool(env: ImageToolEnv, permissive = false) {
 	);
 }
 
-export function sacredGeometryTool(env: ImageToolEnv, permissive = false) {
+export function sacredGeometryTool(
+	env: ImageToolEnv,
+	text: ToolWording,
+	permissive = false,
+) {
 	return imageTool(
 		{
 			name: "sacred_geometry_generate",
-			description:
-				"Draw sacred geometry: the Flower of Life, Metatron's Cube, a simplified Sri Yantra (nested triangles around a point, in a circle), or the Vesica Piscis, and attach it to your reply as an image. More layers add rings of circles, nested shapes, or, for Metatron's Cube, the outer ring (two or more layers).",
+			description: text.description,
 			parameters: strictObject({
-				pattern: literals([
-					"flower_of_life",
-					"metatron",
-					"sri_yantra",
-					"vesica_pisces",
-				]),
+				pattern: literals(
+					["flower_of_life", "metatron", "sri_yantra", "vesica_pisces"],
+					text.about("pattern"),
+				),
 				layers: Type.Optional(
 					Type.Integer({
 						minimum: 1,
 						maximum: MAX_LAYERS,
-						description: "Default 3.",
+						...text.about("layers"),
 					}),
 				),
-				rotation: Type.Optional(Type.Number({ description: "Degrees." })),
+				rotation: Type.Optional(Type.Number(text.about("rotation"))),
 				colors: Type.Optional(
 					Type.Array(Type.String(), {
 						maxItems: MAX_LAYERS,
-						description: "CSS colors cycled per layer.",
+						...text.about("colors"),
 					}),
 				),
-				background: BACKGROUND,
+				background: background(text.about("background")),
 			}),
 			draw: (args) => ({
 				stem: "sacred-geometry",

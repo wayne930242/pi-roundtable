@@ -404,9 +404,9 @@ test("a stop drops queued tasks with a notice and waits only for the running wor
 	await coding.stop();
 	expect(ran).toEqual([1]);
 	const byId = new Map(results.map((result) => [result.job.id, result]));
-	expect(byId.get(1)?.outcome).toEqual({
+	expect(byId.get(1)?.outcome).toMatchObject({
 		ok: false,
-		error: "the worker was stopped",
+		error: expect.stringContaining("the host shut down while the worker ran"),
 	});
 	expect(byId.get(2)?.outcome).toMatchObject({
 		ok: false,
