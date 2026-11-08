@@ -574,6 +574,36 @@ describe("the agent server's routing", () => {
 		expect(await reportChannel(infraOnWeb)).toBe("app:agent.infra");
 	});
 
+	test("a webhook's post in an agent's app room is the claim's, and starts a background report turn there", async () => {
+		const { registry } = await setUp(
+			agentServerPlugin(options(), async () => routed),
+			[],
+			{},
+			undefined,
+			surfaces,
+		);
+		const claim = registry.channels.find((c) => c.name === "agent-server");
+		expect(claim?.owns("app:agent.infra")).toBe(true);
+		const admission = claim?.admit({
+			channel: "app:agent.infra",
+			messageId: "app:41",
+			authorId: "webhook:h1",
+			authorName: "CI",
+			authorIsBot: true,
+			isDirect: false,
+			mentionsBot: false,
+			repliesToBot: false,
+			text: "build 12 failed",
+			attachments: [],
+			integration: { id: "h1", own: false },
+		});
+		expect(admission?.kind).toBe("background");
+		if (admission?.kind !== "background") return;
+		expect(admission.turn.channel).toBe("app:agent.infra");
+		expect(admission.turn.text).toStartWith('Webhook "CI" posted in');
+		expect(admission.turn.text).toEndWith("build 12 failed");
+	});
+
 	test("the preflight passes for registered surfaces and refuses one nobody registered, naming the key", async () => {
 		const good = agentServerPlugin(
 			options({ routing: infraOnWeb }),
