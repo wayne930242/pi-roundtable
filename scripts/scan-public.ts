@@ -88,6 +88,8 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 			"src/connectors/connector-commands.ts",
 			"src/connectors/connector-registry.ts",
 			"src/connectors/connector-registry.test.ts",
+			"src/connectors/connector-results.ts",
+			"src/connectors/connector-resync.ts",
 			"src/connectors/connectors-plugin.ts",
 			"src/connectors/connectors-plugin.test.ts",
 			`src/connectors/${spell("context", "forge")}.ts`,
