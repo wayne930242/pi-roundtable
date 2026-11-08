@@ -48,14 +48,15 @@ describeDb("moveTeam", () => {
 
 	afterAll(async () => {
 		if (sql) {
+			// The agent tables stay, as a later host boot finds them in the migration ledger; only their rows go.
 			for (const table of [
-				"agents",
-				"agent_groups",
 				"agent_group_messages",
 				"agent_group_cursors",
-				"discord_grants",
+				"agent_groups",
+				"agents",
 			])
-				await sql.unsafe(`DROP TABLE IF EXISTS ${table}`);
+				await sql.unsafe(`DELETE FROM ${table}`);
+			await sql.unsafe("DROP TABLE IF EXISTS discord_grants");
 			await sql.close();
 		}
 	});
