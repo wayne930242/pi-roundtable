@@ -10,6 +10,7 @@ import {
 	type PluginContext,
 	PluginError,
 	type RoundtablePlugin,
+	RUNTIME,
 	type Speaker,
 	type TurnResult,
 } from "pi-roundtable";
@@ -39,6 +40,9 @@ import { RemoteSessionSweeper } from "./session-sweeper.ts";
 
 /** The listener the host's `http` block opens; the endpoints are reachable wherever it is. */
 const LISTENER = "public";
+
+/** The root command named in the service's refusals on a host without Discord. */
+const DEFAULT_ROOT = "roundtable";
 
 interface RemoteMcpBaseOptions {
 	/** The bearer token an outside agent presents at `/mcp/personal`; keep it secret and long. */
@@ -141,7 +145,7 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 	let adopt: (() => Promise<void>) | undefined;
 	return definePlugin({
 		name: "remote-mcp",
-		requires: [DISCORD, IDENTITY, CONVERSATIONS],
+		requires: [IDENTITY, CONVERSATIONS],
 		provides: [REMOTE_MCP],
 		identities: [
 			{
@@ -161,7 +165,8 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 		preflight: () => adopt?.(),
 		setup: async (context) => {
 			const { services, logger, conversations, database } = context;
-			const discord = services.get(DISCORD);
+			// Without Discord there are no grant commands and no channel endpoint; grants stay stored.
+			const discord = services.find(DISCORD);
 			const identities = services.get(IDENTITY);
 			// Who the token stands for is read from the stored principals in preflight.
 			let found: Bound | undefined;
@@ -198,7 +203,9 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 					},
 				}),
 				grants,
-				executor: () => discord.connection.channelExecutor(),
+				...(discord
+					? { executor: () => discord.connection.channelExecutor() }
+					: {}),
 				logger,
 				messages: text,
 				toolNames,
@@ -209,12 +216,17 @@ export function remoteMcp(options: RemoteMcpOptions): RoundtablePlugin {
 					conversations.deleteConversation(channel),
 				logger,
 			});
-			discord.commands.add(
+			discord?.commands.add(
 				mcpGrantCommands(discord.guard, grants, options.publicUrl, text),
 			);
 			services.provide(
 				REMOTE_MCP,
-				remoteMcpService(grants, text, options.publicUrl, discord.guard.root),
+				remoteMcpService(
+					grants,
+					text,
+					options.publicUrl,
+					discord?.guard.root ?? DEFAULT_ROOT,
+				),
 			);
 			// Read before any service starts, by `preflight` above.
 			adopt = async () => {
@@ -282,7 +294,17 @@ function conversationOf(
 	{ queue, turns, services }: PluginContext,
 ): RemoteConversation {
 	if (options.answer) return { answer: options.answer, claim: options.claim };
-	return defaultConversation({ queue, turns, server: services.lazy(AGENTS) });
+	// The agent server is a built-in, set up before this plugin; a host without one runs remote
+	// turns on the core's runtime.
+	const agents = services.find(AGENTS);
+	if (agents)
+		return defaultConversation({ queue, turns, server: () => agents });
+	const runtime = services.lazy(RUNTIME);
+	return defaultConversation({
+		queue,
+		turns,
+		server: () => ({ runtime: runtime() }),
+	});
 }
 
 /**

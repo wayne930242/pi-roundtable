@@ -3654,6 +3654,7 @@ What needs Discord is refused or left out rather than failing later:
 - `notify` is not registered unless a plugin contributes a [direct channel](#directchannels-reaching-a-person-on-their-own), since there is nowhere to send a notice.
 - `schedule_*` and `delegate_task` are registered only in a conversation whose claim takes background turns: their runs are turns of the [background target](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) `PERSONAL_TARGET`, named `owner`, which the core contributes on every host. A conversation of a claim without `background` has neither; a no-surface conversation needs a registered private principal known to a direct channel, as [background targets](#backgroundtargets-whose-turn-a-schedule-or-delegated-task-is) describes.
 - `roundtable doctor` skips the Discord checks.
+- pi-roundtable-mcp's `mcpConnectors` and `remoteMcp` add no slash commands, and `remoteMcp` serves `/mcp/personal` without the `/mcp/discord/<token>` channel tools.
 
 Pi's runtime still needs the `compact_session` tool in every session, from the Pi package pi-self-compact: load it from a plugin with `piPackages: ["pi-self-compact"]`, as the `plugins/self-compact.ts` of a project `roundtable init` creates does, or the preflight stops the start and says so.
 `roundtable init --adapter web` creates a host without Discord around the [web chat](#web-chat-pi-roundtable-webchat).

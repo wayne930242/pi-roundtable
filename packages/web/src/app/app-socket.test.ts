@@ -826,6 +826,8 @@ describeDb("the owner app over a real host", () => {
 		const served = await rest(app, `files/${view.id}`);
 		expect(served.headers.get("content-length")).toBe(String(big.byteLength));
 		expect(new Uint8Array(await served.arrayBuffer())).toEqual(big);
+		// Wait for the turn's reply, or on a slow disk it lands in the next test's socket as that test's reply.
+		await tab.take(agentReply("scout"));
 		tab.close();
 	});
 

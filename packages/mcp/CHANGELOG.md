@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `mcpConnectors` holds a call to a connector's tool whose server marks it `destructiveHint: true` or `readOnlyHint: false` (rule `mcp-hints`; its card names the tool, the server, and the call's `kind` and `id` when it has them). A tool that declares neither hint, or no hints at all, runs unasked, and yolo mode never approves a held call (`HoldRule.yolo`). `resolveVirtualServer` keeps each tool's boolean hints from ContextForge's `annotations`; ContextForge writes them when a tool is created, so a connector added before its upstream declared hints has to be added again. `ConnectorMessages.toolHintHold` words the card.
 
+### Fixed
+
+- `mcpConnectors` and `remoteMcp` start on a host without Discord: neither requires `DISCORD` any more, both read it with `services.find`. Without Discord the connectors add no slash commands and keep `CONNECTORS` and its management; remote MCP adds no `/<root> mcp` commands and no `/mcp/discord/<token>` route, serves `/mcp/personal`, keeps channel grants stored but unused, and with no agent server runs its default turns on the core's runtime. With Discord nothing changes.
+
 ## [0.41.0] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.41.0 (an agent team that lives in the app on a Discord host without an agent guild); no package-specific behavior changes.

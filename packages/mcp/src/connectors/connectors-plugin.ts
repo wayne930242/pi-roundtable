@@ -135,7 +135,6 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 	let load: (() => Promise<void>) | undefined;
 	return definePlugin({
 		name: "mcp-connectors",
-		requires: [DISCORD],
 		provides: [CONNECTORS],
 		migrations: [ConnectorRegistry.migration],
 		// The stored connectors are read, and their servers resolved, before any service starts, so
@@ -162,8 +161,9 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				maxToolName: options.maxToolName ?? DEFAULT_MAX_TOOL_NAME,
 				messages: text,
 			});
-			const { commands, guard } = services.get(DISCORD);
-			commands.add(connectorCommands(guard, registry, text));
+			// Without Discord the connectors are managed through CONNECTORS alone.
+			const discord = services.find(DISCORD);
+			discord?.commands.add(connectorCommands(discord.guard, registry, text));
 			services.provide(CONNECTORS, {
 				get version() {
 					return registry.version;

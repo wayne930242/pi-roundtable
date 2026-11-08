@@ -41,8 +41,11 @@ export interface McpGatewayOptions {
 	dispatchToken: string;
 	agent: Pick<RemoteAgent, "dispatch" | "result">;
 	grants: ChannelGrantStore;
-	/** Undefined until the Discord connection is ready. */
-	executor(): ChannelExecutor | undefined;
+	/**
+	 * Undefined until the Discord connection is ready. Left out on a host without Discord: then
+	 * there is no `/mcp/discord/` route, and no channel tool is listed.
+	 */
+	executor?(): ChannelExecutor | undefined;
 	logger: Logger;
 	messages?: RemoteMcpMessages;
 	/** The names of the dispatch and result tools; `agent_dispatch` and `agent_result` by default. */
@@ -99,13 +102,15 @@ export class McpGateway {
 	/** Both endpoints take every method and answer the ones they refuse themselves. */
 	routes(listener: string): HttpRoute[] {
 		const handle = (request: Request) => this.handle(request);
+		const personal: HttpRoute = {
+			name: "mcp-personal",
+			listener,
+			path: { exact: "/mcp/personal" },
+			handle,
+		};
+		if (!this.#options.executor) return [personal];
 		return [
-			{
-				name: "mcp-personal",
-				listener,
-				path: { exact: "/mcp/personal" },
-				handle,
-			},
+			personal,
 			{
 				name: "mcp-discord",
 				listener,
@@ -118,7 +123,8 @@ export class McpGateway {
 	/** Never throws; error responses never repeat the URL, which may hold a token. */
 	async handle(request: Request): Promise<Response> {
 		const path = new URL(request.url).pathname;
-		const discord = path.startsWith("/mcp/discord/");
+		const discord =
+			this.#options.executor !== undefined && path.startsWith("/mcp/discord/");
 		if (path !== "/mcp/personal" && !discord)
 			return new Response("Not found", { status: 404 });
 		if (request.headers.get("Origin"))
@@ -211,7 +217,7 @@ export class McpGateway {
 	async #channelTools(bundle: ChannelBundle): Promise<ToolSpec[]> {
 		const { grants } = this.#options;
 		const executor = () => {
-			const current = this.#options.executor();
+			const current = this.#options.executor?.();
 			if (!current) throw new ChannelToolError("DISCORD_UNAVAILABLE");
 			return current;
 		};
