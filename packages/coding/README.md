@@ -79,10 +79,12 @@ System report turns cannot call `repo_task`; do the work in the turn or hand it 
 | `repo_add` | `repo` | Clone `owner/repo` into `shelfDir/owner/repo`; refuse invalid names and existing clones. |
 | `repo_list` | `fetch?` | List paths, branches, upstream ahead/behind counts, dirty files, last commits, prose summaries, CI hints and linked skills. |
 | `repo_task` | `repo`, `task`, `skills?` | Start a background worker in its own worktree, or queue it when every worker slot is taken, returning its job number (and queue position) immediately. The host's own turns, such as a report's, may not. |
+| `repo_task_list` | `repo?` | List running and queued tasks with id, repository, who started each, when it started or was queued, and the first line of its task. |
+| `repo_task_cancel` | `repo`, `id`, `reason?` | Cancel a task: a queued one is dropped and never runs; a running worker is stopped and its commits stay on its branch, unmerged. |
 | `repo_change_report` | `repo` | Fetch and post the commits and diffstat ahead of the default branch; return its full SHA. |
 | `repo_push` | `repo`, `sha` | Push the exact reported SHA to the reported default branch, without force, after the hold gate permits it. |
 
-All five tools have `minTier: "owner"` and are contributed through `defineTool` for agent and owner session selections.
+All seven tools have `minTier: "owner"` and are contributed through `defineTool` for agent and owner session selections.
 The operator remains responsible for any tool-tier overrides.
 A custom owner claim with a restricted `ToolSelection` must include the exported `REPO_TOOLS` names; include `skill_list` separately when the host skills addon is enabled.
 The host's skills addon resolves explicit skills, or the calling agent's carried skills when omitted; an owner call carries none unless it names them.
@@ -115,6 +117,19 @@ Hosts call `desk.setMaxWorkers(n)` for the same change in code, and `desk.worker
 The page has built-in zh-TW wording for a zh-TW host; `presentation.messages`, keyed by the English text, words it otherwise.
 Past that a task waits in a first-in, first-out queue of at most `maxQueued` tasks (default 16), and `repo_task` answers at once with its queue position; one more is refused.
 A queued task starts when a worker slot frees.
+### Cancelling a task
+
+`repo_task_cancel` cancels one task, and `repo_task_list` shows which there are.
+An agent sees and cancels the tasks its own turns started; a turn an owner speaks sees and cancels any; outside an agent's turn a person sees the tasks they started.
+The host's own turns, such as a report's, count as the agent they run for.
+A queued task leaves the queue and never starts; its report says it was cancelled before it ran.
+A running worker is aborted the way a timeout aborts it, and held actions it was waiting on are closed.
+Its commits are kept on its branch and worktree and are not rebased into the clone; the report says "cancelled by <name>" and names the branch, the worktree path and the commits, to inspect, merge or delete.
+The tool waits up to 30 seconds for the worker to settle and answers with the branch and the number of commits kept.
+Cancelling frees the slot, so the next queued task starts; an unknown or finished id is refused.
+The Settings page `coding-workers` lists the running and queued tasks, each with a Cancel action that asks first; only an owner may use it.
+`desk.cancel(id, by)` does the same in code and answers a `CancelResult`: `dropped`, `stopped` (with `branch`, `dir`, `commits` and whether the worker `settled`), or `refused` with a reason; `desk.tasks()` lists the tasks.
+
 On host stop queued tasks are dropped and each gets a report saying it never ran; the shutdown drain waits only for running workers.
 The worker's report includes its final answer, declined or unanswered actions, calls approved by yolo mode, what became of its branch, branch, HEAD, new commits and uncommitted files.
 Failures and timeouts also report the final Git state when it can be read.
@@ -237,7 +252,7 @@ The `CODING` service exposes `shelf: RepoShelf` and `desk: CodingDesk` for trust
 | `worker` | `PiCodingWorker` | Trusted worker runner replacement. |
 | `onResult` | surface reply | Report delivery integration. |
 
-`RepoShelf`, `CodingDesk`, `PiCodingWorker`, `CodingWorkerFailure`, `REPO_TOOLS`, `codingReport`, `integrationText`, `reportPost`, `WORKTREES_DIR` and their option/result types are exported for testing and host integrations.
+`RepoShelf`, `CodingDesk`, `PiCodingWorker`, `CodingWorkerFailure`, `REPO_TOOLS`, `codingReport`, `integrationText`, `reportPost`, `WORKTREES_DIR` and their option/result types, `CancelResult` and `CodingTask` among them, are exported for testing and host integrations.
 `CodingResult.integration` tells what became of the worker's branch (`merged`, `nothing`, `conflict` with its files, or `refused` with the reason) and `CodingResult.autoApproved` the calls yolo mode approved; `CodingJob.starter` names the conversation and speaker whose modes the worker follows, and `CodingJob.branch` its branch.
 `resolveRun(turn)` receives the public `ToolTurn`, including the calling agent scope and channel.
 It returns `{ model, thinking, channel, origin? }`; skill selection still follows the caller, not the resolved report destination.
