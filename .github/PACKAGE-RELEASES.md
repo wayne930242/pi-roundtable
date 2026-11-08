@@ -73,11 +73,18 @@ Browser ships its Dockerfile but not an image: a host builds the image once from
 ## Subsequent lockstep releases
 
 Before choosing the version, run `git fetch --tags origin` and compare the local tags with `git ls-remote --tags origin` and `npm view pi-roundtable dist-tags`: a checkout behind origin once picked versions that were already published.
-Update the root version and every workspace version together.
-Update every workspace's core development dependency to that version and its peer range to the matching minor, written `>=<major>.<minor>.0 <<major>.<minor+1>.0` for version `<major>.<minor>.<patch>`, such as the range the other workspaces' manifests already carry.
-Update changelogs, regenerate `bun.lock`, and run the clean-install checks and packing checks.
-The version bump changes the lockfile's workspace entries, so commit `bun.lock` with the bump and confirm `bun install --frozen-lockfile` passes locally before pushing.
-Run `bun scripts/check-release.ts v<version>` before committing: it refuses mismatched versions, core peer ranges, development pins, and repository directories.
+`bun scripts/release.ts <version> --summary "<a few words>"` does the mechanical part, from a clean checkout of the release branch; add `--dry-run` first to see the files and the assembled changelog without writing anything.
+It refuses a version that is not newer than the root's, or that is already a `v<version>` tag on origin or on npm (`--offline` skips those two checks), then:
+
+- sets the root and every workspace to the version, every workspace's core development dependency to it, and its peer range to the matching minor, written `>=<major>.<minor>.0 <<major>.<minor+1>.0`;
+- moves that range wherever the prose states it: every `packages/*/README.md`, the site pages (English and zh-tw) and the docs;
+- turns the fragments in `changes/unreleased/` (see `changes/README.md`), and anything written by hand under a `## [Unreleased]`, into a `## [<version>] - <date>` section of the root and each workspace changelog, giving a workspace no fragment names the lockstep line, and deletes the fragments;
+- runs `bun install` so `bun.lock` carries the new workspace entries, then `scripts/check-release.ts` (which also checks the prose ranges and that every changelog has the `## [<version>]` heading) and the docs and release tests, and prints `git diff --stat`.
+
+It does not commit, tag or push.
+Read the diff, then commit it as `chore(release): <version>` with the summary as the body, and confirm `bun install --frozen-lockfile` passes before pushing.
+To redo a release, `git checkout .` restores the tree, the fragments and `bun.lock` included.
+Run `bun scripts/check-release.ts v<version>` again after any edit by hand: it refuses mismatched versions, core peer ranges, development pins, repository directories, stale prose ranges and a changelog without the release heading.
 Run `bun scripts/preflight-release.ts v<version>`: it packs every workspace, checks required files (including the web HTML/JS/CSS, drawing fonts, and sandbox worker sources), and requires each package to exist on npm before the core can publish.
 Use `--local` only for CI or pre-first-publish checks, where a new package need not yet exist on npm.
 Run preflight with the npm that `publish.yml` installs (`npm@latest`), for example from `npm install --prefix <tmp> npm@latest` placed first on `PATH`: npm 12 changed the JSON shape of `npm pack --json` and `npm view --json`, and an older local npm does not exercise it.
