@@ -138,6 +138,47 @@ describeDb("mcpConnectors on a host", () => {
 		expect(cf.servers.size).toBe(0);
 	});
 
+	test("holds a connector's tool its hints mark destructive or not read-only, and runs the rest", async () => {
+		const host = await boot({});
+		cf.upstream["https://mcp.example.test/mcp"] = [
+			{ name: "read", annotations: { readOnlyHint: true } },
+			{ name: "wipe", annotations: { destructiveHint: true } },
+			{
+				name: "derive",
+				annotations: { readOnlyHint: false, destructiveHint: false },
+			},
+			{ name: "plain", annotations: {} },
+			"bare",
+		];
+		await handle(host, addNotion().interaction as never);
+		const description = await host.hold("notion-wipe", {
+			kind: "order",
+			id: "7",
+		});
+		expect(String(description)).toContain("notion-wipe");
+		expect(String(description)).toContain("kind order, id 7");
+		expect(await host.hold("notion-derive", {})).toBeDefined();
+		for (const name of ["read", "plain", "bare"])
+			expect(await host.hold(`notion-${name}`, {})).toBeUndefined();
+		expect(await host.hold("shell", {})).toBeUndefined();
+		expect(
+			await host.context.services
+				.get(CONNECTORS)
+				.resolve("roundtable-conn-notion"),
+		).toMatchObject({ hints: { "notion-wipe": { destructiveHint: true } } });
+	});
+
+	test("forgets a removed connector's hints", async () => {
+		const host = await boot({});
+		cf.upstream["https://mcp.example.test/mcp"] = [
+			{ name: "wipe", annotations: { destructiveHint: true } },
+		];
+		await handle(host, addNotion().interaction as never);
+		expect(await host.hold("notion-wipe", {})).toBeDefined();
+		await host.context.services.get(CONNECTORS).remove("notion");
+		expect(await host.hold("notion-wipe", {})).toBeUndefined();
+	});
+
 	test("a connector added before a restart is read again at boot", async () => {
 		const first = await boot({});
 		await handle(first, addNotion().interaction as never);

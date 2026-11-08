@@ -17,6 +17,7 @@ import { setLocale } from "../i18n/index.ts";
 import { contactsOf } from "../identity/identity-view.ts";
 import { NotLinkedError } from "../kernel/errors.ts";
 import { setTimeZone } from "../kernel/time.ts";
+import { refuseYoloOverrides } from "../plugin-api/holds.ts";
 import type {
 	HostEnv,
 	LinkedSessions,
@@ -232,6 +233,10 @@ export class Linkage {
 		);
 		const { routes, channels } = this.registry;
 		this.sessions = linkSessions(this.registry);
+		refuseYoloOverrides(
+			this.registry.holdRules,
+			this.#options.autonomy?.yolo.allow ?? [],
+		);
 		this.events.link(this.registry.handlers);
 		const identity = services.find(IDENTITY);
 		this.router = new ChannelRouter({

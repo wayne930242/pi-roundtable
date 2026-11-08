@@ -6,6 +6,7 @@ import type { ApprovedBy } from "../../interactions/prompts.ts";
 import { type Autonomy, DEFAULT_AUTONOMY } from "../../modes/autonomy.ts";
 import type { ConversationModes } from "../../modes/conversation-modes.ts";
 import { YOLO_CARDED_SHELL_CLASSES } from "../../modules/host-shell/shell-policy.ts";
+import { YOLO_NEVER_CLASS } from "../../plugin-api/holds.ts";
 import type { PiAgentRuntimeOptions } from "../runtime-types.ts";
 import type { AutoApprover } from "./confirmation-gate.ts";
 import type { SpeakerRef } from "./gate-refusals.ts";
@@ -73,6 +74,8 @@ export function yoloApprover(seams: YoloSeams): AutoApprover {
 	const card = new Set(autonomy.yolo.card);
 	const carded = new Set(YOLO_CARDED_SHELL_CLASSES);
 	const approves = (id: string) => {
+		// A `yolo: "never"` rule's call, which no configuration lets through.
+		if (id.endsWith(`.${YOLO_NEVER_CLASS}`)) return false;
 		if (card.has(id) || card.has(ruleOf(id))) return false;
 		// A rule that reports classes has opted in; one that reports none is approved only by name.
 		if (unclassed(id)) return allow.has(id);

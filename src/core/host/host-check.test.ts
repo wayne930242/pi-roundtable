@@ -347,3 +347,44 @@ describe("Roundtable.check", () => {
 		});
 	});
 });
+
+describe("a hold rule yolo never approves", () => {
+	const hints: RoundtablePlugin = {
+		name: "hints-plugin",
+		setup: () => ({
+			holdRules: [{ name: "hints", yolo: "never", describe: () => undefined }],
+		}),
+	};
+	const autonomy = (allow: string[], card: string[] = []) => ({
+		yolo: {
+			allow,
+			card,
+			questionGraceMs: 30_000,
+			timeoutCardGraceMs: 60_000,
+		},
+		longRunningMaxMs: 1_800_000,
+	});
+
+	test.each([
+		["its name", ["hints"]],
+		["one of its classes", ["shell.push", "hints.read"]],
+	])("refuses a config whose yolo.allow names %s", async (_label, allow) => {
+		const refused = new Roundtable(options({ autonomy: autonomy(allow) }), [
+			hints,
+		]);
+		await expect(refused.check()).rejects.toThrow(
+			/autonomy\.yolo\.allow names hints.*never approves/s,
+		);
+		const ran = new Roundtable(options({ autonomy: autonomy(allow) }), [hints]);
+		hosts.push(ran);
+		await expect(ran.run()).rejects.toThrow(/never approves/);
+	});
+
+	test("accepts a config that allows other rules, or cards this one", async () => {
+		const report = await new Roundtable(
+			options({ autonomy: autonomy(["shell.rm"], ["hints"]) }),
+			[hints],
+		).check();
+		expect(report.plugins).toContain("hints-plugin");
+	});
+});

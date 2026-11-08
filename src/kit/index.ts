@@ -210,6 +210,7 @@ export type {
 	CardLimits,
 	InterimPosterOptions,
 	McpEndpoint,
+	McpToolHints,
 	PromptSlot,
 	VirtualServer,
 } from "./worker.ts";

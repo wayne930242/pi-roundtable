@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `HoldRule.yolo: "never"` marks a hold rule whose calls yolo mode never approves, whatever the configuration says: its calls carry the class `<rule>.yolo-never`, which the yolo approver always cards, and the host refuses to start when `autonomy.yolo.allow` names the rule or one of its classes (`RoundtableOptions.autonomy`, which `defineRoundtable` fills from `autonomy`). An unattended turn still fails a held call closed.
+- `VirtualServer.hints` (`McpToolHints` in `pi-roundtable/kit`) lists each tool's MCP safety hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) by tool name. It is optional; `mcpExtension` ignores it.
+
 ## [0.38.1] - 2026-11-08
 
 ### Fixed

@@ -374,6 +374,43 @@ describe("yolo still asks on a card", () => {
 		);
 	});
 
+	describe("a rule yolo never approves", () => {
+		const hints: HoldRule = {
+			name: "hints",
+			yolo: "never",
+			describe: (tool) => (tool === "wipe" ? "wipe the thing" : undefined),
+		};
+		const wipe = (gate: ConfirmationGate, card = cards()) =>
+			gate
+				.decide("wipe", {}, { prompts: card.prompts, asker: "guide" }, inTurn)
+				.then((result) => ({ result, card }));
+
+		test("a yolo owner turn gets a card, whatever the config allows", async () => {
+			for (const allow of [[], ["hints"], ["hints.yolo-never"]]) {
+				const { gate, mode } = room({
+					holds: holdChain([hints]),
+					autonomy: { allow },
+				});
+				const { result, card } = await wipe(gate);
+				expect(mode.approvals).toEqual([]);
+				expect(result.approvedBy).toBeUndefined();
+				expect(card.asked).toBe(1);
+			}
+		});
+
+		test("an unattended turn, which has no card, fails closed", async () => {
+			const { gate, mode } = room({
+				holds: holdChain([hints]),
+				speaker: { ...OWNER_SPEAKER, principalId: SYSTEM_PRINCIPAL },
+			});
+			const result = await gate.decide("wipe", {}, undefined, inTurn);
+			expect(mode.approvals).toEqual([]);
+			expect(result.approvedBy).toBeUndefined();
+			expect(result.refused).toBe("held");
+			expect(result.reason).toBeDefined();
+		});
+	});
+
 	test("a speaker below the owner", async () => {
 		await carded({ speaker: { ...OWNER_SPEAKER, tier: "member" } });
 	});

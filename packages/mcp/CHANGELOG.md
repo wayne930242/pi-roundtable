@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `mcpConnectors` holds a call to a connector's tool whose server marks it `destructiveHint: true` or `readOnlyHint: false` (rule `mcp-hints`; its card names the tool, the server, and the call's `kind` and `id` when it has them). A tool that declares neither hint, or no hints at all, runs unasked, and yolo mode never approves a held call (`HoldRule.yolo`). `resolveVirtualServer` keeps each tool's boolean hints from ContextForge's `annotations`; ContextForge writes them when a tool is created, so a connector added before its upstream declared hints has to be added again. `ConnectorMessages.toolHintHold` words the card.
+
 ## [0.38.1] - 2026-11-08
 
 - Release in lockstep with pi-roundtable 0.38.1 (a quote in one's own app bubble is readable in every look; a list a model sends as JSON text reaches a tool as the list, so `helper_end` by name works); no package-specific behavior changes.

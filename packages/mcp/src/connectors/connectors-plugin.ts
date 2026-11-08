@@ -21,6 +21,7 @@ import {
 	resolveVirtualServer,
 } from "./contextforge.ts";
 import { type ConnectorMessages, connectorMessages } from "./messages.ts";
+import { toolHintsHoldRule } from "./tool-hints.ts";
 
 /** One token per process, valid for a year; every restart mints a fresh one. */
 const TOKEN_TTL_SECONDS = 365 * 24 * 3600;
@@ -124,7 +125,9 @@ function checkOptions({ contextForge }: McpConnectorsOptions): string {
 /**
  * The owner's MCP connectors: ContextForge holds each upstream server and its token, a table
  * holds what the host needs to route to it, and `/<root> connector` adds and removes them.
- * Provides `CONNECTORS`.
+ * Provides `CONNECTORS`. Holds a call to a tool its server marks `destructiveHint: true` or
+ * `readOnlyHint: false` (rule `mcp-hints`, which yolo mode never approves); a tool that declares
+ * neither runs unasked.
  */
 export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 	const url = checkOptions(options);
@@ -144,6 +147,13 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 			const admin = new ContextForgeAdmin(url, token, fetch, text);
 			const resolve = (name: string) =>
 				resolveVirtualServer(url, token, name, fetch, text);
+			// The servers a host resolves itself, latest by name; the registry's are its own.
+			const resolved = new Map<string, VirtualServer>();
+			const resolveForHost = async (name: string) => {
+				const server = await resolve(name);
+				resolved.set(server.name, server);
+				return server;
+			};
 			const registry = ConnectorRegistry.attach(database(), {
 				admin,
 				resolve,
@@ -162,7 +172,7 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				servers: () => registry.servers(),
 				profileSources: () => registry.profileSources(),
 				token,
-				resolve,
+				resolve: resolveForHost,
 				admin: {
 					gateways: () => admin.gateways(),
 					servers: () => admin.servers(),
@@ -171,7 +181,14 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 			});
 			// Nothing is added but what preflight reads.
 			load = () => registry.load();
-			return {};
+			return {
+				holdRules: [
+					toolHintsHoldRule({
+						servers: () => [...registry.servers(), ...resolved.values()],
+						messages: text,
+					}),
+				],
+			};
 		},
 	});
 }

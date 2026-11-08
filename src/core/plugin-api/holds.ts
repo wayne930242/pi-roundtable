@@ -74,6 +74,13 @@ export type HoldDescription =
 export interface HoldRule {
 	name: string;
 	/**
+	 * `"never"` marks a rule whose held calls yolo mode never approves, whatever the configuration
+	 * says. Its calls carry the class `<name>.yolo-never` (the classes it reports are ignored), which
+	 * the yolo approver always cards, and the host refuses to start when `autonomy.yolo.allow` names
+	 * the rule or one of its classes.
+	 */
+	yolo?: "never";
+	/**
 	 * Whether the rule stands for other rules' calls, as the precheck scripts' does, and may report
 	 * their ids in `holdClasses`. Any other rule may report only ids that start with its own name
 	 * and a dot. A relay's calls also carry `<name>.relay`, so `autonomy.yolo.card` naming the relay
@@ -153,6 +160,29 @@ export interface HoldRule {
 	 * taken to name approvers for every tool.
 	 */
 	mayName?(tool: string): boolean;
+}
+
+/** The class a `yolo: "never"` rule's calls carry, after `<rule>.`; yolo mode never approves it. */
+export const YOLO_NEVER_CLASS = "yolo-never";
+
+/**
+ * Refuses a yolo configuration that would approve a call of a `yolo: "never"` rule: `allow` naming
+ * the rule or one of its classes. Naming it in `card` is harmless and passes.
+ */
+export function refuseYoloOverrides(
+	rules: readonly HoldRule[],
+	allow: readonly string[],
+): void {
+	for (const rule of rules) {
+		if (rule.yolo !== "never") continue;
+		const named = allow.find(
+			(id) => id === rule.name || id.startsWith(`${rule.name}.`),
+		);
+		if (named !== undefined)
+			throw new PluginError(
+				`autonomy.yolo.allow names ${named}, but hold rule ${rule.name} is one yolo mode never approves. Remove ${named} from autonomy.yolo.allow.`,
+			);
+	}
 }
 
 /** The description of a held call with its hold classes. */
@@ -394,6 +424,7 @@ function validClasses(
 	rule: HoldRule,
 	names: ReadonlySet<string>,
 ): readonly string[] {
+	if (rule.yolo === "never") return [`${rule.name}.${YOLO_NEVER_CLASS}`];
 	if (!Array.isArray(reported) || reported.length === 0) return [rule.name];
 	const ids = reported as unknown[];
 	if (!ids.every((id): id is string => isClassOf(id, rule, names)))

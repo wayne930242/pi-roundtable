@@ -40,6 +40,28 @@ describe("yoloApprover", () => {
 		...(holdClasses ? { holdClasses } : {}),
 	});
 
+	test("never answers for a class marked yolo-never, even one the config allows", () => {
+		const allowing = yoloApprover({
+			modes: modes(),
+			autonomy: {
+				yolo: {
+					allow: ["hints", "hints.yolo-never"],
+					card: [],
+				},
+			},
+			channel: ROOM,
+			speaker: OWNER_SPEAKER,
+		});
+		expect(
+			allowing(call(["hints.yolo-never"]), { speakerOnly: false }),
+		).toBeUndefined();
+		expect(
+			allowing(call(["shell.push", "hints.yolo-never"]), {
+				speakerOnly: false,
+			}),
+		).toBeUndefined();
+	});
+
 	test("answers for classes it allows only", () => {
 		expect(approver()(call(["shell.push"]), { speakerOnly: false })?.auto).toBe(
 			"yolo",
