@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { HostStoppingError } from "../kernel/errors.ts";
-import { silentLogger } from "../kernel/log.ts";
+import { type Logger, silentLogger } from "../kernel/log.ts";
 import type { RoundtablePlugin, Service } from "../plugin-api/plugin.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
 
@@ -97,12 +97,12 @@ function reporting(options: Partial<RoundtableOptions> = {}) {
 				name: "fake",
 				setup: (context) => {
 					finishing = () =>
-						context.queue.finishing(() =>
+						context.queue.finishing?.(() =>
 							context.queue.run("fake:room", async () => {
 								log.push(`report, closed ${context.queue.closed}`);
 								return "reported";
 							}),
-						);
+						) ?? Promise.reject(new Error("the queue has no finishing"));
 					return {
 						services: [
 							{
@@ -127,6 +127,84 @@ function reporting(options: Partial<RoundtableOptions> = {}) {
 		},
 	};
 }
+
+describe("a service told the drain begins", () => {
+	test("hears beginDrain once, before it is polled for busy work, and a failing one does not stop the shutdown", async () => {
+		const log: string[] = [];
+		const roundtable = host([
+			plugin("desk", [
+				{
+					name: "desk",
+					beginDrain: () => void log.push("begin"),
+					busy: () => {
+						log.push("busy");
+						return [];
+					},
+				},
+			]),
+			plugin("broken", [
+				{
+					name: "broken",
+					beginDrain: () => {
+						throw new Error("no hook");
+					},
+				},
+			]),
+		]);
+		await roundtable.run();
+		expect(await roundtable.shutdown("SIGTERM")).toBe(0);
+		expect(log.slice(0, 2)).toEqual(["begin", "busy"]);
+		expect(log.filter((entry) => entry === "begin")).toHaveLength(1);
+	});
+});
+
+describe("a report turn that starts during the abort grace", () => {
+	test("is told to stop once the queue is sealed, so the shutdown does not run it out", async () => {
+		const stopped: unknown[] = [];
+		const logger: Logger = {
+			...silentLogger(),
+			warn: (fields: unknown) => void stopped.push(fields),
+			child: () => logger,
+		};
+		let busy = ["fake:room"];
+		const roundtable = host(
+			[
+				{
+					name: "fake",
+					setup: (context) => ({
+						services: [
+							{
+								name: "desk",
+								busy: () => busy,
+								abort: () => {
+									setTimeout(() => {
+										busy = [];
+										void context.queue.finishing?.(() =>
+											context.queue.run("fake:room", () => Bun.sleep(300)),
+										);
+									}, 5);
+									return true;
+								},
+							},
+						],
+					}),
+				},
+			],
+			{ logger, drain: { intervalMs: 1, limitMs: 20, abortGraceMs: 60 } },
+		);
+		await roundtable.run();
+		await roundtable.shutdown("SIGTERM");
+		expect(
+			stopped.filter(
+				(fields) =>
+					typeof fields === "object" &&
+					fields !== null &&
+					"channel" in fields &&
+					fields.channel === "fake:room",
+			),
+		).toHaveLength(1);
+	});
+});
 
 describe("work that ends during the drain", () => {
 	test("delivers its report through the queue although the host is shutting down", async () => {

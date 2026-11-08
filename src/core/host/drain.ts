@@ -57,6 +57,23 @@ export async function drainWork(
 	return left;
 }
 
+/** Tells each service the drain begins, as `Service.beginDrain` says; a failure is logged and the rest are still told. */
+export function beginServicesDrain(
+	services: readonly Pick<Service, "name" | "beginDrain">[],
+	logger: Logger,
+): void {
+	for (const service of services) {
+		try {
+			service.beginDrain?.();
+		} catch (error) {
+			logger.error(
+				{ service: service.name, err: error },
+				"the service could not be told the drain begins",
+			);
+		}
+	}
+}
+
 /**
  * Tells each service that still has work to stop it, as `Service.abort` says; a failure is
  * logged and the rest are still told. Whether any service told some work.

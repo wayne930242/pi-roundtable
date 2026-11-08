@@ -431,9 +431,10 @@ export interface QueuePort {
 	 * Runs `task` as the delivery of work the shutdown drain waits for, such as a coding worker's
 	 * report: a queue task it starts, and what that task awaits, is admitted although the host is
 	 * shutting down, `closed` reads false there, and the drain waits for it as for any task. It
-	 * ends when the drain does; after that the task is refused as any other.
+	 * ends when the drain does; after that the task is refused as any other. Absent on a host that
+	 * predates it: call `task` directly then.
 	 */
-	finishing<T>(task: () => Promise<T>): Promise<T>;
+	finishing?<T>(task: () => Promise<T>): Promise<T>;
 	/** Tasks of the channel running or waiting. */
 	size(channel: ChannelKey): number;
 	/** Channels with a task running or waiting. */

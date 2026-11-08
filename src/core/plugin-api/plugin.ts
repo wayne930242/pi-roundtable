@@ -46,14 +46,15 @@ export interface Service {
 	name: string;
 	start?(): Promise<void> | void;
 	/**
-	 * Starts once every service's `start` and the HTTP listeners are up, without holding up the
-	 * boot: a failure is logged and heard as `serviceStarted` with `failed`, never fatal, and the
-	 * other services' background starts still run. `stop` runs for it like for any started service.
+	 * Starts once every service's `start` and the HTTP listeners are up, without holding up the boot: a failure is logged, heard
+	 * as `serviceStarted` with `failed`, never fatal, and the other background starts still run. `stop` runs for it as for any service.
 	 */
 	startInBackground?(): Promise<void>;
 	stop?(): Promise<void> | void;
 	/** Work still running or waiting, one entry each; the shutdown drain waits until every list is empty. */
 	busy?(): string[];
+	/** As the shutdown begins to wait for work, before the drain: from here on the service should start no work of its own. */
+	beginDrain?(): void;
 	/** At the drain limit, tells the work `busy` lists to stop gently, before the abort grace and `stop`; whether it told any. */
 	abort?(): boolean;
 }

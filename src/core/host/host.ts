@@ -21,6 +21,7 @@ import type { ToolTierTable } from "../runtime/tool-tiers.ts";
 import type { ShellEnvConfig } from "../shared/child-env.ts";
 import {
 	abortServices,
+	beginServicesDrain,
 	type DrainOptions,
 	drainWork,
 	stopTurns,
@@ -281,6 +282,13 @@ export class Roundtable {
 		// Turns already running finish, but nothing new starts from here on, whoever asks.
 		logger.info({ signal }, "shutting down once idle");
 		this.#link.queue.close();
+		beginServicesDrain(this.#started, logger);
+		const stopQueuedTurns = () =>
+			stopTurns(
+				this.#link.queue.busy(),
+				(channel) => this.#link.router?.stop(channel as ChannelKey) ?? false,
+				logger,
+			);
 		const left = await drainWork({
 			...drain,
 			busy: () => [
@@ -290,17 +298,16 @@ export class Roundtable {
 			// A turn the limit finds still running is stopped, as the owner's stop would, and a
 			// service is told to stop its own work before it is stopped.
 			abort: () => {
-				const turns = stopTurns(
-					this.#link.queue.busy(),
-					(channel) => this.#link.router?.stop(channel as ChannelKey) ?? false,
-					logger,
-				);
+				const turns = stopQueuedTurns();
 				const services = abortServices(this.#started, logger);
 				return turns || services;
 			},
 		});
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
+		// A report turn that started during the abort grace is stopped too, so the teardown does not wait for it.
+		if (left.length > 0 && this.#link.queue.busy().length > 0)
+			stopQueuedTurns();
 		if (left.length > 0) {
 			logger.warn(
 				{ aborted: left },
