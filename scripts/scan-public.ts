@@ -176,8 +176,9 @@ const CJK_DIRECTORIES = [
 // The character catalog matches Chinese role words when it suggests a look, and its test checks that matching.
 const CJK_FILES = [
 	"README.zh-TW.md",
-	// The web package's built-in zh-TW catalog, its webhooks part, and its test, which names the terms the catalog must use.
+	// The web package's built-in zh-TW catalog, its parts, and its test, which names the terms the catalog must use.
 	"packages/web/src/i18n/zh-tw.ts",
+	"packages/web/src/i18n/zh-tw-rows.ts",
 	"packages/web/src/i18n/zh-tw-webhooks.ts",
 	"packages/web/src/i18n/zh-tw.test.ts",
 	"site/astro.config.mjs",

@@ -44,7 +44,7 @@
 	"packages/web/web/host-pages.test.tsx": 910,
 	"packages/web/web/lib/host-style.ts": 512,
 	"packages/web/web/lib/menu-items.ts": 511,
-	"packages/web/web/lib/rooms.ts": 931,
+	"packages/web/web/lib/rooms.ts": 927,
 	"packages/web/web/menus.test.tsx": 980,
 	"packages/web/web/pages/workspace.tsx": 1614,
 	"packages/web/web/rooms.test.ts": 1160,
