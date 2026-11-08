@@ -49,6 +49,8 @@ export const PUBLIC_NAME_ALLOWLIST: NameAllowlist = {
 	],
 	"bun.lock": [spell("type", "safe"), spell("j", "ev")],
 	".github/PACKAGE-RELEASES.md": [OWNER_HANDLE],
+	// The migration baseline builds the connectors plugin, whose one required option names the gateway.
+	"scripts/migration-ids.ts": [spell("context", "forge")],
 	// Workspace metadata keeps the same public attribution as the root package.
 	...Object.fromEntries(
 		[
