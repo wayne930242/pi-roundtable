@@ -813,7 +813,7 @@ describeDb("the owner app over a real host", () => {
 		const tab = await Client.open(app, { "x-actor": "owner" });
 		if (!tab) throw new Error("the owner was refused");
 		const ready = await tab.take(ofType("ready"));
-		expect(Object.entries(ready.uploads)).toEqual([["maxBytes", 104857600]]);
+		expect(ready.uploads).toEqual({ maxBytes: 104857600, perMessage: 4 });
 		tab.send({
 			type: "send",
 			id: "b1",
