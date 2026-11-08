@@ -14,6 +14,6 @@ A new migration needs its id recorded: `bun scripts/migration-ids.ts --record` (
 
 - `servicePair` in `pi-roundtable/testing` wraps a service in a Proxy, so a class with `#private` fields (for example `PgScheduleStore`) throws "Cannot access invalid private field" through it. Pass bound methods or a closure-based object.
 - A database test must not leave a host-migrated table dropped: the shared migration ledger makes later `testHost` boots skip recreating it.
-- Keep a PostgreSQL data directory outside the repository, for example `~/.cache/pi-roundtable-<task>/pgdata`. The public scan in `scripts/workspaces.test.ts` walks the whole tree, gitignored directories included, and fails on files a running server creates and deletes.
-- Run `initdb` and start the server in separate steps, never in one parallel tool batch: the server needs the data directory first.
+- A `bun test` run starts its own throwaway PostgreSQL (`scripts/test-preload.ts`, wired by `bunfig.toml` at the root and in each package with database tests), so database suites run locally without `ROUNDTABLE_TEST_DATABASE_URL`; it needs `initdb` and `postgres` on PATH or in `PG_BIN`, and costs about 2 s per run. A new package with a database test needs the same `bunfig.toml` (`scripts/test-preload.test.ts` checks). Set `ROUNDTABLE_TEST_DATABASE_URL` to your own server for a faster loop; CI does.
+- A run killed with SIGKILL leaves its server and temp directory behind; `bun scripts/test-db-sweep.ts` stops and removes them.
 - A gate script that runs several checks ends with an explicit `GATE-OK` or `GATE-FAILED` line. Printing only the tail once hid a lint failure that was then pushed.

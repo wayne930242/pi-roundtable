@@ -3,3 +3,6 @@
 linker = "hoisted"
 
 [test]
+# Starts a throwaway PostgreSQL when the run has no test database. Bun reads only the bunfig.toml
+# of the directory it runs from, so each package with database tests repeats this in its own.
+preload = ["./scripts/test-preload.ts"]

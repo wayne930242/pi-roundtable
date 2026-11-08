@@ -1,0 +1,38 @@
+---
+name: Set up bun
+description: >-
+  Installs bun from the npm registry with retries, and falls back to oven-sh/setup-bun, which downloads from
+  GitHub releases. Two origins keep one 5xx from failing a run, as a 504 once failed a tag's publish.
+inputs:
+  bun-version:
+    description: The exact bun version.
+    required: true
+  no-cache:
+    description: Pass "true" to keep the setup-bun fallback from restoring or saving a cache (a job that publishes).
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - id: npm
+      continue-on-error: true
+      shell: bash
+      env:
+        BUN_VERSION: ${{ inputs.bun-version }}
+      run: |
+        prefix="$RUNNER_TEMP/bun-npm"
+        for attempt in 1 2 3; do
+          if npm install --global --prefix "$prefix" "bun@$BUN_VERSION" --no-audit --no-fund \
+            && [[ "$("$prefix/bin/bun" --version)" == "$BUN_VERSION" ]]; then
+            echo "$prefix/bin" >> "$GITHUB_PATH"
+            exit 0
+          fi
+          echo "::warning::bun $BUN_VERSION from npm failed (attempt $attempt)"
+          rm -rf "$prefix"
+          sleep $((attempt * 10))
+        done
+        exit 1
+    - if: steps.npm.outcome == 'failure'
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: ${{ inputs.bun-version }}
+        no-cache: ${{ inputs.no-cache }}
