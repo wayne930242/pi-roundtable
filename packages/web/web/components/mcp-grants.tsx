@@ -13,6 +13,7 @@ import { toast } from "../lib/toast.ts";
 import { useReloadable } from "../lib/use-reloadable.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";
+import { SecretUrlDialog } from "./secret-url-dialog.tsx";
 import { Select } from "./select.tsx";
 import { Badge, Empty, Failure, Loading } from "./states.tsx";
 
@@ -23,51 +24,6 @@ const NEW_BUNDLE = " new";
 
 const labelsOf = (ids: readonly string[], operations: Operations) =>
 	ids.map((id) => operations.find((o) => o.id === id)?.label ?? id).join(", ");
-
-/** A bundle URL, shown this once with a copy button. */
-function UrlDialog(props: {
-	shown?: { bundle: string; url: string };
-	onClose(): void;
-}) {
-	return (
-		<Dialog
-			open={props.shown !== undefined}
-			title={t("MCP URL of {bundle}", { bundle: props.shown?.bundle ?? "" })}
-			onClose={props.onClose}
-		>
-			<div className="stack">
-				<p>
-					{t(
-						"This URL is the access credential and is shown only this once. Add a remote MCP server in the AI client and paste it; no separate token is needed.",
-					)}
-				</p>
-				<input
-					readOnly
-					aria-label={t("MCP URL")}
-					className="mcp-url"
-					value={props.shown?.url ?? ""}
-					onFocus={(e) => e.target.select()}
-				/>
-				<div className="actions">
-					<button
-						type="button"
-						className="secondary"
-						onClick={() => {
-							void navigator.clipboard
-								?.writeText(props.shown?.url ?? "")
-								.then(() => toast(t("Copied")));
-						}}
-					>
-						{t("Copy")}
-					</button>
-					<button type="button" onClick={props.onClose}>
-						{t("Done")}
-					</button>
-				</div>
-			</div>
-		</Dialog>
-	);
-}
 
 function OperationChoice(props: {
 	operations: Operations;
@@ -498,8 +454,19 @@ export function McpGrants() {
 					)}
 				</p>
 			</Confirm>
-			<UrlDialog
-				{...(shownUrl ? { shown: shownUrl } : {})}
+			<SecretUrlDialog
+				{...(shownUrl
+					? {
+							shown: {
+								title: t("MCP URL of {bundle}", { bundle: shownUrl.bundle }),
+								note: t(
+									"This URL is the access credential and is shown only this once. Add a remote MCP server in the AI client and paste it; no separate token is needed.",
+								),
+								label: t("MCP URL"),
+								url: shownUrl.url,
+							},
+						}
+					: {})}
 				onClose={() => setShownUrl(undefined)}
 			/>
 		</section>

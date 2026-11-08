@@ -25,9 +25,8 @@ import {
 	createAuthenticator,
 	WEB_CONSOLE_IDENTITY,
 } from "./auth/authenticator.ts";
-import { discoverProvider, OidcLogin } from "./auth/oidc.ts";
-import { loadSessionKey } from "./auth/session-key.ts";
 import { WebSessions } from "./auth/sessions.ts";
+import { startOidc } from "./auth/start-oidc.ts";
 import {
 	type AccessView,
 	ConsoleApi,
@@ -39,14 +38,16 @@ import {
 	protectedDirs,
 	type ResolvedOptions,
 	resolveOptions,
-	showableRoots,
 	type WebConsoleOptions,
-	workspaceRootsOf,
 } from "./options.ts";
 import { loadVapid } from "./push/vapid.ts";
 import { accessVisitors, consoleVisitors } from "./visitors.ts";
 import { hostIcon, viewerOf, WEB_APP, WebAppRegistry } from "./web-app.ts";
 import { checkRegistered } from "./web-plugin-checks.ts";
+import { mountWebhooks } from "./webhooks/mount.ts";
+import { WebhookStore } from "./webhooks/store.ts";
+import { type WebhooksSlot, webhookTools } from "./webhooks/tools.ts";
+import { showableRoots, workspaceRootsOf } from "./workspace-roots.ts";
 
 /** How often sessions past their limit are deleted: daily. */
 const SESSION_SWEEP_MS = 86_400_000;
@@ -66,8 +67,10 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	const { auth } = settings;
 	const rooms = settings.panes.includes("rooms");
 	const schedules = settings.panes.includes("schedules");
+	// The agents' webhook tools are defined with the plugin; they reach the webhooks once it is set up.
+	const slot: WebhooksSlot = {};
 	const migrations = [
-		...(rooms ? APP_MIGRATIONS : []),
+		...(rooms ? [...APP_MIGRATIONS, WebhookStore.migration] : []),
 		...(auth.mode === "oidc"
 			? [WebSessions.migration, WebSessions.jsonValuesMigration]
 			: []),
@@ -76,6 +79,7 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 		name: "web-console",
 		...(migrations.length > 0 ? { migrations } : {}),
 		provides: rooms ? [WEB_APP, ROOM_LAYOUT] : [WEB_APP],
+		...(rooms ? { tools: webhookTools(slot) } : {}),
 		// `none` and `password` speak for one principal through this identity; a verifier or a sign-in brings its own.
 		...(auth.mode !== "none" && auth.mode !== "password"
 			? {}
@@ -97,13 +101,17 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 				? [MEMORY]
 				: []),
 		],
-		setup: (context) => build(settings, context),
+		setup: (context) => build(settings, context, slot),
 	});
 }
 
 type Context = Parameters<RoundtablePlugin["setup"]>[0];
 
-async function build(settings: ResolvedOptions, context: Context) {
+async function build(
+	settings: ResolvedOptions,
+	context: Context,
+	slot: WebhooksSlot,
+) {
 	const { services, queue, logger, env } = context;
 	// What the other plugins register their rooms, pages and steps in: sealed when the web service starts.
 	const webApp = new WebAppRegistry(settings.surface);
@@ -456,7 +464,23 @@ async function build(settings: ResolvedOptions, context: Context) {
 		look: settings.look,
 		...(settings.presentation ? { presentation: settings.presentation } : {}),
 		api,
-		...(app ? { app } : {}),
+		...(app
+			? {
+					app,
+					webhooks: mountWebhooks({
+						database: context.database(),
+						directory: services.get(AGENTS).directory,
+						surface: app.surface,
+						origin: settings.webhookOrigin,
+						mount: settings.mount,
+						...(settings.presentation
+							? { presentation: settings.presentation }
+							: {}),
+						slot,
+						logger,
+					}),
+				}
+			: {}),
 		gate,
 		surface: settings.surface,
 		subscribe: (listener) => {
@@ -506,56 +530,4 @@ async function build(settings: ResolvedOptions, context: Context) {
 		),
 		dashboard: [`Web console: ${settings.origin}${settings.mount}/`],
 	};
-}
-
-interface OidcParts {
-	sessions: WebSessions;
-	settings: ResolvedOptions;
-	identify: Parameters<typeof createAuthenticator>[0]["identify"];
-	logger: Context["logger"];
-	events: Context["events"];
-	ended(id: string): void;
-}
-
-/** Reads the provider's discovery document, the client secret and the session key, and makes the sign-in flow. */
-async function startOidc(
-	auth: Extract<ResolvedOptions["auth"], { mode: "oidc" }>,
-	parts: OidcParts,
-): Promise<OidcLogin> {
-	const { settings, logger } = parts;
-	let clientSecret: string | undefined;
-	if (auth.clientSecretEnv) {
-		clientSecret = process.env[auth.clientSecretEnv];
-		if (!clientSecret)
-			throw new Error(
-				`web-console: auth.clientSecretEnv names ${auth.clientSecretEnv}, which is not set`,
-			);
-	}
-	return new OidcLogin({
-		settings: auth,
-		metadata: await discoverProvider(auth),
-		...(clientSecret ? { clientSecret } : {}),
-		sessions: parts.sessions,
-		key: loadSessionKey(settings.dataDir, logger),
-		origin: settings.origin,
-		mount: settings.mount,
-		surface: settings.surface,
-		routing: settings.routing,
-		title: settings.title,
-		presentation: settings.presentation,
-		identify: parts.identify,
-		onSignIn: (info) =>
-			parts.events.action?.({
-				kind: "sign-in",
-				actor: info.speakerId,
-				principalId: info.principalId,
-				ok: true,
-				at: new Date(),
-			}),
-		onEnded: parts.ended,
-		...(auth.onSessionVerified
-			? { onSessionVerified: auth.onSessionVerified }
-			: {}),
-		logger,
-	});
 }

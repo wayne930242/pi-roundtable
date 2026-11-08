@@ -25,6 +25,7 @@ import { useConnection } from "../lib/socket.ts";
 import { PageCharacter } from "./character.tsx";
 import { Icon } from "./icons.tsx";
 import { hasThreadLink, MessageMarkdown } from "./message-markdown.tsx";
+import { Badge } from "./states.tsx";
 
 // An internal note's row and its styles, a knight's line that it archived its temp knights, a
 // message between agents, and an owner's message sent during a turn, are read when the first is shown.
@@ -188,7 +189,9 @@ export const MessageRow = memo(function MessageRow(props: {
 					{...(props.header && agent ? avatarPress : {})}
 				>
 					{props.header ? (
-						owner ? (
+						message.kind === "integration" ? (
+							<Icon name="connectors" size={32} />
+						) : owner ? (
 							<Suspense fallback={null}>
 								<OwnerPicture
 									picture={
@@ -214,6 +217,9 @@ export const MessageRow = memo(function MessageRow(props: {
 				{props.header ? (
 					<div className="message-meta">
 						<strong>{message.author}</strong>
+						{message.kind === "integration" ? (
+							<Badge>{t("Webhook")}</Badge>
+						) : null}
 						<time dateTime={message.at}>
 							{clock(message.at, props.timeZone)}
 						</time>

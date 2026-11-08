@@ -185,6 +185,7 @@ export function serverMessages(): Map<string, string> {
 			"HttpError",
 			"LayoutRefusal",
 			"UploadRefusal",
+			"WebhookError",
 			"bad",
 			"message",
 			"say",

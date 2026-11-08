@@ -81,6 +81,13 @@ agent 都以組合出來的角色呈現。
 頁面有 Modern 與 Camelot 兩種外觀（Camelot 白天是羊皮紙、夜晚是夜間城堡，配上金色線條、盾形外框和蠟封），各有淺色與深色，在 Settings 依裝置選擇。
 `appearance.look` 設定 host 的預設外觀。
 
+### 傳入 Webhook
+
+正式騎士的聊天室可以接收外部的 JSON 發文，就像 Discord Webhook 發在它的頻道一樣：以 `{ "content": "...", "username": "..." }`（或任何 JSON，會顯示成程式碼區塊；最多 16 KB、每分鐘 30 則）`POST <mountPath>/hooks/<id>/<token>`，內容會標上 **Webhook** 顯示在聊天室，並以不可信輸入啟動騎士的回報。
+這個路徑不需要登入，所以前面的登入 proxy 必須放行 `<mountPath>/hooks/`；`webhookOrigin` 可為網址指定另一個公開主機名稱。
+owner 在騎士設定的 **更多** 分頁建立與撤銷 Webhook，騎士自己則用 `webhook_create`、`webhook_list` 和 `webhook_revoke`，只限自己的聊天室。
+網址只顯示一次，只儲存 token 的雜湊。
+
 ## 安裝到裝置與通知
 
 app 是 PWA：manifest 的範圍限於 mount 路徑，service worker 只快取頁面外殼、不快取資料，圖示可用 `icons.dir` 換掉內建的一組。分頁圖示預設是圓桌的標誌；manifest 與圖示不需登入就能取得，登入頁與連結預覽才有圖示。
@@ -100,6 +107,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `auth` | 必填，或用 `verifier` | `{ mode: "none" }`、`{ mode: "password" }`、`{ mode: "verifier", verifier }` 或 `{ mode: "oidc", ... }`。 |
 | `verifier` | 無 | verifier 模式的簡寫：`cloudflareAccess(...)` 或自訂函式。兩者同時給會出錯。 |
 | `origin` | 必填 | 瀏覽器看到的 scheme 和 host。寫入操作必須帶上完全相同的 `Origin`。 |
+| `webhookOrigin` | `origin` | 傳入 Webhook 網址開頭的 scheme 和 host，用於公開的 Webhook 主機名稱和主控台不同時。 |
 | `ownerId` | 主要 owner | 已棄用：沒有回報身分的 verifier 所代表的 principal。 |
 | `dataDir` | `./data` | host 資料目錄，其中有 `sessions/` 和 `web/`。 |
 | `mountPath` | `/console` | route prefix。 |

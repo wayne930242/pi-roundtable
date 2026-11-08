@@ -61,6 +61,9 @@ test("the page builds with relative URLs only, and every file it names is in the
  * block and its lazy import, the Markdown pass split out so the blocks chunk can reuse it (405
  * bytes gzipped), and the block slots' tokens in the stylesheet (166); pi-better-show's parser,
  * elements and React wrappers are the lazy blocks chunk, which the next test keeps out of the entry.
+ * The 50 bytes after that are a webhook's post in a room (7 bytes over): the message row draws an
+ * `integration` message's author with the shared Badge and a plain icon; the webhooks section
+ * of the knight's sheet is lazy.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -76,7 +79,8 @@ const FIRST_LOAD_BASELINE =
 	50 +
 	150 +
 	150 +
-	600;
+	600 +
+	50;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 

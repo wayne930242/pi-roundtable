@@ -20,7 +20,7 @@ Then only a person whose principal holds the owner role gets in.
 ## Contents
 
 - [Requirements](#requirements) and [Install](#install)
-- [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [pins and folders](#pins-and-folders), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table), [the files pane](#the-files-pane)
+- [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [incoming webhooks](#incoming-webhooks), [pins and folders](#pins-and-folders), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table), [the files pane](#the-files-pane)
 - [Members and the gate](#members-and-the-gate): [who is let in](#who-is-let-in), what each tier sees, and the steps owed before the app opens
 - [Install on a device](#install-on-a-device) and [Notifications](#notifications)
 - [Authentication](#authentication) and the [threat model](#threat-model)
@@ -161,6 +161,17 @@ A knight's temp knights (the helpers it makes with `helper_create`, see the core
 **Clear finished temp knights** is in the room list's menu, a folder's menu and a knight's menu, and is left out when nothing has ended. It archives at once, with no confirmation, and the notice's Undo restores exactly those. A temp knight's own menu has **Archive this temp knight**, with the same notice. When a knight clears its own with `helper_end`, its room shows a line naming them with an Undo. The archive page lists each temp knight right after its knight.
 The routes are `POST api/rooms/archive-finished-helpers` (body `{ "rooms": [<keys>] }` of knights' rooms, at most 500; left out, every knight's; answers `{ "archived": [{ "room", "names" }] }`) and `POST api/rooms/restore-helpers` (body `{ "names": [<names>] }`, at most 500; answers `{ "restored": [<names>] }`; a name that is not a temp knight is refused with `400` and named, and one that is no longer archived is passed over). Both are the owners', like the rest of `api/rooms`. `RoomView.helper` is `{ parent, parentName, origin?, finished? }` on a temp knight's room; `origin` is the room it was made from (a group's room when a member made it during the group's round), present only when that is a room of the app. The cards a temp knight asks show in its `origin` room, else its `parent` room.
 
+
+### Incoming webhooks
+
+A permanent knight's room takes posts from outside, as a Discord webhook's post in its channel does: a CI job or an alert posts JSON to the webhook's URL, the post shows in the room as a message of the kind `integration` (a bubble under the post's author, marked **Webhook**, that counts as unread), and the knight runs a report turn on it (`Webhook "<name>" posted in your channel: …`), which the core treats as untrusted input. Temp knights and groups have no webhooks.
+
+- **The URL** is `<webhookOrigin or origin><mountPath>/hooks/<id>/<token>`. The token is 32 random bytes; only its SHA-256 is stored, it is compared in constant time, and the URL is shown once, when the webhook is made. The path needs no session and no proxy token, so a proxy in front of the console must let `<mountPath>/hooks/` through (or serve it on its own hostname, set as `webhookOrigin`).
+- **A post** is `POST` with a JSON body of at most 16 KB. With `content` (or `text`), a non-blank string of at most 4000 characters, the message is that text, by `username` (at most 80 characters) or else the webhook's name; any other object or array shows as a fenced `json` block, cut to fit. It answers `204`; a body that is not JSON `400`, one too large `413`, another method `405`, more than 30 posts a minute `429`, and an unknown id, a wrong token, a revoked or expired webhook or an archived knight the same bare `404`.
+- **The owner** manages a knight's webhooks in its sheet's **More** tab, or with `GET api/agents/<name>/webhooks` (`{ webhooks: [{ id, name, createdBy, created, lastUsed, expiresAt, once }] }`, never a token), `POST api/agents/<name>/webhooks` with `{ name, expiresInMinutes?, once? }` (answers `201 { webhook, url }`, the URL this once) and `DELETE api/agents/<name>/webhooks/<id>`. All are the owners'.
+- **The knight itself** has the tools `webhook_create { name, expires_in_minutes?, once? }` (answers the URL once), `webhook_list` and `webhook_revoke { id }`, which act only on its own room's webhooks. Each knight may have 10 webhooks that never expire and 20 that do; an expiry is at most 7 days. A `once` webhook is revoked by its first accepted post. The tools tell the knight to keep the URL only in a secret store, such as a GitHub secret or a file of mode 0600.
+
+The webhooks are kept in `web_webhooks` (migration `web-webhooks`).
 
 ### Making and arranging agents
 
@@ -700,6 +711,7 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `auth` | none, `auth` or `verifier` required | How requests are authenticated: `{ mode: "none" }`, `{ mode: "password" }`, `{ mode: "verifier", verifier }` or `{ mode: "oidc", ... }`; its keys are in the next table, and [Authentication](#authentication) explains the modes. |
 | `verifier` | none | Shorthand for `auth: { mode: "verifier", verifier }`: decides whether a request comes from someone your proxy authenticated, and reports who. `cloudflareAccess(...)` is built in; pass your own function to use another proxy. Giving both `auth` and `verifier` throws. |
 | `origin` | none, required | The app's own origin as the browser sees it, such as `https://app.example.com`: scheme and host (and port), no path. Requests that change data must carry it as their `Origin`, the dashboard line links to it, and push derives its default contact from it. |
+| `webhookOrigin` | `origin` | The origin an incoming webhook's URL starts with, when the public hostname for webhooks is not the console's, such as a hostname a proxy serves without its sign-in. The path is still `<mountPath>/hooks/…`. |
 | `ownerId` | the primary owner | Deprecated. The owner's principal id that a request from a verifier reporting no actor stands for. The Notes pane no longer needs it: it shows each owner their own notes. |
 | `dataDir` | `./data` | The host's data directory; the console reads `<dataDir>/sessions`, and the app keeps `web/` (the session key, the VAPID keys, uploaded and reply files) under it. Set it to the `dataDir` of your configuration. |
 | `mountPath` | `/console` | The path the app is served under: one or more segments of letters, digits, `.`, `_`, `~`, and `-`. |

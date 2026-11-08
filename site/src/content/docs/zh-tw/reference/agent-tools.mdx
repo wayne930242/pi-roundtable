@@ -153,4 +153,12 @@ shell 以 host 的使用者身分執行，所以刻意的指令仍讀得到那�
 外掛的工具，帶著它的作者給的 `minTier`。
 見[外掛能新增什麼](/zh-tw/plugins/what-plugins-can-add/)。
 
+web 套件開啟聊天室頁面時，會加上正式騎士的[傳入 Webhook](/zh-tw/plugins/web-package/)工具，只作用在呼叫者自己的聊天室；臨時騎士和群組席位會被拒絕。
+
+| 工具 | 作用 | 最低層級 |
+| --- | --- | --- |
+| `webhook_create` | 為聊天室建立 Webhook，並只回傳一次網址，網址只能放在機密儲存處。永不到期的最多 10 個、會到期的最多 20 個；期限最長 7 天；`once` 會在第一次發文後撤銷。 | `owner` |
+| `webhook_list` | 列出聊天室有效的 Webhook，不會再顯示網址。 | `owner` |
+| `webhook_revoke` | 依 id 撤銷聊天室的一個 Webhook。 | `owner` |
+
 {/* Sources: src/core/agents/agent-tools.ts:20-30, src/core/agents/agent-tools.ts:134-395, src/core/builtin/agent-server.ts:89-96, src/core/modules/skills/skill-tools.ts:16-215, src/core/builtin/skills.ts:23-27, src/core/modules/memory/owner-memory.ts:56-140, src/core/builtin/stores.ts:15-20, src/core/shared/schedule-tools.ts:7-125, src/core/shared/delegate-tool.ts, src/core/builtin/modules.ts:48-64, src/core/modules/notify/notify.ts:1-30, src/core/modules/host-shell/shell-policy.ts:8-16, src/core/modules/host-shell/shell-policy.ts:359-381, src/core/agents/agent-team.ts:100-125, src/core/discord/channel-operations.ts:80-250, src/core/modules/discord-admin/discord-admin.ts:60-255, src/core/discord/owner-discord-access.ts:15-35, src/core/builtin/discord-admin.ts:33-38, src/core/runtime/tool-tiers.ts:12-30, src/core/runtime/extensions/ask-user.ts, src/core/shared/read-attachment-tool.ts, src/core/runtime/extensions/self-compact-guard.ts, src/core/modules/delegation/web-research-worker.ts:14-25, src/core/tool-set.snapshot.json */}

@@ -28,10 +28,11 @@ import { checkRoots, WorkspaceFiles } from "./app/workspace-files.ts";
 import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
 import { ConsoleServer } from "./console-server.ts";
-import { resolveOptions, showableRoots, workspaceRootsOf } from "./options.ts";
+import { resolveOptions } from "./options.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit } from "./verifier.ts";
 import type { Visitor } from "./visitors.ts";
+import { showableRoots, workspaceRootsOf } from "./workspace-roots.ts";
 
 const hex = (data: ArrayBufferLike | Uint8Array): string =>
 	Buffer.from(data as ArrayBuffer).toString("hex");

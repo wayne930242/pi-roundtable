@@ -2,8 +2,9 @@ import type { AgentProfileView } from "../../src/api-types.ts";
 import { closeAgentSheet } from "../lib/agent-sheet.ts";
 import { translate as t } from "../lib/messages.ts";
 import { askRoomConfirm } from "../lib/room-confirm.ts";
+import { AgentWebhooks } from "./agent-webhooks.tsx";
 
-/** The sheet's More tab: the prompt's history, and archiving the knight (not the coordinator). */
+/** The sheet's More tab: the prompt's history, a permanent knight's webhooks, and archiving the knight (not the coordinator). */
 export function AgentMore(props: {
 	profile: AgentProfileView;
 	coordinator: boolean;
@@ -21,6 +22,7 @@ export function AgentMore(props: {
 					</button>
 				</li>
 			</ul>
+			{profile.helper ? null : <AgentWebhooks agent={profile.name} />}
 			{props.coordinator ? null : (
 				<section className="card stack">
 					<h3>{t("Archive")}</h3>

@@ -166,13 +166,13 @@ export class AppSurface implements ChatSurface {
 		this.#deliver = undefined;
 	}
 
-	/** Hands a message to the host; throws before the host started the surface. */
+	/** Hands a message to the host, a webhook's as asking nothing of a page; throws before the host started the surface. */
 	deliver(message: InboundMessage): void {
 		if (!this.#deliver)
 			throw new PluginError(
 				"the web app surface has not started; messages are taken once the host runs",
 			);
-		this.#noteAsked(message.channel);
+		if (!message.integration) this.#noteAsked(message.channel);
 		this.#deliver(message);
 	}
 

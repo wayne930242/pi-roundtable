@@ -21,6 +21,7 @@ import {
 import { hasMarkSvg, isPublicStatic, servePwa } from "./pwa.ts";
 import type { Visitor } from "./visitors.ts";
 import { viewerOf } from "./web-app.ts";
+import type { WebhookRoutes } from "./webhooks/mount.ts";
 
 const encoder = new TextEncoder();
 /** Changes closer together than this reach the page as one event. */
@@ -64,6 +65,8 @@ export interface ConsoleServerOptions {
 		): Promise<Response | undefined>;
 		websocket: WebSocketRoute<AppSocket>;
 	};
+	/** The agent rooms' incoming webhooks, when the rooms pane is served. */
+	webhooks?: WebhookRoutes;
 	/** The onboarding gate; without it nobody is gated. */
 	gate?: Pick<Gate, "required">;
 	/** The app's surface, for the `next` a turned-away page navigation asks to come back to. */
@@ -178,6 +181,9 @@ export class ConsoleServer {
 		if (path !== this.#options.mount && !path.startsWith(this.#base))
 			return new Response("Not found", { status: 404 });
 		const rest = path.slice(this.#base.length);
+		// A webhook's token is its credential: its post needs no session and no proxy's token.
+		if (this.#options.webhooks && rest.startsWith("hooks/"))
+			return this.#options.webhooks.post(request, rest);
 		// Static and the same for everyone: a sign-in page and a link preview show the icon without a session.
 		if (READ_METHODS.has(request.method) && isPublicStatic(rest)) {
 			const shown = servePwa(rest, this.#pwa());
@@ -203,6 +209,8 @@ export class ConsoleServer {
 			return request.method === "GET"
 				? this.#diagrams.serve(request)
 				: new Response("Method not allowed", { status: 405 });
+		const hooks = await this.#options.webhooks?.route(request, rest);
+		if (hooks) return hooks;
 		const owned = await this.#options.app?.handle(request, rest, admission);
 		if (owned) return owned;
 		if (rest.startsWith("api/"))

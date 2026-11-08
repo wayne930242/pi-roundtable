@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - The plugin provides `ROOM_LAYOUT` with its rooms pane, so agents place rooms in the room list's folders: `agent_create` and `group_create` take `group`, `agent_list` shows the folders and pins, and `room_arrange` sorts rooms into folders. The writes run under the layout's lock and every open page updates.
+- Incoming webhooks for the knights' rooms: a JSON `POST <mount>/hooks/<id>/<token>` (Discord's `{ content, username }`, or any JSON as a fenced block) shows in a permanent knight's room as an `integration` message and starts its report turn, as a Discord webhook's post did. The owner makes and revokes them in the knight's sheet (**More** › **Webhooks**) or through `api/agents/<name>/webhooks`, and a knight with the tools `webhook_create`, `webhook_list` and `webhook_revoke`, for its own room only. Only the token's SHA-256 is stored and the URL is shown once; posts are limited to 16 KB and 30 a minute, a webhook may expire (at most 7 days) or be good for one post, and every refusal of the URL itself is the same 404. The option `webhookOrigin` sets the origin of the URL when it is not `origin`. New table `web_webhooks` (migration `web-webhooks`); the package now depends on `typebox`, pinned.
 
 ## [0.38.1] - 2026-11-08
 

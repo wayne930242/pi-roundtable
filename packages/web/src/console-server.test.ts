@@ -3,7 +3,7 @@ import type { ActorFacts } from "pi-roundtable";
 import { recordingLogger } from "pi-roundtable/testing";
 import type { AssetBundle } from "./assets.ts";
 import { createAuthenticator } from "./auth/authenticator.ts";
-import { ConsoleServer } from "./console-server.ts";
+import { ConsoleServer, type ConsoleServerOptions } from "./console-server.ts";
 import { ORIGIN } from "./testing/fixtures.ts";
 import { admit, admitAs, type RequestVerifier, refuse } from "./verifier.ts";
 import type { Identified, Visitor } from "./visitors.ts";
@@ -34,6 +34,7 @@ function setup(
 	) => Promise<Identified> = async () => ({
 		visitor: OWNER,
 	}),
+	extra: Partial<ConsoleServerOptions> = {},
 ) {
 	const listeners: (() => void)[] = [];
 	const apiPaths: string[] = [];
@@ -62,6 +63,7 @@ function setup(
 		subscribe: (listener) => listeners.push(listener),
 		logger: recorder.logger,
 		...(coalesceMs === undefined ? {} : { coalesceMs }),
+		...extra,
 	});
 	return { server, listeners, apiPaths, visitors, recorder };
 }
@@ -407,5 +409,41 @@ describe("a visitor who must sign in", () => {
 		expect((await get(server, "/console/", { method: "POST" })).status).toBe(
 			401,
 		);
+	});
+
+	test("hands a webhook's post to the webhooks before asking for a session, and the owner's webhook routes only to owners", async () => {
+		const seen: string[] = [];
+		const webhooks = {
+			post: async (_request: Request, rest: string) => {
+				seen.push(`post ${rest}`);
+				return new Response(null, { status: 204 });
+			},
+			route: async (_request: Request, rest: string) => {
+				seen.push(`route ${rest}`);
+				return Response.json({ webhooks: [] });
+			},
+		};
+		const refused = setup(() => refuse("no assertion"), undefined, undefined, {
+			webhooks,
+		});
+		expect(
+			(await get(refused.server, "/console/hooks/a/b", { method: "POST" }))
+				.status,
+		).toBe(204);
+		const member: Visitor = { ...OWNER, tier: "member" };
+		const members = setup(
+			() => admit(),
+			undefined,
+			async () => ({ visitor: member }),
+			{ webhooks },
+		);
+		expect(
+			(await get(members.server, "/console/api/agents/infra/webhooks")).status,
+		).toBe(403);
+		const owners = setup(() => admit(), undefined, undefined, { webhooks });
+		expect(
+			(await get(owners.server, "/console/api/agents/infra/webhooks")).status,
+		).toBe(200);
+		expect(seen).toEqual(["post hooks/a/b", "route api/agents/infra/webhooks"]);
 	});
 });

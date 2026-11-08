@@ -1,9 +1,8 @@
-/**
- * The console's built-in Traditional Chinese (Taiwan) wording. English source strings are the keys,
- * so a host that words any of them in `presentation.messages` wins, key by key. A class, part or
- * palette is named `character.<kind>.<id>`, and what a class suits `character.jobs.<id>`.
- */
+import { ZH_TW_WEBHOOKS } from "./zh-tw-webhooks.ts";
+
+/** Built-in zh-TW wording keyed by the English source strings, a host's `presentation.messages` winning key by key; a class, part or palette is `character.<kind>.<id>`, what a class suits `character.jobs.<id>`. */
 export const ZH_TW: Readonly<Record<string, string>> = {
+	...ZH_TW_WEBHOOKS,
 	// 應用程式外框
 	Live: "即時",
 	Panes: "頁面",

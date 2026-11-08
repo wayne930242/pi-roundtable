@@ -457,8 +457,8 @@ export const isStartOver = (message: Pick<RoomMessage, "kind" | "text">) =>
 export interface RoomMessage {
 	id: number;
 	room: string;
-	/** `owner` wrote it, `agent` is a reply, `system` is a line the server wrote: a divider, a yolo approval. */
-	kind: "owner" | "agent" | "system";
+	/** `owner` wrote it, `agent` is a reply, `system` a line the server wrote, `integration` a webhook's post. */
+	kind: "owner" | "agent" | "system" | "integration";
 	/** The principal of an `owner` message. */
 	principalId?: string;
 	/** The agent name of an `agent` message. */

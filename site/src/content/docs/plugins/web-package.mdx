@@ -81,6 +81,13 @@ Agents are drawn as composed characters.
 The page has a Modern look and a Camelot look (parchment by day, a night castle by night, gold rules, shield frames, wax seals), each in light and dark, picked per device in Settings.
 `appearance.look` sets the host's default.
 
+### Incoming webhooks
+
+A permanent knight's room takes JSON posts from outside, as a Discord webhook's post in its channel does: `POST <mountPath>/hooks/<id>/<token>` with `{ "content": "...", "username": "..." }` (or any JSON, shown as a fenced block, at most 16 KB, 30 posts a minute) shows in the room marked **Webhook** and starts the knight's report turn, as untrusted input.
+The path needs no session, so a sign-in proxy must let `<mountPath>/hooks/` through; `webhookOrigin` names a separate public hostname for the URL.
+The owner makes and revokes webhooks in the knight's sheet (**More**), and the knight with `webhook_create`, `webhook_list` and `webhook_revoke`, for its own room only.
+The URL is shown once and only the token's hash is stored.
+
 ## Install on a device and notifications
 
 The app is a PWA: a manifest scoped to the mount, a service worker that keeps the shell and never data, and icons (`icons.dir` replaces the shipped set). The tab icon is the round-table mark by default, and the manifest and icons answer without a session so the sign-in page and link previews show them.
@@ -100,6 +107,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `auth` | required, or `verifier` | `{ mode: "none" }`, `{ mode: "password" }`, `{ mode: "verifier", verifier }`, or `{ mode: "oidc", ... }`. |
 | `verifier` | none | Shorthand for the verifier mode: `cloudflareAccess(...)` or a custom function. Giving both throws. |
 | `origin` | required | Browser-visible scheme and host. Writes must send this exact `Origin`. |
+| `webhookOrigin` | `origin` | Scheme and host an incoming webhook's URL starts with, when the public hook hostname differs from the console's. |
 | `ownerId` | primary owner | Deprecated: the principal a verifier that reports no actor stands for. |
 | `dataDir` | `./data` | Host data directory: `sessions/` and `web/`. |
 | `mountPath` | `/console` | Route prefix. |
