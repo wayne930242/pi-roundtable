@@ -473,3 +473,32 @@ describe("validate", () => {
 		expect(quiet.warned).toEqual([]);
 	});
 });
+
+describe("a team with no Discord channels", () => {
+	const table = (discordChannels: boolean) => {
+		const agents = [agent("moved", "2000")];
+		return new Routes({
+			store: {
+				agent: (name: string) => agents.find((a) => a.name === name),
+				group: () => undefined,
+			} as never,
+			roomSurfaces: () => ["app"],
+			discordChannels,
+		});
+	};
+
+	test("ignores the channel id a moved agent still holds", () => {
+		const routes = table(false);
+		expect(routes.primary("moved")).toBe("app:agent.moved");
+		expect(routes.placeOn("moved", "discord")).toBeUndefined();
+		expect(routes.of("moved", "opening", "discord:2000")).toBe(
+			"app:agent.moved",
+		);
+	});
+
+	test("keeps a stored channel id while the team has Discord channels", () => {
+		const routes = table(true);
+		expect(routes.primary("moved")).toBe("discord:2000");
+		expect(routes.placeOn("moved", "discord")).toBe("discord:2000");
+	});
+});

@@ -653,4 +653,41 @@ describeDb("the built-in plugins' tables", () => {
 			await sql.close();
 		}
 	});
+
+	test("a host that left its guild moves the team's rows to its team id and drops their channel ids", async () => {
+		const sql = openPool(testDatabaseUrl);
+		try {
+			for (const table of ["agents", "agent_groups"])
+				await sql.unsafe(`DROP TABLE IF EXISTS ${table}`);
+			const withGuild = await defineRoundtable(config);
+			await migrate(
+				sql,
+				withGuild.plugins.flatMap((plugin) => plugin.migrations ?? []),
+			);
+			await sql`INSERT INTO agents (guild_id, name, display_name, prompt, avatar_prompt, channel_id)
+				VALUES (${discord.guild}, 'ada', 'Ada', '', '', '555')`;
+			const local = await defineRoundtable({
+				...config,
+				discord: undefined,
+				agents: [
+					{ name: "ada", displayName: "Ada", prompt: "p", avatarPrompt: "a" },
+				],
+				team: { formerIds: [discord.guild] },
+			});
+			await migrate(
+				sql,
+				local.plugins.flatMap((plugin) => plugin.migrations ?? []),
+			);
+			const rows =
+				await sql`SELECT guild_id, channel_id FROM agents WHERE name = 'ada'`;
+			expect(
+				rows.map((r: { guild_id: string; channel_id: string | null }) => [
+					r.guild_id,
+					r.channel_id,
+				]),
+			).toEqual([["local", null]]);
+		} finally {
+			await sql.close();
+		}
+	});
 });

@@ -327,6 +327,31 @@ describe("the agent server without Discord", () => {
 		);
 	});
 
+	test("keeps its rows under the team id it is given, not the guild", async () => {
+		const opened: string[] = [];
+		const plugin = agentServerPlugin(
+			options({ teamId: "crew" }),
+			async (_context, teamId) => {
+				opened.push(teamId);
+				return stores;
+			},
+		);
+		expect(plugin.migrations?.map((m) => m.name)).not.toContain("team-move");
+		await setUpLocal(plugin, ["app"]);
+		expect(opened).toEqual(["crew"]);
+	});
+
+	test("moves a former team's rows at every boot, clearing channel ids when it has no Discord channels", () => {
+		const moving = agentServerPlugin(
+			local({ teamId: "crew", formerTeamIds: ["old-guild"] }),
+		);
+		const names = moving.migrations?.map((m) => m.name) ?? [];
+		expect(names.at(-1)).toBe("team-move");
+		expect(moving.migrations?.find((m) => m.name === "team-move")?.runs).toBe(
+			"every-boot",
+		);
+	});
+
 	test("the error reports go to the primary place of the agent the ops place names, in its web room", async () => {
 		const posted: string[] = [];
 		const reports: string[] = [];

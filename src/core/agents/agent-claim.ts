@@ -50,9 +50,13 @@ export interface AgentClaimOptions {
 	 * router resolved, `"owners"` only the owner tier; a webhook's report is the same either way.
 	 */
 	speakers?: "everyone" | "owners";
+	/**
+	 * The Discord guild the agents' channels live in: a message from it is the agent server's even
+	 * outside the channels it knows. Not the team's id; absent for a team without Discord channels.
+	 */
+	discordGuild?: string | undefined;
 	team: Pick<
 		DiscordAgentTeam,
-		| "guildId"
 		| "owns"
 		| "answerOwner"
 		| "answerGroup"
@@ -183,7 +187,7 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 		owns: (channel, space) =>
 			discordIdOf(channel) !== undefined
 				? team.owns(channel) !== undefined ||
-					(space !== undefined && space === team.guildId)
+					(space !== undefined && space === options.discordGuild)
 				: roomOf(channel, surface.roomSurfaces?.() ?? []) !== undefined &&
 					team.owns(channel) !== undefined,
 		admit: (message) => {

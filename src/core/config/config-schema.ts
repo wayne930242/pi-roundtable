@@ -28,6 +28,7 @@ import {
 	text,
 } from "./schema.ts";
 import { skillsField } from "./skills-config.ts";
+import { teamField } from "./team.ts";
 
 /** The shape `roundtable.config.ts` is checked against: every key, its type and its bounds. */
 const tierMembers = shape({
@@ -132,6 +133,7 @@ export const configSchema = shape({
 		),
 	),
 	coordinator: optional(text),
+	team: teamField,
 	characters: optional(
 		shape({ skins: optional(skinTones), refreshAvatars: optional(bool) }),
 	),

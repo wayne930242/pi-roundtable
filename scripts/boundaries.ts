@@ -284,9 +284,103 @@ export function coreCycles(root: string): string[][] {
 		.sort((a, b) => (a[0] ?? "").localeCompare(b[0] ?? ""));
 }
 
+/** The directories of the core whose code is the team's, which any surface's agents share. */
+const TEAM_DIRS = [
+	"src/core/agents/",
+	"src/core/routing/",
+	"src/core/threads/",
+];
+
+/** The team's test support, which stands in for a surface and is not team code. */
+const TEAM_TEST_SUPPORT = /-(fixture|fake-runtime)\.ts$/;
+
+/** The ways team code names Discord: an identifier, the surface's key or name, and the guild. */
+export type DiscordName = "discord-identifier" | "discord-surface" | "guild";
+
+/**
+ * How many times each file of the team code (`agents`, `routing`, `threads`; tests and their fixtures excluded) names
+ * Discord: an identifier with "discord" in it (`discordKey`), the string `"discord"` or one that
+ * starts `"discord:"`, and "guild" in an identifier, string, or template. Comments and prose
+ * messages do not count. A file that names none is left out. D4 of the core refactor plan: the
+ * team code works for any surface, so the count may only shrink, down to nothing.
+ */
+export function discordNames(
+	root: string,
+): Record<string, Partial<Record<DiscordName, number>>> {
+	const found: Record<string, Partial<Record<DiscordName, number>>> = {};
+	for (const path of sourcesUnder(join(root, "src/core"))) {
+		const file = posix(relative(root, path));
+		if (
+			TEST.test(file) ||
+			TEAM_TEST_SUPPORT.test(file) ||
+			!TEAM_DIRS.some((dir) => file.startsWith(dir))
+		)
+			continue;
+		const counts: Partial<Record<DiscordName, number>> = {};
+		const add = (name: DiscordName, by = 1) => {
+			if (by > 0) counts[name] = (counts[name] ?? 0) + by;
+		};
+		const seen = new Set<string>();
+		const visit = (node: unknown): void => {
+			if (Array.isArray(node)) {
+				for (const item of node) visit(item);
+				return;
+			}
+			if (typeof node !== "object" || node === null) return;
+			const value = node as {
+				type?: string;
+				name?: string;
+				value?: unknown;
+				start?: number;
+			};
+			// An import's `imported` and `local` are one name at one place.
+			const place = `${value.type}:${value.start}`;
+			const text =
+				value.type === "Identifier"
+					? value.name
+					: value.type === "StringLiteral"
+						? (value.value as string)
+						: value.type === "TemplateElement"
+							? (value.value as { raw: string }).raw
+							: undefined;
+			if (text !== undefined && !seen.has(place)) {
+				seen.add(place);
+				if (value.type === "Identifier" && /discord/i.test(text))
+					add("discord-identifier");
+				if (
+					value.type !== "Identifier" &&
+					(text === "discord" || text.startsWith("discord:"))
+				)
+					add("discord-surface");
+				add("guild", text.match(/guild/gi)?.length ?? 0);
+			}
+			for (const [key, child] of Object.entries(node))
+				if (key !== "loc" && key !== "start" && key !== "end") visit(child);
+		};
+		visit(
+			parse(readFileSync(path, "utf8"), {
+				sourceType: "module",
+				plugins: [
+					"typescript",
+					...(file.endsWith("x") ? (["jsx"] as const) : []),
+				],
+			}).program,
+		);
+		if (Object.keys(counts).length > 0) found[file] = counts;
+	}
+	return Object.fromEntries(
+		Object.entries(found).sort(([a], [b]) => Number(a > b) - Number(a < b)),
+	);
+}
+
 if (import.meta.main) {
-	const root = resolve(process.argv[2] ?? ".");
-	const violations = boundaryViolations(root);
+	const root = resolve(
+		process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? ".",
+	);
+	// With `--discord-names` the team code's Discord allowlist, the shape of its baseline file.
+	const report = process.argv.includes("--discord-names")
+		? discordNames(root)
+		: boundaryViolations(root);
 	// pi-lens-ignore: no-console-except-error — the script's printed report is its product
-	console.log(JSON.stringify(violations, null, "\t"));
+	console.log(JSON.stringify(report, null, "\t"));
 }

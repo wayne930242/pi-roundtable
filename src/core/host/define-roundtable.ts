@@ -173,6 +173,11 @@ function discordAssembly(
 	};
 }
 
+/** The id the team's rows are stored under: the configured one, else the agent guild's, else `local`. */
+function teamIdOf(config: ResolvedConfig): string {
+	return config.team.id ?? config.discord?.guild ?? LOCAL_TEAM_ID;
+}
+
 /**
  * The agent server and what only it uses, each in its place in the plugin list: the skills addon
  * and the seed agents. Its team lives in the Discord guild `discord.guild` names when there is one,
@@ -195,6 +200,7 @@ function agentAssembly(
 ): AgentAssembly {
 	const { name, discord } = config;
 	const owner = discordOwnerOf(config);
+	const teamId = teamIdOf(config);
 	const sharedPrompt = config.prompts.shared
 		? readPrompt(config.prompts.shared, "prompts.shared")
 		: readPrompt(join(ASSETS, "prompts", "shared.md"), "prompts.shared");
@@ -206,7 +212,7 @@ function agentAssembly(
 		skills: config.skills
 			? [
 					skillsPlugin({
-						guildId: discord?.guild ?? LOCAL_TEAM_ID,
+						guildId: teamId,
 						reposDir: config.skills.reposDir ?? join(config.dataDir, "repos"),
 						writtenDir: join(config.dataDir, "skills"),
 						builtinDir: config.skills.builtinDir ?? join(ASSETS, "skills"),
@@ -215,6 +221,8 @@ function agentAssembly(
 				]
 			: [],
 		agentServer: agentServerPlugin({
+			teamId,
+			formerTeamIds: config.team.formerIds,
 			// Without the agent guild the team lives in the app's rooms, as on a host without Discord.
 			...(discord?.guild
 				? {
@@ -358,7 +366,7 @@ export async function defineRoundtable(
 			scheduleStorePlugin(),
 			precheckPlugin(),
 			// Before the agent server and the operator's plugins, which register the texts the owner edits.
-			promptsPlugin({ guildId: discord?.guild ?? LOCAL_TEAM_ID }),
+			promptsPlugin({ guildId: teamIdOf(config) }),
 			// Before Discord, whose services hand out its instance, and the modules and agent server that use it.
 			threadsPlugin({ dataDir: config.dataDir }),
 			channelContextPlugin(),

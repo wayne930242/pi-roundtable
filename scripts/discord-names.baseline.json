@@ -1,0 +1,83 @@
+{
+	"src/core/agents/agent-claim.ts": {
+		"discord-identifier": 6,
+		"guild": 2
+	},
+	"src/core/agents/agent-conversations.ts": {
+		"guild": 13
+	},
+	"src/core/agents/agent-messages.ts": {
+		"discord-identifier": 4
+	},
+	"src/core/agents/agent-outbox.ts": {
+		"guild": 13
+	},
+	"src/core/agents/agent-prompt.ts": {
+		"discord-identifier": 2,
+		"discord-surface": 2
+	},
+	"src/core/agents/agent-schema.ts": {
+		"guild": 7
+	},
+	"src/core/agents/agent-statements.ts": {
+		"guild": 38
+	},
+	"src/core/agents/agent-store.ts": {
+		"guild": 19
+	},
+	"src/core/agents/agent-team.ts": {
+		"discord-identifier": 3,
+		"guild": 2
+	},
+	"src/core/agents/group-messages.ts": {
+		"guild": 17
+	},
+	"src/core/agents/helper-presets.ts": {
+		"guild": 33
+	},
+	"src/core/agents/message-target.ts": {
+		"discord-surface": 2
+	},
+	"src/core/agents/room-progress.ts": {
+		"discord-identifier": 2
+	},
+	"src/core/agents/routes.ts": {
+		"discord-identifier": 10,
+		"discord-surface": 4
+	},
+	"src/core/agents/team-editing.ts": {
+		"discord-identifier": 2,
+		"discord-surface": 1
+	},
+	"src/core/agents/team-helpers.ts": {
+		"discord-surface": 3,
+		"discord-identifier": 6
+	},
+	"src/core/agents/team-keys.ts": {
+		"discord-identifier": 16,
+		"discord-surface": 1
+	},
+	"src/core/agents/team-lifecycle.ts": {
+		"discord-identifier": 2
+	},
+	"src/core/agents/team-options.ts": {
+		"guild": 1
+	},
+	"src/core/agents/team-status.ts": {
+		"discord-identifier": 2
+	},
+	"src/core/agents/team-turns.ts": {
+		"discord-identifier": 7
+	},
+	"src/core/routing/message-text.ts": {
+		"discord-surface": 1
+	},
+	"src/core/routing/peer-bots.ts": {
+		"discord-surface": 1,
+		"guild": 2
+	},
+	"src/core/threads/dispatch-threads.ts": {
+		"discord-identifier": 4,
+		"discord-surface": 1
+	}
+}

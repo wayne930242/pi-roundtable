@@ -197,6 +197,7 @@ export default {
 | `discord.guild` | 無 | agent server 的伺服器，agent 的頻道、分類與 `#dashboard` 都在這裡；需要 `discord.entryChannel` 與 `http.publicUrl`。不設時，bot 仍在它加入的每個伺服器服務外掛的 claim、斜線指令與主人的私訊，團隊則像沒有 `discord` 時一樣住在 app 的房間：必須設 `agents`，設 `entryChannel` 會出錯 |
 | `agents` | 無 | 第一批團隊，只建立一次。沒有 `discord.guild` 時，種子沒有 `channelId`，團隊的資料列記在 id `local` 之下 |
 | `coordinator` | `agents` 的第一位 | 沒有 `discord.guild` 時，接手主人一般請求的 agent，不能被封存。有 `discord.guild` 時設它會出錯：由入口頻道的 agent 協調 |
+| `team.id`、`team.formerIds` | `discord.guild` 的 id，否則 `local`；無 | 團隊資料列存放用的 id（與 guild 無關），以及先前用過的 id：其資料列每次啟動時搬到新 id，沒有 Discord 頻道時一併清掉頻道 id |
 | `skills` | 有 `agents` 時開啟 | 技能 addon；沒有 `discord` 時，只有 `agents` 列了 agent 才會開 |
 | `helpers` | 每位騎士 4 位、全站 12 位，結束 24 小時後封存 | 臨時騎士：騎士用 `helper_create` 為單一任務做出、完成後用 `helper_end` 清掉的幫手。設定為 `{ perParent, perHost, archiveFinishedAfterHours }`；`false` 兩個工具都不提供 |
 

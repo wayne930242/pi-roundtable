@@ -1,6 +1,5 @@
 import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { SQL } from "bun";
 import { agentClaim } from "../agents/agent-claim.ts";
 import { AgentDashboard } from "../agents/agent-dashboard.ts";
@@ -13,23 +12,16 @@ import { modeOrigins } from "../agents/helper-modes.ts";
 import { Routes } from "../agents/routes.ts";
 import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
-import type { ResolvedHelpers } from "../config/helpers.ts";
-import type { ResolvedRouting } from "../config/routing.ts";
 import { ROOM_LAYOUT } from "../contract/room-layout.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
+import { moveTeam } from "../db/team-move.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
-import {
-	AUTO_THINKING,
-	formatModelRef,
-	type ModelRef,
-} from "../domain/models.ts";
+import { AUTO_THINKING, formatModelRef } from "../domain/models.ts";
 import type { SessionTool } from "../domain/sessions.ts";
-import type { OwnerIdentity } from "../identity/owner-identity.ts";
 import type { Tier } from "../identity/speakers.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
 import type { Logger } from "../kernel/log.ts";
-import type { ErrorReporter } from "../ops/error-reporter.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	AGENTS,
@@ -43,92 +35,18 @@ import {
 } from "../plugin-api/services.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { agentPromptExtension } from "../runtime/extensions/agent-prompt.ts";
-import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
 import { DISCORD } from "./discord.ts";
 import { agentOnly } from "./session-tool.ts";
 
-/**
- * The id of the team on a host without Discord, in place of the Discord guild: the rows the team
- * keeps are stored under it, as under the guild's id on a host with Discord.
- */
-export const LOCAL_TEAM_ID = "local";
+export {
+	type AgentServerOptions,
+	LOCAL_TEAM_ID,
+} from "./agent-server-options.ts";
 
-export interface AgentServerOptions {
-	/**
-	 * The Discord guild the team lives in. Absent on a host without Discord, or whose bot has no
-	 * agent guild: the team is then `LOCAL_TEAM_ID`, it has no channels, and its agents live in the
-	 * rooms of the surfaces that host them.
-	 */
-	guildId?: string;
-	/** The channel the coordinator lives in; set with `guildId`, never with `coordinator`. */
-	entryChannelId?: string;
-	/**
-	 * The coordinator's name on a host without Discord, where no entry channel names it; the first
-	 * seed when absent. Refused with `entryChannelId`.
-	 */
-	coordinator?: string;
-	owner: OwnerIdentity & { id: string };
-	/** The assistant's display name, as the confirmation judge names it. */
-	assistant: string;
-	/** Shared with the rest of the host, so logins refresh in one place; lists the models an agent may run. */
-	modelRuntime: ModelRuntime;
-	dataDir: string;
-	/** The model of agents and of the assistant. */
-	model: ModelRef;
-	/** How sure the confirmation judge must be before its answer is used. */
-	judgeThreshold: number;
-	/** Where the agent server hands the runtime plugin its per-agent settings. */
-	agents?: AgentSessionsSlot;
-	/** The shell's shared working directory. */
-	workDir: string;
-	/**
-	 * The agents' scratch dir, created with mode 0700 when the agent server starts: their shell's
-	 * TMPDIR, where writes and removals run without a hold.
-	 */
-	scratchDir?: string;
-	/** The host account the agents' shell and file tools run as. */
-	shellUser: string;
-	/**
-	 * Whose turns in the agents' channels load memory: `"everyone"` (the default) or `"owners"`;
-	 * see `AgentSessions.memory`.
-	 */
-	memory?: "everyone" | "owners";
-	/**
-	 * Who the agents answer in their channels and groups' channels: `"everyone"` (the default) or
-	 * `"owners"`, which leaves a speaker below the owner tier unanswered.
-	 */
-	speakers?: "everyone" | "owners";
-	/**
-	 * Limits of the downloads of a message's files (`discord.attachmentDownload`): `deadlineMs`
-	 * for all of a message's files together (default 60 s), `idleMs` for one file to send no byte
-	 * (default 10 s).
-	 */
-	attachmentDownload?: { deadlineMs?: number; idleMs?: number };
-	/** The prompt every agent starts with, and the one for speakers other than the owner. */
-	prompts: { shared: string; guest?: string };
-	/** The listener the avatar pictures are served on; none mounts no route, and a surface serves them through `AGENTS.avatars.serve`. */
-	avatarListener?: string;
-	/**
-	 * The origin the agents' pictures are served from. Without one a picture's URL is
-	 * `/avatars/<hash>.png`, which the surface that serves the pictures resolves against its origin.
-	 */
-	avatarUrl?: string;
-	/**
-	 * Render every agent's picture again at start (`characters.refreshAvatars`) and set it where
-	 * its hash differs from the stored one; default false.
-	 */
-	refreshAvatars?: boolean;
-	/** The assistant's neutral avatar: the style reference and the picture of an agent without one. */
-	avatarReference: string;
-	/** The picture used instead when `avatarReference` cannot be read as one; the failure is logged. */
-	avatarNeutral?: string;
-	/** Reports the process's own errors to an agent; without one nothing is reported. */
-	errorReporter?: ErrorReporter;
-	/** The checked `routing` block: where work no person started lands. Without it every place is what it was before `routing`. */
-	routing?: ResolvedRouting;
-	/** The temp knights' limits; `false` leaves `helper_create` and `helper_end` out. Without it the defaults apply. */
-	helpers?: ResolvedHelpers | false;
-}
+import {
+	type AgentServerOptions,
+	LOCAL_TEAM_ID,
+} from "./agent-server-options.ts";
 
 /** The name of the agent server's plugin, as `serviceStarted` events name it. */
 export const AGENT_SERVER_PLUGIN = "agent-server";
@@ -201,7 +119,7 @@ export function agentServerPlugin(
 		throw new ConfigError(
 			"the agent server: entryChannelId and coordinator both name the coordinator. Set the entry channel with Discord, the coordinator without it.",
 		);
-	const teamId = options.guildId ?? LOCAL_TEAM_ID;
+	const teamId = options.teamId ?? options.guildId ?? LOCAL_TEAM_ID;
 	/** Set once the plugin has set up; the preflight reads it after every plugin linked. */
 	let hostsRooms: (() => boolean) | undefined;
 	let linkRoutes: (() => void) | undefined;
@@ -209,7 +127,19 @@ export function agentServerPlugin(
 		name: AGENT_SERVER_PLUGIN,
 		// The agent server's own tables; the host runs them before any setup, in this order. The
 		// held actions' table is the runtime plugin's.
-		migrations: PgAgentStore.migrations(teamId),
+		migrations: [
+			...PgAgentStore.migrations(teamId),
+			// After the agents' tables, and the prompts', skills' and conversations' before it.
+			...(options.formerTeamIds?.length
+				? [
+						moveTeam({
+							from: options.formerTeamIds,
+							to: teamId,
+							clearChannels: options.guildId === undefined,
+						}),
+					]
+				: []),
+		],
 		provides: [AGENTS],
 		requires: [RUNTIME],
 		// A team with no Discord channels is reached through rooms only; without a surface that
@@ -292,6 +222,7 @@ export function agentServerPlugin(
 				store,
 				roomSurfaces: () => surfaces.roomSurfaces(),
 				latest: (agent) => store.conversations.latest(agent),
+				discordChannels: channels !== undefined,
 				logger,
 			});
 			// The surfaces the rules name are registered by the time every plugin has set up.
@@ -447,6 +378,7 @@ export function agentServerPlugin(
 				channels: [
 					agentClaim({
 						owner: options.owner,
+						discordGuild: options.guildId,
 						...(options.speakers ? { speakers: options.speakers } : {}),
 						team: built,
 						runtime: running,

@@ -77,6 +77,7 @@ export type {
 	SurfaceRouting,
 } from "./core/config/routing.ts";
 export type { SkillsConfig } from "./core/config/skills-config.ts";
+export type { TeamConfig } from "./core/config/team.ts";
 export type {
 	AttachmentPort,
 	AttachmentRefusalCode,
