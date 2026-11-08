@@ -56,9 +56,9 @@ describe("discord without discord.guild", () => {
 	test("no agents is refused, unless agentServer is false", () => {
 		const { agents: _, ...noAgents } = appTeam;
 		expect(refusal(noAgents)).toContain("config discord.guild: left out");
-		expect(
-			resolveConfig({ ...noAgents, agentServer: false }).agentServer,
-		).toBe(false);
+		expect(resolveConfig({ ...noAgents, agentServer: false }).agentServer).toBe(
+			false,
+		);
 	});
 
 	test("a seed's channel and a Discord place for an agent are refused", () => {

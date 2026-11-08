@@ -391,8 +391,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
 			agentServer && (agentGuild || (config.agents?.length ?? 0) > 0),
 		topLevelOps: config.ops !== undefined,
 	});
-	const ops =
-		opsOf(config.ops, agentGuild) ?? opsOfPlace(routing?.places.ops);
+	const ops = opsOf(config.ops, agentGuild) ?? opsOfPlace(routing?.places.ops);
 	const access = accessOf(config, discord !== undefined);
 	const { primaryOwner } = access;
 	return {
