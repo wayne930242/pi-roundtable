@@ -289,7 +289,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						},
 						"long_running": {
 							"type": "boolean",
@@ -323,7 +329,7 @@
 			},
 			{
 				"name": "agent_list",
-				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels.",
+				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels; then the web app's room groups in order with their rooms, and its pinned rooms.",
 				"parameters": {
 					"type": "object",
 					"properties": {}
@@ -1816,7 +1822,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						}
 					}
 				}
@@ -2291,6 +2303,46 @@
 						"limit": {
 							"type": "number",
 							"description": "Maximum number of lines to read"
+						}
+					}
+				}
+			},
+			{
+				"name": "room_arrange",
+				"description": "Sort agent and group rooms into the web app's room groups and order them, when the speaker asks. Missing groups are made. The listed groups come first in the room list in list order, then every other group as it was; in each listed group the listed rooms come first in order, then its other rooms as they were. Rooms you leave out keep their place, Home stays on top, and a temp knight's room stays under its knight's. Any wrong entry refuses the whole call and nothing moves. Read the current groups with agent_list first.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"groups"
+					],
+					"properties": {
+						"groups": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"group",
+									"names"
+								],
+								"properties": {
+									"group": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 40,
+										"description": "The group's name, 1 to 40 characters in any language."
+									},
+									"names": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"minItems": 1,
+										"description": "Agent or group names (from agent_list), in the order their rooms should appear."
+									}
+								}
+							},
+							"minItems": 1,
+							"description": "Groups in room-list order."
 						}
 					}
 				}
@@ -3011,7 +3063,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						},
 						"long_running": {
 							"type": "boolean",
@@ -3045,7 +3103,7 @@
 			},
 			{
 				"name": "agent_list",
-				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels.",
+				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels; then the web app's room groups in order with their rooms, and its pinned rooms.",
 				"parameters": {
 					"type": "object",
 					"properties": {}
@@ -4538,7 +4596,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						}
 					}
 				}
@@ -4683,6 +4747,46 @@
 						"limit": {
 							"type": "number",
 							"description": "Maximum number of lines to read"
+						}
+					}
+				}
+			},
+			{
+				"name": "room_arrange",
+				"description": "Sort agent and group rooms into the web app's room groups and order them, when the speaker asks. Missing groups are made. The listed groups come first in the room list in list order, then every other group as it was; in each listed group the listed rooms come first in order, then its other rooms as they were. Rooms you leave out keep their place, Home stays on top, and a temp knight's room stays under its knight's. Any wrong entry refuses the whole call and nothing moves. Read the current groups with agent_list first.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"groups"
+					],
+					"properties": {
+						"groups": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"group",
+									"names"
+								],
+								"properties": {
+									"group": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 40,
+										"description": "The group's name, 1 to 40 characters in any language."
+									},
+									"names": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"minItems": 1,
+										"description": "Agent or group names (from agent_list), in the order their rooms should appear."
+									}
+								}
+							},
+							"minItems": 1,
+							"description": "Groups in room-list order."
 						}
 					}
 				}
@@ -7112,7 +7216,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						},
 						"long_running": {
 							"type": "boolean",
@@ -7146,7 +7256,7 @@
 			},
 			{
 				"name": "agent_list",
-				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels.",
+				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels; then the web app's room groups in order with their rooms, and its pinned rooms.",
 				"parameters": {
 					"type": "object",
 					"properties": {}
@@ -8639,7 +8749,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						}
 					}
 				}
@@ -9114,6 +9230,46 @@
 						"limit": {
 							"type": "number",
 							"description": "Maximum number of lines to read"
+						}
+					}
+				}
+			},
+			{
+				"name": "room_arrange",
+				"description": "Sort agent and group rooms into the web app's room groups and order them, when the speaker asks. Missing groups are made. The listed groups come first in the room list in list order, then every other group as it was; in each listed group the listed rooms come first in order, then its other rooms as they were. Rooms you leave out keep their place, Home stays on top, and a temp knight's room stays under its knight's. Any wrong entry refuses the whole call and nothing moves. Read the current groups with agent_list first.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"groups"
+					],
+					"properties": {
+						"groups": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"group",
+									"names"
+								],
+								"properties": {
+									"group": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 40,
+										"description": "The group's name, 1 to 40 characters in any language."
+									},
+									"names": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"minItems": 1,
+										"description": "Agent or group names (from agent_list), in the order their rooms should appear."
+									}
+								}
+							},
+							"minItems": 1,
+							"description": "Groups in room-list order."
 						}
 					}
 				}
@@ -9843,7 +9999,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Agents (the default) or Agents-<suffix>, such as Agents-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						},
 						"long_running": {
 							"type": "boolean",
@@ -9877,7 +10039,7 @@
 			},
 			{
 				"name": "agent_list",
-				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels.",
+				"description": "List every agent and group: name, display name, channel, and status; then the Agents and Groups categories in server order with their channels; then the web app's room groups in order with their rooms, and its pinned rooms.",
 				"parameters": {
 					"type": "object",
 					"properties": {}
@@ -10288,7 +10450,13 @@
 						},
 						"category": {
 							"type": "string",
-							"description": "The category its channel opens under: Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better."
+							"description": "Discord only: the category its channel opens under, Groups (the default) or Groups-<suffix>, such as Groups-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group."
+						},
+						"group": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 40,
+							"description": "The group its room goes into in the web app's room list, made when missing; agent_list shows the groups there. Leave it out to keep the room ungrouped."
 						}
 					}
 				}
@@ -10417,6 +10585,46 @@
 						"limit": {
 							"type": "number",
 							"description": "Maximum number of lines to read"
+						}
+					}
+				}
+			},
+			{
+				"name": "room_arrange",
+				"description": "Sort agent and group rooms into the web app's room groups and order them, when the speaker asks. Missing groups are made. The listed groups come first in the room list in list order, then every other group as it was; in each listed group the listed rooms come first in order, then its other rooms as they were. Rooms you leave out keep their place, Home stays on top, and a temp knight's room stays under its knight's. Any wrong entry refuses the whole call and nothing moves. Read the current groups with agent_list first.",
+				"parameters": {
+					"type": "object",
+					"required": [
+						"groups"
+					],
+					"properties": {
+						"groups": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"group",
+									"names"
+								],
+								"properties": {
+									"group": {
+										"type": "string",
+										"minLength": 1,
+										"maxLength": 40,
+										"description": "The group's name, 1 to 40 characters in any language."
+									},
+									"names": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"minItems": 1,
+										"description": "Agent or group names (from agent_list), in the order their rooms should appear."
+									}
+								}
+							},
+							"minItems": 1,
+							"description": "Groups in room-list order."
 						}
 					}
 				}
