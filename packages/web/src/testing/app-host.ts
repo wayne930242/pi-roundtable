@@ -3,7 +3,12 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ActorFacts, TurnRequest, TurnResult } from "pi-roundtable";
+import {
+	type ActorFacts,
+	AGENTS,
+	type TurnRequest,
+	type TurnResult,
+} from "pi-roundtable";
 import { type TestHost, testHost } from "pi-roundtable/testing";
 import type { ServerFrame } from "../api-types.ts";
 import { APP_PROTOCOL } from "../app/protocol.ts";
@@ -64,6 +69,12 @@ export interface Booted {
 	seen: TurnRequest[];
 	scripts: Map<string, Script>;
 	stops: string[];
+	/** The sockets `Client.open` opened on this host and nobody has closed. */
+	clients: Set<Client>;
+	/** Closes every socket still open, so a test that failed before it closed its own leaves none to hear the next test's frames. */
+	closeClients(): void;
+	/** Forgets what the tests so far did: the turns seen, the scripts set and the stops asked for; closes the sockets left open, aborts the turns still running, which cancels their cards, and waits until the rooms are quiet. Run it from `afterEach`. */
+	reset(): Promise<void>;
 	stop(): Promise<void>;
 }
 
@@ -181,6 +192,16 @@ export async function boot(options: {
 			}),
 		],
 	});
+	// The team loads its agents after the host is up; a test that reads them at once would find none.
+	const { directory } = host.context.services.get(AGENTS);
+	const deadline = Date.now() + 5000;
+	while (!directory.agent("guide") && Date.now() < deadline)
+		await Bun.sleep(10);
+	const clients = new Set<Client>();
+	const closeClients = () => {
+		for (const client of clients) client.close();
+		clients.clear();
+	};
 	return {
 		host,
 		socket,
@@ -188,6 +209,21 @@ export async function boot(options: {
 		seen,
 		scripts,
 		stops,
+		clients,
+		closeClients,
+		reset: async () => {
+			closeClients();
+			// A turn still running would keep its cards open and go on answering into the next test.
+			for (const turn of running.values()) turn.abort();
+			// The aborted turn lets the room's queued messages start theirs; wait until the last one ends.
+			for (let quiet = 0; quiet < 3; ) {
+				await Bun.sleep(20);
+				quiet = running.size === 0 ? quiet + 1 : 0;
+			}
+			seen.length = 0;
+			scripts.clear();
+			stops.length = 0;
+		},
 		stop: () => host.stop(),
 	};
 }
@@ -198,10 +234,12 @@ export class Client {
 	/** Frames before this index have been passed over by a `take`. */
 	#cursor = 0;
 	readonly #ws: WebSocket;
+	readonly #booted: Booted;
 	closed: { code: number } | undefined;
 
-	private constructor(ws: WebSocket) {
+	private constructor(ws: WebSocket, booted: Booted) {
 		this.#ws = ws;
+		this.#booted = booted;
 		ws.onmessage = (event) =>
 			this.frames.push(JSON.parse(String(event.data)) as ServerFrame);
 		ws.onclose = (event) => {
@@ -224,7 +262,10 @@ export class Client {
 			ws.onerror = () => resolve(false);
 			ws.onclose = () => resolve(false);
 		});
-		return opened ? new Client(ws) : undefined;
+		if (!opened) return undefined;
+		const client = new Client(ws, boot);
+		boot.clients.add(client);
+		return client;
 	}
 
 	send(frame: object): void {
@@ -276,6 +317,7 @@ export class Client {
 	}
 
 	close(): void {
+		this.#booted.clients.delete(this);
 		this.#ws.close();
 	}
 }

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -6,7 +6,6 @@ import {
 	type ApprovedBy,
 	IDENTITY,
 	MODES,
-	type PromptScope,
 	type PromptWait,
 	promptScope,
 	SCHEDULES,
@@ -19,6 +18,13 @@ import type {
 	SchedulesView,
 	ServerFrame,
 } from "../api-types.ts";
+import {
+	isThreadKey,
+	messagesOf,
+	OWNER_SCOPE,
+	roomList,
+	until,
+} from "../testing/app-fixture.ts";
 import {
 	ADA,
 	ADA_DISCORD,
@@ -49,6 +55,7 @@ describeDb("the owner app over a real host", () => {
 	afterAll(async () => {
 		await app.stop();
 	});
+	afterEach(() => app.reset());
 
 	test("a message to a room is answered there, as the owner, by the agent", async () => {
 		const tab = await Client.open(app, { "x-actor": "owner" });
@@ -480,6 +487,8 @@ describeDb("the owner app over a real host", () => {
 		});
 		const tab = await Client.open(app, { "x-actor": "owner" });
 		if (!tab) throw new Error("the owner was refused");
+		// A socket that sends before it is ready may be shown the open card twice.
+		await tab.take(ofType("ready"));
 		tab.send({ type: "send", id: "l1", room: GUIDE, text: "late-card" });
 		const card = await tab.take(ofType("prompt"));
 		expect(card.prompt).not.toHaveProperty("late");
@@ -1193,7 +1202,12 @@ describeDb("the owner app over a real host", () => {
 		expect(config.panes).toEqual(["rooms", "schedules", "overview"]);
 		expect(config.app).toEqual({ surface: "app", protocol: APP_PROTOCOL });
 		const rooms = (await (await rest(app, "rooms")).json()) as RoomsView;
-		const avatar = rooms.rooms[0]?.avatar;
+		// An agent dressed by an earlier test or run keeps its picture's hash, whose file lies in a data
+		// directory that may be gone; drawing the look again puts the file in this one.
+		const { directory, avatars } = app.host.context.services.get(AGENTS);
+		const look = directory.agent("guide")?.character;
+		if (look) await avatars.render(look);
+		const avatar = rooms.rooms.find((r) => r.key === GUIDE)?.avatar;
 		expect(avatar).toMatch(/^\/console\/avatars\/[0-9a-f]+\.png$/);
 		const picture = await fetch(`http://localhost${avatar}`, {
 			headers: { "x-actor": "owner" },
@@ -1230,6 +1244,12 @@ describeDb("the owner app over a real host", () => {
 
 	test("history survives a restart of the host", async () => {
 		const { dataDir } = app;
+		const tab = await Client.open(app, { "x-actor": "owner" });
+		if (!tab) throw new Error("the owner was refused");
+		await tab.take(ofType("ready"));
+		tab.send({ type: "send", id: "k1", room: GUIDE, text: "kept across it" });
+		await tab.take(agentReply("guide"));
+		tab.close();
 		const before = (await (
 			await rest(app, `rooms/${encodeURIComponent(GUIDE)}/messages`)
 		).json()) as MessagesView;
@@ -1294,6 +1314,7 @@ describeDb("the owner app with a small upload limit", () => {
 	afterAll(async () => {
 		await small.stop();
 	});
+	afterEach(() => small.reset());
 
 	test("a file over the limit is refused with 413 and the page is told the limit", async () => {
 		const send = (bytes: number) => {
@@ -1323,43 +1344,6 @@ describeDb("the owner app with a small upload limit", () => {
 	});
 });
 
-const OWNER_SCOPE: PromptScope = {
-	principalId: ADA_DISCORD,
-	speakerId: `discord:${ADA_DISCORD}`,
-	tier: "owner",
-	escalate: "owners",
-};
-
-const isThreadKey = (key: string) => /^app:thread\.[0-9a-f-]{36}$/.test(key);
-
-/** The messages of a room as the REST serves them. */
-async function messagesOf(booted: Booted, room: string) {
-	return (
-		(await (
-			await rest(booted, `rooms/${encodeURIComponent(room)}/messages`)
-		).json()) as MessagesView
-	).messages;
-}
-
-/** The room list as the REST serves it. */
-async function roomList(booted: Booted) {
-	return ((await (await rest(booted, "rooms")).json()) as RoomsView).rooms;
-}
-
-/** Waits until `check` returns a value, polling for up to `ms`. */
-async function until<T>(
-	check: () => Promise<T | undefined>,
-	ms = 4000,
-): Promise<T> {
-	const deadline = Date.now() + ms;
-	for (;;) {
-		const found = await check();
-		if (found !== undefined) return found;
-		if (Date.now() > deadline) throw new Error("the condition never held");
-		await Bun.sleep(20);
-	}
-}
-
 describeDb("dispatch threads of the app over a real host", () => {
 	let app: Booted;
 	beforeAll(async () => {
@@ -1368,6 +1352,7 @@ describeDb("dispatch threads of the app over a real host", () => {
 	afterAll(async () => {
 		await app.stop();
 	});
+	afterEach(() => app.reset());
 
 	test("message_agent from a web room shows the exchange as cards in the sender's room, kept in its history, and opens no thread", async () => {
 		app.scripts.set("ask-the-scout", async (request) => {
@@ -1508,23 +1493,26 @@ describeDb("dispatch threads left open by a host that stopped", () => {
 	test("the next start closes them with a restart notice, and the thread stays readable", async () => {
 		const first = await boot({ auth: "verifier" });
 		const { dataDir } = first;
-		const thread = await first.host.context.services
-			.get(THREADS)
-			.open(GUIDE, "Left open", "📋 Task: long job");
-		if (!thread) throw new Error("the thread was not opened");
-		expect(
-			(await roomList(first)).find((r) => r.key === thread.channel)?.closed,
-		).toBeUndefined();
-		await first.stop();
+		let channel = "";
+		try {
+			const thread = await first.host.context.services
+				.get(THREADS)
+				.open(GUIDE, "Left open", "📋 Task: long job");
+			if (!thread) throw new Error("the thread was not opened");
+			channel = thread.channel;
+			expect(
+				(await roomList(first)).find((r) => r.key === channel)?.closed,
+			).toBeUndefined();
+		} finally {
+			await first.stop();
+		}
 		const second = await boot({ auth: "verifier", dataDir });
 		try {
 			const closed = await until(async () =>
-				(await roomList(second)).find(
-					(r) => r.key === thread.channel && r.closed,
-				),
+				(await roomList(second)).find((r) => r.key === channel && r.closed),
 			);
 			expect(closed.parent).toBe(GUIDE);
-			const rows = await messagesOf(second, thread.channel);
+			const rows = await messagesOf(second, channel);
 			expect(rows.map((m) => m.kind)).toEqual(["agent", "system"]);
 			expect(rows[1]?.text).toContain("restarted before this job finished");
 			expect(rows[1]?.text.startsWith("-#")).toBe(false);
@@ -1542,6 +1530,7 @@ describeDb("characters and presence over a real host", () => {
 	afterAll(async () => {
 		await app.stop();
 	});
+	afterEach(() => app.reset());
 
 	const open = async () => {
 		const tab = await Client.open(app, { "x-actor": "owner" });
@@ -1697,6 +1686,7 @@ describeDb("a group round of the app over a team without Discord", () => {
 	afterAll(async () => {
 		await local.stop();
 	});
+	afterEach(() => local.reset());
 
 	test("a group round names the member speaking", async () => {
 		const { directory, team } = local.host.context.services.get(AGENTS);
@@ -1762,6 +1752,10 @@ describeDb("the room list's layout over a real host", () => {
 		await app.host.context.services.get(IDENTITY).resolve(MEL);
 		await clear();
 	}, 30_000);
+	afterEach(async () => {
+		await app.reset();
+		await clear();
+	});
 	afterAll(async () => {
 		await clear();
 		await app.stop();
@@ -1926,6 +1920,7 @@ describeDb("internal notes in rooms two owners read", () => {
 	afterAll(async () => {
 		await two.stop();
 	});
+	afterEach(() => two.reset());
 
 	test("the room list says which rooms take notes, threads not among them", async () => {
 		const threads = two.host.context.services.get(THREADS);
@@ -2143,12 +2138,15 @@ describeDb("messages sent during a turn in the app's rooms", () => {
 	afterAll(async () => {
 		await two.stop();
 	});
+	afterEach(() => two.reset());
 
 	/** A turn that runs until `release`, so messages sent meanwhile are steered or queued. */
 	function holdTurn(marker: string) {
 		const gate = Promise.withResolvers<void>();
-		two.scripts.set(marker, async () => {
-			await gate.promise;
+		two.scripts.set(marker, async (_request, signal) => {
+			const aborted = Promise.withResolvers<void>();
+			signal.addEventListener("abort", () => aborted.resolve(), { once: true });
+			await Promise.race([gate.promise, aborted.promise]);
 			return { ok: true, text: `held ${marker}` };
 		});
 		return gate.resolve;
@@ -2242,14 +2240,23 @@ describeDb("messages sent during a turn in the app's rooms", () => {
 			text: "queued-text-2",
 		});
 		release();
-		const started = await tab.take(
-			(frame) =>
-				frame.type === "edited" &&
-				frame.message.id === queued.id &&
-				frame.message.delivery === undefined,
+		// The mark coming off and the reply are separate frames, in either order.
+		const started = await until(async () =>
+			tab.frames.find(
+				(frame) =>
+					frame.type === "edited" &&
+					frame.message.id === queued.id &&
+					frame.message.delivery === undefined,
+			),
 		);
 		expect(started).toMatchObject({ message: { text: "queued-text-2" } });
-		await tab.take(agentReply("scout"));
+		await until(async () =>
+			tab.frames.find(
+				(frame) =>
+					frame.type === "message" &&
+					frame.message.text === "echo queued-text-2",
+			),
+		);
 		expect(
 			(await messagesOf(SCOUT)).find((m) => m.id === queued.id)?.delivery,
 		).toBeUndefined();
