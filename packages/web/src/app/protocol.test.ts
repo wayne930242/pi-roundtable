@@ -100,6 +100,31 @@ describe("client frames", () => {
 		});
 	});
 
+	test("an answer to a block parses to the kind and the pairs, and nothing the page adds", () => {
+		expect(
+			parse({
+				type: "block_answer",
+				id: "b1",
+				room: "app:agent.guide",
+				message: 7,
+				block: 0,
+				answer: {
+					kind: "form",
+					title: "ignored",
+					ref: { block: 9 },
+					fields: [["store", "sqlite"]],
+				},
+			}),
+		).toEqual({
+			type: "block_answer",
+			id: "b1",
+			room: "app:agent.guide",
+			message: 7,
+			block: 0,
+			answer: { kind: "form", fields: [["store", "sqlite"]] },
+		});
+	});
+
 	test("anything else is refused", () => {
 		for (const bad of [
 			"not json",
@@ -123,6 +148,26 @@ describe("client frames", () => {
 			{ type: "answers", prompt: "p", answers: [1] },
 			{ type: "cancel" },
 			{ type: "focus", room: 4 },
+			...[
+				{ message: 0 },
+				{ message: 1.5 },
+				{ block: -1 },
+				{ block: "0" },
+				{ answer: { kind: "hover", fields: [] } },
+				{ answer: { kind: "form", fields: [["a"]] } },
+				{ answer: { kind: "form", fields: [["a", 1]] } },
+				{ answer: { kind: "form" } },
+				{ answer: { kind: "form", fields: Array(513).fill(["a", "b"]) } },
+				{ id: "" },
+			].map((bad) => ({
+				type: "block_answer",
+				id: "b1",
+				room: "r",
+				message: 7,
+				block: 0,
+				answer: { kind: "pick", fields: [["picked", "A"]] },
+				...bad,
+			})),
 		])
 			expect(
 				parseClientFrame(typeof bad === "string" ? bad : JSON.stringify(bad)),

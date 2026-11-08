@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { DISPLAY_KINDS } from "pi-better-show";
+import { DISPLAY_KINDS, INTERACTIVE_KINDS } from "pi-better-show";
 import type { ChannelKey } from "pi-roundtable";
+import { supportOf } from "pi-roundtable/kit";
 import {
 	describeBlocksContract,
 	type SurfaceObservation,
@@ -48,14 +49,22 @@ describeBlocksContract("the app surface", async () => {
 	};
 });
 
-test("the app draws the display kinds itself, and the model is told how to write each", () => {
+test("the app draws the display and the interactive kinds itself, and the model is told how to write each", () => {
 	const surface = appSurface();
-	expect(surface.blocks).toEqual(DISPLAY_KINDS);
-	for (const kind of DISPLAY_KINDS)
+	expect(surface.blocks).toEqual([...DISPLAY_KINDS, ...INTERACTIVE_KINDS]);
+	for (const kind of [...DISPLAY_KINDS, ...INTERACTIVE_KINDS])
 		expect(surface.formatting).toContain(`\`${kind}\``);
-	// The interactive kinds arrive as text and are answered by typing.
-	for (const kind of ["options", "form", "review", "suggest", "checklist"])
-		expect(surface.formatting).not.toContain(`\`${kind}\``);
+	// Core adds no line that the app cannot show forms.
+	expect(supportOf(surface, ROOM).formatting).toBe(surface.formatting);
+});
+
+test("the model is told when to use a block and when ask_user, and that the answer comes as a message", () => {
+	const { formatting } = appSurface();
+	expect(formatting).toContain("ask_user");
+	expect(formatting).toContain("next message");
+	expect(formatting).toContain("Never use it when several may be chosen");
+	expect(formatting).toContain("`multi` question");
+	expect(formatting).toContain("`file:` id");
 });
 
 test("a 5000-character table reply is stored whole, in one message", async () => {
@@ -84,4 +93,8 @@ test("a host room is told no block guide and draws no block, though the app's ro
 	expect(there?.formatting).toContain("Markdown renders");
 	expect(there?.formatting).not.toContain("Display blocks");
 	expect(there?.formatting).not.toContain("`table`");
+	// Core tells the model what a guest's page cannot show.
+	expect(supportOf(surface, host).formatting).toContain(
+		"This chat cannot show forms, option buttons or checklists.",
+	);
 });

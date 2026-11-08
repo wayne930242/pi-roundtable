@@ -75,6 +75,9 @@ function harness(
 				delivered.push(message);
 			},
 		}),
+		blockAnswers: {
+			answer: async () => ({ ok: false, code: "unanswerable" }),
+		},
 		desk: partial<OwnerDesk>({ openFrames: () => [], roomOf: () => undefined }),
 		rooms: partial<Rooms>({
 			resolve: async (key) =>

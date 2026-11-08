@@ -8,7 +8,7 @@ const MESSAGE_ID = /^app-(\d+)$/;
 export const coreMessageId = (id: number): string => `app-${id}`;
 
 export interface QueuedDeliveryOptions {
-	log: Pick<RoomLog, "get" | "setDelivery">;
+	log: Pick<RoomLog, "get" | "setDelivery" | "reopenAnswer">;
 	/** Whether the room is a host's, whose messages the core does not mark. */
 	isHostRoom(room: string): boolean;
 	/** Shows a stored message, as it is now, to the sockets that may have its room. */
@@ -19,7 +19,8 @@ export interface QueuedDeliveryOptions {
  * How the owner's messages sent during a turn stand, from the marks the core places on them: a
  * steered message was added to the running turn, a waiting one is queued for its own. Steered and
  * cancelled are kept with the message; queued is held in memory, since the queue itself does not
- * outlive a restart, and goes when the turn starts.
+ * outlive a restart, and goes when the turn starts. A cancelled message that answered a block
+ * reopens the block.
  */
 export class QueuedDelivery {
 	readonly #options: QueuedDeliveryOptions;
@@ -100,8 +101,11 @@ export class QueuedDelivery {
 			this.#cancelling.delete(key);
 		}
 		if (result !== "done") return result;
-		const stored = await this.#options.log.setDelivery(room, id, "cancelled");
-		if (stored) this.#options.show(stored);
+		const { log, show } = this.#options;
+		const stored = await log.setDelivery(room, id, "cancelled");
+		if (stored) show(stored);
+		const reopened = await log.reopenAnswer(room, id);
+		if (reopened) show(reopened);
 		return result;
 	}
 }
