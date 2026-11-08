@@ -46,7 +46,7 @@ export interface McpConnectorsOptions {
 	/**
 	 * The least time in milliseconds between two admin requests of a resync, which makes five per
 	 * connector; default 1200 (50 a minute, half of ContextForge's limit of 100, which locks the admin
-	 * account for 15 minutes when exceeded). A resync that meets a 429 stops there, does not retry, and asks nothing more for `resyncLockoutMs`.
+	 * account for 15 minutes when exceeded). A resync that meets a 429 (or a 401, 403 or 423) stops there, does not retry, and asks nothing more for `resyncLockoutMs`.
 	 */
 	resyncIntervalMs?: number;
 	/**
@@ -87,7 +87,8 @@ export interface Connectors {
 	remove(name: string): Promise<void>;
 	/**
 	 * Has ContextForge read a connector's upstream server again and makes its virtual server serve the
-	 * tools it has now, with their hints, as `/<root> connector resync <name>` does; the connector, its
+	 * tools it has now, with their hints, as `/<root> connector resync <name>` does (a tool that keeps its
+	 * name keeps the hints the gateway first stored); the connector, its
 	 * token, and its virtual server stay. The host does this for every connector at start. A refusal
 	 * is a `ConnectorError`; one before the gateway read the upstream leaves the connector as it was, and
 	 * one after it may leave the virtual server with fewer tools until the next resync. A refused admin

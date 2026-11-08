@@ -300,9 +300,9 @@ export class ConnectorRegistry {
 
 	/**
 	 * Has ContextForge read the connector's upstream server again and makes its virtual server serve
-	 * the gateway's tools as they are now, with their hints. A renamed tool is attached, a removed one
-	 * detached; the gateway, the virtual server, the token, the purpose, and the stored row stay.
-	 * A failure before the refresh leaves the connector as it was. The refresh removes the tools the
+	 * the gateway's tools as they are now, with their hints (a kept name keeps the hints the gateway first
+	 * stored; its refresh does not update them). A renamed tool is attached, a removed one
+	 * detached; the gateway, the virtual server, the token, the purpose, and the stored row stay. A failure before the refresh leaves the connector as it was. The refresh removes the tools the
 	 * upstream no longer offers from the virtual server, so a failure after it may leave the server with
 	 * fewer tools until the next resync; the cache lists the old and the new names meanwhile, so a hold
 	 * rule still finds every name the gateway may serve.
