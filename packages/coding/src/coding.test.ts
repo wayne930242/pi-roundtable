@@ -357,6 +357,11 @@ test("missing, declined and failed cards fail closed, and a repository takes a s
 	await shelf.add("sample/project");
 	for (const mode of ["missing", "declined", "failed"] as const) {
 		const delivered = gate<CodingResult>();
+		// Git does not take two worktrees cut at once from one clone ("failed to read
+		// .git/worktrees/N/commondir"), so each start waits until the worker before it is running.
+		const running = [gate<void>(), gate<void>()];
+		const proceed = gate<void>();
+		let started = 0;
 		const desk = new CodingDesk({
 			shelf,
 			logger: silentLogger(),
@@ -372,13 +377,19 @@ test("missing, declined and failed cards fail closed, and a repository takes a s
 						},
 			deliver: async (result) => delivered.resolve(result),
 			worker: {
-				run: async (_job, _signal, review) =>
-					`${await review({ tool: "bash", input: "{}", action: "risky operation" })}`,
+				run: async (_job, _signal, review) => {
+					running[started++]?.resolve();
+					await proceed.promise;
+					return `${await review({ tool: "bash", input: "{}", action: "risky operation" })}`;
+				},
 			},
 		});
 		await desk.start(request());
-		// A second worker on the same repository starts in its own worktree.
+		await running[0]?.promise;
+		// A second worker on the same repository starts in its own worktree, while the first still works.
 		expect((await desk.start(request())).queuePosition).toBeUndefined();
+		await running[1]?.promise;
+		proceed.resolve();
 		const result = await delivered.promise;
 		await desk.idle();
 		// A declined call is settled; only an unanswered one is held for the report.
