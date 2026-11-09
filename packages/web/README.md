@@ -728,7 +728,7 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`: how many days a stored file of the app's agent rooms is kept, a whole number from 1 to 3650. A host kind's own `retention.fileDays` decides for its rooms. |
 | `push` | on, with an `https` origin | Web Push; its keys are in the table below, and [Notifications](#notifications) describes the whole. |
 | `icons` | the package's own | `{ dir }`: a directory of the five install icons, see [Install on a device](#install-on-a-device). |
-| `appearance` | `{ look: "modern" }` | `{ look }`: `modern` or `camelot`. The page's default look and the manifest's splash colors; the owner can switch it in the app. |
+| `appearance` | `{ look: "modern", home: "rooms" }` | `{ look, home }`. `appearance.look` is `modern` or `camelot`: the page's default look and the manifest's splash colors; the owner can switch it in the app. `appearance.home` is what the app opens on: `rooms` (the arranged room list, as before) or `chats` (the chat list). |
 | `title` | `Roundtable` | The page's heading, `<title>` (set in the served HTML, so a tab and a search result have it before the script runs), `og:title` and the installed app's name. |
 | `description` | a line derived from `title` | The page's `<meta name="description">` and `og:description`, for search results and link previews. |
 | `presentation` | English | `{ locale, messages }`: locale controls dates and document language, and `zh-TW` also selects the [built-in Traditional Chinese wording](#presentation-and-built-in-zh-tw); English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |

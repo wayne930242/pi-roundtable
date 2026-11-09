@@ -86,6 +86,7 @@ describe("the options the docs describe", () => {
 			"icons.dir",
 			"appearance",
 			"appearance.look",
+			"appearance.home",
 		])
 			expect(found).toContain(path);
 		expect(found.length).toBeGreaterThan(30);

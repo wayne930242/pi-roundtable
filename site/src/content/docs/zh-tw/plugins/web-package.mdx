@@ -123,7 +123,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`：app 騎士房間裡已儲存檔案的保留天數，1 到 3650。宿主房間種類自己的 `retention.fileDays` 管它自己的房間。 |
 | `push` | https origin 時開啟 | Web Push；金鑰見下表。 |
 | `icons` | 內建圖示 | `{ dir }`：放五個安裝圖示的目錄。 |
-| `appearance` | `{ look: "modern" }` | `{ look }`：`modern` 或 `camelot`。 |
+| `appearance` | `{ look: "modern", home: "rooms" }` | `{ look, home }`：`appearance.look` 是 `modern` 或 `camelot`；`appearance.home` 是 app 開啟的首頁，`rooms`（整理過的房間列表）或 `chats`（聊天列表）。 |
 | `title` | `Roundtable` | 頁面標題（直接寫在送出的 HTML 裡，也是 `og:title`），也是安裝後 app 的名稱。 |
 | `description` | 由 `title` 推得 | `<meta name="description">` 與 `og:description`，給搜尋結果與連結預覽用。 |
 | `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。`zh-TW` 會使用內建的繁體中文（臺灣）文字，`messages` 可逐個 key 覆寫。 |

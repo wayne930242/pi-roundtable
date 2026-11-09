@@ -338,8 +338,13 @@ export interface WebConsoleOptions {
 	description?: string;
 	/** Where the install icons come from; default the ones this package ships. */
 	icons?: { dir: string };
-	/** How the page looks: `modern` (default) or `camelot`. The page's owner can switch it in the app. */
-	appearance?: { look?: "modern" | "camelot" };
+	/**
+	 * How the page looks: `look` is `modern` (default) or `camelot`, and the page's owner can switch it
+	 * in the app. `home` is what the app opens on: `rooms` (default) the arranged room list, or
+	 * `chats` the chat list: pinned rooms as big avatars, one list by latest activity, folders as
+	 * chips, hidden and archived rooms behind one row, and everything else behind a grid button.
+	 */
+	appearance?: { look?: "modern" | "camelot"; home?: "rooms" | "chats" };
 	/** Text a relayed message begins with, taken off the owner's words; default the remote MCP note. */
 	relayNotes?: readonly string[];
 	/**
@@ -406,6 +411,7 @@ export interface ResolvedOptions {
 	description: string | undefined;
 	iconsDir: string | undefined;
 	look: "modern" | "camelot";
+	home: "rooms" | "chats";
 	relayNotes: readonly string[];
 	exclude:
 		| ((key: ChannelKey, record?: ConversationRecord) => boolean)

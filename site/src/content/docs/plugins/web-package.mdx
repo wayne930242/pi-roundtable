@@ -123,7 +123,7 @@ From 23:00 to 08:00 on the console's time zone an agent's post and a notice are 
 | `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`: days a stored file of the app's agent rooms is kept, 1 to 3650. A host kind's own `retention.fileDays` decides for its rooms. |
 | `push` | on with an https origin | Web Push; keys below. |
 | `icons` | shipped icons | `{ dir }`: a directory of the five install icons. |
-| `appearance` | `{ look: "modern" }` | `{ look }`: `modern` or `camelot`. |
+| `appearance` | `{ look: "modern", home: "rooms" }` | `{ look, home }`: `appearance.look` is `modern` or `camelot`; `appearance.home` is `rooms` (the arranged room list) or `chats` (the chat list). |
 | `title` | `Roundtable` | Page heading, `<title>` (in the served HTML), `og:title`, and installed app name. |
 | `description` | derived from `title` | `<meta name="description">` and `og:description`, for search results and link previews. |
 | `presentation` | English | `{ locale, messages }` controls language, date formatting, and wording; English source strings are dictionary keys. A `zh-TW` locale uses the built-in Traditional Chinese (Taiwan) wording, and `messages` words single keys over it. |

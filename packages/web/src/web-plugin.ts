@@ -255,6 +255,7 @@ async function build(
 						surface: settings.surface,
 						protocol: APP_PROTOCOL,
 						...(settings.modes ? {} : { modes: false as const }),
+						...(settings.home === "chats" ? { home: "chats" as const } : {}),
 					},
 				}
 			: {}),
