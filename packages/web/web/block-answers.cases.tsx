@@ -7,6 +7,7 @@ import type {
 	ServerFrame,
 } from "../src/api-types.ts";
 import {
+	agentReply,
 	CHECKLIST,
 	FORM,
 	HIDDEN_FORM,
@@ -90,20 +91,8 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 	});
 
 	let ids = 100;
-	const reply = (
-		text: string,
-		over: Partial<RoomMessage> = {},
-	): RoomMessage => ({
-		id: ids++,
-		room: "app:agent.guide",
-		kind: "agent",
-		agent: "guide",
-		author: "Guide",
-		text,
-		files: [],
-		at: "2026-11-08T10:00:00.000Z",
-		...over,
-	});
+	const reply = (text: string, over: Partial<RoomMessage> = {}) =>
+		agentReply(ids++, text, over);
 
 	const row = (message: RoomMessage, answerable = true) => (
 		<MessageRow
@@ -185,10 +174,18 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 		});
 		const form = shadow(root, "pbs-form");
 		await tick(form.querySelector("input[type=radio]") as HTMLInputElement);
+		const note = form.querySelector("[part=note]") as HTMLTextAreaElement;
+		note.value = " The one we run. ";
+		note.dispatchEvent(new Event("input"));
 		await click(form.querySelector("[part=submit]"));
 		expect(calls).toHaveLength(2);
 		expect(calls[1]?.answer.kind).toBe("form");
 		expect(calls[1]?.answer.fields).toContainEqual(["store", "SQLite"]);
+		// Other comments go out as the reserved pi-note field, trimmed.
+		expect(calls[1]?.answer.fields).toContainEqual([
+			"pi-note",
+			"The one we run.",
+		]);
 		expect(root.querySelector(".block-confirm")).toBeNull();
 	});
 

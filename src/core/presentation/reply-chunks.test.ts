@@ -49,16 +49,18 @@ describe("chunksFor", () => {
 		expect(rest).toEqual([]);
 		expect(fencesIn(chunk ?? "")).toEqual(["table"]);
 		expect(chunk).toContain(BLOCK_SAMPLES.table);
-		expect(chunk).toContain("Reply with a number.");
+		expect(chunk).toContain("Reply with a number. Other comments are welcome.");
 	});
 
 	test("an interactive kind the surface does not draw asks in the surface's language", () => {
 		const text = ["Pick one.", BLOCK_SAMPLES.options].join("\n\n");
 		const zh = chunksFor({ ...drawing, lang: "zh-TW" }, text).join("\n");
-		expect(zh).toContain("\u8acb\u56de\u8986\u7de8\u865f\u3002");
+		expect(zh).toContain(
+			"\u8acb\u56de\u8986\u7de8\u865f\u3002\u4e5f\u6b61\u8fce\u88dc\u5145\u5176\u4ed6\u610f\u898b\u3002",
+		);
 		expect(zh).not.toContain("Reply with a number.");
 		const en = chunksFor(drawing, text).join("\n");
-		expect(en).toContain("Reply with a number.");
+		expect(en).toContain("Reply with a number. Other comments are welcome.");
 		expect(fencesIn(zh)).toEqual([]);
 	});
 
