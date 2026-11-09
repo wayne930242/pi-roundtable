@@ -131,7 +131,8 @@ function webhookOf(
 ): EmuWebhook {
 	const hook = id ? state.webhooks.get(id) : undefined;
 	if (!hook) throw new HttpError(404, 10015, "Unknown Webhook");
-	if (hook.token !== token)
+	// Without a token the request is the bot's own, authorized by its bot token.
+	if (token !== undefined && hook.token !== token)
 		throw new HttpError(401, 50027, "Invalid Webhook Token");
 	return hook;
 }
@@ -271,11 +272,10 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 		],
 		[
 			"DELETE",
-			/^\/webhooks\/(\d+)$/,
+			/^\/webhooks\/(\d+)(?:\/([^/]+))?$/,
 			({ params }) => {
-				const id = params[0] ?? "";
-				if (!state.webhooks.delete(id))
-					throw new HttpError(404, 10015, "Unknown Webhook");
+				const hook = webhookOf(state, params[0], params[1]);
+				state.webhooks.delete(hook.id);
 				return undefined;
 			},
 		],

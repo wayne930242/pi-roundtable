@@ -79,10 +79,19 @@ test("kit area files expose exactly its single entry's names", () => {
 
 test("every published name is recorded in the changelog and guide's entry index", () => {
 	const local = resolve(ROOT, "packaging/CHANGELOG.md");
-	const changelog = readFileSync(
-		existsSync(local) ? local : resolve(ROOT, "CHANGELOG.md"),
-		"utf8",
-	);
+	// A change not yet released is a fragment; the release moves it into the changelog.
+	const unreleased = resolve(ROOT, "changes/unreleased");
+	const changelog = [
+		readFileSync(
+			existsSync(local) ? local : resolve(ROOT, "CHANGELOG.md"),
+			"utf8",
+		),
+		...(existsSync(unreleased)
+			? readdirSync(unreleased).map((file) =>
+					readFileSync(resolve(unreleased, file), "utf8"),
+				)
+			: []),
+	].join("\n");
 	const guide = readFileSync(resolve(ROOT, "docs/plugins.md"), "utf8");
 	for (const entry of ["main", "testing", "kit", "discord", "characters"]) {
 		const found = snapshot[entry];

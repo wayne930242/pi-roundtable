@@ -4667,6 +4667,14 @@ Import from the entries listed below; source area files are internal.
 | `PersonDisplay` | `pi-roundtable` | type |
 | `PersonProfiles` | `pi-roundtable` | type |
 | `Persona` | `pi-roundtable` | type |
+| `PlaceAuthor` | `pi-roundtable` | type |
+| `PlaceCheck` | `pi-roundtable` | type |
+| `PlaceKind` | `pi-roundtable` | type |
+| `PlacePort` | `pi-roundtable` | type |
+| `PlacePost` | `pi-roundtable` | type |
+| `PlaceProvider` | `pi-roundtable` | type |
+| `PlaceRef` | `pi-roundtable` | type |
+| `PlaceSpec` | `pi-roundtable` | type |
 | `PlaceTarget` | `pi-roundtable` | type |
 | `PluginContext` | `pi-roundtable` | type |
 | `PluginIdentity` | `pi-roundtable` | type |
@@ -4795,6 +4803,7 @@ Import from the entries listed below; source area files are internal.
 | `ToolContribution` | `pi-roundtable` | type |
 | `ToolOutput` | `pi-roundtable` | type |
 | `ToolRefusal` | `pi-roundtable` | value |
+| `ToolArgument` | `pi-roundtable` | type |
 | `ToolSelection` | `pi-roundtable` | type |
 | `ToolSpec` | `pi-roundtable` | type |
 | `ToolTierTable` | `pi-roundtable` | type |
@@ -4863,6 +4872,11 @@ Import from the entries listed below; source area files are internal.
 | `describeBlocksContract` | `pi-roundtable/testing` | value |
 | `describeSurfaceContract` | `pi-roundtable/testing` | value |
 | `checkSurfaceContract` | `pi-roundtable/testing` | value |
+| `checkPlaceProviderContract` | `pi-roundtable/testing` | value |
+| `placeProviderContract` | `pi-roundtable/testing` | value |
+| `PlaceContractFailure` | `pi-roundtable/testing` | type |
+| `PlaceContractSubject` | `pi-roundtable/testing` | type |
+| `PlaceSeen` | `pi-roundtable/testing` | type |
 | `SurfaceContractFailure` | `pi-roundtable/testing` | type |
 | `SurfaceContractSubject` | `pi-roundtable/testing` | type |
 | `SurfaceObservation` | `pi-roundtable/testing` | type |
