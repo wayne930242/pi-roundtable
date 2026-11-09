@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.44.1] - 2026-11-09
+
+### Added
+
+- pi-roundtable-web: An SVG that an agent attaches, or that a review block names as `image: file:<id>`, now shows inline in the web app, including its CSS and SMIL animation. It is served as `image/svg+xml` under a sandbox with no script, and opening its address directly downloads it instead of showing it as a page.
+
 ## [0.44.0] - 2026-11-09
 
 ### Added

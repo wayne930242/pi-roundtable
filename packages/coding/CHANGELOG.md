@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.44.1] - 2026-11-09
+
+- Release in lockstep with pi-roundtable 0.44.1 (SVG attachments shown inline, sandboxed); no package-specific behavior changes.
+
 ## [0.44.0] - 2026-11-09
 
 ### Fixed
