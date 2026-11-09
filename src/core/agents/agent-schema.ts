@@ -199,11 +199,18 @@ export function agentMigrations(teamId: string): Migration[] {
 		HelperPresets.sharingMigration,
 		// The places of agents and groups on the surfaces that make or bind their own; stored places only.
 		agentPlacesMigration,
-		// Until 1.0 the channel columns stay the source a rollback reads: the table follows them at every boot, for this team's rows.
-		{
-			name: "agent-places-from-channels",
-			runs: "every-boot",
-			up: convergeLegacyChannelPlaces(teamId),
-		},
 	];
+}
+
+/**
+ * Until 1.0 the channel columns stay the source a rollback reads: the table follows them at every
+ * boot, for this team's rows. Declared after `moveTeam`, which moves the rows of a former id in
+ * with their channel ids, so the rows it moved get their places at that same boot.
+ */
+export function agentPlacesConvergence(teamId: string): Migration {
+	return {
+		name: "agent-places-from-channels",
+		runs: "every-boot",
+		up: convergeLegacyChannelPlaces(teamId),
+	};
 }

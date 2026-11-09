@@ -15,7 +15,7 @@ const FORMER = "900000000000000203";
 const LOCAL = "local";
 const SURFACE = LEGACY_CHANNEL_SURFACE;
 
-const PLACE_MIGRATIONS = ["agent-places", "agent-places-from-channels"];
+const PLACE_MIGRATIONS = ["agent-places"];
 const TABLES = [
 	"agent_places",
 	"agents",
@@ -68,7 +68,11 @@ describeDb("agent places: storage", () => {
 		await group(LOCAL, "council", null);
 		await agent(OTHER, "elsewhere", "30");
 	};
-	const upgrade = (team = HOME) => migrate(sql, PgAgentStore.migrations(team));
+	const upgrade = (team = HOME) =>
+		migrate(sql, [
+			...PgAgentStore.migrations(team),
+			PgAgentStore.placesConvergence(team),
+		]);
 
 	beforeEach(async () => {
 		sql?.close();
@@ -88,14 +92,18 @@ describeDb("agent places: storage", () => {
 		await sql.close();
 	});
 
-	test("the list adds the two place migrations after 0.43's, the second at every boot", () => {
+	test("the list adds the place table after 0.43's, and the convergence is a separate every-boot migration", () => {
 		const names = PgAgentStore.migrations(HOME).map((m) => m.name);
 		expect(names.slice(0, before(HOME).length)).toEqual(
 			before(HOME).map((m) => m.name),
 		);
 		expect(names.slice(before(HOME).length)).toEqual(PLACE_MIGRATIONS);
 		const added = PgAgentStore.migrations(HOME).slice(before(HOME).length);
-		expect(added.map((m) => m.runs ?? "once")).toEqual(["once", "every-boot"]);
+		expect(added.map((m) => m.runs ?? "once")).toEqual(["once"]);
+		expect(PgAgentStore.placesConvergence(HOME)).toMatchObject({
+			name: "agent-places-from-channels",
+			runs: "every-boot",
+		});
 	});
 
 	test("a fresh database gets an empty table", async () => {
@@ -319,6 +327,7 @@ describeDb("agent places: storage", () => {
 					clearChannels: true,
 					places: [{ surface: SURFACE }],
 				}),
+				PgAgentStore.placesConvergence(LOCAL),
 			]);
 		const warn = spyOn(console, "warn").mockImplementation(() => undefined);
 		try {

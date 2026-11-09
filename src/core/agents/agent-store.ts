@@ -28,6 +28,7 @@ import {
 import {
 	type AgentRow,
 	agentMigrations,
+	agentPlacesConvergence,
 	agentsMigration,
 	type GroupRow,
 	toGroup,
@@ -85,6 +86,11 @@ export class PgAgentStore extends AgentGroupStore implements AgentDirectory {
 	/** The migrations of the store's tables for the team the process serves. */
 	static migrations(teamId: string): Migration[] {
 		return agentMigrations(teamId);
+	}
+
+	/** The every-boot migration that makes the place table follow the channel columns; it runs after the team move. */
+	static placesConvergence(teamId: string): Migration {
+		return agentPlacesConvergence(teamId);
 	}
 
 	/** The store over the host's migrated pool, holding the rows of one team. */

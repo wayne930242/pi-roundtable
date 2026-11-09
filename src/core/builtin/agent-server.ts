@@ -145,6 +145,8 @@ export function agentServerPlugin(
 					},
 				],
 			}),
+			// After the move, so the rows it brought in with their channel ids get their places at this boot.
+			PgAgentStore.placesConvergence(teamId),
 		],
 		provides: [AGENTS],
 		requires: [RUNTIME],

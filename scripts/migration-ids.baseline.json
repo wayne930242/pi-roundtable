@@ -78,7 +78,7 @@
 	],
 	"everyBoot": [
 		"identity/backfill",
-		"agent-server/agent-places-from-channels",
-		"agent-server/team-move"
+		"agent-server/team-move",
+		"agent-server/agent-places-from-channels"
 	]
 }
