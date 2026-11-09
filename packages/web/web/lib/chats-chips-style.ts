@@ -47,6 +47,7 @@ button.chip {
 	border-radius: 14px;
 	background: var(--surface);
 	color: var(--text);
+	font-family: inherit;
 	font-size: 1rem;
 	white-space: nowrap;
 }
@@ -95,13 +96,15 @@ button.chip[aria-pressed="true"] .chip-count {
 
 /* ── Other folders' unread rooms, above the chosen folder's list ──────────────────────────────── */
 
-.elsewhere {
+.elsewhere,
+.folder-section {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-1);
 }
 
-.elsewhere h2 {
+.elsewhere h2,
+.folder-section h2 {
 	margin: 0;
 	color: var(--muted);
 	font-size: var(--text-sm);

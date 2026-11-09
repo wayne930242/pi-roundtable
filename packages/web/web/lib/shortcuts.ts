@@ -10,6 +10,7 @@
 
 import { closeMenu } from "./action-menu.ts";
 import { store } from "./app-store.ts";
+import { lastChip } from "./chat-chip.ts";
 import { collapsedNow } from "./folds.ts";
 import { unreadOf } from "./host-state.ts";
 import { composingKey } from "./ime.ts";
@@ -171,6 +172,12 @@ function stepRoom(direction: 1 | -1, unread: boolean): void {
 		stays: (key) => waitingCards(state, key) > 0 || unreadOf(key) > 0,
 		expanded: openFolds(),
 		current,
+		home: {
+			chip: lastChip(),
+			unread: Object.fromEntries(
+				state.order.map((key) => [key, unreadOf(key)]),
+			),
+		},
 	});
 	// A room open that the list does not hold (a host's room) is left where it is.
 	if (route.pane === "room" && !stops.some((stop) => stop.key === current))

@@ -195,8 +195,8 @@ a.pin[aria-current="page"] {
 }
 
 .room-row.chat-row {
-	min-height: 4.5rem;
-	padding: var(--space-3) var(--space-2);
+	height: 4.5rem;
+	padding: var(--space-2);
 	border: 1px solid transparent;
 	border-radius: var(--radius);
 	background: transparent;
@@ -218,8 +218,13 @@ a.pin[aria-current="page"] {
 	);
 }
 
+.chat-row .room-row-top {
+	height: 1.5rem;
+}
+
 .chat-row .room-row-preview {
 	gap: var(--space-2);
+	height: 1.5rem;
 }
 
 .chat-row .chat-preview {

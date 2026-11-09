@@ -78,6 +78,13 @@ export default function ChatsHome(props: ChatsHomeProps) {
 	const listKeys = listFor(arrangement, chip, at, order);
 	const elsewhere = elsewhereUnread(arrangement, chip, unread, at, order);
 	const pins = pinsOf(arrangement);
+	const activeChip = chips.find((one) => one.id === chip);
+	const activeName =
+		activeChip?.kind === "folder"
+			? activeChip.name
+			: activeChip?.kind === "other"
+				? t("Other")
+				: undefined;
 	const rows = useRowData([
 		...pins,
 		...listKeys,
@@ -110,6 +117,13 @@ export default function ChatsHome(props: ChatsHomeProps) {
 			/>
 		);
 	};
+	const list = (
+		<ul className="room-list chat-list">
+			{listKeys.map((key) =>
+				rowFor(key, tagged ? folderOf(arrangement, key) : undefined),
+			)}
+		</ul>
+	);
 	const pinsList =
 		pins.length > 0 ? (
 			<ul className={dock ? "pins pin-dock" : "pins"} aria-label={t("Pinned")}>
@@ -169,11 +183,14 @@ export default function ChatsHome(props: ChatsHomeProps) {
 					</ul>
 				</section>
 			) : null}
-			<ul className="room-list chat-list">
-				{listKeys.map((key) =>
-					rowFor(key, tagged ? folderOf(arrangement, key) : undefined),
-				)}
-			</ul>
+			{elsewhere.length > 0 && activeName !== undefined ? (
+				<section className="folder-section">
+					<h2>{activeName}</h2>
+					{list}
+				</section>
+			) : (
+				list
+			)}
 			{hidden + (archived ?? 0) > 0 ? (
 				<HiddenRow
 					hidden={hidden}

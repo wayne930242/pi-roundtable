@@ -53,6 +53,8 @@ test("in All each row wears its folder's tag; in a folder the rows do not, and t
 	expect(names(".elsewhere .chat-row strong")).toEqual(["news"]);
 	expect(q(".elsewhere .chat-row .folder-tag")?.textContent).toBe("Play");
 	expect(q(".elsewhere h2")?.textContent).toBe("Other unread");
+	// The active folder's own rooms sit under a heading of its name.
+	expect(q(".folder-section h2")?.textContent).toBe("Work");
 	expect(names(".chat-list:not(.elsewhere-list) .chat-row strong")).toEqual([
 		"scout",
 	]);
@@ -60,6 +62,7 @@ test("in All each row wears its folder's tag; in a folder the rows do not, and t
 	// Once read, the room drops back to its own folder.
 	seed(0, { [NEWS]: 0 });
 	await until(() => q(".elsewhere") === null);
+	await until(() => q(".folder-section h2") === null);
 });
 
 test("on a phone the pins sit in a dock above the bar, in pin order with their badges; a column keeps them on top", async () => {
