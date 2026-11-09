@@ -36,6 +36,7 @@
 		"agent-server/helper-presets",
 		"agent-server/agents-helper-preset",
 		"agent-server/helper-presets-shared",
+		"agent-server/agent-places",
 		"coding/settings",
 		"line/inbox",
 		"line/messages",
@@ -75,5 +76,9 @@
 		"web-console/web-sessions-json-values",
 		"webchat/notices"
 	],
-	"everyBoot": ["identity/backfill", "agent-server/team-move"]
+	"everyBoot": [
+		"identity/backfill",
+		"agent-server/agent-places-from-channels",
+		"agent-server/team-move"
+	]
 }

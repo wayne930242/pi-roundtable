@@ -1,3 +1,4 @@
+import { LEGACY_CHANNEL_TABLES } from "./legacy-channels.ts";
 import type { Migration } from "./migrations.ts";
 
 export interface TeamMoveOptions {
@@ -15,15 +16,25 @@ export interface TeamMoveOptions {
 	 * already holds, are cleared. Default false.
 	 */
 	clearChannels?: boolean;
+	/**
+	 * The surfaces whose stored places name something of the space the team lived in, such as the
+	 * channels of a Discord guild. A place row moved from a former id other than `keep` is dropped, as
+	 * the legacy channel ids are cleared, so start makes new places; without `keep` every moved row
+	 * is dropped. With `clearChannels` the team's own rows of these surfaces go too.
+	 */
+	places?: readonly { surface: string; keep?: string }[];
 }
 
-/** The tables whose rows hold a Discord channel id. */
-const CHANNEL_TABLES = new Set(["agents", "agent_groups"]);
+/** The tables whose rows hold a legacy channel id. */
+const CHANNEL_TABLES = new Set(Object.keys(LEGACY_CHANNEL_TABLES));
+
+/** The table of stored places: its second unique key is a place id, which no two owners of a team share. */
+const PLACES_TABLE = "agent_places";
 
 /**
- * Moves a former team's rows to the team id: every row of a table with a `guild_id` column whose id
+ * Moves a former team's rows to the team id: every row of a table with a `guild_id` (or, for places, `team_id`) column whose id
  * is one of `from`, in the tables the host's plugins keep (agents, groups, skills, prompts, presets,
- * outbox, conversations). Rows of other guilds stay, such as the `discord_*` grants and audit of the
+ * outbox, conversations, places). Rows of other guilds stay, such as the `discord_*` grants and audit of the
  * guilds a bot still serves. A row whose key the team already holds stays where it is (a warning
  * names it), so a second boot changes nothing; of two former ids holding one key, the one listed
  * first moves.
@@ -39,36 +50,55 @@ export function moveTeam(options: TeamMoveOptions): Migration {
 		up: (sql) =>
 			sql.begin(async (tx) => {
 				if (from.length === 0 && !options.clearChannels) return;
-				const tables: { table: string; key: string[] | null }[] = await tx`
-					SELECT c.table_name AS table,
+				const tables: { table: string; scope: string; key: string[] | null }[] =
+					await tx`
+					SELECT c.table_name AS table, c.column_name AS scope,
 						(SELECT array_agg(a.attname::text ORDER BY a.attnum)
 							FROM pg_constraint p
 							JOIN pg_attribute a
 								ON a.attrelid = p.conrelid AND a.attnum = ANY (p.conkey)
 							WHERE p.conrelid = format('%I', c.table_name)::regclass
-								AND p.contype = 'p' AND a.attname <> 'guild_id') AS key
+								AND p.contype = 'p' AND a.attname <> c.column_name) AS key
 					FROM information_schema.columns c
 					JOIN information_schema.tables t
 						ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-					WHERE c.table_schema = current_schema() AND c.column_name = 'guild_id'
+					WHERE c.table_schema = current_schema()
+						AND c.column_name IN ('guild_id', 'team_id')
 						AND t.table_type = 'BASE TABLE' AND c.table_name NOT LIKE 'discord\\_%'
 					ORDER BY c.table_name`;
-				for (const { table, key } of tables) {
+				for (const { table, scope, key } of tables) {
 					const channels = CHANNEL_TABLES.has(table);
 					if (options.clearChannels && channels)
 						await tx.unsafe(
-							`UPDATE "${table}" SET channel_id = NULL WHERE guild_id = $1 AND channel_id IS NOT NULL`,
+							`UPDATE "${table}" SET channel_id = NULL WHERE ${scope} = $1 AND channel_id IS NOT NULL`,
 							[options.to],
 						);
+					if (table === PLACES_TABLE)
+						for (const { surface, keep } of options.places ?? []) {
+							if (options.clearChannels)
+								await tx.unsafe(
+									`DELETE FROM "${table}" WHERE ${scope} = $1 AND surface = $2`,
+									[options.to, surface],
+								);
+							// The places of a former id whose space is not the team's now name nothing it can reach.
+							await tx.unsafe(
+								`DELETE FROM "${table}" WHERE ${scope} = ANY ($1::text[]) AND surface = $2 AND ${scope} IS DISTINCT FROM $3::text`,
+								[from, surface, keep ?? null],
+							);
+						}
 					const match = (key ?? [])
 						.map((column) => `l."${column}" = t."${column}"`)
 						.join(" AND ");
 					// One former id at a time, in the listed order: the first to hold a key wins, and the
 					// later ones find it taken.
 					for (const id of from) {
+						const same =
+							table === PLACES_TABLE
+								? ` AND NOT EXISTS (SELECT 1 FROM "${table}" l WHERE l.${scope} = $1 AND l.surface = t.surface AND l.external_id = t.external_id)`
+								: "";
 						const taken = match
-							? ` AND NOT EXISTS (SELECT 1 FROM "${table}" l WHERE l.guild_id = $1 AND ${match})`
-							: "";
+							? ` AND NOT EXISTS (SELECT 1 FROM "${table}" l WHERE l.${scope} = $1 AND ${match})${same}`
+							: same;
 						const clear =
 							channels &&
 							(options.clearChannels ||
@@ -77,23 +107,23 @@ export function moveTeam(options: TeamMoveOptions): Migration {
 								? ", channel_id = NULL"
 								: "";
 						await tx.unsafe(
-							`UPDATE "${table}" t SET guild_id = $1${clear} WHERE t.guild_id = $2${taken}`,
+							`UPDATE "${table}" t SET ${scope} = $1${clear} WHERE t.${scope} = $2${taken}`,
 							[options.to, id],
 						);
 					}
 					if (!match || from.length === 0) continue;
 					const kept: Record<string, unknown>[] = await tx.unsafe(
-						`SELECT t.guild_id, ${key?.map((column) => `t."${column}"`).join(", ")} FROM "${table}" t
-							WHERE t.guild_id = ANY ($2::text[])
-								AND EXISTS (SELECT 1 FROM "${table}" l WHERE l.guild_id = $1 AND ${match})`,
+						`SELECT t.${scope} AS moved_from, ${key?.map((column) => `t."${column}"`).join(", ")} FROM "${table}" t
+							WHERE t.${scope} = ANY ($2::text[])
+								AND EXISTS (SELECT 1 FROM "${table}" l WHERE l.${scope} = $1 AND ${match})`,
 						[options.to, from],
 					);
 					if (kept.length > 0)
 						console.warn(
 							`team-move: ${kept.length} row(s) of "${table}" stay under their former id, because team "${options.to}" already holds the same key: ${kept
 								.map(
-									({ guild_id, ...rest }) =>
-										`${guild_id}/${Object.values(rest).join("/")}`,
+									({ moved_from, ...rest }) =>
+										`${moved_from}/${Object.values(rest).join("/")}`,
 								)
 								.join(", ")}`,
 						);
