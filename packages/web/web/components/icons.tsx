@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import type { HomeIconName } from "../lib/home-icons.ts";
 import type { HostGlyphName } from "../lib/host-icons.ts";
 import type { LayoutIconName } from "../lib/layout-icons.ts";
 
@@ -53,7 +54,11 @@ const PATHS = {
 		"M6 16V11a6 6 0 0 1 .8-3M9.5 5.2A6 6 0 0 1 18 11v5l1.5 2H8M10 21h4M4 4l16 16",
 } as const;
 
-export type IconName = keyof typeof PATHS | LayoutIconName | HostGlyphName;
+export type IconName =
+	| keyof typeof PATHS
+	| LayoutIconName
+	| HomeIconName
+	| HostGlyphName;
 
 /** Icons that modules loaded later bring with them, so the first load carries only what it draws. */
 const added: Record<string, string> = {};

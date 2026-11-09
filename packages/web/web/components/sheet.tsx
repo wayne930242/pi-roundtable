@@ -27,8 +27,8 @@ export function Sheet(props: {
 	title: string;
 	onClose(): void;
 	children: ReactNode;
-	/** `palette` is a wide, top-aligned panel for the room switcher. */
-	variant?: "sheet" | "palette";
+	/** `palette` is a wide, top-aligned panel for the room switcher; `features` is a popover beside the chat home's grid button on a wide screen. */
+	variant?: "sheet" | "palette" | "features";
 	/** `wide` is a reading width, for a document; `full` fills the window, for writing at length. */
 	size?: "default" | "wide" | "full";
 	/** Where focus goes once the sheet is gone, when the browser's own return would land on nothing. */
@@ -132,11 +132,13 @@ export function Sheet(props: {
 			className={
 				props.variant === "palette"
 					? "sheet palette"
-					: props.size === "wide"
-						? "sheet wide"
-						: props.size === "full"
-							? "sheet full"
-							: "sheet"
+					: props.variant === "features"
+						? "sheet features"
+						: props.size === "wide"
+							? "sheet wide"
+							: props.size === "full"
+								? "sheet full"
+								: "sheet"
 			}
 			aria-label={props.title}
 			// `cancel` and `close` rise through the React tree: a sheet inside a sheet must not close its parent.

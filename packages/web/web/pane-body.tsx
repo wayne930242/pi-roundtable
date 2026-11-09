@@ -3,6 +3,8 @@ import type { ConfigView, GateStepView } from "../src/api-types.ts";
 import type { NavItem } from "./app-chrome.tsx";
 import {
 	AgentPage,
+	ArrangePage,
+	ChatsHome,
 	ConnectorsPage,
 	ConversationsPage,
 	GatePage,
@@ -59,11 +61,31 @@ export function PaneBody(props: {
 			</div>
 		);
 	if (gateShown) return <GatePage steps={owed} />;
+	const chats = app?.home === "chats";
+	/** The home: the chat list, or the arranged room list. */
+	const home = (active?: string) =>
+		chats ? (
+			<ChatsHome onSearch={openPalette} active={active} column={wide} />
+		) : (
+			<RoomsPage onSearch={openPalette} active={active} />
+		);
 	switch (pane) {
 		case "rooms":
-			return <RoomsPage onSearch={openPalette} />;
+			// Wide enough, the column stands beside a place for the room that is not open yet.
+			return chats && wide ? (
+				<div className="split" data-chats="">
+					<div className="split-list">{home()}</div>
+					<div className="split-detail">
+						<p className="split-empty">{t("Choose a chat from the list.")}</p>
+					</div>
+				</div>
+			) : (
+				home()
+			);
+		case "arrange":
+			return <ArrangePage onSearch={openPalette} />;
 		case "room": {
-			if (!route.key) return <RoomsPage onSearch={openPalette} />;
+			if (!route.key) return home();
 			const detail = (config.kinds ?? []).some((kind) =>
 				route.key?.startsWith(`${app?.surface}:${kind.kind}.`),
 			) ? (
@@ -72,10 +94,8 @@ export function PaneBody(props: {
 				<RoomPage key={route.key} roomKey={route.key} />
 			);
 			return wide ? (
-				<div className="split">
-					<div className="split-list">
-						<RoomsPage onSearch={openPalette} active={route.key} />
-					</div>
+				<div className="split" {...(chats ? { "data-chats": "" } : {})}>
+					<div className="split-list">{home(route.key)}</div>
 					<div className="split-detail">{detail}</div>
 				</div>
 			) : (

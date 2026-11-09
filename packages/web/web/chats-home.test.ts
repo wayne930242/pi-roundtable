@@ -1,0 +1,97 @@
+import { expect, test } from "bun:test";
+import {
+	chipsOf,
+	hiddenDot,
+	listFor,
+	pinBadge,
+	pinsOf,
+} from "./lib/chats-home.ts";
+import type { Sections } from "./lib/sections.ts";
+
+const A = "app:agent.a";
+const B = "app:agent.b";
+const C = "app:agent.c";
+const D = "app:agent.d";
+const HOME = "app:agent.guide";
+
+/** The arrangement the home reads: Home and a pin on top, two folders, and the rest. */
+const arrangement = (over: Partial<Sections> = {}): Sections => ({
+	home: [HOME],
+	pinned: [D],
+	folders: [
+		{ id: "f1", name: "Work", rooms: [A] },
+		{ id: "f2", name: "Play", rooms: [] },
+	],
+	rest: [C, B],
+	hidden: [],
+	restAgents: [],
+	restGroups: [],
+	threads: {},
+	orphans: { open: [], closed: [] },
+	...over,
+});
+const times: Record<string, number> = { [A]: 40, [B]: 30, [C]: 20 };
+const at = (key: string) => times[key] ?? Number.NEGATIVE_INFINITY;
+const order = [HOME, A, B, C, D];
+
+test("the pins are Home first, then the pinned rooms in their order", () => {
+	expect(pinsOf(arrangement())).toEqual([HOME, D]);
+	expect(pinsOf(arrangement({ home: [] }))).toEqual([D]);
+});
+
+test("there are no chips without a folder; with folders: all, each folder, and others only when rooms are in none", () => {
+	expect(chipsOf(arrangement({ folders: [] }))).toEqual([]);
+	expect(chipsOf(arrangement()).map((chip) => [chip.id, chip.kind])).toEqual([
+		["all", "all"],
+		["f1", "folder"],
+		["f2", "folder"],
+		["other", "other"],
+	]);
+	expect(chipsOf(arrangement({ rest: [] })).map((chip) => chip.id)).toEqual([
+		"all",
+		"f1",
+		"f2",
+	]);
+});
+
+test("all lists every room that is neither pinned nor hidden by latest activity; a folder chip lists its rooms by the same order", () => {
+	expect(listFor(arrangement(), "all", at, order)).toEqual([A, B, C]);
+	expect(listFor(arrangement(), "f1", at, order)).toEqual([A]);
+	expect(listFor(arrangement(), "f2", at, order)).toEqual([]);
+	expect(listFor(arrangement(), "other", at, order)).toEqual([B, C]);
+	// A folder that is gone shows everything rather than nothing.
+	expect(listFor(arrangement(), "folder.deleted", at, order)).toEqual([
+		A,
+		B,
+		C,
+	]);
+	// A tie keeps the server's order.
+	const flat = listFor(arrangement({ rest: [C, B] }), "all", () => 0, [
+		B,
+		C,
+		A,
+	]);
+	expect(flat).toEqual([B, C, A]);
+});
+
+test("a folder's rooms are in the folder's chip even when the folder holds several, newest first", () => {
+	const folders = [{ id: "f1", name: "Work", rooms: [B, A, C] }];
+	expect(listFor(arrangement({ folders, rest: [] }), "f1", at, order)).toEqual([
+		A,
+		B,
+		C,
+	]);
+});
+
+test("a waiting card outranks unread, unread outranks the working dot, and nothing is no badge", () => {
+	expect(pinBadge(2, 5, true)).toEqual({ kind: "waiting", count: 2 });
+	expect(pinBadge(0, 5, true)).toEqual({ kind: "unread", count: 5 });
+	expect(pinBadge(0, 0, true)).toEqual({ kind: "typing" });
+	expect(pinBadge(0, 0, false)).toBeUndefined();
+});
+
+test("the collapsed row lights a dot when a hidden room has something unread", () => {
+	expect(hiddenDot([A, B], { [B]: 2 })).toBe(true);
+	expect(hiddenDot([A, B], { [C]: 2 })).toBe(false);
+	expect(hiddenDot([], { [A]: 1 })).toBe(false);
+});

@@ -68,6 +68,7 @@ describe("the built-in zh-TW catalog", () => {
 				"web/components/creator-fields.tsx: t(part.title)",
 				"web/components/composer.tsx: t(plan.text)",
 				"web/components/round-table.tsx: t(SEAT_STATE_LABELS[state])",
+				"web/lib/features-grid.ts: t(PANE_LABELS[name])",
 				"web/lib/api.ts: t(text)",
 				"web/lib/character-labels.ts: translate(key)",
 				"web/lib/character-labels.ts: translate(key)",

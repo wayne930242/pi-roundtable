@@ -26,6 +26,8 @@ export const PAGE_ROUTES: Record<
 	presets: lazy(() => import("../pages/presets.tsx")),
 	// Every knight's incoming webhooks.
 	webhooks: lazy(() => import("../pages/webhooks.tsx")),
+	// The chat home's page for the rooms that are hidden and the archive.
+	hidden: lazy(() => import("../pages/hidden.tsx")),
 	// The host's own pages, `p/<id>`.
 	p: lazy(() => hostUi().then((ui) => ({ default: ui.HostPage }))),
 };

@@ -33,6 +33,13 @@ export const AgentPage = lazy(() =>
 export const HostRoomPage = lazy(() =>
 	hostUi().then((ui) => ({ default: ui.HostRoomPage })),
 );
+// The chat home, and the room list that stays as its management view, load when first opened.
+export const ChatsHome = lazy(() => import("./pages/chats-home.tsx"));
+export const ArrangePage = lazy(() =>
+	import("./pages/arranged-rooms.tsx").then((m) => ({
+		default: m.ArrangedRoomsPage,
+	})),
+);
 export const SchedulesPage = lazy(() =>
 	import("./pages/schedules.tsx").then((m) => ({ default: m.SchedulesPage })),
 );
