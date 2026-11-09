@@ -1,7 +1,5 @@
 import type {
 	ChannelKey,
-	ConversationPort,
-	Logger,
 	RouteSocket,
 	WebSocketAccept,
 	WebSocketRoute,
@@ -12,84 +10,29 @@ import {
 	APP_PROTOCOL,
 	APP_PROTOCOL_VERSION,
 	type ClientFrame,
-	MAX_MESSAGE_CHARS,
 	MAX_MESSAGE_FILES,
 	type RefusalCode,
 	type RoomFile,
 	type RoomMessage,
 } from "../api-types.ts";
-import type { Authenticator } from "../auth/authenticator.ts";
-import type { Gate } from "../gate.ts";
-import type { PluggedFrames, Viewer, WebAppRegistry } from "../web-app.ts";
-import type { BlockAnswering } from "./block-answering.ts";
-import type { Answerer, OwnerDesk } from "./desk.ts";
-import type { Presence } from "./presence.ts";
+import type { PluggedFrames } from "../web-app.ts";
+import type { Answerer } from "./desk.ts";
 import { parseClientFrame } from "./protocol.ts";
 import { changeQueued } from "./queued-frames.ts";
-import type { Rooms } from "./rooms.ts";
-import { keepNote, say } from "./say.ts";
-import type { AppSocket, Audience, Sockets } from "./sockets.ts";
-import type { AppSurface } from "./surface.ts";
-import type { Uploads } from "./uploads.ts";
+import { say } from "./say.ts";
+import { answerCard } from "./socket-cards.ts";
+import {
+	MAX_FRAME_BYTES,
+	MAX_SOCKETS,
+	MAX_TIMER_MS,
+	RECHECK_MS,
+	type SocketRouteOptions,
+	viewerOfSocket,
+} from "./socket-options.ts";
+import { sendMessage } from "./socket-send.ts";
+import type { AppSocket } from "./sockets.ts";
 
-/** The longest delay a timer keeps; a longer one fires at once. */
-const MAX_TIMER_MS = 2 ** 31 - 1;
-
-/** The most sockets the route holds open at once. */
-const MAX_SOCKETS = 32;
-/** How often an open socket's person is looked up again, when the options say nothing else. */
-const RECHECK_MS = 30_000;
-/** The largest frame in bytes; a `send` carries text only, so this is far above `MAX_MESSAGE_CHARS`. */
-const MAX_FRAME_BYTES = 192 * 1024;
-
-export interface SocketRouteOptions {
-	/** The path of the socket: `<mount>/api/socket`. */
-	path: string;
-	/** The console's own origin, the only one a browser may open the socket from. */
-	origin: string;
-	authenticator: Pick<Authenticator, "authenticate" | "recheck">;
-	sockets: Sockets;
-	surface: AppSurface;
-	desk: OwnerDesk;
-	rooms: Rooms;
-	/** Takes an owner's answer to an interactive block of an agent's reply. */
-	blockAnswers: Pick<BlockAnswering, "answer">;
-	/** The table of who is busy, sent to the owners after `ready`; absent in a route built without one. */
-	presence?: Pick<Presence, "frame">;
-	uploads: Uploads;
-	/** What the pieces of the app plug in: host rooms, their frame handlers and the rule for who reads them. */
-	registry: Pick<WebAppRegistry, "frameHandler" | "isHostRoom" | "access">;
-	/** The onboarding gate: a socket whose person owes a required step is gated. */
-	gate: Pick<Gate, "required" | "onChanged">;
-	/** Who has a room's frames. */
-	audienceOf(room: string): Audience;
-	/**
-	 * Called once the socket has had `ready` and before anything else is replayed to it, gated or
-	 * not: the pieces of the app send what is per person there, such as the notices and the badge.
-	 */
-	opened?(connection: AppSocket): Promise<void>;
-	conversations: Pick<ConversationPort, "stop" | "cancelQueued" | "editQueued">;
-	logger: Logger;
-	/**
-	 * The longest a socket stays open, whatever its credential says. A password session lives for
-	 * days and a logout or a new password does not reach an open socket, so the socket is closed
-	 * with 4401 after this long and its reconnect carries the cookie again. Absent: no cap.
-	 */
-	maxLifeMs?: number;
-	/** How often an open socket's person is looked up again; default 30 s. */
-	recheckMs?: number;
-	/** The clock, in milliseconds; default `Date.now`. */
-	now?: () => number;
-}
-
-/** The viewer behind a socket, at the tier it holds now. */
-export const viewerOfSocket = (connection: AppSocket): Viewer => ({
-	principalId: connection.principal.id,
-	speakerId: connection.speakerId,
-	tier: connection.tier,
-	roles: connection.roles,
-	name: connection.principal.name,
-});
+export { type SocketRouteOptions, viewerOfSocket } from "./socket-options.ts";
 
 /**
  * The WebSocket of the app: the upgrade passes the console's authenticator, so it is the same
@@ -425,7 +368,9 @@ export class SocketRoute {
 					await this.#plugged(connection, "hostSend", frame);
 					return;
 				}
-				await this.#send(connection, who, frame);
+				await sendMessage(this.#options, connection, who, frame, (code) =>
+					this.#refuse(connection, code, frame.id),
+				);
 				return;
 			case "stop": {
 				if (registry.isHostRoom(frame.room)) {
@@ -457,7 +402,7 @@ export class SocketRoute {
 			case "answer":
 			case "answers":
 			case "cancel":
-				refused = await this.#card(who, frame);
+				refused = await answerCard(this.#options, who, frame);
 				break;
 			case "subscribe":
 			case "unsubscribe":
@@ -505,52 +450,6 @@ export class SocketRoute {
 	}
 
 	/**
-	 * An answer to a card: who may give it is the card's own audience (the turn's speaker, the
-	 * named approvers, the owners where the scope escalates), which the room's access cannot widen.
-	 * A card of a host room is first something the person must be able to read; a card of an agent
-	 * room is the owners'.
-	 */
-	async #card(
-		who: Answerer,
-		frame: Extract<
-			ClientFrame,
-			{ type: "approval" | "answer" | "answers" | "cancel" }
-		>,
-	): Promise<RefusalCode | undefined> {
-		const { desk, registry } = this.#options;
-		const room = desk.roomOf(frame.prompt);
-		if (room !== undefined) {
-			if (registry.isHostRoom(room)) {
-				const viewer: Viewer = {
-					principalId: who.principalId,
-					speakerId: who.speakerId,
-					tier: who.tier,
-					roles: who.roles ?? [],
-					name: who.name,
-				};
-				if (!(await registry.access.read(viewer, room as ChannelKey)))
-					return "unknown_prompt";
-			} else if (who.tier !== "owner") return "forbidden";
-		}
-		switch (frame.type) {
-			case "approval":
-				return this.#needsActor(who, frame.prompt)
-					? "forbidden"
-					: desk.approve(who, frame.prompt, frame.approved);
-			case "answer":
-				return this.#needsActor(who, frame.prompt)
-					? "forbidden"
-					: desk.answer(who, frame.prompt, frame.answer);
-			case "answers":
-				return this.#needsActor(who, frame.prompt)
-					? "forbidden"
-					: desk.answers(who, frame.prompt, frame.answers, frame.note);
-			case "cancel":
-				return desk.cancel(who, frame.prompt);
-		}
-	}
-
-	/**
 	 * An owner's answer to a block: sent to the agent as the owner's next message, by the path a
 	 * typed message takes, so it steers into a running turn, queues or starts one. The sender hears
 	 * the message that carries it, or why none was sent; the other sockets see the block locked.
@@ -581,68 +480,6 @@ export class SocketRoute {
 					},
 			{ connection },
 		);
-	}
-
-	/**
-	 * Whether this answer cannot be taken: a late card's answer starts a turn written as the
-	 * answerer, which needs the actor their credential vouched for. Refused up front, the card
-	 * stays open for someone who has one rather than closing on an answer that goes nowhere.
-	 */
-	#needsActor(who: Answerer, prompt: string): boolean {
-		return !who.actor && this.#options.desk.isLate(prompt);
-	}
-
-	async #send(
-		connection: AppSocket,
-		who: Answerer,
-		frame: Extract<ClientFrame, { type: "send" }>,
-	): Promise<void> {
-		const { rooms, uploads, surface, sockets, logger } = this.#options;
-		const refuse = (code: RefusalCode) =>
-			this.#refuse(connection, code, frame.id);
-		// The agent rooms are the owners', and they take only turns.
-		if (who.tier !== "owner") return refuse("forbidden");
-		// A note is for the other people who read the rooms; where nobody else does, it is no frame.
-		const note = frame.mode === "note";
-		if (note && !(await rooms.notesOn())) return refuse("bad_frame");
-		const room = await rooms.resolve(frame.room);
-		if (!room) return refuse("unknown_room");
-		if (room.readOnly) return refuse("read_only");
-		const text = frame.text.trim();
-		if (text.length > MAX_MESSAGE_CHARS) return refuse("too_long");
-		const ids = frame.uploads ?? [];
-		if (text === "" && ids.length === 0) return refuse("empty");
-		// Without the actor the credential vouched for, the router cannot tell whose message it is;
-		// a note goes to no router.
-		if (!note && !who.actor) return refuse("forbidden");
-		const files = uploads.claim(ids, who.principalId);
-		if (!files) return refuse("unknown_upload");
-		if (!surface.started) return refuse("not_accepted");
-		try {
-			if (note)
-				await keepNote(
-					this.#options,
-					connection,
-					who,
-					room.key,
-					frame.id,
-					text,
-					files,
-				);
-			else
-				await this.say(room.key, who, text, files, connection, (message) =>
-					sockets.deliver(
-						{ type: "accepted", id: frame.id, room: room.key, message },
-						{ connection },
-					),
-				);
-		} catch (error) {
-			logger.warn(
-				{ room: room.key, err: error },
-				"an app message was not taken",
-			);
-			refuse("not_accepted");
-		}
 	}
 
 	/** Takes a message of the owner into a room; see `say`. */
