@@ -34,7 +34,9 @@ afterEach(() => page.act(() => closeMenu()));
 const show = async (node: React.ReactNode) => {
 	await page.render(node);
 	await until(() => q(".chats") !== null && all(".chat-row, .pin").length > 0);
-	await page.act(() => settle(80));
+	await page.act(async () => {
+		await settle(80);
+	});
 };
 const row = (key: string): HTMLElement => {
 	const found = q(`a.chat-row[data-room="${key}"]`);
@@ -75,16 +77,18 @@ const swipe = async (
 	to: number,
 	sag: number,
 ) => {
-	await page.act(() => touch(target, "pointerdown", from, 100));
+	await page.act(() => {
+		touch(target, "pointerdown", from, 100);
+	});
 	for (let i = 1; i <= 6; i += 1)
-		await page.act(() =>
+		await page.act(() => {
 			touch(
 				target,
 				"pointermove",
 				from + ((to - from) * i) / 6,
 				100 + (sag * i) / 6,
-			),
-		);
+			);
+		});
 	await page.act(async () => {
 		await settle(260);
 		touch(target, "pointerup", to, 100 + sag);
@@ -179,7 +183,9 @@ test("Alt+↓ and Alt+↑ still step through the rooms from the chat home", asyn
 	const stop = startShortcuts();
 	try {
 		window.location.hash = `#/room/${encodeURIComponent(BUILD)}`;
-		await page.act(() => settle(20));
+		await page.act(async () => {
+			await settle(20);
+		});
 		key("ArrowDown", { altKey: true });
 		const next = currentRoute().key;
 		expect(next).toBeDefined();
