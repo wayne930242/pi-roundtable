@@ -33,7 +33,6 @@ import {
 	type DirectChannelProvider,
 	directChannelsPort,
 } from "../presence/direct-channels.ts";
-import { placePort } from "./place-port.ts";
 import { refuseShellTools } from "../runtime/chat-only.ts";
 import type { ToolTierTable } from "../runtime/tool-tiers.ts";
 import { ChatCommandSources, claimChatCommand } from "./chat-commands.ts";
@@ -44,6 +43,7 @@ import {
 	claimTarget,
 	Names,
 } from "./claims.ts";
+import { placePort } from "./place-port.ts";
 import { PlaceClaims } from "./places.ts";
 import { ServiceRegistry } from "./services.ts";
 import { surfaceService } from "./surface-service.ts";
