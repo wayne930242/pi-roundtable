@@ -73,6 +73,9 @@ test("the page builds with relative URLs only, and every file it names is in the
  * and the preload table naming the webhook parts the page shares with the knight's sheet; the
  * page and those parts are lazy.
  * The 3 bytes after that are the two branches compressing together.
+ * The 150 bytes after that are splitting the files that passed the size limit (126 over): no
+ * behavior moved, but the entry's code now crosses more module boundaries (the app shell hands its
+ * state to the pane body as props, the rooms reducer is several modules).
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -91,7 +94,8 @@ const FIRST_LOAD_BASELINE =
 	600 +
 	50 +
 	100 +
-	153;
+	153 +
+	150;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
