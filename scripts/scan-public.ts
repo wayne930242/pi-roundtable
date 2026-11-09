@@ -191,8 +191,10 @@ const CJK_FILES = [
 	"packages/web/src/i18n/zh-tw-webhooks.ts",
 	"packages/web/src/i18n/zh-tw.test.ts",
 	"site/astro.config.mjs",
-	"src/characters/catalog.ts",
-	"src/characters/characters.test.ts",
+	"src/characters/classes-a.ts",
+	"src/characters/classes-b.ts",
+	"src/characters/classes-c.ts",
+	"src/characters/characters-suggest.test.ts",
 ];
 
 /**

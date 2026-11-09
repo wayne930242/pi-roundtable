@@ -4,7 +4,7 @@
 
 | Requirement | Evidence | Result |
 | --- | --- | --- |
-| Clone and list managed repositories | `src/coding.test.ts`: clones and lists shelf state, including branch/upstream/summary and duplicate refusal | pass |
+| Clone and list managed repositories | `src/coding-shelf.test.ts`: clones and lists shelf state, including branch/upstream/summary and duplicate refusal | pass |
 | Generate a change report | Temporary bare origin: clean ahead-only report contains commits, full SHA, default branch and diffstat; dirty, empty and behind clones refuse | pass |
 | Hold a push until approval, then execute | `testPlugin` exposes the linked push hold; the test keeps origin unchanged while awaiting a simulated owner answer, then executes the tool and verifies the remote SHA | pass |
 | Owner-repository option | Exact-match exceptions pass; same-prefix and other-owner repositories remain held | pass |

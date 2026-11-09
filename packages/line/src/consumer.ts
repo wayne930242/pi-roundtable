@@ -1,5 +1,6 @@
 import type { SQL } from "bun";
 import type { InboundMessage, Logger } from "pi-roundtable";
+import { checkRef, cleanRefs, MAX_REFS, tooManyRefs } from "./consumer-refs.ts";
 import { errorCode, LineError } from "./errors.ts";
 import type { InboxEvent, InboxProcessor, InboxResult } from "./inbox.ts";
 import type { JoinNotifier } from "./join.ts";
@@ -17,10 +18,6 @@ import {
 } from "./messages.ts";
 import { inboundOf } from "./route.ts";
 
-/** The most references a subscriber may return for one message, and the longest one. */
-const MAX_REFS = 100;
-const MAX_REF_CHARS = 512;
-
 export interface ConsumerDeps {
 	sql: SQL;
 	logger: Logger;
@@ -32,43 +29,6 @@ export interface ConsumerDeps {
 	 * it. Throwing fails the event, which is retried. Absent: nothing is routed.
 	 */
 	route?: (message: InboundMessage) => void;
-}
-
-const checkRef = (ref: unknown): string => {
-	if (
-		typeof ref !== "string" ||
-		ref === "" ||
-		ref.length > MAX_REF_CHARS ||
-		ref.includes("\u0000")
-	)
-		throw new LineError(
-			"bad_refs",
-			`line: a ref is a non-empty string of at most ${MAX_REF_CHARS} characters`,
-		);
-	return ref;
-};
-
-const tooManyRefs = (): LineError =>
-	new LineError(
-		"bad_refs",
-		`line: a message may have at most ${MAX_REFS} refs`,
-	);
-
-/**
- * The references a subscriber answered, checked: strings that PostgreSQL can store, once each, in
- * order. Nothing is a message with no references to add; anything else than `{ refs }` is refused,
- * so an answer meant as something else (a retry request, say) is not taken for a mirror.
- */
-function cleanRefs(answer: unknown): string[] {
-	if (answer === undefined) return [];
-	if (typeof answer !== "object" || answer === null || !("refs" in answer))
-		throw new LineError(
-			"bad_refs",
-			"line: a subscriber answers a message with { refs } or nothing; to give up, throw",
-		);
-	const refs: unknown = answer.refs;
-	if (!Array.isArray(refs) || refs.length > MAX_REFS) throw tooManyRefs();
-	return [...new Set(refs.map(checkRef))];
 }
 
 /** The context of an event that keeps nothing. */

@@ -68,7 +68,10 @@ const ALLOWED: Record<string, string> = {
 		"the web plugin suites' owner scope, a test fixture",
 	'examples/echo-runtime.ts: ?? "owner"':
 		"the example runtime's persona kind, not a tier",
-	'src/testing.ts: ?? "owner"': "testPlugin's default owner id, a test fixture",
+	'src/core/testing/fake-discord.ts: ?? "owner"':
+		"fakeDiscord's default owner id, a test fixture",
+	'packages/mcp/src/testing/remote-mcp-fixture.ts: tier: "owner"':
+		"the remote-mcp suites' owner speaker, a test fixture",
 };
 
 const PATTERN = /\?\? "owner"|tier: "owner"/;

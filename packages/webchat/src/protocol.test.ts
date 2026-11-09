@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseClientFrame } from "./protocol.ts";
+import { parseClientFrame } from "./client-frame.ts";
 
 test("parses each client frame and keeps only its known fields", () => {
 	expect(parseClientFrame('{"type":"auth","token":"t"}')).toEqual({
