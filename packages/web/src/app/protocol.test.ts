@@ -125,6 +125,33 @@ describe("client frames", () => {
 		});
 	});
 
+	test("the reserved pi-note field of an answer to a block is kept with the pairs", () => {
+		expect(
+			parse({
+				type: "block_answer",
+				id: "b1",
+				room: "app:agent.guide",
+				message: 7,
+				block: 0,
+				answer: {
+					kind: "form",
+					fields: [
+						["store", "sqlite"],
+						["pi-note", "the one we run"],
+					],
+				},
+			}),
+		).toMatchObject({
+			answer: {
+				kind: "form",
+				fields: [
+					["store", "sqlite"],
+					["pi-note", "the one we run"],
+				],
+			},
+		});
+	});
+
 	test("anything else is refused", () => {
 		for (const bad of [
 			"not json",

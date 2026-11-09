@@ -1,3 +1,5 @@
+import type { RoomMessage } from "../src/api-types.ts";
+
 /** The markdown the block-answer cases draw, one sample of each interactive block. */
 export const OPTIONS = [
 	"```options",
@@ -58,3 +60,20 @@ export const REVIEW = [
 	"  - {name: D, body: An SVG comp the agent attached, image: 'file:comp-svg_1'}",
 	"```",
 ].join("\n");
+
+/** An agent's stored reply in the guide's room, with the id the caller gives it. */
+export const agentReply = (
+	id: number,
+	text: string,
+	over: Partial<RoomMessage> = {},
+): RoomMessage => ({
+	id,
+	room: "app:agent.guide",
+	kind: "agent",
+	agent: "guide",
+	author: "Guide",
+	text,
+	files: [],
+	at: "2026-11-08T10:00:00.000Z",
+	...over,
+});

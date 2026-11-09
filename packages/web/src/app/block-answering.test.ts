@@ -264,6 +264,62 @@ describeDb("the owner's answer to an interactive block", () => {
 		expect(sent[0]?.text).toContain("- store: sqlite");
 	});
 
+	test("other comments (pi-note) of a form answer reach the agent's text and stay in the block's record", async () => {
+		const message = await reply(FORM);
+		const note = "Use the one we already run.";
+		const outcome = await answer(
+			frame(message.id, 0, {
+				kind: "form",
+				fields: [
+					["store", "sqlite"],
+					["pi-note", note],
+				],
+			}),
+		);
+		expect(outcome.ok).toBe(true);
+		expect(sent[0]?.text).toContain("- store: sqlite");
+		expect(sent[0]?.text).toEndWith(`Other comments: ${note}`);
+		expect(sent[0]?.text).not.toContain("pi-note");
+		expect((await log.get(ROOM, message.id))?.answers).toEqual([
+			{
+				block: 0,
+				fields: [
+					["store", "sqlite"],
+					["pi-note", note],
+				],
+			},
+		]);
+	});
+
+	test("a pick with other comments sends them too, and two notes are refused", async () => {
+		const message = await reply(OPTIONS);
+		const two = await answer(
+			frame(message.id, 0, {
+				kind: "pick",
+				fields: [
+					["picked", "SQLite"],
+					["pi-note", "a"],
+					["pi-note", "b"],
+				],
+			}),
+		);
+		expect(two).toMatchObject({ ok: false, code: "invalid" });
+		expect(sent).toEqual([]);
+		const one = await answer(
+			frame(message.id, 0, {
+				kind: "pick",
+				fields: [
+					["picked", "SQLite"],
+					["pi-note", "but cheaply"],
+				],
+			}),
+		);
+		expect(one.ok).toBe(true);
+		expect(sent[0]?.text).toBe(
+			'User picked "SQLite".\n\nOther comments: but cheaply',
+		);
+	});
+
 	test("a required question left unanswered is refused at that question", async () => {
 		const message = await reply(FORM);
 		const outcome = await answer(
