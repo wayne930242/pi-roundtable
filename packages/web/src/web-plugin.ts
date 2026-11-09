@@ -15,7 +15,7 @@ import {
 	SKILLS,
 } from "pi-roundtable";
 import { DISCORD } from "pi-roundtable/discord";
-import type { KindLinkView, PageLinkView, PaneName } from "./api-types.ts";
+import type { PaneName } from "./api-types.ts";
 import { APP_MIGRATIONS, OwnerApp } from "./app/app.ts";
 import { APP_PROTOCOL } from "./app/protocol.ts";
 import { UPLOAD_FRAMING_BYTES } from "./app/uploads.ts";
@@ -27,11 +27,7 @@ import {
 } from "./auth/authenticator.ts";
 import { WebSessions } from "./auth/sessions.ts";
 import { startOidc } from "./auth/start-oidc.ts";
-import {
-	type AccessView,
-	ConsoleApi,
-	type ConsolePorts,
-} from "./console-api.ts";
+import { ConsoleApi } from "./console-api.ts";
 import { ConsoleServer } from "./console-server.ts";
 import { Gate } from "./gate.ts";
 import {
@@ -42,8 +38,9 @@ import {
 } from "./options.ts";
 import { loadVapid } from "./push/vapid.ts";
 import { accessVisitors, consoleVisitors } from "./visitors.ts";
-import { hostIcon, viewerOf, WEB_APP, WebAppRegistry } from "./web-app.ts";
+import { WEB_APP, WebAppRegistry } from "./web-app.ts";
 import { checkRegistered } from "./web-plugin-checks.ts";
+import { accessViewOf, hostedLinks } from "./web-plugin-hosted.ts";
 import { mountWebhooks } from "./webhooks/mount.ts";
 import { WebhookStore } from "./webhooks/store.ts";
 import { type WebhooksSlot, webhookTools } from "./webhooks/tools.ts";
@@ -223,67 +220,8 @@ async function build(
 	// A broken page stops startup here, before anything connects.
 	const assets = loadAssets(settings.assetDir);
 	const gate = new Gate({ registry: webApp });
-	/** The `icon` of a link when the host named one of the console's icons. */
-	const iconOf = (name: unknown) => {
-		const icon = hostIcon(name);
-		return icon ? { icon } : {};
-	};
-	const hosted: ConsolePorts["hosted"] = async (visitor) => {
-		const viewer = viewerOf(visitor);
-		const pages: PageLinkView[] = [];
-		for (const page of webApp.hostPages()) {
-			try {
-				if (await page.visible(viewer))
-					pages.push({
-						id: page.id,
-						label: page.label,
-						place: page.place,
-						...iconOf(page.icon),
-					});
-			} catch (error) {
-				logger.warn(
-					{ page: page.id, err: error },
-					"a page's visibility was not read",
-				);
-			}
-		}
-		const kinds: KindLinkView[] = [];
-		for (const kind of webApp.kinds()) {
-			try {
-				if ((await kind.list(viewer, {})) !== undefined)
-					kinds.push({
-						kind: kind.kind,
-						label: kind.label,
-						...iconOf(kind.icon),
-					});
-			} catch (error) {
-				logger.warn(
-					{ kind: kind.kind, err: error },
-					"a kind of room was not listed",
-				);
-			}
-		}
-		return { pages, kinds };
-	};
-	const access: AccessView | undefined =
-		settings.admission === "access"
-			? {
-					push: {
-						tiers: settings.push.tiers,
-						...(settings.push.sender !== "internal"
-							? {
-									key: settings.push.sender.external.publicKey,
-									...(settings.push.sender.external.subscribePath
-										? {
-												subscribe: settings.push.sender.external.subscribePath,
-											}
-										: {}),
-								}
-							: {}),
-					},
-					gate: (visitor) => gate.required(viewerOf(visitor)),
-				}
-			: undefined;
+	const hosted = hostedLinks(webApp, logger);
+	const access = accessViewOf(settings, gate);
 	const api = new ConsoleApi({
 		title: settings.title,
 		timeZone: env.timeZone,

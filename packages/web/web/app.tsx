@@ -1,13 +1,13 @@
-import {
-	lazy,
-	type ReactNode,
-	Suspense,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ConfigView, PaneName } from "../src/api-types.ts";
+import { type NavItem, ThemeButton, useViewportSize } from "./app-chrome.tsx";
+import {
+	ActionMenuHost,
+	NoticeBell,
+	Palette,
+	RoomConfirmHost,
+	SheetHosts,
+} from "./app-pages.ts";
 import { ErrorBoundary } from "./components/boundary.tsx";
 import { BrandMark } from "./components/brand-mark.tsx";
 import { ConnectionGate } from "./components/connection-gate.tsx";
@@ -18,7 +18,6 @@ import { WaitingButton } from "./components/waiting-button.tsx";
 import { api, messageOf, setPushSubscribe } from "./lib/api.ts";
 import { useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
-import { hostUi } from "./lib/frame-taps.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
 import { initLook } from "./lib/look.ts";
 import { useMedia } from "./lib/media.ts";
@@ -33,81 +32,8 @@ import { hrefFor, pageKey, setRouting, useRoute } from "./lib/router.ts";
 import { isSearchKey } from "./lib/search-key.ts";
 import { initSkins } from "./lib/skins.ts";
 import { openCards, tabTitle, useTabUnread } from "./lib/tab-count.ts";
-import { setTheme, useTheme } from "./lib/theme.ts";
-import { MorePage, PANE_ICONS, PANE_LABELS } from "./pages/more.tsx";
-import { RoomPage } from "./pages/room.tsx";
-import { RoomsPage } from "./pages/rooms.tsx";
-
-// The older panes are read less often than the rooms, so they load when first opened.
-// The menus' drawing loads once the page has: a long press is never the first thing a person does.
-const ActionMenuHost = lazy(() =>
-	import("./components/action-menu.tsx").then((m) => ({
-		default: m.ActionMenuHost,
-	})),
-);
-const Palette = lazy(() =>
-	import("./components/palette.tsx").then((m) => ({ default: m.Palette })),
-);
-const SheetHosts = lazy(() =>
-	import("./components/sheet-hosts.tsx").then((m) => ({
-		default: m.SheetHosts,
-	})),
-);
-const RoomConfirmHost = lazy(() =>
-	import("./components/room-confirms.tsx").then((m) => ({
-		default: m.RoomConfirmHost,
-	})),
-);
-// The bell and the gate's page load with the first notice or the first gated visit, not with the page.
-const NoticeBell = lazy(() => import("./components/notice-bell.tsx"));
-const GatePage = lazy(() =>
-	import("./pages/gate.tsx").then((m) => ({ default: m.GatePage })),
-);
-const AgentPage = lazy(() =>
-	import("./pages/agent.tsx").then((m) => ({ default: m.AgentPage })),
-);
-// A host's rooms load when the first one opens.
-const HostRoomPage = lazy(() =>
-	hostUi().then((ui) => ({ default: ui.HostRoomPage })),
-);
-const SchedulesPage = lazy(() =>
-	import("./pages/schedules.tsx").then((m) => ({ default: m.SchedulesPage })),
-);
-const PromptsPage = lazy(() =>
-	import("./pages/prompts.tsx").then((m) => ({ default: m.PromptsPage })),
-);
-const OverviewPage = lazy(() =>
-	import("./pages/overview.tsx").then((m) => ({ default: m.OverviewPage })),
-);
-const ConversationsPage = lazy(() =>
-	import("./pages/conversations.tsx").then((m) => ({
-		default: m.ConversationsPage,
-	})),
-);
-const TranscriptPage = lazy(() =>
-	import("./pages/transcript.tsx").then((m) => ({ default: m.TranscriptPage })),
-);
-const NotesPage = lazy(() =>
-	import("./pages/notes.tsx").then((m) => ({ default: m.NotesPage })),
-);
-const SkillsPage = lazy(() =>
-	import("./pages/skills.tsx").then((m) => ({ default: m.SkillsPage })),
-);
-const ConnectorsPage = lazy(() =>
-	import("./pages/connectors.tsx").then((m) => ({ default: m.ConnectorsPage })),
-);
-// The files pane is light too; its editor is a chunk of its own that waits for the first file to open.
-const WorkspacePage = lazy(() =>
-	import("./pages/workspace.tsx").then((m) => ({ default: m.WorkspacePage })),
-);
-// Settings is not where a visit starts, so its page loads when it first opens.
-const SettingsPage = lazy(() =>
-	import("./pages/settings.tsx").then((m) => ({ default: m.SettingsPage })),
-);
-// The table's page is light, and the scene it mounts is a chunk of its own that waits for the view to open.
-const TablePage = lazy(() =>
-	import("./pages/table.tsx").then((m) => ({ default: m.TablePage })),
-);
+import { PANE_ICONS, PANE_LABELS } from "./pages/more.tsx";
+import { PaneBody } from "./pane-body.tsx";
 
 export function App() {
 	const [config, setConfig] = useState<ConfigView>();
@@ -147,58 +73,6 @@ export function App() {
 				shell
 			)}
 		</ConfigContext.Provider>
-	);
-}
-
-interface NavItem {
-	pane: string;
-	label: string;
-	icon: IconName;
-}
-
-/** Keeps the layout the size of what the person can see: the visible area shrinks when the on-screen keyboard rises. */
-function useViewportSize(): void {
-	useEffect(() => {
-		const viewport = window.visualViewport;
-		const root = document.documentElement;
-		const apply = () => {
-			root.style.setProperty(
-				"--app-height",
-				`${viewport?.height ?? window.innerHeight}px`,
-			);
-			root.style.setProperty("--app-top", `${viewport?.offsetTop ?? 0}px`);
-		};
-		apply();
-		viewport?.addEventListener("resize", apply);
-		viewport?.addEventListener("scroll", apply);
-		window.addEventListener("resize", apply);
-		return () => {
-			viewport?.removeEventListener("resize", apply);
-			viewport?.removeEventListener("scroll", apply);
-			window.removeEventListener("resize", apply);
-		};
-	}, []);
-}
-
-function ThemeButton() {
-	const { resolved } = useTheme();
-	return (
-		<button
-			type="button"
-			className="icon-button"
-			aria-label={
-				resolved === "dark" ? t("Switch to light") : t("Switch to dark")
-			}
-			onClick={(event) => {
-				const box = event.currentTarget.getBoundingClientRect();
-				setTheme(resolved === "dark" ? "light" : "dark", {
-					x: box.left + box.width / 2,
-					y: box.top + box.height / 2,
-				});
-			}}
-		>
-			<Icon name={resolved === "dark" ? "sun" : "moon"} />
-		</button>
 	);
 }
 
@@ -353,97 +227,19 @@ function Console({ config }: { config: ConfigView }) {
 		(item) => !tabs.some((tab) => tab.pane === item.pane),
 	);
 
-	const body: ReactNode = (() => {
-		if (forbidden)
-			return (
-				<div className="page">
-					<Failure
-						message={t(
-							"This account is not an owner of this host, so the app stays closed. Reload the page to try again.",
-						)}
-					/>
-				</div>
-			);
-		if (gateShown) return <GatePage steps={owed} />;
-		switch (pane) {
-			case "rooms":
-				return <RoomsPage onSearch={() => setPalette(true)} />;
-			case "room": {
-				if (!route.key) return <RoomsPage onSearch={() => setPalette(true)} />;
-				const detail = (config.kinds ?? []).some((kind) =>
-					route.key?.startsWith(`${app?.surface}:${kind.kind}.`),
-				) ? (
-					<HostRoomPage key={route.key} roomKey={route.key} />
-				) : (
-					<RoomPage key={route.key} roomKey={route.key} />
-				);
-				return wide ? (
-					<div className="split">
-						<div className="split-list">
-							<RoomsPage onSearch={() => setPalette(true)} active={route.key} />
-						</div>
-						<div className="split-detail">{detail}</div>
-					</div>
-				) : (
-					detail
-				);
-			}
-			case "agent":
-				return route.key ? (
-					<AgentPage key={route.key} name={route.key} />
-				) : null;
-			case "schedules":
-				return <SchedulesPage />;
-			case "table":
-				return <TablePage focus={route.key} />;
-			case "workspace":
-				return <WorkspacePage />;
-			case "settings":
-				return <SettingsPage />;
-			case "prompts":
-				return <PromptsPage />;
-			case "more":
-				return <MorePage items={moreItems} />;
-			case "overview":
-				return (
-					<Legacy>
-						<OverviewPage />
-					</Legacy>
-				);
-			case "conversations":
-				return (
-					<Legacy>
-						{route.key ? (
-							<TranscriptPage key={route.key} conversationKey={route.key} />
-						) : (
-							<ConversationsPage />
-						)}
-					</Legacy>
-				);
-			case "notes":
-				return (
-					<Legacy>
-						<NotesPage />
-					</Legacy>
-				);
-			case "skills":
-				return (
-					<Legacy>
-						<SkillsPage />
-					</Legacy>
-				);
-			case "connectors":
-				return (
-					<Legacy>
-						<ConnectorsPage />
-					</Legacy>
-				);
-			default: {
-				const Extra = PAGE_ROUTES[pane];
-				return Extra ? <Extra pane={pane} routeKey={route.key} /> : null;
-			}
-		}
-	})();
+	const body = (
+		<PaneBody
+			config={config}
+			pane={pane}
+			routeKey={route.key}
+			forbidden={forbidden}
+			gateShown={gateShown}
+			owed={owed}
+			wide={wide}
+			moreItems={moreItems}
+			openPalette={() => setPalette(true)}
+		/>
+	);
 
 	const online = app ? connection === "open" : live.connected;
 	// Where the app admits more than its owners, the bell shows what waits on the person.
@@ -569,8 +365,4 @@ function Console({ config }: { config: ConfigView }) {
 			) : null}
 		</LiveContext.Provider>
 	);
-}
-
-function Legacy({ children }: { children: ReactNode }) {
-	return <div className="page">{children}</div>;
 }
