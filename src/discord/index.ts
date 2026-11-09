@@ -21,6 +21,8 @@ export type {
 	AgentPanelOptions,
 } from "../core/discord/agent-panel.ts";
 export { agentPanel } from "../core/discord/agent-panel.ts";
+export type { DiscordPlaceProviderOptions } from "../core/discord/agent-places.ts";
+export { discordPlaceProvider } from "../core/discord/agent-places.ts";
 export {
 	CHANNEL_CONTEXT_DEFAULTS,
 	formatChannelContext,

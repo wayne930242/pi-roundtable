@@ -7,6 +7,7 @@ import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import { AgentError } from "../domain/errors.ts";
 import { PluginError } from "../kernel/errors.ts";
 import type { Logger } from "../kernel/log.ts";
+import type { DiscordConnection } from "./connection.ts";
 
 const SURFACE = "discord";
 
@@ -14,7 +15,8 @@ const SURFACE = "discord";
 const UNKNOWN_CHANNEL = 10003;
 
 export interface DiscordPlacesOptions {
-	client: Client;
+	/** The discord.js client that can ask Discord whether a stored channel still exists; without one the provider has no `check`, and a stored channel is taken as it is. */
+	client?: Client;
 	/** The agent guild: the only server whose channels are the team's places. */
 	guild: string;
 	channels: AgentChannels;
@@ -43,6 +45,27 @@ const category = (kind: "Agents" | "Groups") =>
 export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 	const { client, guild, channels, logger } = options;
 	const mention = (id: string) => `<#${id}>`;
+	const checkWith =
+		(asked: Client) =>
+		async (id: string): Promise<PlaceCheck> => {
+			// Fetched fresh: a cached channel says nothing of one deleted since.
+			const found = await asked.channels
+				.fetch(id, { force: true })
+				.catch((error: unknown) => {
+					// Only Discord's own "unknown" says gone. Missing Access (50001) says nothing of whose
+					// guild the channel is in: a hidden channel of the agent guild answers it too, so it throws.
+					if (
+						error instanceof DiscordAPIError &&
+						error.code === UNKNOWN_CHANNEL
+					)
+						return "gone" as const;
+					throw error;
+				});
+			if (found === "gone") return found;
+			// A channel discord.js cannot build is none of the agent guild's; only Discord's own "unknown" says gone.
+			if (found === null) return "foreign";
+			return !found.isDMBased() && found.guildId === guild ? "ok" : "foreign";
+		};
 	return {
 		surface: SURFACE,
 		storage: "stored",
@@ -135,25 +158,7 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			}
 			return `its channel ${mention(id)} is kept under Archive.`;
 		},
-		check: async (id): Promise<PlaceCheck> => {
-			// Fetched fresh: a cached channel says nothing of one deleted since.
-			const found = await client.channels
-				.fetch(id, { force: true })
-				.catch((error: unknown) => {
-					// Only Discord's own "unknown" says gone. Missing Access (50001) says nothing of whose
-					// guild the channel is in: a hidden channel of the agent guild answers it too, so it throws.
-					if (
-						error instanceof DiscordAPIError &&
-						error.code === UNKNOWN_CHANNEL
-					)
-						return "gone" as const;
-					throw error;
-				});
-			if (found === "gone") return found;
-			// A channel discord.js cannot build is none of the agent guild's; only Discord's own "unknown" says gone.
-			if (found === null) return "foreign";
-			return !found.isDMBased() && found.guildId === guild ? "ok" : "foreign";
-		},
+		...(client ? { check: checkWith(client) } : {}),
 		describe: (id, topic) => channels.setTopic(id, topic),
 		onRemoved: (listener) => options.onRemoved(listener),
 		mention: (key) => mention(parseChannelKey(key).id),
@@ -178,4 +183,33 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			return `Categories, in server order:\n${lines.join("\n") || "none"}`;
 		},
 	};
+}
+
+export interface DiscordPlaceProviderOptions {
+	/** The agent guild: the only server whose channels are the team's places. */
+	guild: string;
+	/** The Discord the host uses, as `DISCORD` provides it: the provider reads the guild's channels and deleted channels from it. */
+	connection: Pick<DiscordConnection, "agentChannels" | "onChannelDeleted">;
+	logger: Logger;
+	/** The discord.js client, so the team can check at start that its stored channels still exist; absent = they are taken as they are. */
+	client?: Client;
+}
+
+/**
+ * Discord's place provider for a plugin that replaces `DISCORD` with a Discord of its own: the
+ * agent guild's channels as the team's places, with the keys, seats and log names the built-in
+ * Discord plugin gives them, so no stored session, schedule or held action moves. Contribute it
+ * with `places` from the replacing plugin whenever the host has `discord.guild`.
+ */
+export function discordPlaceProvider(
+	options: DiscordPlaceProviderOptions,
+): PlaceProvider {
+	const { guild, connection } = options;
+	return discordPlaces({
+		...(options.client ? { client: options.client } : {}),
+		guild,
+		channels: connection.agentChannels(guild),
+		onRemoved: (listener) => connection.onChannelDeleted(listener),
+		logger: options.logger,
+	});
 }

@@ -124,6 +124,7 @@ export function agentServerPlugin(
 	const teamId = options.teamId ?? options.guildId ?? LOCAL_TEAM_ID;
 	/** Set once the plugin has set up; the preflight reads it after every plugin linked. */
 	let hostsRooms: (() => boolean) | undefined;
+	let servesDiscord: (() => boolean) | undefined;
 	let linkRoutes: (() => void) | undefined;
 	return {
 		name: AGENT_SERVER_PLUGIN,
@@ -158,6 +159,11 @@ export function agentServerPlugin(
 				throw new ConfigError(
 					"the agents need a surface that hosts their rooms, such as pi-roundtable-web, and none is installed. Without Discord channels there is nowhere to talk to them; add a plugin whose chat surface declares agentRooms: true, or configure discord with its guild.",
 				);
+			// Channels the team makes but no provider reads would leave its agents unanswered.
+			if (servesDiscord && !servesDiscord())
+				throw new ConfigError(
+					`the agent guild ${options.guildId} has Discord channels for the agents, but no plugin contributes the place provider of the "discord" surface, so the team cannot read them. A plugin that replaces DISCORD must contribute it with places: [discordPlaceProvider({ guild, connection, logger })] from pi-roundtable/discord.`,
+				);
 			// The surfaces the rules name exist only once every plugin has registered its own.
 			linkRoutes?.();
 		},
@@ -173,6 +179,7 @@ export function agentServerPlugin(
 					? connection.agentChannels(options.guildId)
 					: undefined;
 			if (!channels) hostsRooms = () => surfaces.roomSurfaces().length > 0;
+			else servesDiscord = () => context.places.of("discord") !== undefined;
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
 				skins: context.env.characterSkins,

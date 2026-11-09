@@ -11,7 +11,7 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import { discordPlaces } from "../discord/agent-places.ts";
+import { discordPlaceProvider } from "../discord/agent-places.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -231,17 +231,10 @@ export function standInDiscord(
 				directChannels: [direct],
 				places: agentGuild
 					? [
-							discordPlaces({
-								// SAFETY: a stand-in's provider is read for keys; nothing asks the client.
-								client: undefined as never,
+							discordPlaceProvider({
 								guild: agentGuild,
-								channels: (
-									connection.agentChannels as (guild: string) => never
-								)(agentGuild),
-								onRemoved: (listener) =>
-									(connection.onChannelDeleted as (l: typeof listener) => void)(
-										listener,
-									),
+								// SAFETY: a stand-in's provider is read for keys; nothing asks the channels.
+								connection: connection as never,
 								logger: silentLogger(),
 							}),
 						]

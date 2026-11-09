@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DISCORD, type DiscordServices } from "../core/builtin/discord.ts";
 import type { RoundtableConfig } from "../core/config/config.ts";
 import type { ChatSurface } from "../core/contract/surface.ts";
+import { discordPlaceProvider } from "../core/discord/agent-places.ts";
 import {
 	type DefinedRoundtable,
 	defineRoundtable,
@@ -44,19 +45,31 @@ function quietDiscord(): RoundtablePlugin {
 		replaces: [DISCORD],
 		setup: ({ services }) => {
 			// SAFETY: the built-in plugins after it hand these to the team and the tools, which read them only when a turn or a command runs.
+			const connection = {
+				agentChannels: () => ({}),
+				agentDashboard: () => ({ show: async () => undefined }),
+				onChannelDeleted: () => undefined,
+				ownerChannel: async () => "discord:owner",
+				ownerOperations: () => ({}),
+			};
 			services.provide(DISCORD, {
-				connection: {
-					agentChannels: () => ({}),
-					agentDashboard: () => ({ show: async () => undefined }),
-					onChannelDeleted: () => undefined,
-					ownerChannel: async () => "discord:owner",
-					ownerOperations: () => ({}),
-				},
+				connection,
 				commands: { add: () => undefined },
 				threads: { open: async () => undefined, sweep: async () => undefined },
 				guard: {},
 			} as unknown as DiscordServices);
-			return { surfaces: [surface] };
+			return {
+				surfaces: [surface],
+				// The agent guild's channels are the team's places; a Discord that replaces the built-in one reads them through this.
+				places: [
+					discordPlaceProvider({
+						guild: "900000000000000001",
+						// SAFETY: the provider is read for keys; nothing asks the channels.
+						connection: connection as never,
+						logger: silentLogger(),
+					}),
+				],
+			};
 		},
 	};
 }

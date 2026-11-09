@@ -8,6 +8,8 @@ The agent team reads where its agents and groups are through the place providers
 
 `Agent.channelId`, `AgentGroup.channelId`, `AgentSeed.channelId`, `AgentDirectory.agentByChannel` and `groupByChannel`, `AgentTeam.guildId` and `discordGuild`, and the `channelId` of the `TeamStatus` views are deprecated and removed in 1.0; read `placesOf` and `placeOwner`. The team still keeps them up to date.
 
-The web console reads the team's `places` for its channel links.
+The web console reads the team's `places` for its channel links and its `teamId` for the team's name.
 
-The stand-in Discord of `testHost` contributes Discord's place provider when the test host has an agent guild, as the built-in plugin does. A plugin that replaces `DISCORD` with a Discord of its own, in a host with an agent guild, must contribute a provider for the surface as well, or the team has no Discord places.
+The stand-in Discord of `testHost` contributes Discord's place provider when the test host has an agent guild, as the built-in plugin does. A plugin that replaces `DISCORD` with a Discord of its own, in a host with an agent guild, must contribute that provider too: `discordPlaceProvider` from `pi-roundtable/discord`, given the `guild`, the `connection` and a `logger` (`DiscordPlaceProviderOptions`), is the built-in one, with the keys, group seats and log names Discord's teams have always had, so contribute it with `places`. A host with an agent guild and a Discord that has no such provider now refuses to start, naming it, instead of leaving the agents unanswered.
+
+A key of a surface no provider serves is no room: a message kept for one is dropped on the next start without a model turn, as before, and a group seat whose home is such a key posts there.
