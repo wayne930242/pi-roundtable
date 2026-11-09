@@ -183,6 +183,10 @@ const CJK_FILES = [
 	"README.zh-TW.md",
 	// The web package's built-in zh-TW catalog, its parts, and its test, which names the terms the catalog must use.
 	"packages/web/src/i18n/zh-tw.ts",
+	"packages/web/src/i18n/zh-tw-app.ts",
+	"packages/web/src/i18n/zh-tw-knights.ts",
+	"packages/web/src/i18n/zh-tw-people.ts",
+	"packages/web/src/i18n/zh-tw-settings.ts",
 	"packages/web/src/i18n/zh-tw-rows.ts",
 	"packages/web/src/i18n/zh-tw-webhooks.ts",
 	"packages/web/src/i18n/zh-tw.test.ts",
