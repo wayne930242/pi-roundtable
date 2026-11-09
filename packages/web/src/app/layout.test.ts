@@ -24,6 +24,7 @@ describeDb("the room list's layout in the database", () => {
 		// The tables are created if absent and never dropped: the host-migrated ledger would not recreate them.
 		sql = new SQL(testDatabaseUrl, { max: 8 });
 		await RoomLayout.migration.up(sql);
+		await RoomLayout.hiddenMigration.up(sql);
 		layout = new RoomLayout(sql);
 	});
 	afterAll(async () => {

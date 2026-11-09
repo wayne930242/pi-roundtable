@@ -1,7 +1,7 @@
-// The styles of the chat home and of the shell under it: no rail and no tab bar, the pins, the
-// folder chips, the list without cards, the grid of all features. They load with the home (the
-// page's own stylesheet, which every visit downloads before it draws, stays as small as before),
-// as a constructed stylesheet, once for the page.
+// The styles of the chat home: the pins, the folder chips, the list without cards, the bottom bar,
+// the grid of all features. (The shell under it, with no rail and no tab bar, is in `styles.css`.)
+// They load with the home as a constructed stylesheet, once for the page, so the page's own
+// stylesheet, which every visit downloads before it draws, stays as small as before.
 //
 // Status shows through a badge, an icon or a tint, and a card or a button has a border on all four
 // sides or on none: the open room's row keeps a uniform accent border, never one colored edge.
@@ -10,38 +10,6 @@ import { CHATS_FEATURES_CSS } from "./chats-features-style.ts";
 import { installStyle } from "./lazy-style.ts";
 
 export const CHATS_HOME_CSS = `
-/* ── The shell: the home is the whole menu, so the rail and the tab bar are gone ───────────────── */
-
-.app[data-home="chats"] {
-	grid-template-columns: minmax(0, 1fr);
-	grid-template-rows: minmax(0, 1fr);
-}
-
-.app[data-home="chats"] .rail,
-.app[data-home="chats"] .tabbar {
-	display: none;
-}
-
-.app[data-home="chats"] .stage {
-	grid-column: 1;
-	padding-left: var(--safe-left);
-}
-
-/* A page other than the home and a room has a bar with the way back; the home and a room carry their own. */
-.app[data-home="chats"] .topbar {
-	display: none;
-	justify-content: flex-start;
-}
-
-.app[data-home="chats"][data-bar] .topbar {
-	display: flex;
-}
-
-.app[data-home="chats"] .topbar .back-link {
-	flex: none;
-	margin-left: calc(var(--space-2) * -1);
-}
-
 /* ── The home ──────────────────────────────────────────────────────────────────────────────────── */
 
 .chats {

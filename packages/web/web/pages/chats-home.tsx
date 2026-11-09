@@ -9,7 +9,6 @@ import { lastChip, rememberChip } from "../lib/chat-chip.ts";
 import { chipsOf, hiddenDot, listFor, pinsOf } from "../lib/chats-home.ts";
 import { installChatsHomeStyle } from "../lib/chats-home-style.ts";
 import { useConfig } from "../lib/config.ts";
-import { useHost } from "../lib/host-state.ts";
 import "../lib/home-icons.ts";
 import { AllFeatures } from "../components/all-features.tsx";
 import { ChatRow } from "../components/chat-row.tsx";
@@ -21,6 +20,7 @@ import { openAddMenu } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
 import { activityAt } from "../lib/rooms.ts";
 import { type Sections, sections } from "../lib/sections.ts";
+import { useUnreadMap } from "../lib/unread-map.ts";
 import { HostKinds, useRowData } from "./rooms.tsx";
 
 export interface ChatsHomeProps {
@@ -71,7 +71,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 	const pins = pinsOf(arrangement);
 	const rows = useRowData([...pins, ...listKeys]);
 	const byKey = new Map(rows.map((row) => [row.key, row]));
-	const unread = useHost((state) => state.unread);
+	const unread = useUnreadMap();
 	const archived = useArchivedCount();
 	const hidden = arrangement.hidden.length;
 	const none = listed && pins.length + listKeys.length === 0 && hidden === 0;
@@ -107,6 +107,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 								{...data}
 								active={key === props.active}
 								size={props.column || props.active !== undefined ? 56 : 80}
+								unread={unread[key] ?? 0}
 							/>
 						);
 					})}
@@ -136,6 +137,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 							now={now}
 							timeZone={timeZone}
 							threads={arrangement.threads[key]?.open.length ?? 0}
+							unread={unread[key] ?? 0}
 						/>
 					);
 				})}

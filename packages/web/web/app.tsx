@@ -17,7 +17,6 @@ import { Toaster } from "./components/toaster.tsx";
 import { WaitingButton } from "./components/waiting-button.tsx";
 import { api, messageOf, setPushSubscribe } from "./lib/api.ts";
 import { useSelector } from "./lib/app-store.ts";
-import { installChatsHomeStyle } from "./lib/chats-home-style.ts";
 import { ConfigContext } from "./lib/config.ts";
 import { setHomeMode } from "./lib/home-mode.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
@@ -98,7 +97,13 @@ function Console({ config }: { config: ConfigView }) {
 	const hasApp = app !== undefined && config.panes.includes("rooms");
 	// The host opens the app on the chat list: no rail and no tab bar, and a back control on the other pages.
 	const chats = hasApp && app?.home === "chats";
-	if (chats) installChatsHomeStyle();
+	// The rest of the home's styles load beside it; the shell's are in the page's stylesheet.
+	useEffect(() => {
+		if (chats)
+			import("./lib/chats-home-style.ts").then((m) =>
+				m.installChatsHomeStyle(),
+			);
+	}, [chats]);
 	const [palette, setPalette] = useState(false);
 	// Wide enough, the room list stands beside the open room.
 	const wide = useMedia("(min-width: 1024px)");

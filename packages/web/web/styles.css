@@ -348,6 +348,38 @@ kbd {
 	}
 }
 
+/* A host that opens on the chat list (`appearance.home`): the home is the whole menu, so the rail and the tab bar are gone. */
+
+.app[data-home="chats"] {
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+}
+
+.app[data-home="chats"] .rail,
+.app[data-home="chats"] .tabbar {
+	display: none;
+}
+
+.app[data-home="chats"] .stage {
+	grid-column: 1;
+	padding-left: var(--safe-left);
+}
+
+/* A page other than the home and a room has a bar with the way back; the home and a room carry their own. */
+.app[data-home="chats"] .topbar {
+	display: none;
+	justify-content: flex-start;
+}
+
+.app[data-home="chats"][data-bar] .topbar {
+	display: flex;
+}
+
+.app[data-home="chats"] .topbar .back-link {
+	flex: none;
+	margin-left: calc(var(--space-2) * -1);
+}
+
 /* ── Pages ─────────────────────────────────────────────────────────────────────────────────────── */
 
 .page {

@@ -76,6 +76,10 @@ test("the page builds with relative URLs only, and every file it names is in the
  * The 150 bytes after that are splitting the files that passed the size limit (126 over): no
  * behavior moved, but the entry's code now crosses more module boundaries (the app shell hands its
  * state to the pane body as props, the rooms reducer is several modules).
+ * The 800 bytes after that are the chat home (755 over): the shell's back bar and the pane body's
+ * choice of home and column, the `hidden` list in the room state and the sections, the Hide item
+ * and the bare figure; the home, its grid, its page for hidden rooms, the room's threads control
+ * and all of their styles are lazy chunks.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -95,7 +99,8 @@ const FIRST_LOAD_BASELINE =
 	50 +
 	100 +
 	153 +
-	150;
+	150 +
+	800;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 

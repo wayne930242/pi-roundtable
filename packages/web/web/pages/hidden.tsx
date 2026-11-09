@@ -8,7 +8,6 @@ import { useAccentStyle } from "../lib/characters.ts";
 import { installChatsHomeStyle } from "../lib/chats-home-style.ts";
 import { useConfig } from "../lib/config.ts";
 import { ago } from "../lib/format.ts";
-import { useHost } from "../lib/host-state.ts";
 import { hideRoom } from "../lib/layout-actions.ts";
 import { useLive } from "../lib/live.ts";
 import { roomMenuOf } from "../lib/menus.ts";
@@ -16,15 +15,20 @@ import { plural, translate as t } from "../lib/messages.ts";
 import { activityAt } from "../lib/rooms.ts";
 import { hrefFor } from "../lib/router.ts";
 import { type Sections, sections } from "../lib/sections.ts";
+import { useUnreadMap } from "../lib/unread-map.ts";
 import { type RowData, ThreadList, useRowData } from "./rooms.tsx";
 
 /** One hidden room: it still answers, and shows when it last spoke; Unhide returns it to its place. */
 const HiddenRoom = memo(function HiddenRoom(
-	props: Omit<RowData, "key"> & { now: number; timeZone: string },
+	props: Omit<RowData, "key"> & {
+		now: number;
+		timeZone: string;
+		unread: number;
+	},
 ) {
 	const { view } = props;
 	const accent = useAccentStyle(view.character);
-	const unread = useHost((state) => state.unread[view.key] ?? 0);
+	const { unread } = props;
 	return (
 		<li className="hidden-room" style={accent}>
 			<a className="hidden-room-link" href={hrefFor("room", view.key)}>
@@ -109,6 +113,7 @@ export default function HiddenPage() {
 		[shape],
 	);
 	const rows = useRowData(hidden);
+	const unread = useUnreadMap();
 	return (
 		<div className="page">
 			<header className="page-head">
@@ -128,7 +133,13 @@ export default function HiddenPage() {
 				) : (
 					<ul className="room-list hidden-list">
 						{rows.map(({ key, ...row }) => (
-							<HiddenRoom key={key} {...row} now={now} timeZone={timeZone} />
+							<HiddenRoom
+								key={key}
+								{...row}
+								now={now}
+								timeZone={timeZone}
+								unread={unread[key] ?? 0}
+							/>
 						))}
 					</ul>
 				)}

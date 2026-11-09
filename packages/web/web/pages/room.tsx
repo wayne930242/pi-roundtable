@@ -5,7 +5,6 @@ import { HeaderPicture } from "../components/header-picture.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { RoomChat } from "../components/room-chat.tsx";
-import { RoomThreadsButton } from "../components/room-threads.tsx";
 import { Empty, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { WaitingButton } from "../components/waiting-button.tsx";
@@ -33,6 +32,13 @@ const CouncilView = lazy(() =>
 const ModeToggle = lazy(() =>
 	import("../components/mode-toggle.tsx").then((m) => ({
 		default: m.ModeToggle,
+	})),
+);
+
+// The control for a room's threads is read only where the home is the chat list.
+const RoomThreadsButton = lazy(() =>
+	import("../components/room-threads.tsx").then((m) => ({
+		default: m.RoomThreadsButton,
 	})),
 );
 
@@ -233,7 +239,11 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<header className="room-head">
 						{lead}
 						<WaitingButton />
-						<RoomThreadsButton room={roomKey} />
+						{chatsHome() ? (
+							<Suspense fallback={null}>
+								<RoomThreadsButton room={roomKey} />
+							</Suspense>
+						) : null}
 						<button
 							ref={menuButton}
 							type="button"

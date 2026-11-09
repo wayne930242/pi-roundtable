@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
 import { pinBadge } from "../lib/chats-home.ts";
-import { useHost } from "../lib/host-state.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
@@ -15,13 +14,17 @@ import { RoomPicture } from "./room-picture.tsx";
  * waiting there, else the unread messages, else a dot while its agent works; Home also wears a star.
  */
 export const PinTile = memo(function PinTile(
-	props: Omit<RowData, "key"> & { active: boolean; size: number },
+	props: Omit<RowData, "key"> & {
+		active: boolean;
+		size: number;
+		/** Messages of the room the person has not read. */
+		unread: number;
+	},
 ) {
 	const { view } = props;
 	const press = useMenuPress(() => roomMenuOf(view.key));
 	const accent = useAccentStyle(view.character);
-	const unread = useHost((state) => state.unread[view.key] ?? 0);
-	const badge = pinBadge(props.waiting, unread, props.typing);
+	const badge = pinBadge(props.waiting, props.unread, props.typing);
 	return (
 		<li className="pin-item">
 			<a

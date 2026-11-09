@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
 import { ago } from "../lib/format.ts";
-import { useHost } from "../lib/host-state.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
@@ -23,12 +22,14 @@ export const ChatRow = memo(function ChatRow(
 		timeZone: string;
 		/** The room's open dispatch threads. */
 		threads: number;
+		/** Messages of the room the person has not read. */
+		unread: number;
 	},
 ) {
 	const { view } = props;
 	const press = useMenuPress(() => roomMenuOf(view.key));
 	const accent = useAccentStyle(view.character);
-	const unread = useHost((state) => state.unread[view.key] ?? 0);
+	const { unread } = props;
 	return (
 		<li>
 			<ReadReveal />

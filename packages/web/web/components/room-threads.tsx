@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { useConfig } from "../lib/config.ts";
 import { plural, translate as t } from "../lib/messages.ts";
@@ -26,6 +26,13 @@ export function RoomThreadsButton(props: { room: string }) {
 	);
 	const threads = useMemo(() => JSON.parse(shape) as ThreadKeys, [shape]);
 	const [open, setOpen] = useState(false);
+	// The control's styles come with the chat home's, which a room opened by its address has not loaded yet.
+	useEffect(() => {
+		if (chats)
+			import("../lib/chats-home-style.ts").then((m) =>
+				m.installChatsHomeStyle(),
+			);
+	}, [chats]);
 	const count = threads.open.length + threads.closed.length;
 	if (!chats || count === 0) return null;
 	const label = plural(count, "{count} thread", "{count} threads");
