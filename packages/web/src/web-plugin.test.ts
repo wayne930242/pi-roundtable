@@ -1,16 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { AGENTS, IDENTITY, MEMORY } from "pi-roundtable";
+import { describe, expect, test } from "bun:test";
+import { AGENTS } from "pi-roundtable";
 import { CATALOG, EAST_ASIAN_SKINS } from "pi-roundtable/characters";
-import { DISCORD } from "pi-roundtable/discord";
-import {
-	partial,
-	servicePair,
-	type TestPluginResult,
-	testPlugin,
-} from "pi-roundtable/testing";
+import { testPlugin } from "pi-roundtable/testing";
 import type {
 	ConfigView,
 	ConversationsView,
@@ -19,323 +10,36 @@ import type {
 	PrincipalsView,
 } from "./api-types.ts";
 import { cloudflareAccess } from "./cloudflare-access.ts";
-import { resolveOptions } from "./options.ts";
 import {
 	AUDIENCE,
-	accessIdentity,
-	accessKeys,
 	type FakePrincipal,
-	fakeIdentity,
-	fakeMemory,
-	fixtureSessions,
 	ORIGIN,
 	OWNER_CHANNEL,
 	OWNER_EMAIL,
-	OWNER_SUB,
 	TEAM,
 } from "./testing/fixtures.ts";
+import {
+	agents,
+	base,
+	boot,
+	discord,
+	harnesses,
+	identity,
+	keys,
+	MEMBER,
+	MEMBER_EMAIL,
+	memory,
+	OWNER,
+	SECOND,
+	SECOND_EMAIL,
+	sign,
+	teamChanges,
+	webPluginHostPerTest,
+} from "./testing/web-plugin-host.ts";
 import { admit } from "./verifier.ts";
 import { webConsole } from "./web-plugin.ts";
 
-const { keys, sign } = await accessKeys();
-const verifier = cloudflareAccess({
-	teamDomain: TEAM,
-	audience: AUDIENCE,
-	email: OWNER_EMAIL,
-	keys,
-});
-
-/** A built page stand-in: the plugin reads whatever is in the directory. */
-function assetDir(): string {
-	const dir = mkdtempSync(join(tmpdir(), "web-console-page-"));
-	writeFileSync(join(dir, "index.html"), "<html>console</html>");
-	return dir;
-}
-
-const harnesses: TestPluginResult[] = [];
-afterEach(async () => {
-	await Promise.all(harnesses.splice(0).map((harness) => harness.stop()));
-});
-
-const teamChanges: (() => void)[] = [];
-const agents = servicePair(AGENTS, {
-	team: partial({
-		discordGuild: "900000000000000099",
-		onChange: (listener: () => void) => teamChanges.push(listener),
-		owns: () => undefined,
-		status: async () => ({ agents: [], groups: [] }),
-	}) as never,
-});
-/** The owner, as the configuration links their Access identity, and their memory. */
-const OWNER: FakePrincipal = {
-	id: "owner",
-	name: "Owner",
-	tier: "owner",
-	identities: [accessIdentity(OWNER_SUB)],
-};
-const SECOND_EMAIL = "second@example.test";
-const SECOND: FakePrincipal = {
-	id: "p_01J0000000000000000000BEA0",
-	name: "Bea",
-	tier: "owner",
-	identities: [accessIdentity("bea")],
-};
-const MEMBER_EMAIL = "member@example.test";
-const MEMBER: FakePrincipal = {
-	id: "p_01J0000000000000000000MEL0",
-	name: "Mel",
-	tier: "member",
-	identities: [accessIdentity("mel")],
-};
-const identity = (people: FakePrincipal[] = [OWNER]) =>
-	servicePair(IDENTITY, fakeIdentity(people));
-/** Each principal's memory, kept like the store keeps it: the same rows on every read. */
-const memories = new Map<string, ReturnType<typeof fakeMemory>>();
-afterEach(() => memories.clear());
-const memory = servicePair(MEMORY, {
-	forSpeaker: (id: string) => {
-		const found =
-			memories.get(id) ??
-			fakeMemory([
-				{
-					kind: "core",
-					fact: id === OWNER.id ? "Likes tea" : `Notes of ${id}`,
-					eventDate: null,
-				},
-			]);
-		memories.set(id, found);
-		return found;
-	},
-});
-const discord = servicePair(DISCORD, {
-	connection: partial({
-		channelInfo: async () => ({ kind: "dm" as const, name: "Owner" }),
-	}) as never,
-});
-
-/** The panes of 0.22: the owner app (`rooms`) needs a database and the agent server, which a plugin harness does not have. */
-const PANES = ["overview", "conversations", "notes"] as const;
-const base = () => ({
-	verifier,
-	origin: ORIGIN,
-	ownerId: "owner",
-	dataDir: fixtureSessions(),
-	assetDir: assetDir(),
-	panes: PANES,
-});
-
-async function boot(
-	options: Partial<Parameters<typeof webConsole>[0]> = {},
-	people?: FakePrincipal[],
-) {
-	const harness = await testPlugin(webConsole({ ...base(), ...options }), {
-		services: [agents, memory, discord, identity(people)],
-	});
-	harnesses.push(harness);
-	const route = (name: string) => {
-		const found = harness.contribution.http?.find((r) => r.name === name);
-		if (!found) throw new Error(`no route ${name}`);
-		return found;
-	};
-	const call = async (path: string, init: RequestInit = {}, jwt?: string) =>
-		route("web-console").handle(
-			new Request(`http://host${path}`, {
-				...init,
-				headers: {
-					...(jwt ? { "cf-access-jwt-assertion": jwt } : {}),
-					...init.headers,
-				},
-			}),
-		);
-	return { harness, call, route };
-}
-
-describe("refuses to start", () => {
-	test("without a verifier, however the option is missing", () => {
-		const { verifier: _omitted, ...rest } = base();
-		expect(() => webConsole(rest as never)).toThrow("no verifier");
-		expect(() =>
-			webConsole({ ...base(), verifier: undefined } as never),
-		).toThrow("no verifier");
-		expect(() => webConsole({ ...base(), verifier: "yes" } as never)).toThrow(
-			"no verifier",
-		);
-		expect(() => webConsole(undefined as never)).toThrow();
-	});
-
-	test.each([
-		["an origin that is not a URL", { origin: "console" }, "origin"],
-		[
-			"an origin with a path",
-			{ origin: "https://console.example.test/app" },
-			"origin",
-		],
-		[
-			"an origin that is not http or https",
-			{ origin: "ftp://console.example.test" },
-			"origin",
-		],
-		["a mount path with no segment", { mountPath: "/" }, "mountPath"],
-		[
-			"a mount path without a leading slash",
-			{ mountPath: "console" },
-			"mountPath",
-		],
-		["a mount path with a dot segment", { mountPath: "/a/../b" }, "mountPath"],
-		["a mount path with a space", { mountPath: "/my console" }, "mountPath"],
-		["no panes", { panes: [] }, "panes"],
-		["an unknown pane", { panes: ["unknown"] }, "unknown pane"],
-		["a repeated pane", { panes: ["notes", "notes"] }, "twice"],
-		[
-			"schedules without rooms",
-			{ panes: ["schedules"] },
-			"needs the rooms pane",
-		],
-		["the discord surface", { surface: "discord" }, "surface"],
-		["a surface that is not a word", { surface: "My App" }, "surface"],
-		["no card grace", { cardGraceSeconds: 0 }, "cardGraceSeconds"],
-		["a day of card grace", { cardGraceSeconds: 86_400 }, "cardGraceSeconds"],
-		["no upload at all", { uploadMaxBytes: 0 }, "uploadMaxBytes"],
-		[
-			"an upload limit the listener could not be asked for",
-			{ uploadMaxBytes: Number.MAX_SAFE_INTEGER },
-			"uploadMaxBytes",
-		],
-		[
-			"an upload limit above 4 GiB",
-			{ uploadMaxBytes: 4 * 1024 ** 3 + 1 },
-			"uploadMaxBytes",
-		],
-		["a fractional upload limit", { uploadMaxBytes: 1.5 }, "uploadMaxBytes"],
-		[
-			"a push host that is a URL",
-			{ push: { endpointHosts: ["https://push.example.com"] } },
-			"push.endpointHosts",
-		],
-		[
-			"a push host that is an address",
-			{ push: { endpointHosts: ["10.0.0.1"] } },
-			"push.endpointHosts",
-		],
-		[
-			"a preview that is not a switch",
-			{ push: { preview: "yes" } },
-			"push.preview",
-		],
-		[
-			"a push subject that is neither mailto nor https",
-			{ push: { subject: "http://ops.example.com" } },
-			"push.subject",
-		],
-		[
-			"quiet hours that are not a window",
-			{ push: { quietHours: true } },
-			"push.quietHours",
-		],
-		[
-			"quiet hours with a time that is not HH:MM",
-			{ push: { quietHours: { start: "23", end: "08:00" } } },
-			"push.quietHours",
-		],
-		[
-			"quiet hours at an hour past 23",
-			{ push: { quietHours: { start: "24:00", end: "08:00" } } },
-			"push.quietHours",
-		],
-		[
-			"quiet hours with no end",
-			{ push: { quietHours: { start: "23:00" } } },
-			"push.quietHours",
-		],
-		[
-			"quiet hours that start when they end",
-			{ push: { quietHours: { start: "08:00", end: "08:00" } } },
-			"push.quietHours",
-		],
-		["notes with no owner id", { ownerId: " " }, "ownerId"],
-		["an empty title", { title: " " }, "title"],
-	])("with %s", (_name, change, message) => {
-		expect(() => webConsole({ ...base(), ...change } as never)).toThrow(
-			message,
-		);
-	});
-
-	test("without a list of panes the console serves the owner app first", () => {
-		const { panes } = resolveOptions({ ...base(), panes: undefined } as never);
-		expect(panes).toEqual([
-			"rooms",
-			"table",
-			"workspace",
-			"overview",
-			"schedules",
-			"conversations",
-			"notes",
-			"presets",
-			"webhooks",
-		]);
-		const settings = resolveOptions(base());
-		expect([settings.surface, settings.cardGraceSeconds]).toEqual(["app", 120]);
-		// A file may be 100 MiB by default, or more: the upload route asks the listener for the room.
-		expect(settings.uploadMaxBytes).toBe(100 * 1024 * 1024);
-		expect([settings.push.preview, settings.push.endpointHosts]).toEqual([
-			true,
-			[],
-		]);
-		expect(
-			resolveOptions({
-				...base(),
-				push: { preview: false, endpointHosts: ["*.push.example.com"] },
-			}).push,
-		).toMatchObject({ preview: false, endpointHosts: ["*.push.example.com"] });
-		// Quiet hours default to 23:00 to 08:00; `false` turns them off.
-		expect(settings.push.quietHours).toEqual({ start: "23:00", end: "08:00" });
-		expect(
-			resolveOptions({
-				...base(),
-				push: { quietHours: { start: "22:30", end: "07:00" } },
-			}).push.quietHours,
-		).toEqual({ start: "22:30", end: "07:00" });
-		expect(
-			resolveOptions({ ...base(), push: { quietHours: false } }).push
-				.quietHours,
-		).toBeUndefined();
-		// The VAPID contact defaults to an https origin only; a mailto: or https: subject overrides.
-		expect(resolveOptions(base()).push.subject).toBe(ORIGIN);
-		expect(
-			resolveOptions({ ...base(), origin: "http://localhost:8080" }).push
-				.subject,
-		).toBeUndefined();
-		expect(
-			resolveOptions({
-				...base(),
-				origin: "http://localhost:8080",
-				push: { subject: "mailto:ops@example.com" },
-			}).push.subject,
-		).toBe("mailto:ops@example.com");
-		expect(
-			resolveOptions({ ...base(), uploadMaxBytes: 1024 * 1024 * 1024 })
-				.uploadMaxBytes,
-		).toBe(1024 * 1024 * 1024);
-	});
-
-	test("a notes-less console needs no owner id", () => {
-		expect(() =>
-			webConsole({ ...base(), ownerId: undefined, panes: ["conversations"] }),
-		).not.toThrow();
-	});
-
-	test("the notes pane needs no owner id either: it shows the visitor's own notes", () => {
-		expect(() => webConsole({ ...base(), ownerId: undefined })).not.toThrow();
-	});
-
-	test("with a page that was never built", async () => {
-		await expect(
-			testPlugin(webConsole({ ...base(), assetDir: "/nonexistent-page" }), {
-				services: [agents, memory, discord, identity()],
-			}),
-		).rejects.toThrow("not built");
-	});
-});
+webPluginHostPerTest();
 
 describe("webConsole on a plugin harness", () => {
 	test("adds two routes on the public listener under /console, a service, and a dashboard line", async () => {
