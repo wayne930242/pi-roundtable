@@ -191,7 +191,7 @@ test("a folded folder keeps the open room under its heading and folds the others
 	await show(<List active={SCOUT} />);
 	expect(q(".folder-toggle")?.getAttribute("aria-expanded")).toBe("false");
 	expect(all(".folder-body .room-row").map((row) => row.textContent)).toEqual([
-		rowOf("scout")?.textContent,
+		rowOf("scout")?.textContent ?? "",
 	]);
 	expect(q(".folder-body")?.hasAttribute("hidden")).toBe(false);
 	// The stack speaks for the one room that is hidden.
