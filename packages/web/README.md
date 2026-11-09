@@ -20,7 +20,7 @@ Then only a person whose principal holds the owner role gets in.
 ## Contents
 
 - [Requirements](#requirements) and [Install](#install)
-- [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [incoming webhooks](#incoming-webhooks), [pins and folders](#pins-and-folders), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table), [the files pane](#the-files-pane)
+- [The owner app](#the-owner-app): rooms, cards, [modes](#modes-yolo-and-long-running), [dispatch threads](#dispatch-threads), [incoming webhooks](#incoming-webhooks), [pins and folders](#pins-and-folders), [the chat home](#the-chat-home), [uploads](#uploads), [characters](#characters-in-the-page), [the Camelot look](#the-camelot-look), [the round table](#the-round-table), [the files pane](#the-files-pane)
 - [Members and the gate](#members-and-the-gate): [who is let in](#who-is-let-in), what each tier sees, and the steps owed before the app opens
 - [Install on a device](#install-on-a-device) and [Notifications](#notifications)
 - [Authentication](#authentication) and the [threat model](#threat-model)
@@ -331,6 +331,17 @@ A host that adds a root the agents cannot reach should authenticate with a verif
 
 The REST is `GET api/workspace`, `GET api/workspace/<place>/list?path=`, `file?path=` (the text, `hash`, `editable` and, when not, `reason`), `raw?path=` (bytes, `no-store`, `&download=1` forces a download), `PUT file?path=` (`{ text, baseHash }`), `POST new?path=` (`{ kind: "file" | "dir", text? }`), `POST rename` (`{ from, to }`), `DELETE entry?path=`, `GET trash`, `POST trash/<id>/restore` and `DELETE trash/<id>`.
 The service worker never caches `api/workspace`.
+
+### The chat home
+
+`appearance.home: "chats"` makes the app open on the chat list instead of the arranged room list. Nothing stored changes: the pins, folders, mutes and read cursors are the ones the room list uses, and a host that leaves `appearance.home` out keeps the room list.
+
+- **Pins.** Home first, with a star, then the pinned rooms in the owners' order, as big figures with the name under each (three to a row on a phone, four in the desktop column). A figure stands free of any frame. One badge sits on its corner: the cards waiting there, else the unread messages, else a green dot while its agent works.
+- **Chips and the list.** The folders are chips above one list of the other rooms by latest activity (the pinned and hidden rooms are not in it); **All** shows everything, a folder's chip its rooms, **Other** the rooms in no folder, and a dot on a chip says one of its rooms has unread messages. There are no chips without a folder. A row has no card around it: the figure, the name, a mute icon, a group badge, the time, one line of the last message and, at the end of that line, the unread count, the waiting cards and how many dispatch threads run. Dispatch threads and temp knights are not rows; they are reached in their room, from a control in its header that lists them as cards.
+- **Hidden rooms.** A room's menu (long press, right click or Menu key) has **Hide**. A hidden room keeps answering, running its schedules and pushing (mute stays separate); it only leaves the home and the switcher. It keeps its pin and folder, so **Unhide** returns it to its place. Home cannot be hidden. The state is shared by every owner, like the pins: `PUT api/rooms/<key>/hidden` with `{ hidden: boolean }`, owner-only, answers the whole layout, and `GET api/rooms` carries `hidden` beside `pins` and `folders`. A new message leaves the room hidden and lights a dot on the collapsed row. The table is `web_room_hidden`, created by the migration `web-room-hidden`.
+- **The collapsed row.** One row at the end, **Hidden N · Archived M**, opens the hidden-and-archived page: the hidden rooms with **Unhide**, then the archived knights and groups with **Restore**; deleting one for good is behind its **⋯** menu and asks first.
+- **Everything else.** The bottom of the home has a grid button and the search (the room palette, ⌘K). The grid opens **All features**, a sheet on a phone and a popover on a wide screen, in four groups built from `panes`, the host's main pages and the fixed entries: Organize (folders and order, schedules, cards waiting, hidden and archived), Work (files, round table, overview, conversations and the host's pages), Knights (notes, skills, presets, webhooks) and System (connectors, settings, profile, the color scheme), with the connection state at the foot. A host with fewer panes shows fewer tiles.
+- **Chrome.** There is no tab bar and no rail; every page other than the home and a room has a bar with a back control to the home. From 1024 px the home is a 380 px column and the open room fills the rest; from 720 to 1024 px the column is the page and a room replaces it, as on a phone. The room switcher, the search and the keyboard shortcuts list rooms in the home's order, hidden ones left out of the switcher and last in the search.
 
 ## Members and the gate
 
@@ -728,7 +739,7 @@ Every option is checked when the plugin is created, so a bad setting stops the h
 | `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`: how many days a stored file of the app's agent rooms is kept, a whole number from 1 to 3650. A host kind's own `retention.fileDays` decides for its rooms. |
 | `push` | on, with an `https` origin | Web Push; its keys are in the table below, and [Notifications](#notifications) describes the whole. |
 | `icons` | the package's own | `{ dir }`: a directory of the five install icons, see [Install on a device](#install-on-a-device). |
-| `appearance` | `{ look: "modern", home: "rooms" }` | `{ look, home }`. `appearance.look` is `modern` or `camelot`: the page's default look and the manifest's splash colors; the owner can switch it in the app. `appearance.home` is what the app opens on: `rooms` (the arranged room list, as before) or `chats` (the chat list). |
+| `appearance` | `{ look: "modern", home: "rooms" }` | `{ look, home }`. `appearance.look` is `modern` or `camelot`: the page's default look and the manifest's splash colors; the owner can switch it in the app. `appearance.home` is what the app opens on: `rooms` (the arranged room list, as before) or `chats` (the chat list, see [The chat home](#the-chat-home)). |
 | `title` | `Roundtable` | The page's heading, `<title>` (set in the served HTML, so a tab and a search result have it before the script runs), `og:title` and the installed app's name. |
 | `description` | a line derived from `title` | The page's `<meta name="description">` and `og:description`, for search results and link previews. |
 | `presentation` | English | `{ locale, messages }`: locale controls dates and document language, and `zh-TW` also selects the [built-in Traditional Chinese wording](#presentation-and-built-in-zh-tw); English source strings are dictionary keys for labels, descriptions, confirmations, and API errors. |

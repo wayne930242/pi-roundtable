@@ -81,6 +81,14 @@ Agents are drawn as composed characters.
 The page has a Modern look and a Camelot look (parchment by day, a night castle by night, gold rules, shield frames, wax seals), each in light and dark, picked per device in Settings.
 `appearance.look` sets the host's default.
 
+### The chat home
+
+`appearance.home: "chats"` opens the app on a chat list instead of the arranged room list; hosts that leave it out keep the room list.
+The pinned rooms are big figures on top (Home first, with a star), the folders are chips that filter one list of the other rooms by latest activity, and one collapsed row leads to the hidden rooms and the archive.
+A room can be hidden from its menu: it keeps answering, running schedules and pushing, and only leaves the home and the switcher; the owners share the hidden rooms like the pins (`PUT api/rooms/<key>/hidden`).
+Everything else (arranging, schedules, files, settings) is behind the grid button, as a sheet on a phone and a popover on a wide screen; there is no tab bar or rail, and from 1024 px the home is a 380 px column beside the open room.
+Dispatch threads and temp knights are reached from a control in their room's header.
+
 ### Incoming webhooks
 
 A permanent knight's room takes JSON posts from outside, as a Discord webhook's post in its channel does: `POST <mountPath>/hooks/<id>/<token>` with `{ "content": "...", "username": "..." }` (or any JSON, shown as a fenced block, at most 16 KB, 30 posts a minute) shows in the room marked **Webhook** and starts the knight's report turn, as untrusted input.

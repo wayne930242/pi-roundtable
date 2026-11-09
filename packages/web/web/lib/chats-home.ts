@@ -69,6 +69,20 @@ export function listFor(
 	});
 }
 
+/**
+ * Every room in the order the chat home shows them: Home and the pins, then the one list by latest
+ * activity, then the hidden rooms. The switcher and the search list rooms in this order.
+ */
+export const homeOrder = (
+	arrangement: Sections,
+	at: (key: string) => number,
+	order: readonly string[],
+): string[] => [
+	...pinsOf(arrangement),
+	...listFor(arrangement, "all", at, order),
+	...arrangement.hidden,
+];
+
 /** What a pin shows in its corner: the count of cards waiting, else unread messages, else a dot while it works. */
 export type PinBadge =
 	| { kind: "waiting" | "unread"; count: number }
