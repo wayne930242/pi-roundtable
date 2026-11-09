@@ -280,7 +280,7 @@ export class AppApi {
 		if (area === "files" && method === "GET" && id === "zip" && !action)
 			return await this.#files.messageZip(request, admission);
 		if (area === "files" && method === "GET" && id && !action)
-			return await this.#files.file(id, admission);
+			return await this.#files.file(id, admission, request);
 		if (area === "workspace")
 			return this.#workspaceApi.handle(request, parts, admission);
 		if (area === "schedules")

@@ -209,3 +209,15 @@ test("the block and the jump read in Traditional Chinese on a zh-TW page", async
 		ZH_TW["{count} attachments"]?.replace("{count}", "7"),
 	);
 });
+
+test("an SVG a message carries is drawn as a picture through the file route, not as a download chip", async () => {
+	const row = await draw(
+		message(8, [file("svg1", "comp.svg", 900, "image/svg+xml")]),
+	);
+	const img = row.querySelector<HTMLImageElement>(
+		".attachments img.file-image",
+	);
+	expect(img?.getAttribute("src")).toBe("api/files/svg1");
+	expect(img?.getAttribute("alt")).toBe("comp.svg");
+	expect(row.querySelector(".file-chip")).toBeNull();
+});

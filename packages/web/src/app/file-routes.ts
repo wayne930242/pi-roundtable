@@ -37,14 +37,18 @@ export class FileApi {
 		this.#options = options;
 	}
 
-	async file(id: string, admission: Authenticated): Promise<Response> {
+	async file(
+		id: string,
+		admission: Authenticated,
+		request: Request,
+	): Promise<Response> {
 		if (!isFileId(id)) throw notFound();
 		await this.#mayServe(id, admission);
 		const { files } = this.#options;
 		const meta = files.meta(id);
 		const blob = files.blob(id);
 		if (!meta || !blob) throw notFound();
-		return fileResponse(meta, blob);
+		return fileResponse(meta, blob, request.headers.get("sec-fetch-dest"));
 	}
 
 	/** Refuses, as a missing file, a stored file the visitor may not be served. */

@@ -198,6 +198,24 @@ test("any ordinary file is accepted: images by their bytes, text as text, the re
 		// name, data, the type the browser said, the type kept
 		["pixel.png", PNG, "image/png", "image/png"],
 		["pasted", PNG, "", "image/png"],
+		[
+			"comp.svg",
+			'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>',
+			"image/svg+xml",
+			"image/svg+xml",
+		],
+		[
+			"named.svg",
+			'<svg xmlns="http://www.w3.org/2000/svg"/>',
+			"",
+			"image/svg+xml",
+		],
+		[
+			"page.svg",
+			"<html><body><svg/></body></html>",
+			"text/plain",
+			"text/plain",
+		],
 		["notes.md", "# Title\n\ntext", "", "text/markdown"],
 		["table.csv", "a,b\n1,2\n", "application/vnd.ms-excel", "text/csv"],
 		["index.ts", "export const a = 1;\n", "video/mp2t", "text/plain"],
@@ -253,10 +271,30 @@ test("a file that says it is an image but is not one is refused, and an empty fi
 		await refusalOf(upload(uploads, "x.png", "not a png", "image/png")),
 	).toBe(415);
 	expect(await refusalOf(upload(uploads, "x.gif", PNG, "image/gif"))).toBe(415);
+	// A declared SVG whose bytes are an HTML page, or a PNG, is refused the same way.
+	expect(
+		await refusalOf(
+			upload(uploads, "x.svg", "<html><svg/></html>", "image/svg+xml"),
+		),
+	).toBe(415);
+	expect(await refusalOf(upload(uploads, "y.svg", PNG, "image/svg+xml"))).toBe(
+		415,
+	);
 	expect(await refusalOf(upload(uploads, "empty.txt", "", "text/plain"))).toBe(
 		400,
 	);
 	expect(filesIn(waiting)).toEqual([]);
+});
+
+test("SVG bytes declared text/plain stay text/plain", async () => {
+	const { uploads } = store();
+	const view = await upload(
+		uploads,
+		"data.txt",
+		'<svg xmlns="http://www.w3.org/2000/svg"/>',
+		"text/plain",
+	);
+	expect(view.type).toBe("text/plain");
 });
 
 test("a request that is no form, has no length or no file is refused", async () => {

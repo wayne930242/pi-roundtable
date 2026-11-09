@@ -17,13 +17,18 @@ import type { RoomFile } from "../api-types.ts";
 const FILE_ID =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** The image types shown in the page itself; every other file is a download. */
+/** The raster image types shown in the page itself; every other file is a download, SVG apart. */
 const INLINE_TYPES = new Set([
 	"image/png",
 	"image/jpeg",
 	"image/webp",
 	"image/gif",
 ]);
+
+/** An SVG is shown inline too, but its own page may carry script and CSS, so it is served under this policy: sandboxed with no script, no network, only its inline styles and data: images. */
+const SVG_TYPE = "image/svg+xml";
+const SVG_POLICY =
+	"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'";
 
 /** How long a reply's or a sent message's file stays: 30 days. */
 export const FILE_RETENTION_MS = 30 * 24 * 3_600_000;
@@ -303,11 +308,18 @@ export class FileDir {
 }
 
 /**
- * The response for a stored file: a download, except for the four image types the page shows,
- * never interpreted as a page (`sandbox`, `nosniff`).
+ * The response for a stored file: a download, except for the image types the page shows (the four
+ * raster ones, and SVG when an image loads it), never interpreted as a page (`sandbox`, `nosniff`); an SVG also gets
+ * `SVG_POLICY`, which lets its inline styles and animation run but no script.
  */
-export function fileResponse(meta: RoomFile, body: Blob): Response {
-	const inline = INLINE_TYPES.has(meta.type);
+export function fileResponse(
+	meta: RoomFile,
+	body: Blob,
+	dest?: string | null,
+): Response {
+	const svg = meta.type === SVG_TYPE;
+	// An SVG opened as a page, not loaded by an <img>, would run as a document on the app's origin: it is a download then.
+	const inline = INLINE_TYPES.has(meta.type) || (svg && dest === "image");
 	// RFC 5987 leaves `'`, `(`, `)` and `*` out of a value's characters; encodeURIComponent keeps them.
 	const encoded = encodeURIComponent(meta.name).replace(
 		/['()*]/g,
@@ -319,9 +331,11 @@ export function fileResponse(meta: RoomFile, body: Blob): Response {
 			"content-disposition": inline
 				? "inline"
 				: `attachment; filename*=UTF-8''${encoded}`,
-			"content-security-policy": "sandbox",
+			"content-security-policy": svg ? SVG_POLICY : "sandbox",
 			"x-content-type-options": "nosniff",
 			"cache-control": "private, max-age=3600",
+			// The answer depends on how the request was made (an <img> or a page open), so a cache keeps them apart.
+			vary: "sec-fetch-dest",
 			"content-length": String(body.size),
 		},
 	});

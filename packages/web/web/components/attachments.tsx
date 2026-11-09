@@ -121,8 +121,9 @@ function FileItem({ file }: { file: RoomFile }) {
 			<a
 				{...press}
 				href={fileUrl(file)}
-				target="_blank"
-				rel="noreferrer noopener"
+				{...(file.type === "image/svg+xml"
+					? { download: file.name }
+					: { target: "_blank", rel: "noreferrer noopener" })}
 			>
 				<img
 					src={fileUrl(file)}
