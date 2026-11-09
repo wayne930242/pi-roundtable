@@ -48,7 +48,10 @@ export interface ConsolePorts {
 	/** The host's `sessions/` directory. */
 	sessionsDir: string;
 	/** Present when the overview pane is served, or the agent server is there to classify channels. */
-	team?: Pick<AgentTeam, "status" | "owns" | "guildId" | "discordGuild">;
+	team?: Pick<
+		AgentTeam,
+		"status" | "owns" | "teamId" | "guildId" | "discordGuild"
+	>;
 	/**
 	 * The web app's surface, when it hosts the agents' and groups' rooms: the overview then names
 	 * each one's room, which its start-over resets instead of the Discord channel's conversation.

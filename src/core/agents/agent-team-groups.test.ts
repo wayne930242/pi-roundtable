@@ -14,12 +14,7 @@ import {
 	stops,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import {
-	agentRoomKey,
-	discordKey,
-	groupRoomKey,
-	groupSessionKey,
-} from "./team-keys.ts";
+import { agentRoomKey, discordKey, groupRoomKey } from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
@@ -72,7 +67,7 @@ describeDb("PostgreSQL", () => {
 			// The owner started the round, so every speaker may ask him on cards.
 			expect(fx.runtime.turns.map((t) => t.interactive)).toEqual([true, true]);
 			expect(fx.runtime.turns[0]?.agent?.session).toBe(
-				groupSessionKey(opsGroup(), "coordinator"),
+				fx.places.seatKey(opsGroup(), "coordinator"),
 			);
 			// The later speaker sees the earlier reply.
 			expect(fx.runtime.turns[1]?.text).toContain(
@@ -140,7 +135,7 @@ describeDb("PostgreSQL", () => {
 
 		test("a member with held actions is asked, and a confirming message approves them", async () => {
 			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
-			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), {
+			fx.runtime.held.set(fx.places.seatKey(opsGroup(), "infra"), {
 				selectionId: "agent",
 				heldAt: new Date(),
 				calls: [{ tool: "bash", input: "{}", action: "restart" }],
@@ -158,7 +153,7 @@ describeDb("PostgreSQL", () => {
 				calls: [{ tool: "deploy", input: "{}", action: "deploy the site" }],
 				speakerId: "7",
 			};
-			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), held);
+			fx.runtime.held.set(fx.places.seatKey(opsGroup(), "infra"), held);
 			const say = (id: string) =>
 				fx.team.answerGroup(
 					group,
@@ -178,7 +173,7 @@ describeDb("PostgreSQL", () => {
 
 		test("a held call is its principal's: the same person on another identity approves it, another principal of the same tier does not", async () => {
 			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
-			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), {
+			fx.runtime.held.set(fx.places.seatKey(opsGroup(), "infra"), {
 				selectionId: "agent",
 				heldAt: new Date(),
 				calls: [{ tool: "deploy", input: "{}", action: "deploy the site" }],
@@ -206,7 +201,7 @@ describeDb("PostgreSQL", () => {
 		test("held actions 0.8 held over another's after a rollback are its speaker's: the principal of the hold before approves nothing", async () => {
 			script.scores = { coordinator: 0.1, infra: 0.1, doctor: 0.1 };
 			// What PendingConfirmationStore.load gives for that row: B's, by their id alone.
-			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), {
+			fx.runtime.held.set(fx.places.seatKey(opsGroup(), "infra"), {
 				selectionId: "agent",
 				heldAt: new Date(),
 				calls: [{ tool: "deploy", input: "{}", action: "deploy the site" }],
@@ -286,8 +281,8 @@ describeDb("PostgreSQL", () => {
 			await fx.team.channelDeleted(pair.channelId ?? "");
 			expect(fx.store.group("pair")?.status).toBe("archived");
 			expect(fx.runtime.fresh).toEqual([
-				groupSessionKey(pair, "infra"),
-				groupSessionKey(pair, "doctor"),
+				fx.places.seatKey(pair, "infra"),
+				fx.places.seatKey(pair, "doctor"),
 			]);
 			expect(fx.store.agent("infra")?.status).toBe("active");
 			expect(fx.team.owns(discordKey(pair.channelId ?? ""))).toBeUndefined();
@@ -307,8 +302,8 @@ describeDb("PostgreSQL", () => {
 			expect(fx.channels.categoryOf(pair.channelId ?? "")).toBe("Archive");
 			expect(fx.channels.webhooksRemoved).toEqual([pair.channelId ?? ""]);
 			expect(fx.runtime.fresh).toEqual([
-				groupSessionKey(pair, "infra"),
-				groupSessionKey(pair, "doctor"),
+				fx.places.seatKey(pair, "infra"),
+				fx.places.seatKey(pair, "doctor"),
 			]);
 			expect(fx.team.owns(discordKey(pair.channelId ?? ""))).toBeUndefined();
 			await expect(fx.team.archive(coordinator, "pair")).rejects.toThrow(
@@ -534,7 +529,7 @@ describeDb("PostgreSQL", () => {
 			fx.runtime.turns = [];
 			await inDiscord("discord one");
 			const turn = fx.runtime.turns[0];
-			expect(turn?.agent?.session).toBe(groupSessionKey(group(), "infra"));
+			expect(turn?.agent?.session).toBe(fx.places.seatKey(group(), "infra"));
 			// The Discord seat has not seen what was said in the room.
 			expect(turn?.text).toContain("discord one");
 			expect(turn?.text).not.toContain("web one");
@@ -576,7 +571,7 @@ describeDb("PostgreSQL", () => {
 			await inRoom("two");
 			expect(fx.runtime.turns[0]?.text).not.toContain("one");
 			// A Discord round still sees what it had not yet.
-			expect(groupSessionKey(group(), "infra")).not.toBe(
+			expect(fx.places.seatKey(group(), "infra")).not.toBe(
 				fx.runtime.turns[0]?.agent?.session,
 			);
 		});
@@ -667,14 +662,14 @@ describeDb("PostgreSQL", () => {
 			expect(fx.runtime.fresh).toContain(agentRoom("doctor"));
 			// Its seats in groups, Discord's and the room's.
 			expect(fx.runtime.fresh).toContain("agentgroup:app.group.g.doctor");
-			expect(fx.runtime.fresh).toContain(groupSessionKey(group(), "doctor"));
+			expect(fx.runtime.fresh).toContain(fx.places.seatKey(group(), "doctor"));
 		});
 
 		test("archiving a group clears the seats of every one of its conversations", async () => {
 			await fx.team.channelDeleted(group().channelId ?? "");
 			expect(fx.store.group("g")?.status).toBe("archived");
 			for (const member of ["coordinator", "infra", "doctor"]) {
-				expect(fx.runtime.fresh).toContain(groupSessionKey(group(), member));
+				expect(fx.runtime.fresh).toContain(fx.places.seatKey(group(), member));
 				expect(fx.runtime.fresh).toContain(`agentgroup:app.group.g.${member}`);
 			}
 		});

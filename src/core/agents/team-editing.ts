@@ -19,7 +19,6 @@ import type { Agent } from "./agent-store.ts";
 import type { AvatarMode } from "./agent-tools.ts";
 import { createHelper } from "./helper-create.ts";
 import { routesOf } from "./routes.ts";
-import { agentRoomKey, keysOf, seatsOf } from "./team-keys.ts";
 import { groupTopic, teamCategory } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 
@@ -242,7 +241,7 @@ export class TeamEditing {
 			thinking?: string | undefined;
 		} = {},
 	): Promise<{ agent: Agent; text: string }> {
-		const { store, studio, channels, queue, skills, surfaces, logger } =
+		const { store, studio, channels, queue, skills, places, logger } =
 			this.#ctx.options;
 		this.#refuseSkillsOff(input.skills);
 		const {
@@ -321,10 +320,9 @@ export class TeamEditing {
 			"agent created",
 		);
 		this.#ctx.changed();
-		const rooms = surfaces?.roomSurfaces() ?? [];
 		// Before the opening task starts, so its turn already runs under the mode.
 		if (modes)
-			for (const key of keysOf(store, agent.name, rooms))
+			for (const key of places.keysOf(agent.name))
 				await modes.set(key, { longRunning: true }, who.speaker);
 		const avatar = `its picture is the ${character.class} look${modes ? "; long-running mode is on" : ""}`;
 		const where = channelId ? ` in <#${channelId}>` : "";
@@ -340,7 +338,7 @@ export class TeamEditing {
 			"opening",
 			who.openIn === undefined
 				? undefined
-				: agentRoomKey(who.openIn, agent.name),
+				: places.placeOn(agent.name, who.openIn),
 		);
 		if (!home) {
 			logger.warn(
@@ -482,16 +480,15 @@ export class TeamEditing {
 		name: string,
 		change: { displayName?: string; members?: string[]; host?: string },
 	): Promise<string> {
-		const { store, surfaces } = this.#ctx.options;
+		const { store, places } = this.#ctx.options;
 		const before = store.group(name);
 		const group = await store.updateGroup(name, change);
 		// A member taken out starts its seat over, so an agent of that name that joins later
 		// does not resume the old conversation.
 		const runtime = this.#ctx.options.runtime();
-		const rooms = surfaces?.roomSurfaces() ?? [];
 		for (const left of before?.members ?? [])
 			if (!group.members.includes(left))
-				for (const seat of seatsOf(group, left, rooms))
+				for (const seat of places.seatsOf(group, left))
 					await runtime.startFresh(seat);
 		this.#ctx.retitle(group);
 		this.#ctx.changed();

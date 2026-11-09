@@ -3,6 +3,7 @@ import type { InboundMessage } from "../contract/channels.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { discordSpaceOf } from "../testing/team-places.ts";
 import { agentClaim } from "./agent-claim.ts";
 
 const PEER = "800000000000000001";
@@ -28,7 +29,7 @@ function claimWith(answered: string[]) {
 	};
 	return agentClaim({
 		owner: TEST_OWNER,
-		discordGuild: "1",
+		spaceOf: discordSpaceOf("1"),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: { steer: async () => false, stop: () => true },

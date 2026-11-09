@@ -180,12 +180,13 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
 | `attachments` | Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation until a turn uses them: [`attachments`](#contextattachments-files-from-outside-a-turn) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
+| `places` | The agent team's [place providers](#places-where-the-agents-are-spoken-to-on-a-surface), chosen by surface or by a channel key: `of`, `stored()`, `all()` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 | `observe(filter, observer)` | Hears inbound messages without owning or admitting them: [`observe`](#observe-hearing-messages-without-owning-them). Returns a function that stops it; may be called during `setup` |
 | `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(origin, principalId)`, `known(origin, principalId)`, and `notify(origin, principalId, text)`, each through the [delivery router](#where-things-are-delivered) |
-| `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()`, `chatCommands()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
+| `sessions()`, `conversations`, `surfaces`, `places`, `directChannels`, `turns`, `dashboard()`, `chatCommands()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
-`sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()`, and `chatCommands()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
+`sessions()`, `conversations`, `surfaces`, `places`, `directChannels`, `turns`, `dashboard()`, and `chatCommands()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
 
 Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue` is also type-only.
 
@@ -3239,6 +3240,22 @@ The built-in values: Discord says that Markdown renders except tables, which sho
 A host overrides or removes a built-in value through that surface's options (`discord.formatting`, `line({ formatting })`, `webChat({ formatting })`): a text replaces it, and `false` tells the model nothing.
 A custom runtime provider reads the same lookup as `RuntimeDeps.formatting(channel)`.
 
+### `places`: where the agents are spoken to on a surface
+
+A `PlaceProvider` tells the agent team where an agent or group lives on one surface and how to post there.
+A plugin contributes one per surface with `places: [provider]`, and reads them through `context.places` once every plugin is set up: `of(surface)` or `of(key)` for one, `stored()` for those that keep ids of their own, and `all()` in the order "auto" routing prefers (the stored ones in contribution order, then the derived ones in surface order).
+Two providers for one surface, or one for a surface no plugin registers, stop the boot with a `PluginError` naming the plugins.
+
+A provider is `derived` when the place exists with the name (a room, `<surface>:agent.<name>`) and `stored` when the surface makes the places and the team keeps their ids.
+The members a minimal provider needs are `surface`, `storage`, `key`, `placeOf` and `post`; `ensure`, `remove`, `check` (`ok`, `gone` or `foreign`), `describe`, `onRemoved`, `interim`, `space`, `mention`, `conversations`, `coordinatorPlace`, `createArguments` and `layoutText` are optional capabilities.
+A surface with `agentRooms: true` and no provider gets a derived one from the host, so a surface written before places needs no change.
+The Discord plugin contributes its own when `discord.guild` is set.
+A plugin that replaces `DISCORD` with a Discord of its own, on a host with `discord.guild`, contributes `discordPlaceProvider({ guild, connection, logger })` from `pi-roundtable/discord` with `places`: it gives the guild's channels the keys, group seats and log names the built-in Discord gives them (pass `client` too to have the team check its stored channels at start). Without a provider for the `discord` surface the host refuses to start, since the team would make channels it cannot read.
+
+The agent team reads its places through the providers: the keys of an agent or group (`AGENTS.team.roomsOf(name)`, and `placesOf(name)` with each key's surface), who owns a key (`AGENTS.team.owns(key)`, and `AGENTS.directory.placeOwner(key)` for an archived owner too), the routing table, the conversation keys of a group's seats and log, and the outbox replay. A stored provider's places are the rows of `agent_places`; a derived provider's are rooms. "Auto" order puts every stored place before the rooms, so with Discord configured the Discord channel is still an agent's primary place. A row of a surface no provider serves on this host is kept and ignored. `TeamStatus` views carry `places` (`TeamPlace`: `{ surface, key }`). `Agent.channelId`, `AgentGroup.channelId`, `AgentDirectory.agentByChannel` and `groupByChannel`, `AgentTeam.guildId` and `discordGuild`, and the status views' `channelId` are deprecated and removed in 1.0; the team still writes them. Writes (making, archiving and posting in places) still go through Discord's channels directly.
+
+`placeProviderContract(name, make)` from `pi-roundtable/testing` registers the provider contract as tests for any provider; `make` returns a `PlaceContractSubject` with the provider and a view of what a person on the surface sees.
+
 ### Display blocks in a reply
 
 An agent may write a *display block* in a reply: a fenced block whose first word is a kind (`cards`, `table`, `steps`, `stats`, `mindmap`, `mermaid`, `diff`, `options`, `form`, ...) or a GitHub alert (`> [!NOTE]`), as `pi-better-show` defines. A block is YAML or source that only a surface that draws it should show, so the host cuts agent text with `chunksFor(surface, text)` (from `pi-roundtable/kit`), never `splitReply` alone: a block whose kind the surface does not list in `blocks` becomes text first (Discord's flavor by default, `blockText: "line"` for plain text; a diagram is drawn as Unicode boxes, unless its source is over 3 KB or the drawing, which runs in a worker the host waits on for at most 500 ms, is not done by then, and then the source is shown), and the result is split into messages within Discord's limit. A surface that lists any kind in `blocks` gets the text whole in one chunk, because cutting a fence breaks the block. `textFor(surface, text)` does the conversion alone, for a surface that shows a message of any length in one piece (the web chat's replies and inbox notices) and so needs no cutting. A block that is not closed at the end of the reply is still a block: a text surface gets it as text, and a surface that draws it gets it as written. A block that does not parse becomes a plain code block. The same applies to interim posts: the host's surface port copies the surface's `blocks` and `blockText` onto the `InterimPosts` it returns, so the poster cuts for the right surface. A surface whose channels differ (a host's room, read on a page that does not draw blocks) answers `support(channel)` with what is different, and `supportOf(surface, channel)` (from `pi-roundtable/kit`) reads the result; the formatting guidance a turn gets follows it too. A surface that does not draw every interactive kind (`options`, `suggest`, `form`, `checklist`, `review`) gets one more line, closing its `formatting`, which tells the model the chat cannot show forms, option buttons or checklists, to ask in plain text, and that such a block is shown as text for the user to answer by typing; `blockNote: false` leaves it out. A block that reads as text asks in the host's language: `supportOf(surface, channel, surfaces.lang)` carries the locale the host was defined with, and the surface's own `lang` wins. Host notices and error reports are the host's own text and keep `splitReply`.
@@ -4653,6 +4670,14 @@ Import from the entries listed below; source area files are internal.
 | `PersonDisplay` | `pi-roundtable` | type |
 | `PersonProfiles` | `pi-roundtable` | type |
 | `Persona` | `pi-roundtable` | type |
+| `PlaceAuthor` | `pi-roundtable` | type |
+| `PlaceCheck` | `pi-roundtable` | type |
+| `PlaceKind` | `pi-roundtable` | type |
+| `PlacePort` | `pi-roundtable` | type |
+| `PlacePost` | `pi-roundtable` | type |
+| `PlaceProvider` | `pi-roundtable` | type |
+| `PlaceRef` | `pi-roundtable` | type |
+| `PlaceSpec` | `pi-roundtable` | type |
 | `PlaceTarget` | `pi-roundtable` | type |
 | `PluginContext` | `pi-roundtable` | type |
 | `PluginIdentity` | `pi-roundtable` | type |
@@ -4771,6 +4796,7 @@ Import from the entries listed below; source area files are internal.
 | `THREADS` | `pi-roundtable` | value |
 | `TIERS` | `pi-roundtable` | value |
 | `TeamAgentStatus` | `pi-roundtable` | type |
+| `TeamPlace` | `pi-roundtable` | type |
 | `TeamStatus` | `pi-roundtable` | type |
 | `ThinkingLevel` | `pi-roundtable` | type |
 | `ThinkingSetting` | `pi-roundtable` | type |
@@ -4778,6 +4804,7 @@ Import from the entries listed below; source area files are internal.
 | `TierConfig` | `pi-roundtable` | type |
 | `ToolAttachment` | `pi-roundtable` | type |
 | `ToolAttachmentInfo` | `pi-roundtable` | type |
+| `ToolArgument` | `pi-roundtable` | type |
 | `ToolContribution` | `pi-roundtable` | type |
 | `ToolOutput` | `pi-roundtable` | type |
 | `ToolRefusal` | `pi-roundtable` | value |
@@ -4849,6 +4876,11 @@ Import from the entries listed below; source area files are internal.
 | `describeBlocksContract` | `pi-roundtable/testing` | value |
 | `describeSurfaceContract` | `pi-roundtable/testing` | value |
 | `checkSurfaceContract` | `pi-roundtable/testing` | value |
+| `checkPlaceProviderContract` | `pi-roundtable/testing` | value |
+| `placeProviderContract` | `pi-roundtable/testing` | value |
+| `PlaceContractFailure` | `pi-roundtable/testing` | type |
+| `PlaceContractSubject` | `pi-roundtable/testing` | type |
+| `PlaceSeen` | `pi-roundtable/testing` | type |
 | `SurfaceContractFailure` | `pi-roundtable/testing` | type |
 | `SurfaceContractSubject` | `pi-roundtable/testing` | type |
 | `SurfaceObservation` | `pi-roundtable/testing` | type |
@@ -5104,6 +5136,7 @@ Import from the entries listed below; source area files are internal.
 | `DiscordCard` | `pi-roundtable/discord` | type |
 | `DiscordFailure` | `pi-roundtable/discord` | type |
 | `DiscordMessage` | `pi-roundtable/discord` | type |
+| `DiscordPlaceProviderOptions` | `pi-roundtable/discord` | type |
 | `DiscordPoster` | `pi-roundtable/discord` | type |
 | `DiscordReason` | `pi-roundtable/discord` | type |
 | `ForumPost` | `pi-roundtable/discord` | type |
@@ -5131,6 +5164,7 @@ Import from the entries listed below; source area files are internal.
 | `commandGuard` | `pi-roundtable/discord` | value |
 | `composeCommands` | `pi-roundtable/discord` | value |
 | `discord` | `pi-roundtable/discord` | value |
+| `discordPlaceProvider` | `pi-roundtable/discord` | value |
 | `ephemeralPanel` | `pi-roundtable/discord` | value |
 | `fetchManagedChannel` | `pi-roundtable/discord` | value |
 | `groupOption` | `pi-roundtable/discord` | value |

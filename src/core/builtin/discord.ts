@@ -75,6 +75,8 @@ export interface DiscordOptions {
 	dataDir: string;
 	/** The name of the root slash command, without the slash. */
 	rootCommand: string;
+	/** The agent guild (`discord.guild`): when given, the plugin contributes the place provider of the agent team's channels and threads in it. */
+	agentGuild?: string;
 	/** Text appended as it is to the refusal a non-owner gets, such as a pointer to the commands anyone may use. */
 	refusalHint?: string;
 	/** The host's channel context settings; `false` turns it off. Default: on, with the defaults. */
@@ -241,6 +243,10 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.
 				surfaces: [connected],
+				// The agent team's channels and threads, when there is an agent guild for them.
+				places: options.agentGuild
+					? [connected.agentPlaces(options.agentGuild)]
+					: [],
 				// A person's Discord direct messages, through a Discord identity of theirs.
 				directChannels: [
 					discordDirectChannel({

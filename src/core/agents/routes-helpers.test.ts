@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { Routes } from "./routes.ts";
 
 const agent = (name: string, parent?: string) => ({
@@ -18,14 +19,19 @@ const routes = (routing: ResolvedRouting) => {
 		agent("researcher-1", "researcher"),
 		{ ...agent("other"), channelId: "5000" },
 	];
+	// SAFETY: the table reads only `agent` of the store.
+	const store = {
+		agent: (name: string) => agents.find((a) => a.name === name),
+		group: () => undefined,
+	} as never;
 	return new Routes({
 		routing,
-		// SAFETY: the table reads only `agent` of the store.
-		store: {
-			agent: (name: string) => agents.find((a) => a.name === name),
-			group: () => undefined,
-		} as never,
-		roomSurfaces: () => ["app"],
+		store,
+		places: testPlaces({
+			store,
+			rows: () => legacyRows(agents),
+			rooms: () => ["app"],
+		}),
 	});
 };
 
@@ -60,15 +66,14 @@ test("a row of its own, if one was written, still wins over the parent's", () =>
 });
 
 test("without routing a temp knight's place is what any knight's is: its room, since it has no channel", () => {
+	const store = {
+		agent: (name: string) =>
+			name === "researcher-1" ? agent("researcher-1", "researcher") : undefined,
+		group: () => undefined,
+	} as never;
 	const table = new Routes({
-		store: {
-			agent: (name: string) =>
-				name === "researcher-1"
-					? agent("researcher-1", "researcher")
-					: undefined,
-			group: () => undefined,
-		} as never,
-		roomSurfaces: () => ["app"],
+		store,
+		places: testPlaces({ store, rooms: () => ["app"] }),
 	});
 	expect(table.primary("researcher-1")).toBe("app:agent.researcher-1");
 	expect(table.of("researcher-1", "agentMessage")).toBe(

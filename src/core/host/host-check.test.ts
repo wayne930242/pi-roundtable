@@ -9,6 +9,8 @@ import type { HttpRoute } from "../http/listeners.ts";
 import type { AccessRules } from "../identity/access-policy.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { RoundtablePlugin, Service } from "../plugin-api/plugin.ts";
+import { FakePager } from "../testing/fake-pager-places.ts";
+import { FakeRoomSurface } from "../testing/fake-room-surface.ts";
 import { defineRoundtable } from "./define-roundtable.ts";
 import { Roundtable, type RoundtableOptions } from "./host.ts";
 
@@ -72,6 +74,33 @@ const REFUSED: {
 			},
 		],
 		says: /host-check\.missing/,
+	},
+	{
+		label: "two place providers for one surface",
+		plugins: [
+			{
+				name: "pager",
+				setup: () => ({
+					surfaces: [new FakeRoomSurface("pager")],
+					places: [new FakePager().provider],
+				}),
+			},
+			{
+				name: "second-pager",
+				setup: () => ({ places: [new FakePager().provider] }),
+			},
+		],
+		says: /plugin second-pager: surface pager already has the place provider of plugin pager/,
+	},
+	{
+		label: "a place provider for a surface no plugin registers",
+		plugins: [
+			{
+				name: "pager",
+				setup: () => ({ places: [new FakePager().provider] }),
+			},
+		],
+		says: /plugin pager: the place provider of surface pager, which no plugin registers/,
 	},
 	{
 		label: "a field the host removed",

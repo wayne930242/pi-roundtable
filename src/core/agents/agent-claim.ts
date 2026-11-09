@@ -23,14 +23,13 @@ import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
 import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import type { DiscordAgentTeam } from "./agent-team.ts";
-import { discordIdOf, roomOf } from "./team-keys.ts";
 
 /**
- * The agent server outranks every other claim on the Discord channels it owns, and its guild's
- * other channels stay silent even when another plugin's mode or a mention would answer there; a claim of a
- * plugin must use a higher priority to answer in that guild. Of another surface it owns only
- * the rooms of an agent or group of the team on a surface that declares `agentRooms`, never
- * another of its keys. It becomes the core's reserved branch once the team moves into the core
+ * The agent server outranks every other claim on the places it owns, and the other channels of a
+ * space a place provider names (the Discord guild of the agents) stay silent even when another
+ * plugin's mode or a mention would answer there; a claim of a plugin must use a higher priority to
+ * answer in that space. It owns the places of an agent or group of the team, and the rooms on a
+ * surface that declares `agentRooms`, never another of a surface's keys. It becomes the core's reserved branch once the team moves into the core
  * (pi-roundtable batch 7).
  */
 export const AGENT_SERVER_PRIORITY = 100;
@@ -51,10 +50,11 @@ export interface AgentClaimOptions {
 	 */
 	speakers?: "everyone" | "owners";
 	/**
-	 * The Discord guild the agents' channels live in: a message from it is the agent server's even
-	 * outside the channels it knows. Not the team's id; absent for a team without Discord channels.
+	 * The space of the place provider that serves a channel's surface, such as the Discord guild the
+	 * agents' channels live in: a message from that space is the agent server's even outside the
+	 * places it knows. Absent, or undefined for a surface whose provider names none, there is none.
 	 */
-	discordGuild?: string | undefined;
+	spaceOf?: (channel: ChannelKey) => string | undefined;
 	team: Pick<
 		DiscordAgentTeam,
 		| "owns"
@@ -65,12 +65,9 @@ export interface AgentClaimOptions {
 		| "startFresh"
 	>;
 	runtime: Pick<AgentRuntime, "steer" | "stop">;
-	/**
-	 * `roomSurfaces` names the surfaces whose agent and group rooms the claim may own, and `of`
-	 * finds the surface that reads a message's attachments; without them the claim is Discord's alone.
-	 */
+	/** `of` finds the surface that reads a message's attachments; without it every message's are fetched. */
 	surface: Pick<SurfacePort, "react" | "unreact"> &
-		Partial<Pick<SurfacePort, "roomSurfaces" | "of">>;
+		Partial<Pick<SurfacePort, "of">>;
 	/**
 	 * Where the report turn of a webhook's post in an agent's channel runs, given the channel it was
 	 * posted in: the routing table's `integration` rule. Without it, in that channel.
@@ -182,14 +179,11 @@ export function agentClaim(options: AgentClaimOptions): ChannelClaim {
 	return {
 		name: "agent-server",
 		priority: AGENT_SERVER_PRIORITY,
-		// Discord's channels, or the room of an agent or group on a surface that hosts rooms: another
-		// surface's key is never the agent server's, whatever its id, and a room needs a known name.
+		// The place of an agent or group, or any channel of a provider's space: another surface's
+		// key is never the agent server's, whatever its id, and a room needs a known name.
 		owns: (channel, space) =>
-			discordIdOf(channel) !== undefined
-				? team.owns(channel) !== undefined ||
-					(space !== undefined && space === options.discordGuild)
-				: roomOf(channel, surface.roomSurfaces?.() ?? []) !== undefined &&
-					team.owns(channel) !== undefined,
+			team.owns(channel) !== undefined ||
+			(space !== undefined && options.spaceOf?.(channel) === space),
 		admit: (message) => {
 			const owned = team.owns(message.channel);
 			// The agent server's other channels are the owner's notes: nothing there is answered.

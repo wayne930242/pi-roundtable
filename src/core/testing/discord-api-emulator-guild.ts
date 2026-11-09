@@ -7,6 +7,7 @@ import {
 	type EmuState,
 	formError,
 	HttpError,
+	missingAccess,
 	missingPermissions,
 	newId,
 	replaceTags,
@@ -156,7 +157,11 @@ export function guildRoutes(state: EmuState): Route[] {
 		[
 			"GET",
 			/^\/channels\/(\d+)$/,
-			({ params }) => channelJson(channelOf(state, params[0])),
+			({ params }) => {
+				const channel = channelOf(state, params[0]);
+				if (channel.hidden) throw missingAccess();
+				return channelJson(channel);
+			},
 		],
 		[
 			"PATCH",
@@ -185,6 +190,16 @@ export function guildRoutes(state: EmuState): Route[] {
 						: undefined;
 					if (forum?.type === 15)
 						channel.appliedTags = checkAppliedTags(forum, body.applied_tags);
+				}
+				if (typeof body.topic === "string") channel.topic = body.topic;
+				if (typeof body.parent_id === "string") {
+					if (channelOf(state, body.parent_id).type !== 4)
+						throw formError(
+							"parent_id",
+							"CHANNEL_PARENT_INVALID",
+							"Not a category",
+						);
+					channel.parentId = body.parent_id;
 				}
 				const name = str(body.name);
 				if (name) {

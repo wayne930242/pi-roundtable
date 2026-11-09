@@ -15,8 +15,9 @@ const agent: Agent = {
 const surfaces = {
 	of: (key: string) =>
 		key.startsWith("app:") ? { label: "the web app" } : undefined,
-	roomSurfaces: () => ["app"],
 } as never;
+/** The surfaces with a place provider on this host: Discord's, then the web app's rooms. */
+const HOLDERS = ["discord", "app"];
 
 const build = (home: `${string}:${string}`) =>
 	agentSystemPrompt({
@@ -25,7 +26,7 @@ const build = (home: `${string}:${string}`) =>
 		workDir: "/w",
 		owner: TEST_OWNER,
 		shellUser: "u",
-		...placeOf(home, surfaces, true),
+		...placeOf(home, surfaces, HOLDERS),
 	});
 
 test("an app room's prompt names the web app and the other places, not Discord as home", () => {
@@ -61,7 +62,7 @@ const seat = (conversation: `${string}:${string}`) =>
 		owner: TEST_OWNER,
 		shellUser: "u",
 		group: { group, members: [agent, infra] },
-		...placeOf(conversation, surfaces, true),
+		...placeOf(conversation, surfaces, HOLDERS),
 	});
 
 test("a web group seat names the web app, not the agent's home surface", () => {

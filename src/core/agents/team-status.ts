@@ -1,13 +1,19 @@
 import type { ThinkingSetting } from "../domain/models.ts";
 import type { ContextUse } from "./agent-ports.ts";
-import { discordIdOf, keysOf } from "./team-keys.ts";
+import { discordIdOf } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
+import type { TeamPlace } from "./team-places.ts";
+
+export type { TeamPlace } from "./team-places.ts";
 
 /** An active agent as the dashboard shows it. */
 export interface AgentStatus {
 	name: string;
 	displayName: string;
+	/** @deprecated Its Discord channel; read `places`, which names the place on every surface. Removed in 1.0. */
 	channelId?: string;
+	/** Where it is: its place on each surface that holds one, in the order "auto" routing prefers. */
+	places?: TeamPlace[];
 	model: string;
 	thinking: ThinkingSetting;
 	/** The channel of its running turn: its own, a group's, or where it answers a message. */
@@ -29,8 +35,10 @@ export interface AgentStatus {
 export interface GroupStatus {
 	name: string;
 	displayName: string;
-	/** Its Discord channel; absent in a team without Discord. */
+	/** @deprecated Its Discord channel; read `places`, which names the place on every surface. Removed in 1.0. */
 	channelId?: string;
+	/** Where it is: its place on each surface that holds one, in the order "auto" routing prefers. */
+	places?: TeamPlace[];
 	members: string[];
 	host: string;
 	/** Messages of its channel and rooms running or waiting, a round counting as one. */
@@ -46,14 +54,13 @@ export interface TeamStatus {
 /** Every active agent and group, with what each is doing now. */
 export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 	const { options, turns } = ctx;
-	const { store, queue, schedules } = options;
+	const { store, queue, schedules, places } = options;
 	const runtime = options.runtime();
-	const rooms = options.surfaces?.roomSurfaces() ?? [];
 	const agents: AgentStatus[] = [];
 	for (const agent of store.agents()) {
 		if (agent.status !== "active") continue;
-		// Its Discord channel and each room are conversations of their own, and all count.
-		const keys = keysOf(store, agent.name, rooms);
+		// Each place is a conversation of its own, and all count.
+		const keys = places.keysOf(agent.name);
 		const working = turns.workingIn(agent.name);
 		// The board links Discord channels; a turn in a room has none to link.
 		const workingIn = working === undefined ? undefined : discordIdOf(working);
@@ -69,6 +76,7 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 			name: agent.name,
 			displayName: agent.displayName,
 			...(agent.channelId ? { channelId: agent.channelId } : {}),
+			places: places.placesOf(agent.name),
 			...ctx.modelOf(agent.name),
 			...(workingIn ? { workingIn } : {}),
 			waiting: Math.max(
@@ -90,12 +98,12 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 				name: group.name,
 				displayName: group.displayName,
 				...(group.channelId ? { channelId: group.channelId } : {}),
+				places: places.placesOf(group.name),
 				members: group.members.map((m) => store.agent(m)?.displayName ?? m),
 				host: store.agent(group.host)?.displayName ?? group.host,
-				busy: keysOf(store, group.name, rooms).reduce(
-					(sum, key) => sum + queue.size(key),
-					0,
-				),
+				busy: places
+					.keysOf(group.name)
+					.reduce((sum, key) => sum + queue.size(key), 0),
 				...(lastActive ? { lastActive } : {}),
 			},
 		];

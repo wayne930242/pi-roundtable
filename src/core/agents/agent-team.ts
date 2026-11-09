@@ -23,12 +23,7 @@ import { allPresets, transferPreset } from "./helper-preset-overview.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import type { TeamHelpers } from "./team-helpers.ts";
-import {
-	channelOwner,
-	coordinatorOf,
-	discordIdOf,
-	keysOf,
-} from "./team-keys.ts";
+import { coordinatorOf } from "./team-keys.ts";
 import {
 	layoutText,
 	planArrangement,
@@ -87,10 +82,16 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		this.#editing = new TeamEditing(this.#context);
 	}
 
-	get guildId(): string {
-		return this.#options.guildId;
+	get teamId(): string {
+		return this.#options.teamId;
 	}
 
+	/** @deprecated The team's id, which is not always a guild; read `teamId`. Removed in 1.0. */
+	get guildId(): string {
+		return this.#options.teamId;
+	}
+
+	/** @deprecated The Discord guild is the Discord place provider's `space`; removed in 1.0. */
 	get discordGuild(): string | undefined {
 		return this.#options.discordGuild;
 	}
@@ -109,30 +110,28 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return teamStatus(this.#context);
 	}
 
-	/** The agent or group that owns a channel of the agent server, by Discord channel or by room. */
+	/** The agent or group that owns a place of the agent server: a stored place, or a room. */
 	owns(channel: ChannelKey): "agent" | "group" | undefined {
-		const { store, surfaces } = this.#options;
-		return channelOwner(
-			store,
-			channel,
-			discordIdOf(channel) === undefined
-				? (surfaces?.roomSurfaces() ?? [])
-				: [],
-		);
+		return this.#options.places.ownerKind(channel);
 	}
 
 	/** The coordinator's name: the entry channel's agent, else the configured one; undefined while none is active. */
 	coordinator(): string | undefined {
-		return coordinatorOf(this.#options.store, this.#options)?.name;
+		const { store, places } = this.#options;
+		return coordinatorOf(store, places, this.#options)?.name;
 	}
 
 	/**
-	 * Every key an agent or group is addressed by: its Discord channel when it has one, then its
-	 * room on each surface that hosts rooms; empty for an unknown name.
+	 * Every key an agent or group is addressed by: its place on each provider's surface, in the
+	 * order "auto" routing prefers (its Discord channel first when it has one); empty for an unknown name.
 	 */
 	roomsOf(name: string): ChannelKey[] {
-		const { store, surfaces } = this.#options;
-		return keysOf(store, name, surfaces?.roomSurfaces() ?? []);
+		return this.#options.places.keysOf(name);
+	}
+
+	/** Where an agent or group is: its place on each surface that holds one, with that surface's name; empty for an unknown name. */
+	placesOf(name: string): { surface: string; key: ChannelKey }[] {
+		return this.#options.places.placesOf(name);
 	}
 
 	/** The tools every agent turn runs with: the plugins', plus the shell and agent tools. */

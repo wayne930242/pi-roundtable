@@ -35,6 +35,7 @@ export {
 export type {
 	AgentStatus as TeamAgentStatus,
 	GroupStatus,
+	TeamPlace,
 	TeamStatus,
 } from "./core/agents/team-status.ts";
 export { MAX_ATTACHMENT_BYTES } from "./core/attachments/attachment-fetcher.ts";
@@ -114,6 +115,17 @@ export type {
 } from "./core/contract/channels.ts";
 export { QUEUED_MARK, STEERED_MARK } from "./core/contract/channels.ts";
 export type { ChatCommand } from "./core/contract/chat-command.ts";
+export type {
+	PlaceAuthor,
+	PlaceCheck,
+	PlaceKind,
+	PlacePort,
+	PlacePost,
+	PlaceProvider,
+	PlaceRef,
+	PlaceSpec,
+	ToolArgument,
+} from "./core/contract/places.ts";
 export type {
 	ImageDrawer,
 	Judge,

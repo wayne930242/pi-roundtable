@@ -131,9 +131,24 @@ function webhookOf(
 ): EmuWebhook {
 	const hook = id ? state.webhooks.get(id) : undefined;
 	if (!hook) throw new HttpError(404, 10015, "Unknown Webhook");
-	if (hook.token !== token)
+	// Without a token the request is the bot's own, authorized by its bot token.
+	if (token !== undefined && hook.token !== token)
 		throw new HttpError(401, 50027, "Invalid Webhook Token");
 	return hook;
+}
+
+/** Where a webhook speaks: its channel, or, with `thread_id`, a thread of that channel. */
+function webhookTarget(
+	state: EmuState,
+	hook: EmuWebhook,
+	query: URLSearchParams,
+): EmuChannel {
+	const threadId = query.get("thread_id");
+	if (threadId === null) return channelOf(state, hook.channelId);
+	const thread = channelOf(state, threadId);
+	if (thread.parentId !== hook.channelId || !thread.thread)
+		throw new HttpError(404, 10003, "Unknown Channel");
+	return thread;
 }
 
 /** A webhook's own message in its channel; a message the webhook did not post is unknown to it. */
@@ -142,7 +157,7 @@ function webhookMessage(
 	ctx: Ctx,
 ): { hook: EmuWebhook; message: EmuMessage } {
 	const hook = webhookOf(state, ctx.params[0], ctx.params[1]);
-	const channel = channelOf(state, hook.channelId);
+	const channel = webhookTarget(state, hook, ctx.query);
 	const message = channel.messages.find(
 		(entry) => entry.id === ctx.params[2] && entry.webhookId === hook.id,
 	);
@@ -164,6 +179,7 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 						token: hook.token,
 						name: hook.name,
 						channel_id: hook.channelId,
+						application_id: BOT_ID,
 						user: { id: hook.userId },
 					}));
 			},
@@ -203,6 +219,7 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 					token: hook.token,
 					name,
 					channel_id: channel.id,
+					application_id: BOT_ID,
 					user: { id: BOT_ID },
 				};
 			},
@@ -212,7 +229,7 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 			/^\/webhooks\/(\d+)\/([^/]+)$/,
 			({ params, body, query }) => {
 				const hook = webhookOf(state, params[0], params[1]);
-				const channel = channelOf(state, hook.channelId);
+				const channel = webhookTarget(state, hook, query);
 				if (channel.type === 15)
 					throw new HttpError(
 						400,
@@ -243,10 +260,23 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 				const message = add(
 					state,
 					channel,
-					{ authorId: hook.id, webhookId: hook.id },
+					{
+						authorId: hook.id,
+						webhookId: hook.id,
+						...(username ? { username } : {}),
+					},
 					sent,
 				);
 				return messageJson(message);
+			},
+		],
+		[
+			"DELETE",
+			/^\/webhooks\/(\d+)(?:\/([^/]+))?$/,
+			({ params }) => {
+				const hook = webhookOf(state, params[0], params[1]);
+				state.webhooks.delete(hook.id);
+				return undefined;
 			},
 		],
 		[

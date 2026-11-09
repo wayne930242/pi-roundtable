@@ -25,7 +25,6 @@ import type {
 	Contribution,
 	HostEnv,
 	LinkedSessions,
-	PluginContext,
 	RoundtablePlugin,
 	TurnEndEvent,
 	TurnEvent,
@@ -40,6 +39,7 @@ import {
 	RUNTIME,
 } from "./core/plugin-api/services.ts";
 import {
+	type ContributionBase,
 	collectContributions,
 	linkSessions,
 } from "./core/registry/contributions.ts";
@@ -68,6 +68,7 @@ import {
 	callRegisteredTool,
 	registeredTools,
 } from "./core/testing/run-tool.ts";
+import { discordSpaceOf } from "./core/testing/team-places.ts";
 import type {
 	RecordedEvent,
 	TestPluginOptions,
@@ -100,6 +101,15 @@ export type { TestLocale } from "./core/testing/locale.ts";
 export { useTestLocale } from "./core/testing/locale.ts";
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
 export { partial } from "./core/testing/partial.ts";
+export type {
+	PlaceContractFailure,
+	PlaceContractSubject,
+	PlaceSeen,
+} from "./core/testing/place-contract.ts";
+export {
+	checkPlaceProviderContract,
+	placeProviderContract,
+} from "./core/testing/place-contract.ts";
 export type { UsePostgresOptions } from "./core/testing/postgres.ts";
 export { usePostgresForTests } from "./core/testing/postgres.ts";
 export type {
@@ -296,7 +306,7 @@ export async function testPlugin(
 		);
 	services.checkRequires();
 	const attachmentDir = mkdtempSync(join(tmpdir(), "roundtable-test-plugin-"));
-	const context: Omit<PluginContext, "services" | "directChannels"> = {
+	const context: ContributionBase = {
 		logger,
 		env,
 		sessions: () => linked ?? unlinked("sessions"),
@@ -348,7 +358,9 @@ export async function testPlugin(
 				? [
 						agentClaim({
 							owner,
-							discordGuild: memberOf(agentServer.team, "discordGuild"),
+							spaceOf: discordSpaceOf(
+								memberOf(agentServer.team, "discordGuild"),
+							),
 							// SAFETY: the claim reads the concrete team's members (owns, answerOwner, answerGroup, answerBackground, startFresh), which a test that gives a team for it supplies.
 							team: agentServer.team as never,
 							runtime: {

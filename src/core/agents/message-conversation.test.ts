@@ -6,6 +6,7 @@ import { messages } from "../i18n/index.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
@@ -67,6 +68,11 @@ function setup(
 		owner: OWNER,
 		entryChannelId: "4000",
 		store,
+		places: testPlaces({
+			store,
+			rows: () => legacyRows(AGENTS),
+			rooms: () => ["app"],
+		}),
 		channels: {
 			post: async (channelId, post) => {
 				posts.push({ channelId, post });
@@ -76,7 +82,6 @@ function setup(
 			}),
 		},
 		surfaces: {
-			roomSurfaces: () => ["app"],
 			sendReply: async (channel, reply) => {
 				replies.push({ channel, text: reply.chunks.join("") });
 			},

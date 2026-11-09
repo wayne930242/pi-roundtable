@@ -11,6 +11,7 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import { discordPlaceProvider } from "../discord/agent-places.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -183,6 +184,8 @@ export function standInDiscord(
 	ownerId: string,
 	/** What `DISCORD.channelContext` answers; by default no context, as on a host with it off. */
 	channelContext: DiscordServices["channelContext"] = async () => undefined,
+	/** The agent guild, which makes the stand-in contribute Discord's place provider over `agentChannels`, as the built-in plugin does with one. */
+	agentGuild?: string,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
@@ -207,22 +210,36 @@ export function standInDiscord(
 				ownerId,
 			});
 			// SAFETY: the plugins after it read only these members while they set up; the rest is read when a tool runs, which a test host does not do.
+			const connection = {
+				agentChannels: () => ({}),
+				agentDashboard: () => ({ show: async () => undefined }),
+				onChannelDeleted: () => undefined,
+				ownerChannel: async () => "discord:owner-dm",
+				ownerOperations: () => ({}),
+				...overrides,
+			};
 			services.provide(DISCORD, {
-				connection: {
-					agentChannels: () => ({}),
-					agentDashboard: () => ({ show: async () => undefined }),
-					onChannelDeleted: () => undefined,
-					ownerChannel: async () => "discord:owner-dm",
-					ownerOperations: () => ({}),
-					...overrides,
-				},
+				connection,
 				commands: commands.registrar,
 				guard,
 				threads: { open: async () => undefined, sweep: async () => undefined },
 				poster: poster ?? fakeDiscordPoster(),
 				channelContext,
 			} as unknown as DiscordServices);
-			return { surfaces: [surface], directChannels: [direct] };
+			return {
+				surfaces: [surface],
+				directChannels: [direct],
+				places: agentGuild
+					? [
+							discordPlaceProvider({
+								guild: agentGuild,
+								// SAFETY: a stand-in's provider is read for keys; nothing asks the channels.
+								connection: connection as never,
+								logger: silentLogger(),
+							}),
+						]
+					: [],
+			};
 		},
 	};
 }
@@ -282,7 +299,16 @@ export async function testHost(
 		...base,
 		plugins: [
 			...(withDiscord
-				? [standInDiscord(commands, guard, given, discordOwnerOf(resolved).id)]
+				? [
+						standInDiscord(
+							commands,
+							guard,
+							given,
+							discordOwnerOf(resolved).id,
+							undefined,
+							resolved.discord?.guild,
+						),
+					]
 				: []),
 			{
 				name: "test-runtime",

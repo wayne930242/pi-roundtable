@@ -278,6 +278,7 @@ export async function captureHost(
 					{ agentChannels: () => channels },
 					CAPTURE_OWNER.id,
 					captureChannelContext(),
+					CAPTURE_GUILD,
 				),
 			]
 		: [];

@@ -11,6 +11,7 @@ import type {
 	QueuePort,
 } from "../contract/channels.ts";
 import type { ChatCommand } from "../contract/chat-command.ts";
+import type { PlacePort, PlaceProvider } from "../contract/places.ts";
 import type { Providers, ResolvedProviders } from "../contract/providers.ts";
 import type { ServiceKey, Services } from "../contract/services.ts";
 import type { ChatSurface, SurfacePort } from "../contract/surface.ts";
@@ -26,7 +27,6 @@ import type {
 import type { HttpRoute, ListenerAddress } from "../http/listeners.ts";
 import type { Locale } from "../i18n/index.ts";
 import type { Speaker, Tier } from "../identity/speakers.ts";
-import { PluginError } from "../kernel/errors.ts";
 import type { Logger } from "../kernel/log.ts";
 import type {
 	DirectChannelProvider,
@@ -199,6 +199,12 @@ export interface Contribution {
 	 */
 	surfaces?: readonly ChatSurface[];
 	/**
+	 * What the plugin's surfaces hold of the agent team's places, one provider per surface across
+	 * every plugin. A surface that hosts agent rooms (`agentRooms: true`) needs none: the host
+	 * derives one from it. A provider for a surface no plugin registers is refused.
+	 */
+	places?: readonly PlaceProvider[];
+	/**
 	 * The system prompts of conversation kinds the plugin owns, one per kind. A plugin that owns the
 	 * owner's own conversations contributes the `"owner"` kind's prompt; without one those
 	 * conversations start with an empty system prompt.
@@ -255,6 +261,7 @@ export const CONTRIBUTION_KEYS = [
 	"sessionTools",
 	"channels",
 	"surfaces",
+	"places",
 	"personas",
 	"backgroundTargets",
 	"directChannels",
@@ -370,6 +377,8 @@ export interface PluginContext {
 	surfaces: SurfacePort;
 	/** Every plugin's direct channels, which reach a person on their own; calls during setup throw NotLinkedError. */
 	directChannels: DirectChannels;
+	/** The place providers of the agent team, chosen by surface or by a channel's prefix; calls during setup throw NotLinkedError. */
+	places: PlacePort;
 	/** Runs conversation turns of any kind over the runtime and the surfaces; calls during setup throw NotLinkedError. */
 	turns: ConversationTurns;
 	/** The host's one connection pool, migrated before any setup; throws PluginError without a database. */
@@ -463,33 +472,6 @@ export interface RoundtablePlugin {
 	 * here, so a plugin adds its own from setup.
 	 */
 	preflight?(): Promise<void> | void;
-}
-
-/**
- * The context one plugin's setup gets: the host's parts and that plugin's view of the services.
- * `context.core` of 0.1.0 is gone; reading it throws a PluginError naming `context.services`, where
- * a plugin written for 0.1.0 meets it on its first line, instead of getting `undefined`.
- */
-export function pluginContext(
-	plugin: RoundtablePlugin,
-	base: Omit<PluginContext, "services">,
-	services: Services,
-): PluginContext {
-	// Every line a plugin logs carries its name.
-	const context = {
-		...base,
-		logger: base.logger.child({ plugin: plugin.name }),
-		services,
-	};
-	Object.defineProperty(context, "core", {
-		enumerable: false,
-		get() {
-			throw new PluginError(
-				`plugin ${plugin.name}: context.core was removed in 0.2.0; read a service with context.services.get(KEY), for example services.get(SCHEDULES), and provide one with services.provide(KEY, value) after listing KEY in the plugin's provides.`,
-			);
-		},
-	});
-	return context;
 }
 
 export {

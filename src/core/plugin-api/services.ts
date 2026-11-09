@@ -1,5 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { CharacterInput, CharacterSpec } from "../../characters/index.ts";
+import type { CharacterInput } from "../../characters/index.ts";
 import type { Agent, AgentGroup } from "../agents/agent-rules.ts";
 import type { AvatarMode } from "../agents/agent-tools.ts";
 import type { HelperTeam } from "../agents/helper-ops.ts";
@@ -16,7 +16,6 @@ import type { ConversationRegistry } from "../conversations/conversation-registr
 import type { PendingConfirmation } from "../domain/conversation.ts";
 import type { ThinkingLevel, ThinkingSetting } from "../domain/models.ts";
 import type { AgentTurnScope, ChannelKey } from "../domain/sessions.ts";
-import type { HttpRoute } from "../http/listeners.ts";
 import type { IdentityLinks } from "../identity/identity-links.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { PersonProfiles } from "../identity/profiles.ts";
@@ -46,6 +45,7 @@ import type {
 } from "../modules/schedules/schedule-store.ts";
 import type { SkillRegistry } from "../modules/skills/skill-contract.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
+import type { AgentWorkspace, AvatarStudio } from "./agent-assets.ts";
 
 // The services the built-in plugins provide, and the ports they keep to. Each port is an
 // interface, so an object with the same methods satisfies it without being one of the built-in
@@ -186,50 +186,26 @@ export interface AgentServer {
 	routes?: RoutingTable; // where work no person started lands; the built-in server sets it
 }
 
-/**
- * The directories the agents work in, as configured. Every agent shares them: the core has no
- * workspace per agent. Read-only data for a plugin that shows or serves the files; they may not exist yet.
- */
-export interface AgentWorkspace {
-	/** The shell's shared working directory (`config.workDir`), where agents write without a hold. */
-	readonly workDir: string;
-	/** The agents' scratch dir (TMPDIR), when the host sets one; writes there are unheld too. */
-	readonly scratchDir?: string;
-}
-
-/** Agent pictures: rendered from the agent's character, kept and served by content hash. */
-export interface AvatarStudio {
-	/** @deprecated Agents are no longer drawn, so this only tells whether an image provider is configured (it gates the generate_image hint); removed in 1.0. */
-	readonly canDraw: boolean;
-	/** The public URL of a picture, or of the default when there is none. */
-	url(hash: string | undefined): string;
-	/**
-	 * Renders a character as the agent's picture (512 px PNG, modern light disc, idle face), stores
-	 * it by content hash, and returns the hash; the same spec gives the same hash.
-	 */
-	render(spec: CharacterSpec): Promise<string>;
-	/** @deprecated Agents are composed characters and no longer drawn; removed in 1.0. Draws a new picture from an avatar prompt; returns its hash. */
-	draw(avatarPrompt: string): Promise<string>;
-	/** @deprecated Removed in 1.0. Edits a stored picture by an instruction; returns the new picture's hash. */
-	edit(hash: string | undefined, instruction: string): Promise<string>;
-	/** @deprecated Removed in 1.0. A picture made from an agent's display name and name, for a host without an image provider; returns its hash. */
-	fallback(displayName: string, name: string): Promise<string>;
-	/** The pictures, public on the named listener. */
-	route(listener: string): HttpRoute;
-	/** Serves `/avatars/<hash>.png`; undefined for any other path. */
-	serve(pathname: string): Response | undefined;
-}
-
 /** The read half of the agent store: every inbound message asks, and only this process changes them. */
 export interface AgentDirectory {
 	agents(): Agent[];
 	agent(name: string): Agent | undefined;
 	/** The agent, or throws AgentError when it is unknown or archived. */
 	activeAgent(name: string): Agent;
+	/** @deprecated Finds an agent by its Discord channel only; read `placeOwner`, which takes a place of any surface. Removed in 1.0. */
 	agentByChannel(channelId: string): Agent | undefined;
 	groups(): AgentGroup[];
 	group(name: string): AgentGroup | undefined;
+	/** @deprecated Finds a group by its Discord channel only; read `placeOwner`, which takes a place of any surface. Removed in 1.0. */
 	groupByChannel(channelId: string): AgentGroup | undefined;
+	/**
+	 * The agent or group whose place the conversation key is, on any surface that holds places and
+	 * whatever the owner's status; undefined for a key that is nobody's place. Optional, because a
+	 * directory written before places were providers has none.
+	 */
+	placeOwner?(
+		key: ChannelKey,
+	): { kind: "agent" | "group"; name: string } | undefined;
 }
 
 /** What an owner gives to create an agent: the fields of `agent_create`, with the settings `update` takes. */
@@ -264,9 +240,11 @@ export interface AgentChange {
 
 /** The agent team as plugins use it: who is in it, what model they run, and their channels. */
 export interface AgentTeam extends HelperTeam {
-	/** The team's id: what its rows are stored under, the Discord guild's id unless the host sets one, else `"local"`. */
+	/** The team's id: what its rows are stored under, the Discord guild's id unless the host sets one, else `"local"`. Optional, because a team written before places were providers has only `guildId`. */
+	readonly teamId?: string;
+	/** @deprecated The team's id, which is not always a guild; read `teamId`. Removed in 1.0. */
 	readonly guildId: string;
-	/** The Discord guild the team's channels live in; absent on a team without Discord channels. */
+	/** @deprecated The Discord guild is the space of Discord's place provider, which the team no longer needs to know. Removed in 1.0. */
 	readonly discordGuild?: string | undefined;
 	/** Called when a turn starts or ends and when an agent or group changes. */
 	onChange(listener: () => void): void;
@@ -282,8 +260,10 @@ export interface AgentTeam extends HelperTeam {
 	 * Discord, the one `coordinator` names (the first seed by default); undefined while none is active.
 	 */
 	coordinator(): string | undefined;
-	/** Every key an agent or group is addressed by: its Discord channel, then its room on each `agentRooms` surface; empty for an unknown name. */
+	/** Every key an agent or group is addressed by: its place on each surface that holds one, in the order "auto" routing prefers (its Discord channel first), then its room on each `agentRooms` surface; empty for an unknown name. */
 	roomsOf(name: string): ChannelKey[];
+	/** Where an agent or group is: its place on each surface that holds one, with that surface's name; empty for an unknown name. Optional, because a team written before places were providers has only `roomsOf`. */
+	placesOf?(name: string): { surface: string; key: ChannelKey }[];
 	/** The model and thinking setting of an agent's next run: its own, or the assistant's. */
 	modelOf(name: string): { model: string; thinking: ThinkingSetting };
 	/** The assistant's model and thinking setting, which agents without their own follow. */
@@ -497,3 +477,4 @@ export interface SpeakerMemory {
 }
 
 export type { SkillRegistry } from "../modules/skills/skill-contract.ts";
+export type { AgentWorkspace, AvatarStudio } from "./agent-assets.ts";

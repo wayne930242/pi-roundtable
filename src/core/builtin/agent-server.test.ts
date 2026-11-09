@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { PlaceProvider } from "../contract/places.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import { PluginError } from "../kernel/errors.ts";
 import { silentLogger } from "../kernel/log.ts";
@@ -34,11 +35,17 @@ import { ServiceRegistry } from "../registry/services.ts";
 import { agentSessionsSlot } from "../runtime/runtime-plugin.ts";
 import { toolTiers } from "../runtime/tool-tiers.ts";
 import {
+	discordTestPlaces,
+	legacyRows,
+	storedFrom,
+} from "../testing/team-places.ts";
+import {
 	type AgentServerOptions,
 	type AgentServerStores,
 	agentServerPlugin,
 	LOCAL_TEAM_ID,
 } from "./agent-server.ts";
+import { placesPlugin } from "./agent-server-test-kit.ts";
 import { DISCORD, type DiscordServices } from "./discord.ts";
 
 const dirs: string[] = [];
@@ -74,8 +81,19 @@ function options(extra: Partial<AgentServerOptions> = {}): AgentServerOptions {
 	};
 }
 
+/** The stored places of a stand-in store: none, and no reader to link. */
+const NO_PLACES = {
+	places: { on: () => undefined, ownerOf: () => undefined },
+	readPlacesWith: () => undefined,
+};
+
+/** Stand-in stores: the members of a store a test reads, and none of the places. */
+const standIn = (agents: object) =>
+	// SAFETY: the team reads only the members the test gives, and the places.
+	({ agents: { ...NO_PLACES, ...agents } }) as unknown as AgentServerStores;
+
 // SAFETY: setup hands the store to the team and registry, which read it only when a turn or a command runs.
-const stores = { agents: {} } as unknown as AgentServerStores;
+const stores = standIn({});
 
 /** The runtime plugin's runtime, as the agent server reads it. */
 const runtime = { name: "runtime" } as unknown as AgentRuntime;
@@ -87,8 +105,14 @@ async function setUp(
 	personas: Record<string, string> = {},
 	prompts?: PromptDocuments,
 	surfaces: Record<string, unknown> = {},
+	/** The place providers the plugins contribute, such as Discord's. */
+	providers: PlaceProvider[] = [],
 ) {
-	const plugins = [...filling, plugin];
+	const rooms =
+		typeof surfaces.roomSurfaces === "function"
+			? (surfaces.roomSurfaces as () => string[])()
+			: [];
+	const plugins = [...placesPlugin(rooms, providers), ...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
 	if (prompts) services.preset(PROMPTS, prompts);
 	// What the plugins before the agent server provide: the schedule store, background turns and Discord.
@@ -266,7 +290,7 @@ describe("the agent server without Discord", () => {
 		sendReply: (channel: string, reply: unknown) => Promise<void> = async () =>
 			undefined,
 	) {
-		const plugins = [...filling, plugin];
+		const plugins = [...placesPlugin(rooms, []), ...filling, plugin];
 		const services = new ServiceRegistry([...plugins]);
 		services.preset(SCHEDULES, {} as ScheduleStore);
 		services.preset(BACKGROUND_TURNS, background as BackgroundTurns);
@@ -368,17 +392,15 @@ describe("the agent server without Discord", () => {
 		errorReporter.record({ level: 50, msg: "disk full" });
 		const infra = { name: "infra", status: "active" };
 		// SAFETY: the team reads only these members of the store while it starts without Discord.
-		const seeded = {
-			agents: {
-				agent: (name: string) => (name === "infra" ? infra : undefined),
-				agents: () => [],
-				group: () => undefined,
-				seed: async () => [],
-				conversations: { latest: () => undefined },
-				outbox: { pending: async () => [] },
-				hasStoredCharacter: () => false,
-			},
-		} as unknown as AgentServerStores;
+		const seeded = standIn({
+			agent: (name: string) => (name === "infra" ? infra : undefined),
+			agents: () => [],
+			group: () => undefined,
+			seed: async () => [],
+			conversations: { latest: () => undefined },
+			outbox: { pending: async () => [] },
+			hasStoredCharacter: () => false,
+		});
 		const plugin = agentServerPlugin(
 			local({
 				coordinator: "infra",
@@ -428,9 +450,7 @@ describe("the agent server without Discord", () => {
 			avatarPrompt: "",
 			status: "active",
 		});
-		const roster = {
-			agents: { agent: (name: string) => active(name) },
-		} as unknown as AgentServerStores;
+		const roster = standIn({ agent: (name: string) => active(name) });
 		const seeded = (names: string[]): RoundtablePlugin => ({
 			name: "seeded",
 			setup: () => ({
@@ -519,6 +539,8 @@ describe("the agent server's routing", () => {
 	// SAFETY: the table reads only `agent` and `conversations.latest` of the store.
 	const routed = {
 		agents: {
+			...NO_PLACES,
+			places: storedFrom(() => legacyRows([...known.values()])),
 			agent: (name: string) => known.get(name),
 			agentByChannel: (id: string) =>
 				[...known.values()].find((a) => a.channelId === id),
@@ -543,6 +565,7 @@ describe("the agent server's routing", () => {
 			{},
 			undefined,
 			surfaces,
+			[discordTestPlaces()],
 		);
 		const { routes } = services.get(AGENTS);
 		expect(routes?.primary("infra")).toBe("app:agent.infra");
@@ -560,6 +583,7 @@ describe("the agent server's routing", () => {
 			{},
 			undefined,
 			surfaces,
+			[discordTestPlaces()],
 		);
 		const { routes } = services.get(AGENTS);
 		expect(routes?.primary("infra")).toBe("discord:2000");
@@ -580,6 +604,7 @@ describe("the agent server's routing", () => {
 				{},
 				undefined,
 				surfaces,
+				[discordTestPlaces()],
 			);
 			const claim = registry.channels.find((c) => c.name === "agent-server");
 			const admission = claim?.admit({
@@ -611,6 +636,7 @@ describe("the agent server's routing", () => {
 			{},
 			undefined,
 			surfaces,
+			[discordTestPlaces()],
 		);
 		const claim = registry.channels.find((c) => c.name === "agent-server");
 		expect(claim?.owns("app:agent.infra")).toBe(true);
@@ -639,7 +665,7 @@ describe("the agent server's routing", () => {
 			options({ routing: infraOnWeb }),
 			async () => routed,
 		);
-		await setUp(good, [], {}, undefined, surfaces);
+		await setUp(good, [], {}, undefined, surfaces, [discordTestPlaces()]);
 		await good.preflight?.();
 		const bad = agentServerPlugin(
 			options({
@@ -647,7 +673,7 @@ describe("the agent server's routing", () => {
 			}),
 			async () => routed,
 		);
-		await setUp(bad, [], {}, undefined, surfaces);
+		await setUp(bad, [], {}, undefined, surfaces, [discordTestPlaces()]);
 		expect(async () => bad.preflight?.()).toThrow(
 			'config routing.agents.infra.primary: no surface is registered as "slack"',
 		);

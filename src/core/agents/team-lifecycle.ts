@@ -12,18 +12,7 @@ import { isHelper, overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { refreshAvatars } from "./avatar-refresh.ts";
 import { TeamHelpers } from "./team-helpers.ts";
-import {
-	agentOfChannel,
-	coordinatorOf,
-	discordIdOf,
-	groupLogName,
-	groupOfChannel,
-	groupSessionKey,
-	homeScope,
-	keysOf,
-	roomScope,
-	seatsOf,
-} from "./team-keys.ts";
+import { coordinatorOf } from "./team-keys.ts";
 import { categoryKind, groupTopic } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 
@@ -168,24 +157,20 @@ export class TeamLifecycle {
 
 	/** Starts an agent's or every group member's conversation over; call inside the channel's queue. */
 	async startFresh(channel: ChannelKey): Promise<void> {
-		const { store, surfaces } = this.#ctx.options;
+		const { store, places } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
-		// A Discord channel and each room are conversations of their own: a room starts over alone.
-		const agent = agentOfChannel(store, surfaces, channel);
+		// Each place is a conversation of its own: a room starts over alone.
+		const agent = places.agentOf(channel);
 		if (agent?.status === "active") {
-			await runtime.startFresh(
-				discordIdOf(channel) === undefined
-					? roomScope(agent, channel).session
-					: homeScope(agent).session,
-			);
+			await runtime.startFresh(places.scopeOf(agent, channel).session);
 			this.#ctx.changed();
 			return;
 		}
-		const group = groupOfChannel(store, surfaces, channel);
+		const group = places.groupOf(channel);
 		if (group?.status !== "active") return;
 		for (const member of group.members)
-			await runtime.startFresh(groupSessionKey(group, member, channel));
-		await store.catchUp(group, groupLogName(group, channel));
+			await runtime.startFresh(places.seatKey(group, member, channel));
+		await store.catchUp(group, places.logName(group, channel));
 	}
 
 	// ── Archive ────────────────────────────────────────────────────────────
@@ -220,7 +205,11 @@ export class TeamLifecycle {
 			);
 		if (target.status !== "active")
 			throw new AgentError(`"${name}" is already archived.`);
-		if (agent && coordinatorOf(store, this.#ctx.options)?.name === name)
+		if (
+			agent &&
+			coordinatorOf(store, this.#ctx.options.places, this.#ctx.options)
+				?.name === name
+		)
 			throw new AgentError("The coordinator cannot be archived.");
 		if (agent && name === caller?.name)
 			throw new AgentError("You cannot archive yourself; ask another agent.");
@@ -328,11 +317,11 @@ export class TeamLifecycle {
 				await this.remove(helper.name);
 		// What a name keeps in the runtime would be picked up by the next agent or group made under it.
 		const runtime = this.#ctx.options.runtime();
-		const rooms = this.#rooms();
+		const { places } = this.#ctx.options;
 		const seats = group
-			? group.members.flatMap((member) => seatsOf(group, member, rooms))
-			: store.groups().flatMap((other) => seatsOf(other, name, rooms));
-		const kept = [...keysOf(store, name, rooms), ...seats];
+			? group.members.flatMap((member) => places.seatsOf(group, member))
+			: store.groups().flatMap((other) => places.seatsOf(other, name));
+		const kept = [...places.keysOf(name), ...seats];
 		for (const key of kept) await runtime.deleteConversation(key);
 		if (agent) {
 			await store.deleteAgent(name);
@@ -347,19 +336,19 @@ export class TeamLifecycle {
 	async #archiveAgent(agent: Agent): Promise<void> {
 		const { store, schedules, logger } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
-		const rooms = this.#rooms();
+		const { places } = this.#ctx.options;
 		// A parent's temp knights are archived first: they have no place of their own once it is gone.
 		for (const helper of store.helpersOf(agent.name, "active"))
 			await this.helpers.archiveOne(helper);
 		const left = await store.archiveAgent(agent.name);
-		// The agent's Discord channel and each of its rooms are conversations of their own.
-		for (const key of keysOf(store, agent.name, rooms)) {
+		// Each of the agent's places is a conversation of its own.
+		for (const key of places.keysOf(agent.name)) {
 			for (const schedule of await schedules.forChannel(key))
 				await schedules.remove(schedule.id, key);
 			await runtime.startFresh(key);
 		}
 		for (const group of left) {
-			for (const seat of seatsOf(group, agent.name, rooms))
+			for (const seat of places.seatsOf(group, agent.name))
 				await runtime.startFresh(seat);
 			if (group.status === "active") this.retitle(group);
 		}
@@ -373,18 +362,13 @@ export class TeamLifecycle {
 	async #archiveGroup(group: AgentGroup): Promise<void> {
 		const { store, logger } = this.#ctx.options;
 		const runtime = this.#ctx.options.runtime();
-		const rooms = this.#rooms();
+		const { places } = this.#ctx.options;
 		await store.archiveGroup(group.name);
 		for (const member of group.members)
-			for (const seat of seatsOf(group, member, rooms))
+			for (const seat of places.seatsOf(group, member))
 				await runtime.startFresh(seat);
 		logger.info({ group: group.name }, "group archived");
 		this.#ctx.changed();
-	}
-
-	/** The surfaces that host rooms; none for a team without a surface port. */
-	#rooms(): readonly string[] {
-		return this.#ctx.options.surfaces?.roomSurfaces() ?? [];
 	}
 
 	/** Writes a group's members and host into its channel topic, without waiting on Discord; a group without a channel has no topic. */

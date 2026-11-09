@@ -4,7 +4,7 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { fx, script, useTeamFixture } from "./agent-team-fixture.ts";
-import { discordKey, groupRoomKey, groupSessionKey } from "./team-keys.ts";
+import { discordKey, groupRoomKey } from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
@@ -59,9 +59,9 @@ describeDb("PostgreSQL", () => {
 			fx.runtime.fresh = [];
 			await fx.team.startFresh(discordGroup);
 			expect(fx.runtime.fresh).toEqual([
-				groupSessionKey(group(), "coordinator"),
-				groupSessionKey(group(), "infra"),
-				groupSessionKey(group(), "doctor"),
+				fx.places.seatKey(group(), "coordinator"),
+				fx.places.seatKey(group(), "infra"),
+				fx.places.seatKey(group(), "doctor"),
 			]);
 		});
 	});

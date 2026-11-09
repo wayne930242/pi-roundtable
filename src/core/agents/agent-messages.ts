@@ -17,7 +17,6 @@ import {
 import { answersTo } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import { conversationLabel, messageTarget } from "./message-target.ts";
-import { discordIdOf, discordKey, scopeOf } from "./team-keys.ts";
 import {
 	type Chain,
 	MAX_CHAIN_MESSAGES,
@@ -47,7 +46,7 @@ export class AgentMessages {
 		text: string,
 		conversation?: string,
 	): string {
-		const { store, queue, logger, surfaces } = this.#host.options;
+		const { store, queue, logger, places } = this.#host.options;
 		if (to === caller.name)
 			throw new AgentError("message_agent is for other agents, not yourself.");
 		const target = store.activeAgent(to);
@@ -57,7 +56,7 @@ export class AgentMessages {
 		const targetChannel = messageTarget(
 			{
 				store,
-				roomSurfaces: surfaces?.roomSurfaces() ?? [],
+				places,
 				latest: store.conversations.latest(target.name),
 				from: parent,
 				routes: this.#host.routes,
@@ -169,7 +168,7 @@ export class AgentMessages {
 		});
 		const result = await this.#host.turn(
 			target,
-			scopeOf(target, targetChannel),
+			this.#host.options.places.scopeOf(target, targetChannel),
 			targetChannel,
 			agentMessageText(
 				this.#host.current(sender),
@@ -233,7 +232,7 @@ export class AgentMessages {
 	#followUp(sender: Agent, channel: ChannelKey, text: string, chain: Chain) {
 		return this.#host.turn(
 			sender,
-			scopeOf(sender, channel),
+			this.#host.options.places.scopeOf(sender, channel),
 			channel,
 			text,
 			chain,
@@ -314,16 +313,17 @@ export class AgentMessages {
 	}
 
 	async #replayOne(entry: StoredOutboxEntry): Promise<void> {
-		const { store, logger } = this.#host.options;
+		const { store, logger, places } = this.#host.options;
 		if (!(await store.outbox.claim(entry.id))) return;
 		const sender = store.agent(entry.sender);
 		const target = store.agent(entry.target);
-		// An agent archived or moved to another channel since has no turn to give the entry.
+		// An agent archived or moved to another place since has no turn to give the entry; nor has a
+		// key of a surface no provider serves, which is no room.
 		const has = (agent: Agent | undefined, channel: ChannelKey) =>
 			agent?.status === "active" &&
-			(discordIdOf(channel) === undefined ||
-				(agent.channelId !== undefined &&
-					discordKey(agent.channelId) === channel));
+			places.serves(channel) &&
+			(!places.isStored(channel) ||
+				places.agentOf(channel)?.name === agent.name);
 		const origin = entry.origin ?? entry.channel;
 		const intact =
 			entry.kind === "message"

@@ -5,11 +5,7 @@ import { join } from "node:path";
 import { AgentConversations } from "../agents/agent-conversations.ts";
 import type { StoredOutboxEntry } from "../agents/agent-outbox.ts";
 import type { Agent, PgAgentStore } from "../agents/agent-store.ts";
-import {
-	agentRoomKey,
-	discordKey,
-	groupSeatChannel,
-} from "../agents/team-keys.ts";
+import { agentRoomKey, discordKey } from "../agents/team-keys.ts";
 import { TeamTurns } from "../agents/team-turns.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
@@ -23,6 +19,7 @@ import { ChannelQueue } from "../routing/channel-queue.ts";
 import { surfacePort } from "../routing/surface-port.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { registeredTools } from "../testing/run-tool.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { DispatchThreads } from "../threads/dispatch-threads.ts";
 import { runChannelFor } from "./delivery-router.ts";
 import {
@@ -192,6 +189,11 @@ function team(
 		owner: OWNER,
 		entryChannelId: "4000",
 		store,
+		places: testPlaces({
+			store,
+			rows: () => legacyRows(AGENTS),
+			rooms: () => ["app"],
+		}),
 		channels: {
 			post: async (channelId, post) =>
 				void received.discord.push(
@@ -202,7 +204,6 @@ function team(
 			}),
 		},
 		surfaces: {
-			roomSurfaces: () => ["app"],
 			sendReply: async (channel, reply) =>
 				void received[surfaceOfKey(channel)].push(
 					`reply ${channel}: ${reply.chunks.join("")}`,
@@ -327,8 +328,24 @@ const FEATURES: Record<
 	"start-over of a group seat": async (received, surface) => {
 		const { port } = host(received);
 		// A seat outside its turn, as after a start-over, posts in the group's place on its own surface.
-		const seat = groupSeatChannel(
-			{ name: "council", channelId: "7000" },
+		const places = testPlaces({
+			// SAFETY: the places read only whether `council` is a group.
+			store: {
+				agent: () => undefined,
+				group: () => ({ name: "council" }),
+			} as never,
+			rows: () => [
+				{
+					kind: "group",
+					name: "council",
+					surface: "discord",
+					externalId: "7000",
+				},
+			],
+			rooms: () => ["app"],
+		});
+		const seat = places.seatChannel(
+			{ name: "council" },
 			{ home: placeOf("academic", surface) },
 		);
 		await port.sendReply(seat, { chunks: ["started over"] });

@@ -3,6 +3,7 @@ import type { ResolvedRouting } from "../config/routing.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { Agent } from "./agent-store.ts";
 import { Routes } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
@@ -44,15 +45,20 @@ function editing(working: string | undefined, routing?: ResolvedRouting) {
 			return input;
 		},
 	};
-	const roomSurfaces = () => ["app"];
+	const places = testPlaces({
+		// SAFETY: the places read only `agent` and `group` of the store.
+		store: store as never,
+		rows: () => legacyRows([...rows.values()]),
+		rooms: () => ["app"],
+	});
 	const ctx = {
 		options: {
 			store,
-			routes: new Routes({ routing, store, roomSurfaces }),
+			places,
+			routes: new Routes({ routing, store, places }),
 			studio: { render: async () => "r".repeat(64), url: () => "x" },
 			logger: { info: () => undefined, warn: () => undefined },
 			channels: { createChannel: async (name: string) => `ch-${name}` },
-			surfaces: { roomSurfaces },
 			queue: {
 				run: async (_key: string, task: () => Promise<unknown>) => task(),
 			},

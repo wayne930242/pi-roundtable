@@ -27,7 +27,7 @@ export function teamSystemPrompt(
 		scratchDir,
 		agentTools,
 		surfaces,
-		channels,
+		places,
 	} = options;
 	const agent = store.agent(scope.name);
 	if (!agent) throw new AgentError(`no agent ${scope.name}`);
@@ -35,7 +35,7 @@ export function teamSystemPrompt(
 		typeof sharedPrompt === "function" ? sharedPrompt() : sharedPrompt;
 	const guest = typeof guestPrompt === "function" ? guestPrompt() : guestPrompt;
 	const group = scope.group ? store.group(scope.group) : undefined;
-	const coordinator = coordinatorOf(store, options);
+	const coordinator = coordinatorOf(store, places, options);
 	const speaker = turns.speakerOf(scope);
 	const base = agentSystemPrompt({
 		agent,
@@ -51,7 +51,7 @@ export function teamSystemPrompt(
 		...(agent.parent ? { parent: store.agent(agent.parent) } : {}),
 		helpers: options.helpers !== false,
 		...(agentTools ? { agentTools } : {}),
-		...placeOf(turns.turnChannel(scope), surfaces, !!channels),
+		...placeOf(turns.turnChannel(scope), surfaces, places.surfaces()),
 		...(group
 			? {
 					group: {

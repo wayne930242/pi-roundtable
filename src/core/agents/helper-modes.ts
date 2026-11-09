@@ -5,8 +5,8 @@ import type { ModeOrigins } from "../modes/mode-inheritance.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
-import { agentOfChannel, groupOfChannel, keysOf } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
+import type { TeamPlaces } from "./team-places.ts";
 
 /**
  * Makes the temp knight's conversations follow the modes of the conversation that asked for it,
@@ -21,10 +21,10 @@ export async function followOrigin(
 	speaker: Speaker,
 	helper: Agent,
 ): Promise<void> {
-	const { store, surfaces } = ctx.options;
+	const { places } = ctx.options;
 	const modes = ctx.options.modes?.();
 	if (!modes) return;
-	const keys = keysOf(store, helper.name, surfaces?.roomSurfaces() ?? []);
+	const keys = places.keysOf(helper.name);
 	if (speaker.tier !== "owner" || speaker.principalId === SYSTEM_PRINCIPAL) {
 		for (const key of keys) await modes.forget(key);
 		return;
@@ -39,22 +39,16 @@ export async function followOrigin(
  * archived or deleted.
  */
 export function modeOrigins(
-	store: Pick<
-		AgentDirectory,
-		"agent" | "agentByChannel" | "group" | "groupByChannel"
-	>,
-	hosts: { roomSurfaces(): readonly string[] },
+	store: Pick<AgentDirectory, "agent">,
+	places: Pick<TeamPlaces, "agentOf" | "groupOf">,
 ): ModeOrigins {
 	return {
 		originOf: (channel, origin) => {
-			const helper = agentOfChannel(store, hosts, channel);
+			const helper = places.agentOf(channel);
 			if (!helper || !isHelper(helper) || helper.origin !== origin)
 				return undefined;
 			const parent = store.agent(helper.parent as string);
-			const owner =
-				agentOfChannel(store, hosts, origin) ??
-				groupOfChannel(store, hosts, origin) ??
-				parent;
+			const owner = places.agentOf(origin) ?? places.groupOf(origin) ?? parent;
 			return {
 				name: parent?.displayName ?? (helper.parent as string),
 				alive: owner?.status === "active",

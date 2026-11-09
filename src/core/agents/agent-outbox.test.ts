@@ -223,6 +223,24 @@ describeDb("agent messages that survive a stop", () => {
 		expect(infraTexts[2]).toContain("third");
 	});
 
+	test("an entry kept for a key of a surface no provider serves is dropped without a model turn", async () => {
+		// A Discord id from before the host lost its agent guild: the key is no room and no place.
+		await fx.store.outbox.keep({
+			kind: "message",
+			sender: "coordinator",
+			target: "infra",
+			channel: "gone:12345",
+			origin: discordKey(ENTRY),
+			text: "check the disk",
+			speaker: OWNER_SPEAKER,
+			messages: 0,
+		});
+		expect(await fx.store.outbox.pending()).toHaveLength(1);
+		await restart();
+		expect(fx.runtime.turns).toHaveLength(0);
+		expect(await fx.store.outbox.pending()).toEqual([]);
+	});
+
 	test("an entry whose agent was archived meanwhile is dropped, not run", async () => {
 		await coordinatorTurn(() => {
 			fx.queue.close();

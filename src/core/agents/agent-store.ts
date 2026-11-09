@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import type { CharacterSpec } from "../../characters/index.ts";
 import { isCheckDatabase } from "../db/check-database.ts";
 import type { Migration } from "../db/migrations.ts";
+import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { ThinkingLevel } from "../domain/models.ts";
 import {
@@ -34,6 +35,7 @@ import {
 	toGroup,
 } from "./agent-schema.ts";
 import { HelperPresets } from "./helper-presets.ts";
+import type { TeamPlaces } from "./team-places.ts";
 
 export {
 	type Agent,
@@ -66,6 +68,8 @@ export class PgAgentStore extends AgentGroupStore implements AgentDirectory {
 	readonly conversations: AgentConversations;
 	/** The temp-knight presets each agent saved. */
 	readonly presets: HelperPresets;
+	/** How the team reads a key as a place, once the agent server has linked; until then no key is anyone's. */
+	#reading: Pick<TeamPlaces, "ownerOf"> | undefined;
 
 	private constructor(
 		sql: SQL,
@@ -121,6 +125,18 @@ export class PgAgentStore extends AgentGroupStore implements AgentDirectory {
 		this.dressed.clear();
 		for (const row of agents) this.keepAgentRow(row);
 		for (const row of groups) this.groupMap.set(row.name, toGroup(row));
+	}
+
+	/** Lets `placeOwner` read keys the way the team does: through the host's place providers. */
+	readPlacesWith(places: Pick<TeamPlaces, "ownerOf">): void {
+		this.#reading = places;
+	}
+
+	placeOwner(
+		key: ChannelKey,
+	): { kind: "agent" | "group"; name: string } | undefined {
+		const owner = this.#reading?.ownerOf(key);
+		return owner && { kind: owner.kind, name: owner.name };
 	}
 
 	/** Inserts seed agents that do not exist yet; existing rows, edited or not, are left alone. */

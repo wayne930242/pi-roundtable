@@ -6,6 +6,7 @@ import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
 import type { RoundtableConfig } from "../config/config.ts";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import { discordPlaceProvider } from "../discord/agent-places.ts";
 import { discord as discordAdapter } from "../discord/discord-adapter.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
@@ -54,6 +55,8 @@ function quietDiscord(
 		dashboards: number;
 		deliver?: (message: InboundMessage) => void;
 	} = { created: [], dashboards: 0 },
+	/** The agent guild: with one, the stand-in contributes Discord's place provider, as the built-in plugin does; `false` leaves the host's Discord without one. */
+	guild: string | false = config.discord.guild,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
@@ -70,36 +73,51 @@ function quietDiscord(
 		replaces: [DISCORD],
 		setup: ({ services }) => {
 			// SAFETY: the built-in plugins after it hand these to the team and the tools, which read them only when a turn or a command runs.
-			services.provide(DISCORD, {
-				connection: {
-					agentChannels: () => ({
-						post: async () => undefined,
-						createChannel: async (name: string) => {
-							seen.created.push(name);
-							return "900000000000000010";
-						},
-						placeIn: async () => false,
-						layout: async () => [],
-						arrange: async () => undefined,
-						setTopic: async () => undefined,
-						removeWebhook: async () => undefined,
-						exists: async () => true,
-						read: async () => [],
-					}),
-					agentDashboard: () => ({
-						show: async () => {
-							seen.dashboards += 1;
-						},
-					}),
-					onChannelDeleted: () => undefined,
-					ownerChannel: async () => "discord:owner",
-					ownerOperations: () => ({}),
+			const agentChannels = () => ({
+				post: async () => undefined,
+				createChannel: async (name: string) => {
+					seen.created.push(name);
+					return "900000000000000010";
 				},
+				placeIn: async () => false,
+				layout: async () => [],
+				arrange: async () => undefined,
+				setTopic: async () => undefined,
+				removeWebhook: async () => undefined,
+				exists: async () => true,
+				read: async () => [],
+			});
+			const connection = {
+				agentChannels,
+				agentDashboard: () => ({
+					show: async () => {
+						seen.dashboards += 1;
+					},
+				}),
+				onChannelDeleted: () => undefined,
+				ownerChannel: async () => "discord:owner",
+				ownerOperations: () => ({}),
+			};
+			services.provide(DISCORD, {
+				connection,
 				commands: { add: () => undefined },
 				threads: { open: async () => undefined, sweep: async () => undefined },
 				guard: {},
 			} as unknown as DiscordServices);
-			return { surfaces: [surface] };
+			return {
+				surfaces: [surface],
+				places:
+					guild !== false
+						? [
+								discordPlaceProvider({
+									guild,
+									// SAFETY: the provider is read for keys; nothing asks the channels.
+									connection: connection as never,
+									logger: silentLogger(),
+								}),
+							]
+						: [],
+			};
 		},
 	};
 }
@@ -315,6 +333,16 @@ function hasWebAccess(): boolean {
 			);
 			roundtable = new Roundtable(options, plugins);
 			await expect(roundtable.run()).rejects.toThrow("agentServer: false");
+			roundtable = undefined;
+		});
+
+		test("refuses to start when a replacement DISCORD leaves the agent guild without a place provider, naming the one to contribute", async () => {
+			const { options, plugins } = await defineRoundtable(
+				{ ...config, plugins: [quietDiscord(undefined, false), quietRuntime] },
+				{ logger: silentLogger() },
+			);
+			roundtable = new Roundtable(options, plugins);
+			await expect(roundtable.run()).rejects.toThrow("discordPlaceProvider");
 			roundtable = undefined;
 		});
 

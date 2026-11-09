@@ -16,7 +16,7 @@ export interface AgentTeamOptions
 	 * The team's id: the Discord guild, or `LOCAL_TEAM_ID` on a host without Discord. It scopes the
 	 * rows the team keeps.
 	 */
-	guildId: string;
+	teamId: string;
 	/** The Discord guild the team's channels live in, which is not the team's id when the host sets one; absent without Discord channels. */
 	discordGuild?: string | undefined;
 	/** The first team, read and inserted once on start; an agent already stored is never overwritten. */

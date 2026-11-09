@@ -191,21 +191,20 @@ export function chainLimitReason(who: OwnerIdentity): string {
 
 /**
  * Where a turn's conversation is: the surface of the turn's conversation (`home`: the agent's own
- * channel or room, or the group's in a group round), named by its `label`, and the other surfaces the agents have places on, Discord when the team has
- * channels and each surface that hosts rooms.
+ * channel or room, or the group's in a group round), named by its `label`, and the other surfaces the agents have places on:
+ * `holders`, every surface with a place provider.
  */
 export function placeOf(
 	home: ChannelKey,
-	surfaces: Pick<SurfacePort, "of" | "roomSurfaces"> | undefined,
-	hasDiscord: boolean,
+	surfaces: Pick<SurfacePort, "of"> | undefined,
+	holders: readonly string[],
 ): { surface: { label: string; key: string; others: readonly string[] } } {
 	const prefix = parseChannelKey(home).surface;
 	const label = (name: string) =>
 		surfaces?.of(`${name}:`)?.label ?? (name === "discord" ? "Discord" : name);
-	const names = [
-		...(hasDiscord ? ["discord"] : []),
-		...(surfaces?.roomSurfaces() ?? []),
-	].filter((n, i, all) => n !== prefix && all.indexOf(n) === i);
+	const names = holders.filter(
+		(n, i, all) => n !== prefix && all.indexOf(n) === i,
+	);
 	return {
 		surface: { label: label(prefix), key: prefix, others: names.map(label) },
 	};
