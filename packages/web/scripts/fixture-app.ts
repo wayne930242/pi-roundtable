@@ -34,22 +34,16 @@
 //   curl 'http://127.0.0.1:4181/say?room=app:agent.guide&text=approve'
 // `GET /control/mode?room=...&yolo=1&long=1` sets a room's modes. `GET /control/write?path=src/main.ts&text=...`
 // writes a file in the agents' workspace the way a partner would, to try the files pane's conflict check. The page is at http://127.0.0.1:PORT/console/.
-import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	symlinkSync,
-	truncateSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
 import { buildPage } from "./build-page.ts";
 import { fixtureConnectorFeatures } from "./fixture-connectors.ts";
-import { BLOCKS_REPLY, SAMPLE } from "./fixture-samples.ts";
+import { SAMPLE } from "./fixture-samples.ts";
+
+import { seedWorkspace } from "./fixture-workspace.ts";
 
 // The host serves the built page and stops at start-up without one: build it here when it is missing.
 const pageDir = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -69,171 +63,26 @@ url.pathname = `/${databaseName}`;
 process.env.ROUNDTABLE_TEST_DATABASE_URL = url.toString();
 
 // Loaded after the variable is set: the test host reads the database address when it is imported.
-const { AGENTS, MODES, promptScope, SCHEDULES, SKILLS, THREADS } = await import(
-	"pi-roundtable"
-);
+const { AGENTS, MODES, SCHEDULES, SKILLS } = await import("pi-roundtable");
 const { testHost } = await import("pi-roundtable/testing");
 const { webConsole } = await import("../src/web-plugin.ts");
-const { WEB_APP } = await import("../src/web-app.ts");
 const { admitAs, refuse } = await import("../src/verifier.ts");
-const { definePlugin } = await import("pi-roundtable");
-type SkillRegistry = import("pi-roundtable").SkillRegistry;
-type TurnProgress = import("pi-roundtable").TurnProgress;
 type TurnRequest = Parameters<
 	import("pi-roundtable").AgentRuntime["runTurn"]
 >[0];
 
-// Skills for the Skills page: one with long values, a long line, and a long code line, so a
-// document dialog can be checked for wrapping and for scrolling inside the code block.
-const SKILL_CATALOG = [
-	{
-		name: "code-review",
-		source: { kind: "builtin" as const },
-		description: "Review a change set for correctness, security and style.",
-		groups: [],
-		carriers: [],
-	},
-	{
-		name: "deploy-notes",
-		source: { kind: "written" as const },
-		description: "Write release notes from merged changes.",
-		groups: ["release"],
-		carriers: ["guide"],
-	},
-];
-const SKILL_DOCUMENTS: Record<
-	string,
-	{ frontmatter: Record<string, unknown>; body: string }
-> = {
-	"code-review": {
-		frontmatter: {
-			name: "code-review",
-			description:
-				"Use when reviewing a diff, a pull request or a commit range: read the change, run its tests, and report findings by severity with the file and line each one points to, rather than a general impression of the whole change.",
-			license: "MIT",
-			metadata: { version: "1.4.0", tags: ["review", "quality", "security"] },
-		},
-		body: `# Code review
-
-Read the change before reading the code around it. A review answers one question: **is this change safe to merge?**
-
-## Steps
-
-1. List the files the change touches and group them by purpose.
-2. Run the tests the change claims to cover, and the ones it forgot.
-3. Read each hunk. For every finding note the file, the line, and why it matters.
-
-## Severity
-
-- **P0** breaks the build or loses data.
-- **P1** a defect a user can reach.
-- **P2** style, naming, a missing test.
-
-> A finding without a line number is an opinion, not a finding.
-
-\`\`\`ts
-// A long line, to see the block scroll sideways rather than the dialog: the review reports every finding it makes with its file, line and severity.
-export function report(findings: Finding[]): string { return findings.map((f) => \`\${f.severity} \${f.file}:\${f.line} \${f.text}\`).join("\\n"); }
-\`\`\`
-
-| Severity | Blocks merge |
-| --- | --- |
-| P0 | yes |
-| P1 | yes |
-| P2 | no |
-
-Finish with a one-line verdict.`,
-	},
-	"deploy-notes": {
-		frontmatter: {
-			name: "deploy-notes",
-			description:
-				"Use when writing release notes from the changes merged since the last release.",
-		},
-		body: "Group the merged changes by area, then write one line for each.\n\n- Fixes first\n- Then features",
-	},
-};
+const { SKILL_CATALOG, SKILL_DOCUMENTS, registrySkills } = await import(
+	"./fixture-skills.ts"
+);
+const { commandFixture, hostFixture } = await import("./fixture-plugins.ts");
+const { fixtureScripts, sleep } = await import("./fixture-scripts.ts");
 
 const realSkills = process.env.FIXTURE_SKILLS === "registry";
-
-/** The Skills pane's feature port over the host's own registry, so what the pane lists is what the editor opens and saves. */
-const registrySkills = (registry: SkillRegistry) => ({
-	catalog: () => registry.catalog().map(({ file: _file, ...entry }) => entry),
-	read: async (name: string) => {
-		const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(
-			(await registry.document(name)).text,
-		);
-		return { frontmatter, body };
-	},
-});
 
 const origin = `http://127.0.0.1:${port}`;
 const asMember = process.env.FIXTURE_TIER === "member";
 const MEMBER_IDENTITY = "discord:300000000000000013";
 
-/** A plugin that declares an extension command as safe for chat, to see it in a room's command menu. */
-const commandFixture = definePlugin({
-	name: "fixture-commands",
-	setup: () => ({
-		chatCommands: [{ name: "stats", description: "Show this week's usage" }],
-	}),
-});
-
-/** A host room kind and a page, as a plugin that sits on the web app would register them. */
-const hostFixture = definePlugin({
-	name: "fixture-host",
-	requires: [WEB_APP],
-	setup: (context) => {
-		const web = context.services.get(WEB_APP);
-		const all = [
-			{ id: "inbox-empty", title: "Empty thread" },
-			{ id: "inbox-busy", title: "Support thread" },
-		];
-		// A member reads one room of the two, as a kind that gives the tiers different rooms would.
-		const roomsOf = (viewer: { tier: string }) =>
-			viewer.tier === "owner"
-				? all
-				: all.filter((room) => room.id === "inbox-busy");
-		web.registerRoomKind({
-			kind: "inbox",
-			label: "Inbox",
-			icon: "users",
-			list: async (viewer) => ({
-				rooms: roomsOf(viewer).map((room) => ({
-					...room,
-					subtitle: "Support",
-					picture: { initials: "IN", color: "#336699" },
-				})),
-			}),
-			access: async (viewer, id) =>
-				roomsOf(viewer).some((room) => room.id === id)
-					? {
-							read: true,
-							send: viewer.tier === "owner" ? ["note", "turn"] : ["note"],
-							act: true,
-						}
-					: undefined,
-			header: async (_viewer, id) => ({
-				title: all.find((room) => room.id === id)?.title ?? id,
-				fields: [{ label: "Status", value: "Open" }],
-				actions: [],
-			}),
-			send: async () => "accepted",
-		});
-		web.registerPage({
-			id: "mailboxes",
-			label: "Mailboxes",
-			icon: "megaphone",
-			place: "main",
-			visible: () => true,
-			view: async () => ({
-				title: "Mailboxes",
-				sections: [{ kind: "markdown", text: "Two mailboxes." }],
-			}),
-		});
-		return {};
-	},
-});
 const seats = Math.min(
 	12,
 	Math.max(3, Number(process.env.FIXTURE_AGENTS ?? 3)),
@@ -262,328 +111,14 @@ const councilMembers = [
 ].slice(0, councilSize);
 const dataDir = mkdtempSync(join(tmpdir(), "fixture-app-"));
 const workDir = join(dataDir, "work");
-// What the agents left in their workspace, for the files pane: code in several languages, a file with
-// Windows line endings, a binary one, a large one, a repository's `.git`, and a link out of the workspace.
-function seedWorkspace(): void {
-	const put = (path: string, text: string) => {
-		mkdirSync(join(workDir, path, ".."), { recursive: true });
-		writeFileSync(join(workDir, path), text);
-	};
-	put(
-		"README.md",
-		"# Field notes\n\nThe agents keep their work here.\n\n- `src/` the scout's code\n- `notes/` what the archivist wrote down\n\n```ts\nconst answer = 42;\n```\n",
-	);
-	put(
-		"src/main.ts",
-		`import { readFile } from "node:fs/promises";
-
-/** Counts the words of a file, ignoring blank lines. */
-export async function words(path: string): Promise<number> {
-	const text = await readFile(path, "utf8");
-	return text.split(/\\s+/).filter(Boolean).length; // "quoted" 12_000
-}
-
-export const GREETING = \`hello \${"world"}\`;
-`,
-	);
-	put(
-		"src/report.py",
-		`from dataclasses import dataclass
-
-
-@dataclass
-class Finding:
-    title: str
-    severity: int = 3  # 1 is worst
-
-
-def worst(findings: list[Finding]) -> Finding | None:
-    """The most severe finding, or None."""
-    return min(findings, key=lambda f: f.severity, default=None)
-`,
-	);
-	put(
-		"deploy/stack.yml",
-		'services:\n  web:\n    image: ghcr.io/example/web:1.4.0\n    ports: ["8080:80"]\n    environment:\n      MODE: production # not a secret\n',
-	);
-	put("notes/windows.txt", "line one\r\nline two\r\nno final newline");
-	put(
-		"config/settings.json",
-		'{\n  "retries": 3,\n  "tags": ["a", "b"],\n  "debug": false\n}\n',
-	);
-	put("data/blob.bin", "\u0000\u0001binary\u0000");
-	put("logs/big.log", "x".repeat(100));
-	truncateSync(join(workDir, "logs/big.log"), 3 * 1024 * 1024);
-	put("repo/.git/config", "[core]\n\trepositoryformatversion = 0\n");
-	put("repo/readme.txt", "a repository");
-	symlinkSync("/etc/hosts", join(workDir, "outside-link"));
-}
-seedWorkspace();
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-type Script = (
-	request: TurnRequest,
-	signal: AbortSignal,
-) => Promise<{ ok: true; text: string }>;
+seedWorkspace(workDir);
 
 let host: Awaited<ReturnType<typeof testHost>> | undefined;
 let teamForScripts: unknown;
-const promptsOf = (request: TurnRequest) => {
-	const prompts = host?.context.surfaces.prompts(
-		request.channel,
-		promptScope(request.speaker),
-	);
-	if (!prompts) throw new Error("the room has no prompts");
-	return prompts;
-};
-
-const scripts: Record<string, Script> = {
-	blocks: async () => ({ ok: true, text: BLOCKS_REPLY }),
-	approve: async (request, signal) => {
-		const result = await promptsOf(request).confirm(
-			"Run the deploy?",
-			"I want to deploy **v1.4.2** to production.\n\n- 3 services restart\n- no migrations",
-			signal,
-			"owner",
-			undefined,
-			{
-				action: "deploy to production",
-				tool: "bash",
-				input: { command: "bun run deploy --env production", cwd: "/srv/app" },
-				files: [{ path: "/srv/app/deploy.lock", bytes: 12 }],
-				copy: { label: "command", text: "bun run deploy --env production" },
-			},
-		);
-		return {
-			ok: true,
-			text:
-				result === "approved"
-					? "Deployed **v1.4.2**. All checks are green."
-					: "Okay, I did not deploy.",
-		};
-	},
-	timeout: async (request, signal) => {
-		const result = await promptsOf(request).confirm(
-			"Time limit reached",
-			"This turn has run for **10 minutes**. Let it go on?",
-			signal,
-			"owner",
-			undefined,
-			undefined,
-			{
-				purpose: "turn-timeout",
-				wording: {
-					approve: "Continue",
-					decline: "Stop",
-					footer: "Stopping ends the turn where it is.",
-					approved: "Continuing",
-					declined: "Stopped",
-				},
-			},
-		);
-		return {
-			ok: true,
-			text: result === "approved" ? "Carrying on." : "Stopped there.",
-		};
-	},
-	ask: async (request, signal) => {
-		const answer = await promptsOf(request).ask(
-			"Which region?",
-			{
-				question: "Which region should I deploy to?",
-				options: [
-					{ label: "eu-west", description: "Frankfurt, closest to the team" },
-					{
-						label: "us-east",
-						description: "Virginia",
-						preview: "latency 38 ms\ncost $$\nfailover: us-west",
-					},
-					{ label: "ap-south", description: "Mumbai" },
-				],
-				multi: false,
-				allowOther: true,
-			},
-			signal,
-		);
-		return { ok: true, text: `You said: ${JSON.stringify(answer)}.` };
-	},
-	quiz: async (request, signal) => {
-		const prompts = promptsOf(request);
-		const answer = await prompts.questionnaire?.(
-			"A few questions",
-			{
-				questions: [
-					{
-						question: "Which environments?",
-						header: "Targets",
-						options: [
-							{ label: "staging" },
-							{ label: "production" },
-							{ label: "canary" },
-						],
-						multi: true,
-						allowOther: false,
-					},
-					{
-						question: "Anything I should know first?",
-						options: [],
-						multi: false,
-						allowOther: false,
-					},
-				],
-			},
-			signal,
-		);
-		return { ok: true, text: `Noted: ${JSON.stringify(answer)}.` };
-	},
-	late: async (request, signal) => {
-		const result = await promptsOf(request).confirm(
-			"Publish the post?",
-			"The draft is ready. Publish it to the blog?",
-			signal,
-			"owner",
-			{ late: () => "Publish the post, go ahead." },
-		);
-		return { ok: true, text: `The card ended ${result}.` };
-	},
-	dispatch: async (request) => {
-		const thread = await host?.context.services
-			.get(THREADS)
-			.open(
-				request.channel,
-				"Coding #12 · tidy imports",
-				"📋 Task: tidy the imports in `src/`",
-			);
-		if (!thread) return { ok: true, text: "No thread could open here." };
-		// The job goes on in its thread after the turn has answered.
-		void (async () => {
-			await sleep(800);
-			await thread.post(
-				"Reading `src/` …\n\nFound **14** files with unused imports.",
-			);
-			const prompts = host?.context.surfaces.prompts(
-				thread.channel,
-				promptScope(request.speaker),
-			);
-			const result = await prompts?.confirm(
-				"Commit the changes?",
-				"The worker wants to commit **31 removed imports** on `tidy-imports`.",
-				undefined,
-				"owner",
-				undefined,
-				{
-					action: "git commit",
-					tool: "bash",
-					input: { command: "git commit -am 'chore: remove unused imports'" },
-				},
-			);
-			await thread.close(
-				result === "approved"
-					? "✅ Done\n\nRemoved 31 unused imports and committed them on `tidy-imports`."
-					: "❌ Stopped; nothing was committed.",
-			);
-		})();
-		return {
-			ok: true,
-			text: `Started ${thread.mention}. I will report when it is done.`,
-		};
-	},
-	exchange: async (request) => {
-		if (request.agent?.name === "guide")
-			(
-				teamForScripts as {
-					message(
-						caller: NonNullable<TurnRequest["agent"]>,
-						to: string,
-						text: string,
-					): string;
-				}
-			).message(request.agent, "scout", "How large is the repository?");
-		return { ok: true, text: "Asked the scout; the exchange is in a thread." };
-	},
-	helpers: async (request) => {
-		const team = teamForScripts as {
-			helperCreate(
-				caller: NonNullable<TurnRequest["agent"]>,
-				input: { display_name?: string; displayName?: string } & Record<
-					string,
-					unknown
-				>,
-			): Promise<string>;
-		};
-		const agent = request.agent;
-		if (!agent) return { ok: true, text: "I am not an agent." };
-		const made: string[] = [];
-		for (const [displayName, task] of [
-			["Reconnaissance, southern harbour", "survey the harbour slowly"],
-			["Permit check", "approve the permit"],
-			["Tide table", "read the tide table"],
-			["Chart notes", "read the chart notes"],
-		] as const)
-			made.push(
-				await team.helperCreate(agent, {
-					displayName,
-					prompt: `You do one small task: ${task}.`,
-					task,
-				}),
-			);
-		return { ok: true, text: made.join("\n") };
-	},
-	endhelpers: async (request) => {
-		const team = teamForScripts as {
-			helperEnd(
-				caller: NonNullable<TurnRequest["agent"]>,
-				names: "finished",
-			): Promise<string>;
-		};
-		if (!request.agent) return { ok: true, text: "I am not an agent." };
-		return { ok: true, text: await team.helperEnd(request.agent, "finished") };
-	},
-	stream: async (request) => {
-		const progress = async (event: TurnProgress) => {
-			await host?.context.surfaces.progress?.(request.channel, event);
-		};
-		const words =
-			"Reading the repository first, then I will compare the lockfile with the last release and list what changed. ".split(
-				" ",
-			);
-		await progress({
-			type: "tool_start",
-			id: "t1",
-			tool: "read",
-			preview: "package.json",
-		});
-		for (const word of words.slice(0, 8)) {
-			await progress({ type: "text", delta: `${word} ` });
-			await sleep(260);
-		}
-		await progress({ type: "tool_end", id: "t1", tool: "read", ok: true });
-		await progress({
-			type: "tool_start",
-			id: "t2",
-			tool: "bash",
-			preview: "git log --oneline -5",
-		});
-		for (const word of words.slice(8)) {
-			await progress({ type: "text", delta: `${word} ` });
-			await sleep(260);
-		}
-		await sleep(2200);
-		await progress({ type: "tool_end", id: "t2", tool: "bash", ok: true });
-		await progress({
-			type: "tool_start",
-			id: "t3",
-			tool: "grep",
-			preview: "TODO src/",
-		});
-		await sleep(6000);
-		await progress({ type: "tool_end", id: "t3", tool: "grep", ok: false });
-		return {
-			ok: true,
-			text: "Done. Three packages changed since the last release; details below.\n\n1. `web` — owner app\n2. `core` — modes\n3. `docs`",
-		};
-	},
-};
+const scripts = fixtureScripts({
+	host: () => host,
+	team: () => teamForScripts,
+});
 
 const runtime = {
 	runTurn: async (request: TurnRequest) => {
