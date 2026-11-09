@@ -189,12 +189,10 @@ export class LayoutRoutes {
 		return this.#guard(async () => {
 			const owner = await this.#options.owner(admission);
 			if (room.kind === "thread") throw bad("A thread stays under its room.");
-			if (room.key === this.#options.home())
-				throw bad(
-					action === "hidden"
-						? "Home cannot be hidden."
-						: "Home stays at the top.",
-				);
+			if (room.key === this.#options.home()) {
+				if (action === "hidden") throw bad("Home cannot be hidden.");
+				throw bad("Home stays at the top.");
+			}
 			const body = await bodyOf(request);
 			if (action === "hidden") {
 				const { hidden } = body;

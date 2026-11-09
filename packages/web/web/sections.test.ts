@@ -33,10 +33,12 @@ const input = (
 	views: RoomView[],
 	pins: string[] = [],
 	folders: FolderView[] = [],
+	hidden: string[] = [],
 ): SectionsInput => ({
 	order: views.map((one) => one.key),
 	rooms: Object.fromEntries(views.map((one) => [one.key, { view: one }])),
 	pins,
+	hidden,
 	folders,
 });
 
@@ -239,4 +241,45 @@ test("a temp knight whose knight the list does not hold is listed as a room, and
 		() => false,
 	);
 	expect(groups.flatMap((group) => group.keys)).toEqual([HOME, A]);
+});
+
+test("a hidden room is left out of every list, kept in the hidden ones, and its place stays in the layout", () => {
+	const state = input(
+		TEAMROOMS,
+		[B],
+		[{ id: "f1", name: "One", rooms: [TEAM] }],
+		[B, TEAM, C, "app:agent.gone"],
+	);
+	const result = sections(state, at);
+	expect(result.pinned).toEqual([]);
+	expect(result.folders).toEqual([{ id: "f1", name: "One", rooms: [] }]);
+	expect(result.rest).toEqual([A]);
+	// In the order they were hidden, the rooms that exist only.
+	expect(result.hidden).toEqual([B, TEAM, C]);
+	// Unhiding returns each to its place.
+	const back = sections({ ...state, hidden: [] }, at);
+	expect(back.pinned).toEqual([B]);
+	expect(back.folders[0]?.rooms).toEqual([TEAM]);
+	expect(back.rest).toEqual([C, A]);
+	expect(back.hidden).toEqual([]);
+});
+
+test("Home is never hidden, and a hidden room's threads still stay under it", () => {
+	const state = input(
+		[...TEAMROOMS, view(T1, { kind: "thread", parent: A })],
+		[],
+		[],
+		[HOME, A],
+	);
+	const result = sections(state, at);
+	expect(result.home).toEqual([HOME]);
+	expect(result.hidden).toEqual([A]);
+	expect(result.threads[A]?.open).toEqual([T1]);
+	expect(result.orphans.open).toEqual([]);
+});
+
+test("the drawer leaves the hidden rooms out, and a hidden room that waits is not listed first", () => {
+	const state = input(TEAMROOMS, [], [], [A]);
+	const groups = drawerGroups(state, at, (key) => key === A);
+	expect(groups.flatMap((group) => group.keys)).toEqual([HOME, C, TEAM, B]);
 });
