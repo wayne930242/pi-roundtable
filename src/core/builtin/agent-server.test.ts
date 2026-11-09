@@ -237,6 +237,8 @@ describe("the agent server's runtime", () => {
 			"helper-presets",
 			"agents-helper-preset",
 			"helper-presets-shared",
+			"agent-places",
+			"agent-places-from-channels",
 			"team-move",
 		]);
 	});

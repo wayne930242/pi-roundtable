@@ -111,7 +111,7 @@ describeDb("agent places: storage", () => {
 		]);
 	});
 
-	test("the team with no channel ids, as Merlin's, gets no place", async () => {
+	test("the team with no channel ids, of a host with no agent guild, gets no place", async () => {
 		await seed043();
 		await upgrade(LOCAL);
 		expect((await places()).filter(([team]) => team === LOCAL)).toEqual([]);

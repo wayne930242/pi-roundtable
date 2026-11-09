@@ -21,6 +21,14 @@ function fakeDatabase() {
 		if (text.startsWith("SELECT * FROM agent_groups")) return [];
 		if (text.startsWith("SELECT agent_name, channel_key FROM agent_latest"))
 			return [];
+		if (
+			text.startsWith(
+				"SELECT kind, name, surface, external_id FROM agent_places",
+			)
+		)
+			return [];
+		if (text.startsWith("INSERT INTO agent_places")) return [];
+		if (text.startsWith("DELETE FROM agent_places")) return [];
 		if (text.startsWith("INSERT INTO agents")) {
 			await Bun.sleep(latency.insertMs);
 			const v = values as (string | null)[];
@@ -47,7 +55,11 @@ function fakeDatabase() {
 		}
 		throw new Error(`the fake does not know: ${text}`);
 	};
-	return { sql: run as unknown as SQL, latency };
+	// A transaction runs its statements on the same fake, which has no isolation to model.
+	const sql = Object.assign(run, {
+		begin: <T>(work: (tx: unknown) => Promise<T>) => work(run),
+	});
+	return { sql: sql as unknown as SQL, latency };
 }
 
 const agent = (name: string) => ({

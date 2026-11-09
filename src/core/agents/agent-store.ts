@@ -68,38 +68,38 @@ export class PgAgentStore extends AgentGroupStore implements AgentDirectory {
 
 	private constructor(
 		sql: SQL,
-		guildId: string,
+		teamId: string,
 		conversations: AgentConversations,
 		places: AgentPlaces,
 	) {
-		super(sql, guildId, places);
+		super(sql, teamId, places);
 		this.conversations = conversations;
-		this.#prompts = new PromptHistory(sql, guildId);
-		this.outbox = new AgentOutbox(sql, guildId);
-		this.presets = new HelperPresets(sql, guildId);
+		this.#prompts = new PromptHistory(sql, teamId);
+		this.outbox = new AgentOutbox(sql, teamId);
+		this.presets = new HelperPresets(sql, teamId);
 	}
 
 	/** The store's tables; the host runs this before any store attaches. */
 	static readonly migration: Migration = agentsMigration;
 
-	/** The migrations of the store's tables for the guild the process serves. */
-	static migrations(guildId: string): Migration[] {
-		return agentMigrations(guildId);
+	/** The migrations of the store's tables for the team the process serves. */
+	static migrations(teamId: string): Migration[] {
+		return agentMigrations(teamId);
 	}
 
-	/** The store over the host's migrated pool, holding the rows of one guild. */
-	static async attach(sql: SQL, guildId: string): Promise<PgAgentStore> {
+	/** The store over the host's migrated pool, holding the rows of one team. */
+	static async attach(sql: SQL, teamId: string): Promise<PgAgentStore> {
 		// `Roundtable.check()` has no database to read the rows from: the store starts empty.
 		const checking = isCheckDatabase(sql);
 		const store = new PgAgentStore(
 			sql,
-			guildId,
+			teamId,
 			checking
 				? AgentConversations.memory()
-				: await AgentConversations.load(sql, guildId),
+				: await AgentConversations.load(sql, teamId),
 			checking
-				? AgentPlaces.empty(sql, guildId)
-				: await AgentPlaces.load(sql, guildId),
+				? AgentPlaces.empty(sql, teamId)
+				: await AgentPlaces.load(sql, teamId),
 		);
 		if (!checking) await store.#reload();
 		return store;
