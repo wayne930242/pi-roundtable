@@ -23,7 +23,10 @@ export interface Agent {
 	character?: CharacterSpec;
 	/** The rendered picture's content hash, when one exists. */
 	avatarHash?: string;
-	/** Its channel in the agent server; a seed agent has none until one is created. */
+	/**
+	 * @deprecated Its Discord channel only; read `AgentTeam.placesOf`, which names its place on every
+	 * surface. Removed in 1.0. A seed agent has none until one is created.
+	 */
 	channelId?: string;
 	/** `<provider>/<id>`; unset follows the assistant's model. */
 	model?: string;
@@ -74,7 +77,10 @@ export const helperSurface = (
 export interface AgentGroup {
 	name: string;
 	displayName: string;
-	/** Its Discord channel; absent in a team without Discord, whose groups live in rooms only. */
+	/**
+	 * @deprecated Its Discord channel only; read `AgentTeam.placesOf`, which names its place on
+	 * every surface. Removed in 1.0. Absent in a team without Discord, whose groups live in rooms only.
+	 */
 	channelId?: string;
 	/** Agent names in the group's order. */
 	members: string[];
@@ -90,6 +96,7 @@ export interface AgentSeed {
 	character?: CharacterInput;
 	/** @deprecated Agents are composed characters; this is ignored and removed in 1.0. */
 	avatarPrompt?: string;
+	/** @deprecated The seed's Discord channel only; removed in 1.0. */
 	channelId?: string;
 }
 

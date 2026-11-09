@@ -10,7 +10,7 @@ import {
 	stops,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import { discordKey, groupRoomKey, groupSessionKey } from "./team-keys.ts";
+import { discordKey, groupRoomKey } from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
@@ -95,7 +95,7 @@ describeDb("PostgreSQL", () => {
 			expect(speakers()).toEqual(["coordinator"]);
 			// The claim stops the session that runs the turn; the round holds only that one.
 			expect(sessions).toEqual([
-				groupSessionKey(opsGroup(), "coordinator", groupRoom),
+				fx.places.seatKey(opsGroup(), "coordinator", groupRoom),
 			]);
 			expect(told().at(-1)).toBe("stopped - next:- spoken:coordinator 1/8");
 			expect(fx.surfaces.texts(groupRoom).at(-1)).toContain("did not speak");
@@ -119,7 +119,7 @@ describeDb("PostgreSQL", () => {
 			await ask(discordGroup, "everyone, please");
 			expect(fx.surfaces.rounds).toEqual([]);
 			expect(speakers()).toEqual(["coordinator"]);
-			expect(sessions).toEqual([groupSessionKey(opsGroup(), "coordinator")]);
+			expect(sessions).toEqual([fx.places.seatKey(opsGroup(), "coordinator")]);
 			expect(fx.channels.texts(discordGroup.slice(8))).toEqual([
 				"Coordinator: -# Stopped.",
 				"Coordinator: -# The round was stopped, so the members still waiting did not speak.",

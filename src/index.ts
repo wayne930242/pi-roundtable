@@ -35,6 +35,7 @@ export {
 export type {
 	AgentStatus as TeamAgentStatus,
 	GroupStatus,
+	TeamPlace,
 	TeamStatus,
 } from "./core/agents/team-status.ts";
 export { MAX_ATTACHMENT_BYTES } from "./core/attachments/attachment-fetcher.ts";

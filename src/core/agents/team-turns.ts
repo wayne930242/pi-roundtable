@@ -1,21 +1,13 @@
-import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { TurnAttachments } from "../domain/attachment.ts";
-import { supportOf } from "../domain/block-support.ts";
 import type {
 	ChannelKey,
-	IntercomCard,
 	PendingConfirmation,
-	PostAuthor,
-	ReplyFile,
 	TurnResult,
 } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
-import type { InterimPosts } from "../domain/interim.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import type { TurnProgress } from "../domain/progress.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
-import { chunksFor } from "../presentation/reply-chunks.ts";
 import { endOf, settleTurn } from "../routing/settle-turn.ts";
 import { toolTiers } from "../runtime/tool-tiers.ts";
 import { withReplyFiles } from "../shared/reply-files.ts";
@@ -26,16 +18,8 @@ import { HelperWork } from "./helper-work.ts";
 import { roomProgress } from "./room-progress.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { mayApprove } from "./team-approval.ts";
-import {
-	agentOfChannel,
-	channelIdOf,
-	channelOwner,
-	coordinatorOf,
-	discordIdOf,
-	discordKey,
-	groupSeatChannel,
-	scopeOf,
-} from "./team-keys.ts";
+import { coordinatorOf, discordKey } from "./team-keys.ts";
+import { TeamPosts } from "./team-posts.ts";
 import {
 	type Chain,
 	MAX_CHAIN_MESSAGES,
@@ -65,17 +49,19 @@ export class TeamTurns {
 	/** When each agent or group (by `group:<name>`) last started or ended a turn. */
 	readonly #lastActive = new Map<string, Date>();
 
+	readonly #posts: TeamPosts;
 	readonly #messages: AgentMessages;
 	readonly #groups: GroupTurns;
 
 	constructor(options: TeamTurnsOptions) {
 		this.#options = options;
 		this.routes = routesOf(options);
+		this.#posts = new TeamPosts(options);
 		this.helpers = new HelperWork({
 			store: options.store,
+			places: options.places,
 			queue: options.queue,
 			runtime: options.runtime,
-			roomSurfaces: () => options.surfaces?.roomSurfaces() ?? [],
 			changed: () => options.changed(),
 			logger: options.logger,
 		});
@@ -86,11 +72,11 @@ export class TeamTurns {
 			chains: this.#chains,
 			turn: (agent, scope, postTo, text, chain, extra) =>
 				this.#turn(agent, scope, postTo, text, chain, extra),
-			post: (channel, as, body) => this.#post(channel, as, body),
+			post: (channel, as, body) => this.#posts.post(channel, as, body),
 			current: (agent) => this.#current(agent),
 			mayApprove: (speaker, pending) => this.#mayApprove(speaker, pending),
 			turnChannel: (scope) => this.turnChannel(scope),
-			chunks: (channel, text) => this.#chunks(channel, text),
+			chunks: (channel, text) => this.#posts.chunks(channel, text),
 		};
 		this.#messages = new AgentMessages(host);
 		this.#groups = new GroupTurns(host);
@@ -126,7 +112,7 @@ export class TeamTurns {
 		attachments: TurnAttachments,
 	): Promise<TurnResult> {
 		const agent = this.#agentOf(channel);
-		const scope = scopeOf(agent, channel);
+		const scope = this.#options.places.scopeOf(agent, channel);
 		const pending = await this.#options.runtime().heldActions(scope.session);
 		const confirmed =
 			pending !== undefined &&
@@ -159,7 +145,7 @@ export class TeamTurns {
 		const agent = this.#agentOf(channel);
 		return this.#turn(
 			agent,
-			scopeOf(agent, channel),
+			this.#options.places.scopeOf(agent, channel),
 			channel,
 			text,
 			{ messages: 0, speaker },
@@ -174,18 +160,9 @@ export class TeamTurns {
 		return mayApprove(this.#options.toolTiers ?? toolTiers(), speaker, pending);
 	}
 
-	/** The surfaces that host rooms; none for a team without a surface port. */
-	#rooms(channel: ChannelKey): readonly string[] {
-		// Only a room key needs the list, which a surface port gives once the hosts are linked.
-		return discordIdOf(channel) === undefined
-			? (this.#options.surfaces?.roomSurfaces() ?? [])
-			: [];
-	}
-
-	/** The agent whose channel or room it is. */
+	/** The agent whose place it is. */
 	#agentOf(channel: ChannelKey): Agent {
-		const { store, surfaces } = this.#options;
-		const agent = agentOfChannel(store, surfaces, channel);
+		const agent = this.#options.places.agentOf(channel);
 		if (agent?.status !== "active")
 			throw new AgentError(`no agent owns ${channel}`);
 		return agent;
@@ -224,13 +201,13 @@ export class TeamTurns {
 			...(scope.group ? { group: scope.group } : {}),
 		};
 		this.#options.events?.turnStarted(turn);
-		const interim = this.#interim(postTo, agent);
+		const interim = this.#posts.interim(postTo, agent);
 		const progress = roomProgress(this.#options, postTo);
 		let result: TurnResult;
 		try {
 			result = await settleTurn(
 				() =>
-					withReplyFiles(this.#carriesFiles(postTo), () =>
+					withReplyFiles(this.#posts.carriesFiles(postTo), () =>
 						this.#options.runtime().runTurn({
 							channel: postTo,
 							selection: this.#options.selection(scope),
@@ -269,8 +246,8 @@ export class TeamTurns {
 					"unattended turn had nothing to say; nothing posted",
 				);
 			else {
-				const body = replyBody(result, this.#support(postTo));
-				await this.#post(postTo, this.#current(agent), body);
+				const body = replyBody(result, this.#posts.support(postTo));
+				await this.#posts.post(postTo, this.#current(agent), body);
 			}
 		} catch (error) {
 			logger.error({ agent: agent.name, err: error }, "agent reply not posted");
@@ -278,17 +255,6 @@ export class TeamTurns {
 			stopTyping();
 		}
 		return result;
-	}
-
-	/**
-	 * Whether a reply in the channel may carry files: Discord's webhook posts do; a room only when
-	 * its surface declares `supportsFiles`, since a reply with files that surface refuses is lost whole.
-	 */
-	#carriesFiles(channel: ChannelKey): boolean {
-		return (
-			discordIdOf(channel) !== undefined ||
-			this.#options.surfaces?.of(channel)?.supportsFiles === true
-		);
 	}
 
 	#active(agent: string, group: string | undefined): void {
@@ -303,120 +269,6 @@ export class TeamTurns {
 		return this.#options.store.agent(agent.name) ?? agent;
 	}
 
-	/** What the surface that serves the channel does there (see `supportOf`). */
-	#support(channel: ChannelKey) {
-		return supportOf(
-			this.#options.surfaces?.of(channel),
-			channel,
-			this.#options.surfaces?.lang,
-		);
-	}
-
-	/** The messages that carry an agent's text to the channel, cut for the surface that serves it. */
-	#chunks(channel: ChannelKey, text: string): string[] {
-		return chunksFor(this.#support(channel), text);
-	}
-
-	/**
-	 * The turn's interim posts under the agent's name, read as each goes out so a name changed
-	 * during the turn shows; none in a channel no agent or group owns any more.
-	 */
-	#interim(channel: ChannelKey, agent: Agent): InterimPosts | undefined {
-		const { store, channels, studio, surfaces } = this.#options;
-		if (discordIdOf(channel) === undefined) {
-			// A room's interim posts are its surface's, under the agent as author.
-			const first = surfaces?.interim(channel, this.#author(agent));
-			if (!surfaces || !first) return undefined;
-			return {
-				...(first.tools === false ? { tools: false } : {}),
-				// The poster cuts text for the surface the posts go to.
-				...(first.blocks ? { blocks: first.blocks } : {}),
-				...(first.blockText ? { blockText: first.blockText } : {}),
-				post: async (text) => {
-					if (!channelOwner(store, channel, this.#rooms(channel)))
-						throw new AgentError(`${channel} is archived`);
-					const posts = surfaces.interim(
-						channel,
-						this.#author(this.#current(agent)),
-					);
-					if (!posts) throw new AgentError(`${channel} shows no interim posts`);
-					return posts.post(text);
-				},
-			};
-		}
-		if (!channels?.interim) return undefined;
-		const interim = channels.interim.bind(channels);
-		return {
-			post: async (text) => {
-				if (!channelOwner(store, channel))
-					throw new AgentError(`${channel} is archived`);
-				const as = this.#current(agent);
-				return interim(channelIdOf(channel), {
-					name: as.displayName,
-					avatarUrl: studio.url(as.avatarHash),
-				}).post(text);
-			},
-		};
-	}
-
-	/**
-	 * Posts under the agent's name. A channel no agent or group owns any more, archived while a
-	 * turn ran, gets nothing, so its webhook is not made again.
-	 */
-	async #post(
-		channel: ChannelKey,
-		as: Agent,
-		body: {
-			thinking?: string;
-			chunks: string[];
-			files?: ReplyFile[];
-			threadId?: string;
-			failed?: true;
-			intercom?: IntercomCard;
-		},
-	): Promise<void> {
-		const { store, channels, studio, surfaces, logger } = this.#options;
-		if (!channelOwner(store, channel, this.#rooms(channel))) {
-			logger.info(
-				{ channel, agent: as.name },
-				"post to an archived channel dropped",
-			);
-			return;
-		}
-		// Discord ignores `failed`.
-		const { failed, ...rest } = body;
-		if (discordIdOf(channel) === undefined) {
-			if (!surfaces)
-				throw new AgentError(`no surface serves the room ${channel}`);
-			const { thinking, chunks, files, threadId, intercom } = rest;
-			// A thread of the room's surface is a channel of that surface, and speaks there.
-			return surfaces.sendReply(
-				threadId === undefined
-					? channel
-					: channelKey(parseChannelKey(channel).surface, threadId),
-				{
-					...(thinking ? { thinking } : {}),
-					chunks,
-					...(files?.length ? { files } : {}),
-					author: this.#author(as),
-					...(failed ? { failed } : {}),
-					...(intercom ? { intercom } : {}),
-				},
-			);
-		}
-		if (!channels) throw new AgentError(`no Discord channels serve ${channel}`);
-		return channels.post(channelIdOf(channel), {
-			name: as.displayName,
-			avatarUrl: studio.url(as.avatarHash),
-			...rest,
-		});
-	}
-
-	/** Who speaks for the agent on a surface that shows authors. */
-	#author(agent: Agent): PostAuthor {
-		return { name: agent.displayName, agent: agent.name };
-	}
-
 	/**
 	 * Posts text under the caller's name in the channel of its turn: the group's in a group
 	 * round, otherwise its own, as a change report is.
@@ -424,8 +276,8 @@ export class TeamTurns {
 	async postAs(caller: AgentTurnScope, text: string): Promise<void> {
 		const agent = this.#options.store.activeAgent(caller.name);
 		const channel = this.turnChannel(caller);
-		const chunks = this.#chunks(channel, text);
-		await this.#post(channel, this.#current(agent), { chunks });
+		const chunks = this.#posts.chunks(channel, text);
+		await this.#posts.post(channel, this.#current(agent), { chunks });
 	}
 
 	/** The channel the scope's turns run in: the group's in a group round, otherwise its own. */
@@ -435,7 +287,10 @@ export class TeamTurns {
 			: undefined;
 		if (!group) return scope.home;
 		// A seat of a room's group runs in that room; its running turn knows which.
-		return this.#posting.get(scope.session) ?? groupSeatChannel(group, scope);
+		return (
+			this.#posting.get(scope.session) ??
+			this.#options.places.seatChannel(group, scope)
+		);
 	}
 
 	/**
@@ -443,8 +298,8 @@ export class TeamTurns {
 	 * its name: the entry channel, or, without Discord, its room on the first surface that hosts rooms.
 	 */
 	async announce(text: string): Promise<void> {
-		const { store, entryChannelId } = this.#options;
-		const coordinator = coordinatorOf(store, this.#options);
+		const { store, places, entryChannelId } = this.#options;
+		const coordinator = coordinatorOf(store, places, this.#options);
 		if (!coordinator)
 			throw new AgentError(
 				entryChannelId === undefined
@@ -457,7 +312,9 @@ export class TeamTurns {
 				: this.routes.primary(coordinator.name);
 		if (!home)
 			throw new AgentError(`${coordinator.name} has no room to post in`);
-		await this.#post(home, coordinator, { chunks: this.#chunks(home, text) });
+		await this.#posts.post(home, coordinator, {
+			chunks: this.#posts.chunks(home, text),
+		});
 	}
 
 	message(...args: Parameters<AgentMessages["message"]>): string {

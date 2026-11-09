@@ -21,6 +21,7 @@ import type { Agent, PgAgentStore } from "./agent-store.ts";
 import type { RelevanceScorer } from "./group-round.ts";
 import type { HelperWork } from "./helper-work.ts";
 import type { Routes } from "./routes.ts";
+import type { TeamPlaces } from "./team-places.ts";
 
 /** Agent messages without an owner message in between (spec behavior 13). */
 export const MAX_CHAIN_MESSAGES = 8;
@@ -45,23 +46,19 @@ export interface TeamTurnsOptions {
 	/** Who the agents work for, as their prompts and group history name them. */
 	owner: OwnerIdentity;
 	store: PgAgentStore;
+	/** Where the agents and groups are: their keys, and who owns a key, through the host's place providers. */
+	places: TeamPlaces;
 	/** The Discord channels the agents post in; absent on a host without Discord, where every reply goes through a room's surface. */
 	channels?: Pick<AgentChannels, "post" | "interim">;
 	/**
 	 * The surfaces that host agent rooms. A reply in a room goes through `sendReply` with the
 	 * agent as author, and its interim posts through `interim`, never through the Discord
 	 * channels; without it no key but Discord's is the team's. `of` tells whether the room's
-	 * surface carries reply files.
+	 * surface carries reply files. Which surfaces host rooms is `places`'s to say.
 	 */
 	surfaces?: Pick<
 		SurfacePort,
-		| "sendReply"
-		| "interim"
-		| "roomSurfaces"
-		| "of"
-		| "lang"
-		| "progress"
-		| "groupRound"
+		"sendReply" | "interim" | "of" | "lang" | "progress" | "groupRound"
 	>;
 	studio: Pick<AvatarStudio, "url">;
 	/**

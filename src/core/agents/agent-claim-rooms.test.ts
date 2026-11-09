@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import type { ChannelKey } from "../domain/conversation.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { discordSpaceOf, testPlaces } from "../testing/team-places.ts";
 import { agentClaim } from "./agent-claim.ts";
 
 const OWNER = "100000000000000001";
@@ -32,19 +34,25 @@ const message = (
 
 // ── Agent rooms on any surface ────────────────────────────────────────────
 
-/** A team that knows `coder` and the group `ops` in rooms, and wrongly claims `other:agent.coder` too. */
+/** A team that knows `coder` and the group `ops`, which live in the rooms of `roomSurfaces`. */
 function roomsSetup(
 	roomSurfaces: readonly string[] = ["app"],
 	surfaceExtra: Partial<ChatSurface> = {},
 ) {
 	const answered: { channel: string; kind: string; files: string[] }[] = [];
+	const places = testPlaces({
+		// SAFETY: the places read only whether a name is an agent or a group, and its status.
+		store: {
+			agent: (name: string) =>
+				name === "coder" ? { name, status: "active" } : undefined,
+			group: (name: string) =>
+				name === "ops" ? { name, status: "active" } : undefined,
+		} as never,
+		rooms: () => roomSurfaces,
+		discord: false,
+	});
 	const team = {
-		owns: (channel: string) =>
-			channel === "app:agent.coder" || channel === "other:agent.coder"
-				? ("agent" as const)
-				: channel === "app:group.ops"
-					? ("group" as const)
-					: undefined,
+		owns: (channel: ChannelKey) => places.ownerKind(channel),
 		answerOwner: async (
 			channel: string,
 			_speaker: Speaker,
@@ -80,14 +88,13 @@ function roomsSetup(
 	};
 	const claim = agentClaim({
 		owner: TEST_OWNER,
-		discordGuild: "1",
+		spaceOf: discordSpaceOf("1"),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
 		runtime: { steer: async () => false, stop: () => true },
 		surface: {
 			react: async () => {},
 			unreact: async () => {},
-			roomSurfaces: () => roomSurfaces,
 			of: (channel: string) =>
 				(channel.startsWith("app:") ? app : undefined) as
 					| ChatSurface
@@ -126,7 +133,7 @@ test("the claim owns the agent and group rooms of a room surface, and nothing el
 	const { claim } = roomsSetup();
 	expect(claim.owns("app:agent.coder", undefined)).toBe(true);
 	expect(claim.owns("app:group.ops", undefined)).toBe(true);
-	// Unknown names, kinds, and another surface's keys, even when the team would name them.
+	// Unknown names, kinds, and another surface's keys.
 	expect(claim.owns("app:agent.nobody", undefined)).toBe(false);
 	expect(claim.owns("app:thread.x", undefined)).toBe(false);
 	expect(claim.owns("other:agent.coder", undefined)).toBe(false);

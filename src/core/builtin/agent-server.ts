@@ -10,7 +10,8 @@ import { FileAvatarStudio } from "../agents/avatar-studio.ts";
 import { RelevanceScorer } from "../agents/group-round.ts";
 import { modeOrigins } from "../agents/helper-modes.ts";
 import { Routes } from "../agents/routes.ts";
-import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
+import { discordKey } from "../agents/team-keys.ts";
+import { TeamPlaces } from "../agents/team-places.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import { ROOM_LAYOUT } from "../contract/room-layout.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
@@ -195,7 +196,10 @@ export function agentServerPlugin(
 			const skills = context.services.find(SKILLS);
 			const { agents: store } = await openStores(context, teamId);
 			// A temp knight's conversations follow the modes of the one that made it.
-			context.services.find(MODES)?.trackOrigins(modeOrigins(store, surfaces));
+			// Where the agents are, through the place providers the host links once every plugin is set up.
+			const places = new TeamPlaces(store, store.places, context.places);
+			store.readPlacesWith(places);
+			context.services.find(MODES)?.trackOrigins(modeOrigins(store, places));
 			const running = context.services.get(RUNTIME);
 			const judge = providers.judge;
 			const confirmations = new ConfirmationJudge({
@@ -228,20 +232,16 @@ export function agentServerPlugin(
 			const routes = new Routes({
 				routing: options.routing,
 				store,
-				roomSurfaces: () => surfaces.roomSurfaces(),
+				places,
 				latest: (agent) => store.conversations.latest(agent),
-				discordChannels: channels !== undefined,
 				logger,
 			});
 			// The surfaces the rules name are registered by the time every plugin has set up.
-			linkRoutes = () =>
-				routes.validate({
-					names: surfaces.names?.() ?? [],
-					discordChannels: channels !== undefined,
-				});
+			linkRoutes = () => routes.validate({ names: surfaces.names?.() ?? [] });
 			const built: DiscordAgentTeam = new DiscordAgentTeam({
 				routes,
-				guildId: teamId,
+				places,
+				teamId,
 				discordGuild: options.guildId,
 				...(options.entryChannelId !== undefined
 					? { entryChannelId: options.entryChannelId }
@@ -387,13 +387,13 @@ export function agentServerPlugin(
 				channels: [
 					agentClaim({
 						owner: options.owner,
-						discordGuild: options.guildId,
+						spaceOf: (channel) => places.spaceOf(channel),
 						...(options.speakers ? { speakers: options.speakers } : {}),
 						team: built,
 						runtime: running,
 						surface: context.surfaces,
 						integrationChannel: (origin) => {
-							const agent = agentOfChannel(store, surfaces, origin);
+							const agent = places.agentOf(origin);
 							return agent
 								? routes.of(agent.name, "integration", origin)
 								: origin;

@@ -33,8 +33,8 @@ export async function cleanupConversation(
 	)
 		throw new HttpError(404, "There is no such conversation.");
 	const group =
-		(await team?.status())?.groups.some(
-			(g) => g.channelId !== undefined && `discord:${g.channelId}` === key,
+		(await team?.status())?.groups.some((g) =>
+			g.places?.some((place) => place.key === key),
 		) ?? false;
 	const stored =
 		!owned &&

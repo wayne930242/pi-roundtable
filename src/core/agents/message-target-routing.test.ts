@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { Agent } from "./agent-store.ts";
 import { messageTarget } from "./message-target.ts";
 import { Routes } from "./routes.ts";
@@ -20,17 +21,21 @@ function target(
 	from: string,
 	ask?: string,
 ) {
-	const roomSurfaces = ["app"];
+	const places = testPlaces({
+		store,
+		rows: () => legacyRows([infra]),
+		rooms: () => ["app"],
+	});
 	return messageTarget(
 		{
 			store,
-			roomSurfaces,
+			places,
 			latest: latest as never,
 			from: from as never,
 			routes: new Routes({
 				routing,
 				store,
-				roomSurfaces: () => roomSurfaces,
+				places,
 				latest: () => latest as never,
 			}),
 		},

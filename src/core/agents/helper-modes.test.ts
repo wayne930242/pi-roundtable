@@ -4,6 +4,7 @@ import type { ChannelKey } from "../domain/sessions.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { followOrigin, modeOrigins } from "./helper-modes.ts";
 import type { TeamContext } from "./team-options.ts";
@@ -24,17 +25,20 @@ const agent = (fields: Partial<Agent> & { name: string }): Agent => ({
 	...fields,
 });
 
-/** A store of agents and groups, found by name and by Discord channel. */
-function directory(agents: Agent[], groups: AgentGroup[] = []) {
-	return {
+/** A store of agents and groups, found by name, and where they are: a Discord channel each, and a room on `app`. */
+function world(agents: Agent[], groups: AgentGroup[] = []) {
+	const store = {
 		agent: (name: string) => agents.find((a) => a.name === name),
-		agentByChannel: (id: string) => agents.find((a) => a.channelId === id),
 		group: (name: string) => groups.find((g) => g.name === name),
-		groupByChannel: (id: string) => groups.find((g) => g.channelId === id),
 	};
+	const places = testPlaces({
+		store,
+		rows: () => legacyRows(agents, groups),
+		rooms: () => ["app"],
+	});
+	return [store, places] as const;
 }
 
-const hosts = { roomSurfaces: () => ["app"] };
 const infra = agent({ name: "infra", displayName: "Infra", channelId: "10" });
 const scout = agent({
 	name: "infra-1",
@@ -57,8 +61,8 @@ describe("followOrigin", () => {
 		};
 		const ctx = {
 			options: {
-				store: directory([infra, scout]),
-				surfaces: hosts,
+				store: world([infra, scout])[0],
+				places: world([infra, scout])[1],
 				...(modes ? { modes: () => fake } : {}),
 			},
 			turns: { turnChannel: () => origin },
@@ -99,7 +103,7 @@ describe("followOrigin", () => {
 
 describe("modeOrigins", () => {
 	test("a temp knight's conversations follow its origin, named after its parent, on Discord and in rooms", () => {
-		const origins = modeOrigins(directory([infra, scout]), hosts);
+		const origins = modeOrigins(...world([infra, scout]));
 		for (const channel of ["discord:11", "app:agent.infra-1"] as ChannelKey[])
 			expect(origins.originOf(channel, origin)).toEqual({
 				name: "Infra",
@@ -110,7 +114,7 @@ describe("modeOrigins", () => {
 	test("the origin is gone once its agent or group is archived; a deleted parent counts as gone too", () => {
 		const archived = { ...infra, status: "archived" as const };
 		expect(
-			modeOrigins(directory([archived, scout]), hosts).originOf(
+			modeOrigins(...world([archived, scout])).originOf(
 				"discord:11" as ChannelKey,
 				origin,
 			),
@@ -125,14 +129,14 @@ describe("modeOrigins", () => {
 			status: "archived",
 		};
 		expect(
-			modeOrigins(directory([infra, fromCrew], [group]), hosts).originOf(
+			modeOrigins(...world([infra, fromCrew], [group])).originOf(
 				"discord:11" as ChannelKey,
 				crew,
 			),
 		).toEqual({ name: "Infra", alive: false });
 		const thread = "discord:99" as ChannelKey;
 		expect(
-			modeOrigins(directory([{ ...scout, origin: thread }]), hosts).originOf(
+			modeOrigins(...world([{ ...scout, origin: thread }])).originOf(
 				"discord:11" as ChannelKey,
 				thread,
 			),
@@ -140,7 +144,7 @@ describe("modeOrigins", () => {
 	});
 
 	test("a conversation that is no temp knight's, or one made from another origin, follows nothing", () => {
-		const origins = modeOrigins(directory([infra, scout]), hosts);
+		const origins = modeOrigins(...world([infra, scout]));
 		expect(
 			origins.originOf("app:agent.infra" as ChannelKey, origin),
 		).toBeUndefined();

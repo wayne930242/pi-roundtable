@@ -3249,7 +3249,9 @@ Two providers for one surface, or one for a surface no plugin registers, stop th
 A provider is `derived` when the place exists with the name (a room, `<surface>:agent.<name>`) and `stored` when the surface makes the places and the team keeps their ids.
 The members a minimal provider needs are `surface`, `storage`, `key`, `placeOf` and `post`; `ensure`, `remove`, `check` (`ok`, `gone` or `foreign`), `describe`, `onRemoved`, `interim`, `space`, `mention`, `conversations`, `coordinatorPlace`, `createArguments` and `layoutText` are optional capabilities.
 A surface with `agentRooms: true` and no provider gets a derived one from the host, so a surface written before places needs no change.
-The agent team does not read providers yet; the Discord plugin contributes its own when `discord.guild` is set.
+The Discord plugin contributes its own when `discord.guild` is set.
+
+The agent team reads its places through the providers: the keys of an agent or group (`AGENTS.team.roomsOf(name)`, and `placesOf(name)` with each key's surface), who owns a key (`AGENTS.team.owns(key)`, and `AGENTS.directory.placeOwner(key)` for an archived owner too), the routing table, the conversation keys of a group's seats and log, and the outbox replay. A stored provider's places are the rows of `agent_places`; a derived provider's are rooms. "Auto" order puts every stored place before the rooms, so with Discord configured the Discord channel is still an agent's primary place. A row of a surface no provider serves on this host is kept and ignored. `TeamStatus` views carry `places` (`TeamPlace`: `{ surface, key }`). `Agent.channelId`, `AgentGroup.channelId`, `AgentDirectory.agentByChannel` and `groupByChannel`, `AgentTeam.guildId` and `discordGuild`, and the status views' `channelId` are deprecated and removed in 1.0; the team still writes them. Writes (making, archiving and posting in places) still go through Discord's channels directly.
 
 `placeProviderContract(name, make)` from `pi-roundtable/testing` registers the provider contract as tests for any provider; `make` returns a `PlaceContractSubject` with the provider and a view of what a person on the surface sees.
 
@@ -4793,6 +4795,7 @@ Import from the entries listed below; source area files are internal.
 | `THREADS` | `pi-roundtable` | value |
 | `TIERS` | `pi-roundtable` | value |
 | `TeamAgentStatus` | `pi-roundtable` | type |
+| `TeamPlace` | `pi-roundtable` | type |
 | `TeamStatus` | `pi-roundtable` | type |
 | `ThinkingLevel` | `pi-roundtable` | type |
 | `ThinkingSetting` | `pi-roundtable` | type |

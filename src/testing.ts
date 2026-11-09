@@ -68,6 +68,7 @@ import {
 	callRegisteredTool,
 	registeredTools,
 } from "./core/testing/run-tool.ts";
+import { discordSpaceOf } from "./core/testing/team-places.ts";
 import type {
 	RecordedEvent,
 	TestPluginOptions,
@@ -357,7 +358,9 @@ export async function testPlugin(
 				? [
 						agentClaim({
 							owner,
-							discordGuild: memberOf(agentServer.team, "discordGuild"),
+							spaceOf: discordSpaceOf(
+								memberOf(agentServer.team, "discordGuild"),
+							),
 							// SAFETY: the claim reads the concrete team's members (owns, answerOwner, answerGroup, answerBackground, startFresh), which a test that gives a team for it supplies.
 							team: agentServer.team as never,
 							runtime: {

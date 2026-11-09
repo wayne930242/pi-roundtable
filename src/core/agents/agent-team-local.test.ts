@@ -4,6 +4,7 @@ import { AgentError, ScheduleError } from "../domain/errors.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { describeDb, openTestStore, TEST_GUILD } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
+import { discordTestPlaces, testPlacePort } from "../testing/team-places.ts";
 import { PgAgentStore } from "./agent-store.ts";
 import {
 	ENTRY,
@@ -14,6 +15,7 @@ import {
 } from "./agent-team-fixture.ts";
 import { messageTarget } from "./message-target.ts";
 import { agentRoomKey, discordKey, groupRoomKey } from "./team-keys.ts";
+import { TeamPlaces } from "./team-places.ts";
 
 const room = (name: string) => agentRoomKey("app", name);
 const coordinator = {
@@ -231,7 +233,14 @@ describeDb("schedule_list across the rooms of a team with Discord", () => {
 				messageTarget(
 					{
 						store: restarted,
-						roomSurfaces: ["app"],
+						places: new TeamPlaces(
+							restarted,
+							restarted.places,
+							testPlacePort({
+								rooms: () => ["app"],
+								stored: () => [discordTestPlaces()],
+							}),
+						),
 						latest: restarted.conversations.latest("infra"),
 						from,
 					},

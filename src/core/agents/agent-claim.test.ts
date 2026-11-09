@@ -14,6 +14,7 @@ import { ChannelRouter } from "../routing/channel-router.ts";
 import { isSystemTurn } from "../routing/system-turns.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { discordSpaceOf } from "../testing/team-places.ts";
 import { agentClaim, OWNER_TARGET } from "./agent-claim.ts";
 
 const OWNER = "100000000000000001";
@@ -79,7 +80,7 @@ function setup(
 	});
 	const bare = agentClaim({
 		owner: TEST_OWNER,
-		discordGuild: "1",
+		spaceOf: discordSpaceOf("1"),
 		...(speakers ? { speakers } : {}),
 		// biome-ignore lint/suspicious/noExplicitAny: a recording stand-in for the team
 		team: team as any,
@@ -603,13 +604,17 @@ test("the download limits of discord.attachmentDownload reach an agent's turn: a
 });
 
 test("a Discord channel is the agent server's by the guild its channels live in, not by the team id", () => {
-	const { claim } = setup(undefined, undefined, { discordGuild: "7" });
+	const { claim } = setup(undefined, undefined, {
+		spaceOf: discordSpaceOf("7"),
+	});
 	expect(claim.owns("discord:99", "7")).toBe(true);
 	expect(claim.owns("discord:99", "1")).toBe(false);
 	expect(claim.owns("discord:99", undefined)).toBe(false);
 });
 
 test("without a Discord guild no space makes a channel the agent server's", () => {
-	const { claim } = setup(undefined, undefined, { discordGuild: undefined });
+	const { claim } = setup(undefined, undefined, {
+		spaceOf: discordSpaceOf(undefined),
+	});
 	expect(claim.owns("discord:99", "1")).toBe(false);
 });

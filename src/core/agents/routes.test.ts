@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { Routes } from "./routes.ts";
 
 const agent = (name: string, channelId?: string, status = "active") => ({
@@ -35,14 +36,20 @@ function routes(
 ) {
 	const warned: string[] = [];
 	const { rooms, agents } = HOSTS[host];
+	// SAFETY: the table reads only `agent` of the store; a group is asked for only an unknown name.
+	const store = {
+		agent: (name: string) => agents.find((a) => a.name === name),
+		group: () => undefined,
+	} as never;
 	const table = new Routes({
 		routing,
-		// SAFETY: the table reads only `agent` of the store; a group is asked for only an unknown name.
-		store: {
-			agent: (name: string) => agents.find((a) => a.name === name),
-			group: () => undefined,
-		} as never,
-		roomSurfaces: () => rooms,
+		store,
+		places: testPlaces({
+			store,
+			rows: () => legacyRows(agents),
+			rooms: () => rooms,
+			discord: host !== "web only",
+		}),
 		latest: (name) => latest[name],
 		logger: { warn: (_fields, message) => void warned.push(message) },
 	});
@@ -344,13 +351,18 @@ describe("with routing", () => {
 			routing({ places: { ops: "other:alerts" } }),
 		).table;
 		expect(conversation.place("ops")).toBe("other:alerts");
+		const archivedStore = {
+			agent: () => agent("infra", "2000", "archived"),
+			group: () => undefined,
+		} as never;
 		const archived = new Routes({
 			routing: infraOnWeb,
-			store: {
-				agent: () => agent("infra", "2000", "archived"),
-				group: () => undefined,
-			} as never,
-			roomSurfaces: () => ["app"],
+			store: archivedStore,
+			places: testPlaces({
+				store: archivedStore,
+				rows: () => legacyRows([agent("infra", "2000", "archived")]),
+				rooms: () => ["app"],
+			}),
 		});
 		expect(archived.place("ops")).toBeUndefined();
 		expect(archived.place("unknown")).toBeUndefined();
@@ -363,19 +375,20 @@ describe("with routing", () => {
 		);
 		expect(table.primary("infra")).toBe("app:agent.infra");
 		expect(table.placeOn("infra", "web")).toBe("app:agent.infra");
+		const namedStore = {
+			agent: () => agent("infra"),
+			group: () => undefined,
+		} as never;
 		const named = new Routes({
-			store: { agent: () => agent("infra"), group: () => undefined } as never,
-			roomSurfaces: () => ["web", "app"],
+			store: namedStore,
+			places: testPlaces({ store: namedStore, rooms: () => ["web", "app"] }),
 		});
 		expect(named.placeOn("infra", "web")).toBe("web:agent.infra");
 	});
 });
 
 describe("validate", () => {
-	const linked = (
-		names: string[],
-		extra: { discordChannels?: boolean } = {},
-	) => ({ names, discordChannels: extra.discordChannels ?? true, ...extra });
+	const linked = (names: string[]) => ({ names });
 	const refused = (
 		rules: ResolvedRouting,
 		names: string[],
@@ -418,27 +431,14 @@ describe("validate", () => {
 	});
 
 	test("refuses discord when the agents have no Discord channels", () => {
-		const message = refused(
-			routing({ agents: { infra: { primary: "discord" } } }),
-			["discord", "app"],
-			"web only",
-		);
+		const rules = routing({ agents: { infra: { primary: "discord" } } });
+		const message = refused(rules, ["discord", "app"], "web only");
 		expect(routes("web only").table.rules("infra")).toEqual({});
-		try {
-			routes(
-				"web only",
-				routing({ agents: { infra: { primary: "discord" } } }),
-			).table.validate({ names: ["discord", "app"], discordChannels: false });
-			expect.unreachable();
-		} catch (error) {
-			expect((error as Error).message).toContain(
-				"the discord surface holds no agent places",
-			);
-			expect((error as Error).message).toContain(
-				"the agents have no Discord channels",
-			);
-		}
-		expect(message).toBe("");
+		expect(message).toContain("the discord surface holds no agent places");
+		expect(message).toContain("the agents have no Discord channels");
+		expect(message).toContain("Name one that does: app");
+		// With channels the same rule is accepted.
+		expect(refused(rules, ["discord", "app"], "discord + web")).toBe("");
 	});
 
 	test('refuses "web" when no or several surfaces host rooms', () => {
@@ -446,14 +446,22 @@ describe("validate", () => {
 		expect(refused(rules, ["discord"], "discord only")).toContain(
 			'"web" stands for the one surface that hosts rooms, and none does',
 		);
+		const twoStore = {
+			agent: () => agent("infra"),
+			group: () => undefined,
+		} as never;
 		const two = new Routes({
 			routing: rules,
-			store: { agent: () => agent("infra"), group: () => undefined } as never,
-			roomSurfaces: () => ["app", "webchat"],
+			store: twoStore,
+			places: testPlaces({
+				store: twoStore,
+				rooms: () => ["app", "webchat"],
+				discord: false,
+			}),
 		});
-		expect(() =>
-			two.validate({ names: ["app", "webchat"], discordChannels: false }),
-		).toThrow("2 do (app, webchat)");
+		expect(() => two.validate({ names: ["app", "webchat"] })).toThrow(
+			"2 do (app, webchat)",
+		);
 	});
 
 	test("warns once of the agents the rules name that the team does not have yet", () => {
@@ -477,13 +485,18 @@ describe("validate", () => {
 describe("a team with no Discord channels", () => {
 	const table = (discordChannels: boolean) => {
 		const agents = [agent("moved", "2000")];
+		const store = {
+			agent: (name: string) => agents.find((a) => a.name === name),
+			group: () => undefined,
+		} as never;
 		return new Routes({
-			store: {
-				agent: (name: string) => agents.find((a) => a.name === name),
-				group: () => undefined,
-			} as never,
-			roomSurfaces: () => ["app"],
-			discordChannels,
+			store,
+			places: testPlaces({
+				store,
+				rows: () => legacyRows(agents),
+				rooms: () => ["app"],
+				discord: discordChannels,
+			}),
 		});
 	};
 

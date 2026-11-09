@@ -1,4 +1,4 @@
-import type { ChannelKey } from "pi-roundtable";
+import type { ChannelKey, TeamPlace } from "pi-roundtable";
 import { agentRoomKey, groupRoomKey, MemoryError } from "pi-roundtable";
 import { thinkingLabel } from "pi-roundtable/kit";
 import type {
@@ -38,6 +38,14 @@ const memoryReason = (error: MemoryError): string =>
 	MEMORY_REASONS[error.message] ?? "The kind is not one of core, note, event.";
 
 const iso = (date: Date | undefined) => date?.toISOString();
+
+/** The channel id of an agent's or group's Discord place, read from its places, which the pane links by id; none without one. */
+function discordChannel(
+	places: readonly TeamPlace[] | undefined,
+): { channelId: string } | Record<string, never> {
+	const key = places?.find((place) => place.surface === "discord")?.key;
+	return key ? { channelId: key.slice(key.indexOf(":") + 1) } : {};
+}
 
 /**
  * The console's JSON API under `<mount>/api/`. Every handler answers JSON; errors never repeat
@@ -305,7 +313,7 @@ export class ConsoleApi {
 			agents: status.agents.map((agent) => ({
 				name: agent.name,
 				displayName: agent.displayName,
-				...(agent.channelId ? { channelId: agent.channelId } : {}),
+				...discordChannel(agent.places),
 				...(roomSurface ? { room: agentRoomKey(roomSurface, agent.name) } : {}),
 				model: agent.model,
 				thinking: thinkingLabel(agent.thinking),
@@ -319,7 +327,7 @@ export class ConsoleApi {
 				name: group.name,
 				displayName: group.displayName,
 				// A group of a team without Discord has no channel; the pane then links none.
-				...(group.channelId ? { channelId: group.channelId } : {}),
+				...discordChannel(group.places),
 				...(roomSurface ? { room: groupRoomKey(roomSurface, group.name) } : {}),
 				members: group.members,
 				host: group.host,

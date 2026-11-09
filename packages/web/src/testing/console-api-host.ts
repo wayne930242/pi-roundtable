@@ -55,7 +55,7 @@ export const team = partial<AgentTeam>({
 			{
 				name: "scout",
 				displayName: "Scout",
-				channelId: AGENT_CHANNEL,
+				places: [{ surface: "discord", key: `discord:${AGENT_CHANNEL}` }],
 				model: "provider/model",
 				thinking: "auto" as never,
 				workingIn: OWNER_CHANNEL,
@@ -69,7 +69,7 @@ export const team = partial<AgentTeam>({
 			{
 				name: "crew",
 				displayName: "Crew",
-				channelId: GROUP_CHANNEL,
+				places: [{ surface: "discord", key: `discord:${GROUP_CHANNEL}` }],
 				members: ["Scout"],
 				host: "Scout",
 				busy: 0,

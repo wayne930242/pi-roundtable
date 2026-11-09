@@ -12,6 +12,7 @@ import { ChannelQueue } from "../routing/channel-queue.ts";
 import { toolTiers } from "../runtime/tool-tiers.ts";
 import { attachReplyFile } from "../shared/reply-files.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, AgentGroup, PgAgentStore } from "./agent-store.ts";
@@ -76,6 +77,10 @@ function setup(
 		toolTiers: tiers,
 		entryChannelId: "1000",
 		store,
+		places: testPlaces({
+			store,
+			rows: () => legacyRows(AGENTS, [GROUP]),
+		}),
 		channels: {
 			post: async (channelId, post) => {
 				posts.push({ channelId, post });

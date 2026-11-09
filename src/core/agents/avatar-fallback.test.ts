@@ -6,6 +6,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent } from "./agent-store.ts";
 import { type AgentTeamOptions, DiscordAgentTeam } from "./agent-team.ts";
@@ -141,6 +142,11 @@ function context(
 	const ctx = {
 		options: {
 			store,
+			places: testPlaces({
+				store,
+				rows: () => legacyRows(store.agents()),
+				rooms: () => [],
+			}),
 			studio,
 			logger,
 			seeds: () => [],
@@ -329,13 +335,18 @@ describe("the agent tools, with and without an image provider", () => {
 			}),
 		]);
 		return new DiscordAgentTeam({
-			guildId: "1",
+			teamId: "1",
 			entryChannelId: "ch-coordinator",
 			owner: TEST_OWNER,
 			shellUser: "bot",
 			workDir: "/work",
 			sharedPrompt: "Shared.",
 			store,
+			places: testPlaces({
+				store,
+				rows: () => legacyRows(store.agents()),
+				rooms: () => [],
+			}),
 			studio: recordingStudio(kind),
 			pluginSelection: () => ({ id: "plugged", tools: [], groups: [] }),
 			models: {

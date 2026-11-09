@@ -9,6 +9,7 @@ import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { attachReplyFile } from "../shared/reply-files.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
@@ -56,7 +57,9 @@ function roomSurface(
 	const replies: { channel: string; reply: OutboundReply }[] = [];
 	/** Interim posts as `channel name/agent: text`, edits included. */
 	const interims: string[] = [];
-	const port: NonNullable<TeamTurnsOptions["surfaces"]> = {
+	const port: NonNullable<TeamTurnsOptions["surfaces"]> & {
+		roomSurfaces(): readonly string[];
+	} = {
 		roomSurfaces: () => rooms,
 		// Like the surface port: a surface that does not declare files refuses a reply that has them.
 		sendReply: async (channel, reply) => {
@@ -85,7 +88,9 @@ function roomSurface(
 
 function setup(
 	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
-	surfaces: TeamTurnsOptions["surfaces"],
+	surfaces:
+		| (TeamTurnsOptions["surfaces"] & { roomSurfaces?(): readonly string[] })
+		| undefined,
 ) {
 	const posts: { channelId: string; post: AgentPost }[] = [];
 	const discordInterims: string[] = [];
@@ -94,6 +99,11 @@ function setup(
 		owner: OWNER,
 		entryChannelId: "4000",
 		store,
+		places: testPlaces({
+			store,
+			rows: () => legacyRows(AGENTS),
+			rooms: () => surfaces?.roomSurfaces?.() ?? [],
+		}),
 		channels: {
 			post: async (channelId, post) => {
 				posts.push({ channelId, post });

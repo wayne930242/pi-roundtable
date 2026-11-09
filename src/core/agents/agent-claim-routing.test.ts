@@ -6,6 +6,7 @@ import { ChannelQueue } from "../routing/channel-queue.ts";
 import { ChannelRouter } from "../routing/channel-router.ts";
 import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { discordSpaceOf } from "../testing/team-places.ts";
 import { agentClaim } from "./agent-claim.ts";
 
 const webhook = (
@@ -33,7 +34,7 @@ function claimOf(
 ) {
 	return agentClaim({
 		owner: TEST_OWNER,
-		discordGuild: "1",
+		spaceOf: discordSpaceOf("1"),
 		team: {
 			owns: (channel: string) =>
 				channel === "discord:2000" || channel === "app:agent.infra"
@@ -56,7 +57,6 @@ function claimOf(
 		surface: {
 			react: async () => undefined,
 			unreact: async () => undefined,
-			roomSurfaces: () => ["app"],
 		},
 		attachmentDir: () => "/tmp",
 		logger: silentLogger(),

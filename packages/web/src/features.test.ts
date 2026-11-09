@@ -218,7 +218,9 @@ describe("host feature ports", () => {
 							{
 								name: "scout",
 								displayName: "Scout",
-								channelId: AGENT_CHANNEL,
+								places: [
+									{ surface: "discord", key: `discord:${AGENT_CHANNEL}` },
+								],
 								model: "m",
 								thinking: "auto",
 								waiting: 0,
@@ -229,7 +231,9 @@ describe("host feature ports", () => {
 							{
 								name: "council",
 								displayName: "Council",
-								channelId: GROUP_CHANNEL,
+								places: [
+									{ surface: "discord", key: `discord:${GROUP_CHANNEL}` },
+								],
 								members: ["Scout"],
 								host: "Scout",
 								busy: 0,

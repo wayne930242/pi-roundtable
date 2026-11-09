@@ -7,24 +7,19 @@ import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError, ConfigError } from "../domain/errors.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
-import {
-	agentRoomKey,
-	discordKey,
-	keysOf,
-	roomSurfaceOf,
-} from "./team-keys.ts";
+import type { TeamPlaces } from "./team-places.ts";
 
 /**
  * The routing table: where an agent's work lands when no person is waiting on it. An agent's
- * *place* on a surface is its Discord channel or its room there; its *primary place* is where
+ * *place* on a surface is its stored place or its room there; its *primary place* is where
  * unprompted work lands. Work a person started, or that waits on a person, is never routed.
  * Read it as `AGENTS.routes`.
  */
 export interface RoutingTable {
 	/**
-	 * The agent's primary place: the surface its rules name; with `"auto"` (the default) its Discord
-	 * channel when it has one, else its room on the first surface that hosts rooms. Undefined for
-	 * an unknown agent.
+	 * The agent's primary place: the surface its rules name; with `"auto"` (the default) its first
+	 * stored place (its Discord channel when it has one), else its room on the first surface that
+	 * hosts rooms. Undefined for an unknown agent.
 	 */
 	primary(agent: string): ChannelKey | undefined;
 	/** The agent's place on a surface (`"web"` for the one surface that hosts rooms); undefined when it has none there. */
@@ -62,29 +57,28 @@ export interface RoutesOptions {
 	/** The checked `routing` block; without it every decision is what the host did before it existed. */
 	routing?: ResolvedRouting | undefined;
 	store: Pick<AgentDirectory, "agent" | "group">;
-	/** The surfaces that host agent rooms, read each time: they are only known once the plugins linked. */
-	roomSurfaces: () => readonly string[];
+	/**
+	 * Where the agents are, read each time: the providers are only known once the plugins linked. A
+	 * stored place of a surface no provider serves, such as a channel id a former guild left, is none.
+	 */
+	places: Pick<
+		TeamPlaces,
+		"keysOf" | "placeOn" | "rooms" | "surfaces" | "roomSurfaceOf"
+	>;
 	/** The conversation an agent last ran a turn in. */
 	latest?: (agent: string) => ChannelKey | undefined;
 	logger?: RoutesLogger;
-	/**
-	 * Whether the team has Discord channels; default true. A team without them has no Discord place
-	 * for an agent: a channel id still stored on a row, such as one a former guild left, is ignored.
-	 */
-	discordChannels?: boolean;
 }
 
 /** What the surfaces the host registered can hold, read when the agent server links. */
 export interface LinkedSurfaces {
 	/** Every registered surface. */
 	names: readonly string[];
-	/** Whether the agents have Discord channels. */
-	discordChannels: boolean;
 }
 
 /**
  * The one table that says where an agent's work lands. An agent's *place* on a surface is its
- * Discord channel or its room there; its *primary place* is where work no person started lands.
+ * stored place or its room there; its *primary place* is where work no person started lands.
  * Work a person started, or that waits on a person (a message, a card, a schedule's firing, an
  * exchange's answer), is never routed: it stays in the conversation they see. Every decision here
  * is what the host did before `routing` existed until the configuration says otherwise.
@@ -93,24 +87,10 @@ export class Routes implements RoutingTable {
 	readonly #routing: ResolvedRouting | undefined;
 	readonly #options: RoutesOptions;
 	readonly #warned = new Set<string>();
-	readonly #discordChannels: boolean;
 
 	constructor(options: RoutesOptions) {
 		this.#options = options;
 		this.#routing = options.routing;
-		this.#discordChannels = options.discordChannels ?? true;
-	}
-
-	/** The agent's places in order, its Discord channel first when the team has Discord channels. */
-	#keys(name: string): ChannelKey[] {
-		const keys = keysOf(
-			this.#options.store,
-			name,
-			this.#options.roomSurfaces(),
-		);
-		return this.#discordChannels
-			? keys
-			: keys.filter((key) => parseChannelKey(key).surface !== "discord");
 	}
 
 	/**
@@ -134,16 +114,12 @@ export class Routes implements RoutingTable {
 	placeOn(name: string, surface: string): ChannelKey | undefined {
 		const agent = this.#options.store.agent(name);
 		if (!agent) return undefined;
-		const rooms = this.#options.roomSurfaces();
+		const rooms = this.#options.places.rooms();
 		const wanted =
 			surface === WEB && !rooms.includes(WEB) && rooms.length === 1
 				? (rooms[0] as string)
 				: surface;
-		if (wanted === "discord")
-			return agent.channelId && this.#discordChannels
-				? discordKey(agent.channelId)
-				: undefined;
-		return rooms.includes(wanted) ? agentRoomKey(wanted, name) : undefined;
+		return this.#options.places.placeOn(name, wanted);
 	}
 
 	/**
@@ -164,7 +140,7 @@ export class Routes implements RoutingTable {
 				"the agent has no place on its primary surface; its auto place is used",
 			);
 		}
-		return this.#keys(name)[0];
+		return this.#options.places.keysOf(name)[0];
 	}
 
 	/**
@@ -246,7 +222,7 @@ export class Routes implements RoutingTable {
 			from === undefined ? undefined : parseChannelKey(from).surface;
 		if (to === "latest" && surface !== undefined) {
 			const last = latest?.(name);
-			const keys = this.#keys(name);
+			const keys = this.#options.places.keysOf(name);
 			if (
 				last !== undefined &&
 				keys.includes(last) &&
@@ -276,7 +252,8 @@ export class Routes implements RoutingTable {
 	 * surface hosts rooms, otherwise its primary place. Throws AgentError when it has none.
 	 */
 	near(name: string, near?: ChannelKey): ChannelKey {
-		const surface = near === undefined ? undefined : roomSurfaceOf(near);
+		const surface =
+			near === undefined ? undefined : this.#options.places.roomSurfaceOf(near);
 		const room =
 			surface === undefined ? undefined : this.placeOn(name, surface);
 		const key = room ?? this.primary(name);
@@ -303,8 +280,8 @@ export class Routes implements RoutingTable {
 	 */
 	validate(linked: LinkedSurfaces): void {
 		if (!this.#routing) return;
-		const rooms = this.#options.roomSurfaces();
-		const holders = [...(linked.discordChannels ? ["discord"] : []), ...rooms];
+		const rooms = this.#options.places.rooms();
+		const holders = this.#options.places.surfaces();
 		for (const [agent, rules] of Object.entries(this.#routing?.agents ?? {}))
 			for (const key of ["primary", "integration", "agentMessage"] as const) {
 				const surface = rules[key];
@@ -367,14 +344,14 @@ export function routesOf(options: {
 	store: RoutesOptions["store"] & {
 		conversations: { latest(agent: string): ChannelKey | undefined };
 	};
-	surfaces?: { roomSurfaces(): readonly string[] } | undefined;
+	places: RoutesOptions["places"];
 	logger: RoutesLogger;
 }): Routes {
 	return (
 		options.routes ??
 		new Routes({
 			store: options.store,
-			roomSurfaces: () => options.surfaces?.roomSurfaces() ?? [],
+			places: options.places,
 			latest: (agent) => options.store.conversations.latest(agent),
 			logger: options.logger,
 		})

@@ -13,12 +13,6 @@ import {
 	RECENT_FOR_SCORING,
 } from "./group-round.ts";
 import {
-	groupLogName,
-	groupOfChannel,
-	groupScope,
-	groupSessionKey,
-} from "./team-keys.ts";
-import {
 	BACKLOG_LIMIT,
 	type Chain,
 	type TurnExtra,
@@ -64,10 +58,9 @@ export class GroupTurns {
 		return [...round.sessions];
 	}
 
-	/** The active group whose Discord channel or room the key is. */
+	/** The active group whose place the key is. */
 	#groupOf(channel: ChannelKey): AgentGroup {
-		const { store, surfaces } = this.#host.options;
-		const group = groupOfChannel(store, surfaces, channel);
+		const group = this.#host.options.places.groupOf(channel);
 		if (group?.status !== "active")
 			throw new AgentError(`no group owns ${channel}`);
 		return group;
@@ -86,12 +79,12 @@ export class GroupTurns {
 		attachments: TurnAttachments,
 		repliedToName: string | undefined,
 	): Promise<void> {
-		const { store, scorer, confirmations, logger } = this.#host.options;
+		const { store, places, scorer, confirmations, logger } = this.#host.options;
 		const runtime = this.#host.options.runtime();
 		const group = this.#groupOf(channel);
-		// Each conversation of a group keeps its own log: the Discord channel's under the group's
-		// name, a room's under `<group>@<surface>`.
-		const log = groupLogName(group, channel);
+		// Each conversation of a group keeps its own log: a stored place's under the provider's name
+		// for it (a Discord channel's, the group's own), a room's under `<group>@<surface>`.
+		const log = places.logName(group, channel);
 		const members = group.members
 			.map((name) => store.agent(name))
 			.filter((m): m is Agent => m?.status === "active");
@@ -110,7 +103,7 @@ export class GroupTurns {
 		const approvals = new Map<string, boolean>();
 		for (const member of members) {
 			const pending = await runtime.heldActions(
-				groupSessionKey(group, member.name, channel),
+				places.seatKey(group, member.name, channel),
 			);
 			// Only a speaker whose tier holds the held tools may approve or wake a seat for them.
 			if (!pending || !this.#host.mayApprove(speaker, pending)) continue;
@@ -191,7 +184,7 @@ export class GroupTurns {
 					extra.attachments = attachments;
 					if (approvals.get(name)) extra.confirmed = true;
 				}
-				const scope = groupScope(member, group, channel);
+				const scope = places.groupScope(member, group, channel);
 				control.sessions.add(scope.session);
 				share("running", name);
 				let result: TurnResult;

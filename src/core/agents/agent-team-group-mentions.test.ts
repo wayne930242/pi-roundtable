@@ -4,7 +4,7 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { fx, opsGroup, script, useTeamFixture } from "./agent-team-fixture.ts";
-import { discordKey, groupSessionKey } from "./team-keys.ts";
+import { discordKey } from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
@@ -59,7 +59,7 @@ describeDb("PostgreSQL", () => {
 
 		test("a held approval still forces its seat beside the named member", async () => {
 			script.scores = { coordinator: 0.9, infra: 0.1, doctor: 0.9 };
-			fx.runtime.held.set(groupSessionKey(opsGroup(), "infra"), {
+			fx.runtime.held.set(fx.places.seatKey(opsGroup(), "infra"), {
 				selectionId: "agent",
 				heldAt: new Date(),
 				calls: [{ tool: "bash", input: "{}", action: "restart" }],

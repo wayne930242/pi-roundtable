@@ -4,14 +4,14 @@ import type { Logger } from "../kernel/log.ts";
 import type { AgentTurnRunner } from "./agent-ports.ts";
 import { isHelper } from "./agent-rules.ts";
 import type { PgAgentStore } from "./agent-store.ts";
-import { keysOf, scopeOf } from "./team-keys.ts";
+import type { TeamPlaces } from "./team-places.ts";
 
 export interface HelperWorkOptions {
 	store: Pick<PgAgentStore, "agent" | "group" | "setFinished">;
 	queue: Pick<QueuePort, "size">;
 	runtime: () => Pick<AgentTurnRunner, "heldActions">;
-	/** The surfaces that host rooms, which are places of a temp knight beside its Discord thread. */
-	roomSurfaces: () => readonly string[];
+	/** Where the temp knight is: its stored place, such as a Discord thread, and its room on each surface that hosts rooms. */
+	places: Pick<TeamPlaces, "keysOf" | "scopeOf">;
 	/** Called after a temp knight's state changed, so the pages and the dashboard redraw. */
 	changed: () => void;
 	logger: Logger;
@@ -73,15 +73,16 @@ export class HelperWork {
 
 	/** Whether something else waits: a turn queued behind this one, or an action held for the owner. */
 	async #waiting(name: string): Promise<boolean> {
-		const { store, queue, roomSurfaces } = this.#options;
+		const { store, queue, places } = this.#options;
 		const agent = store.agent(name);
 		if (!agent) return false;
-		const keys: ChannelKey[] = keysOf(store, name, roomSurfaces());
+		const keys: ChannelKey[] = places.keysOf(name);
 		// The task that just ended still counts in its channel's queue until it returns.
 		if (keys.some((key) => queue.size(key) > 1)) return true;
 		const runtime = this.#options.runtime();
 		for (const key of keys)
-			if (await runtime.heldActions(scopeOf(agent, key).session)) return true;
+			if (await runtime.heldActions(places.scopeOf(agent, key).session))
+				return true;
 		return false;
 	}
 

@@ -1,9 +1,8 @@
 import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
-import { AgentError } from "../domain/errors.ts";
-import type { AgentTurnScope } from "../domain/ports.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
-import type { Agent, AgentGroup } from "./agent-store.ts";
+import type { Agent } from "./agent-store.ts";
+import type { TeamPlaces } from "./team-places.ts";
 
 /** The surface of the channels the agent server runs on. */
 const DISCORD_SURFACE = "discord";
@@ -50,208 +49,24 @@ export function roomOf(
 	return { kind: match[1] as "agent" | "group", name: match[2] as string };
 }
 
-/** What the surfaces say of rooms: which of them host agent rooms, asked only for a key that is not a Discord one. */
-interface RoomHosts {
-	roomSurfaces(): readonly string[];
-}
-
-/** The agent whose Discord channel or room the key is; an archived one is returned too. */
-export function agentOfChannel(
-	store: Pick<AgentDirectory, "agent" | "agentByChannel">,
-	hosts: RoomHosts | undefined,
-	channel: ChannelKey,
-): Agent | undefined {
-	const id = discordIdOf(channel);
-	if (id !== undefined) return store.agentByChannel(id);
-	const room = roomOf(channel, hosts?.roomSurfaces() ?? []);
-	return room?.kind === "agent" ? store.agent(room.name) : undefined;
-}
-
-/** The group whose Discord channel or room the key is; an archived one is returned too. */
-export function groupOfChannel(
-	store: Pick<AgentDirectory, "group" | "groupByChannel">,
-	hosts: RoomHosts | undefined,
-	channel: ChannelKey,
-): AgentGroup | undefined {
-	const id = discordIdOf(channel);
-	if (id !== undefined) return store.groupByChannel(id);
-	const room = roomOf(channel, hosts?.roomSurfaces() ?? []);
-	return room?.kind === "group" ? store.group(room.name) : undefined;
-}
-
-/** The surface of a key that is not a Discord channel's; undefined for a Discord channel. */
-export const roomSurfaceOf = (room: ChannelKey): string | undefined => {
-	const at = typeof room === "string" ? room.indexOf(":") : -1;
-	if (at <= 0) return undefined;
-	const surface = room.slice(0, at);
-	return surface === DISCORD_SURFACE ? undefined : surface;
-};
-
-/**
- * The channel a group seat runs in outside a running turn: the group's room on the surface of the
- * seat's home for a room seat, so it never falls out to the group's Discord channel; otherwise the
- * group's Discord channel, or the seat's home.
- */
-export function groupSeatChannel(
-	group: Pick<AgentGroup, "name" | "channelId">,
-	scope: Pick<AgentTurnScope, "home">,
-): ChannelKey {
-	const surface = roomSurfaceOf(scope.home);
-	if (surface !== undefined) return groupRoomKey(surface, group.name);
-	return group.channelId ? discordKey(group.channelId) : scope.home;
-}
-
-/**
- * An agent's conversation inside a group, apart from its own. In a Discord group channel, or
- * without a room, it is keyed by the channel; in a room of another surface, by the surface and the
- * group's name, so the room's seats are conversations of their own.
- */
-export function groupSessionKey(
-	group: AgentGroup,
-	agent: string,
-	room?: ChannelKey,
-): ChannelKey {
-	const surface = room === undefined ? undefined : roomSurfaceOf(room);
-	if (surface !== undefined)
-		return `agentgroup:${surface}.group.${group.name}.${agent}`;
-	// A group of a team without Discord has rooms only, so it never has a seat of its own to key.
-	if (!group.channelId)
-		throw new AgentError(`the group ${group.name} has no Discord channel`);
-	return `agentgroup:${group.channelId}.${agent}`;
-}
-
-/**
- * The name a group's messages are logged under: the group's own in its Discord channel, and
- * `<group>@<surface>` in a room, so each conversation keeps its own history and cursors.
- */
-export function groupLogName(group: AgentGroup, room: ChannelKey): string {
-	const surface = roomSurfaceOf(room);
-	return surface === undefined ? group.name : `${group.name}@${surface}`;
-}
-
 /**
  * The coordinator: with Discord, the agent in the entry channel; without it, the agent the
  * configuration names. Undefined while none is active.
  */
 export function coordinatorOf(
-	store: Pick<AgentDirectory, "agent" | "agentByChannel">,
+	store: Pick<AgentDirectory, "agent">,
+	places: Pick<TeamPlaces, "agentOf">,
 	team: {
 		entryChannelId?: string;
 		coordinator?: string | (() => string | undefined);
 	},
 ): Agent | undefined {
 	if (team.entryChannelId !== undefined)
-		return store.agentByChannel(team.entryChannelId);
+		return places.agentOf(discordKey(team.entryChannelId));
 	const name =
 		typeof team.coordinator === "function"
 			? team.coordinator()
 			: team.coordinator;
 	const named = name ? store.agent(name) : undefined;
 	return named?.status === "active" ? named : undefined;
-}
-
-/** An agent's own channel conversation. */
-export function homeScope(agent: Agent): AgentTurnScope {
-	const home = discordKey(agent.channelId ?? "");
-	return { name: agent.name, session: home, home };
-}
-
-/** An agent's conversation in its room: the room is its session and its home. */
-export function roomScope(agent: Agent, room: ChannelKey): AgentTurnScope {
-	return { name: agent.name, session: room, home: room };
-}
-
-/** The agent's own conversation in the channel: its Discord channel's, or its room's. */
-export function scopeOf(agent: Agent, channel: ChannelKey): AgentTurnScope {
-	return discordIdOf(channel) === undefined
-		? roomScope(agent, channel)
-		: homeScope(agent);
-}
-
-/**
- * An agent's conversation inside a group: in a Discord group channel, or without a room, as
- * before; in a room, the room's seat, whose home is the agent's own room on that surface.
- */
-export function groupScope(
-	agent: Agent,
-	group: AgentGroup,
-	room?: ChannelKey,
-): AgentTurnScope {
-	const surface = room === undefined ? undefined : roomSurfaceOf(room);
-	return {
-		name: agent.name,
-		session: groupSessionKey(group, agent.name, room),
-		home:
-			surface === undefined
-				? discordKey(agent.channelId ?? "")
-				: agentRoomKey(surface, agent.name),
-		group: group.name,
-	};
-}
-
-/**
- * The agent or group that owns a channel of the agent server: by Discord channel, or by room on
- * one of `roomSurfaces`. An archived agent or group owns nothing.
- */
-export function channelOwner(
-	store: Pick<AgentDirectory, "agentByChannel" | "groupByChannel"> &
-		Partial<Pick<AgentDirectory, "agent" | "group">>,
-	channel: ChannelKey,
-	roomSurfaces: readonly string[] = [],
-): "agent" | "group" | undefined {
-	const id = discordIdOf(channel);
-	if (id === undefined) {
-		const room = roomOf(channel, roomSurfaces);
-		if (!room) return undefined;
-		if (room.kind === "agent")
-			return store.agent?.(room.name)?.status === "active"
-				? "agent"
-				: undefined;
-		return store.group?.(room.name)?.status === "active" ? "group" : undefined;
-	}
-	if (store.agentByChannel(id)) return "agent";
-	if (store.groupByChannel(id)) return "group";
-	return undefined;
-}
-
-/**
- * Every key an agent or group is addressed by: its Discord channel, when it has one, then its
- * room on each of `roomSurfaces`; none for a name the team does not know. Archived ones count,
- * so what they left behind can be cleared.
- */
-export function keysOf(
-	store: Pick<AgentDirectory, "agent" | "group">,
-	name: string,
-	roomSurfaces: readonly string[],
-): ChannelKey[] {
-	const agent = store.agent(name);
-	if (agent)
-		return [
-			...(agent.channelId ? [discordKey(agent.channelId)] : []),
-			...roomSurfaces.map((surface) => agentRoomKey(surface, name)),
-		];
-	const group = store.group(name);
-	if (group)
-		return [
-			...(group.channelId ? [discordKey(group.channelId)] : []),
-			...roomSurfaces.map((surface) => groupRoomKey(surface, name)),
-		];
-	return [];
-}
-
-/**
- * Every conversation of an agent's seat in a group: the Discord channel's, when the group has
- * one, then each room's on `roomSurfaces`.
- */
-export function seatsOf(
-	group: AgentGroup,
-	agent: string,
-	roomSurfaces: readonly string[],
-): ChannelKey[] {
-	return [
-		...(group.channelId ? [groupSessionKey(group, agent)] : []),
-		...roomSurfaces.map((surface) =>
-			groupSessionKey(group, agent, groupRoomKey(surface, group.name)),
-		),
-	];
 }

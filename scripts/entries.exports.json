@@ -339,6 +339,7 @@
 			"SurfaceRouting",
 			"SurfaceThreads",
 			"TeamAgentStatus",
+			"TeamPlace",
 			"TeamStatus",
 			"ThinkingLevel",
 			"ThinkingSetting",

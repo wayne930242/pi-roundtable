@@ -6,6 +6,7 @@ import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { ChannelQueue } from "../routing/channel-queue.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
+import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import { Routes } from "./routes.ts";
@@ -47,14 +48,20 @@ function setup(
 	} as unknown as PgAgentStore;
 	const turns: TurnRequest[] = [];
 	const posted: string[] = [];
+	const places = testPlaces({
+		store,
+		rows: () => legacyRows(AGENTS),
+		rooms: () => ["app"],
+	});
 	const team: TeamTurns = new TeamTurns({
 		owner: OWNER,
 		entryChannelId: "4000",
 		store,
+		places,
 		routes: new Routes({
 			routing,
 			store,
-			roomSurfaces: () => ["app"],
+			places,
 			latest: (name) => conversations.latest(name),
 		}),
 		channels: {
@@ -62,7 +69,6 @@ function setup(
 			interim: () => ({ post: async () => ({ edit: async () => undefined }) }),
 		},
 		surfaces: {
-			roomSurfaces: () => ["app"],
 			sendReply: async (channel) => void posted.push(channel),
 			of: () => undefined,
 			interim: () => undefined,
