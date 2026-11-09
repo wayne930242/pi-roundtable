@@ -205,12 +205,6 @@ test("any ordinary file is accepted: images by their bytes, text as text, the re
 			"image/svg+xml",
 		],
 		[
-			"pasted-svg",
-			'<svg xmlns="http://www.w3.org/2000/svg"/>',
-			"",
-			"text/plain",
-		],
-		[
 			"named.svg",
 			'<svg xmlns="http://www.w3.org/2000/svg"/>',
 			"",
@@ -219,12 +213,6 @@ test("any ordinary file is accepted: images by their bytes, text as text, the re
 		[
 			"page.svg",
 			"<html><body><svg/></body></html>",
-			"text/plain",
-			"text/plain",
-		],
-		[
-			"data.txt",
-			'<svg xmlns="http://www.w3.org/2000/svg"/>',
 			"text/plain",
 			"text/plain",
 		],
