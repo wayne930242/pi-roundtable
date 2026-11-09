@@ -14,6 +14,7 @@ import {
 	type PartSink,
 	readMultipart,
 } from "./multipart.ts";
+import { isSvg, SVG_HEAD_BYTES } from "./svg.ts";
 
 /** The most bytes of one uploaded file when the options say nothing else: 100 MiB. */
 export const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
@@ -25,8 +26,8 @@ const UPLOAD_WAIT_MS = 24 * 3_600_000;
 const PENDING_PER_PRINCIPAL = 16;
 /** The most bytes one person may have waiting for a message, or on their way: 400 MiB. */
 const PENDING_BYTES_PER_PRINCIPAL = 400 * 1024 * 1024;
-/** How much of the start of a file is kept to tell what it is. */
-const HEAD_BYTES = 16;
+/** How much of the start of a file is kept to tell what it is: enough for an SVG's prolog. */
+const HEAD_BYTES = SVG_HEAD_BYTES;
 
 /** The scheme of the references a message carries to its uploads: `app-upload:<id>`. */
 const REF_PREFIX = "app-upload:";
@@ -36,7 +37,7 @@ const startsWith = (bytes: Uint8Array, signature: readonly number[], at = 0) =>
 	signature.every((byte, index) => bytes[at + index] === byte);
 const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
 
-/** The image type the first bytes say, if any; these four are the ones the page shows itself. */
+/** The image type the first bytes say, if any; these five are the ones the page shows itself. */
 export function imageTypeOf(head: Uint8Array): string | undefined {
 	if (startsWith(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
 		return "image/png";
@@ -45,6 +46,7 @@ export function imageTypeOf(head: Uint8Array): string | undefined {
 		return "image/gif";
 	if (startsWith(head, ascii("RIFF")) && startsWith(head, ascii("WEBP"), 8))
 		return "image/webp";
+	if (isSvg(head)) return "image/svg+xml";
 	return undefined;
 }
 
@@ -54,6 +56,7 @@ const CHECKED_IMAGE_TYPES = new Set([
 	"image/jpeg",
 	"image/gif",
 	"image/webp",
+	"image/svg+xml",
 ]);
 
 /** The type kept for a text file: what its name says among the text types, otherwise plain text. */

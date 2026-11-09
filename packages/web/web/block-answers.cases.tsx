@@ -293,7 +293,8 @@ export function blockAnswerCases(getPage: () => TestPage): void {
 		const images = [...review.querySelectorAll("img")].map((img) =>
 			img.getAttribute("src"),
 		);
-		expect(images).toEqual(["api/files/logo-a"]);
+		// The id of an attached SVG goes the same route as any other file's.
+		expect(images).toEqual(["api/files/logo-a", "api/files/comp-svg_1"]);
 		expect(review.querySelector("iframe")).toBeNull();
 		expect(review.textContent).toContain("proto.html");
 		expect(review.textContent).toContain("open it on the computer");

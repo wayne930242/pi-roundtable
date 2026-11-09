@@ -7,6 +7,7 @@ import { type FileDir, isFileId, safeName } from "../app/files.ts";
 import type { RoomLog } from "../app/room-log.ts";
 import { viewerOfSocket } from "../app/socket.ts";
 import type { AppSocket, Sockets } from "../app/sockets.ts";
+import { SVG_HEAD_BYTES } from "../app/svg.ts";
 import { imageTypeOf } from "../app/uploads.ts";
 import type {
 	HostCard,
@@ -98,11 +99,11 @@ async function bytesOf(
 }
 
 /**
- * What the app's stored file keeps as the type of a host's file: an image type only when the bytes
- * are that image (the page shows those inline), anything else the host declared as given.
+ * What the app's stored file keeps as the type of a host's file: an image type (SVG included) only
+ * when the bytes are that image (the page shows those inline), anything else the host declared as given.
  */
 export function keptType(declared: string, bytes: Uint8Array): string {
-	const image = imageTypeOf(bytes.subarray(0, 16));
+	const image = imageTypeOf(bytes.subarray(0, SVG_HEAD_BYTES));
 	if (image) return image;
 	return declared.startsWith("image/") ? "application/octet-stream" : declared;
 }
@@ -110,7 +111,7 @@ export function keptType(declared: string, bytes: Uint8Array): string {
 /** The PNG, JPEG or WebP the bytes are, if they are one: the images host Markdown may show. */
 export function markdownImageType(bytes: Uint8Array): string | undefined {
 	const type = imageTypeOf(bytes.subarray(0, 16));
-	return type === "image/gif" ? undefined : type;
+	return type === "image/gif" || type === "image/svg+xml" ? undefined : type;
 }
 
 /**

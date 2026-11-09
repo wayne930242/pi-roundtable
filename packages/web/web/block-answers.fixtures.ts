@@ -55,5 +55,6 @@ export const REVIEW = [
 	"  - {name: A, body: First, image: 'file:logo-a'}",
 	"  - {name: B, body: Second, image: 'https://example.test/b.png', page: proto.html}",
 	"  - {name: C, body: Third, image: 'file:..'}",
+	"  - {name: D, body: An SVG comp the agent attached, image: 'file:comp-svg_1'}",
 	"```",
 ].join("\n");
