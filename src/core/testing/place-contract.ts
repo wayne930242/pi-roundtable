@@ -195,7 +195,7 @@ const CHECKS: readonly Check[] = [
 				"a key of another surface read as a place",
 			);
 			expectThat(
-				provider.placeOf("not a key") === undefined,
+				provider.placeOf("not a key" as ChannelKey) === undefined,
 				"a text that is no key read as a place",
 			);
 		},

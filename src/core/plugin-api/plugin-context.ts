@@ -1,3 +1,4 @@
+import type { Services } from "../contract/services.ts";
 import { PluginError } from "../kernel/errors.ts";
 import type { PluginContext, RoundtablePlugin } from "./plugin.ts";
 
