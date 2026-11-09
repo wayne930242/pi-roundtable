@@ -1,21 +1,14 @@
 import {
-	type ActorFacts,
 	type Approval,
-	type ApprovedBy,
 	type ChannelKey,
 	checkAnswer,
 	checkQuestionnaireAnswer,
 	type LateAnswer,
-	type Logger,
 	type OwnerAnswer,
 	type PromptScope,
 	type Prompts,
-	type PromptWait,
 	QUESTIONNAIRE_LIMITS,
 	type QuestionnaireAnswer,
-	SYSTEM_PRINCIPAL,
-	TIERS,
-	type Tier,
 	withdrawalNote,
 } from "pi-roundtable";
 import type {
@@ -27,6 +20,9 @@ import type {
 	RefusalCode,
 	ServerFrame,
 } from "../api-types.ts";
+import { approvalAudience, questionAudience } from "./desk-audience.ts";
+import { answerOf, approvedBy, outcomeOf, pendingOf } from "./desk-cards.ts";
+import type { Answerer, Card, Open, OwnerDeskOptions } from "./desk-types.ts";
 import {
 	askFrame,
 	boundedApproval,
@@ -44,114 +40,7 @@ const APP_ASKS = Object.freeze({
 	note: true,
 });
 
-/** Who answers: an owner visitor, at their tier as of the answer. */
-export interface Answerer {
-	principalId: string;
-	tier: Tier;
-	/** The identity they spoke as, `<provider>:<subject>`. */
-	speakerId: string;
-	name: string;
-	/** The roles their sign-in carried. */
-	roles?: readonly string[];
-	/** The actor their credential vouched for, which a message they start is written as. */
-	actor?: ActorFacts;
-}
-
-export interface OwnerDeskOptions {
-	/** Puts a frame about a room on the sockets that may have it: the owners' for an agent room, the room's readers' for a host room. */
-	broadcast(frame: ServerFrame, room: ChannelKey): void;
-	/** How long a turn that can be resumed waits on its card before it goes on without the answer. */
-	graceMs: number;
-	/** A card nobody answers closes after this long; default 24 hours. */
-	ttlMs?: number;
-	/**
-	 * Starts a turn in a room with a late answer's text, as a message from whoever answered. A
-	 * rejection is logged.
-	 */
-	resume(room: ChannelKey, by: Answerer, text: string): void | Promise<void>;
-	/**
-	 * Keeps a card that ended, for the room's history; called once per card, as it closes. A throw
-	 * or a rejection is logged and never reaches the turn.
-	 */
-	closed?(card: ClosedCard): void | Promise<void>;
-	/** Hears of a card when it opens, once; the late re-send of a card does not call it again. Never throws into the turn. */
-	opened?(room: ChannelKey, frame: PromptFrame): void;
-	/** Display names of principals, for a card that names who may approve it. */
-	namesOf(principalIds: readonly string[]): Promise<string[]>;
-	logger: Logger;
-}
-
-/** What an answer, once checked, says. */
-type Ended =
-	| { type: "approval"; approved: boolean }
-	| { type: "answer"; answer: OwnerAnswer }
-	| { type: "answers"; answer: QuestionnaireAnswer }
-	/** The question card's Cancel. */
-	| { type: "cancel" };
-
-interface Open {
-	room: ChannelKey;
-	frame: PromptFrame;
-	/** Whether this person may answer the card. */
-	admits(from: Answerer): boolean;
-	end(ended: Ended, by: Answerer): void;
-	/** Ends the card without an answer, as a stopped turn does. */
-	abandon(): void;
-}
-
-/** What a card gives the turn that waits on it, and what a late answer says to a new turn. */
-interface Card<T> {
-	room: ChannelKey;
-	frame: PromptFrame;
-	signal: AbortSignal | undefined;
-	supersede: AbortSignal | undefined;
-	/** Present when the turn may stop waiting: what it is told then. */
-	pending?: T;
-	/** How long the turn waits before `pending`, in ms, in place of the desk's `graceMs`. */
-	graceMs?: number;
-	cancelled: T;
-	expired: T;
-	admits(from: Answerer): boolean;
-	/** The turn's result for an answer given while it still waits. */
-	valueOf(ended: Ended): T;
-	/** A hook before an approval resolves `approved`. */
-	approved?(by: Answerer, prompt: string): void;
-	/** The text a late answer starts a turn with; undefined starts none. */
-	lateText?(ended: Ended, by: Answerer, prompt: string): string | undefined;
-}
-
-/** What a card tells a turn that may stop waiting, and how long it waits first; nothing without a `wait`. */
-function pendingOf(wait: PromptWait | undefined): {
-	pending?: "pending";
-	graceMs?: number;
-} {
-	if (!wait) return {};
-	return {
-		pending: "pending",
-		...(wait.graceMs === undefined ? {} : { graceMs: wait.graceMs }),
-	};
-}
-
-const atLeast = (tier: Tier, least: Tier) =>
-	TIERS.indexOf(tier) >= TIERS.indexOf(least);
-
-const outcomeOf = (ended: Ended): PromptOutcome => {
-	if (ended.type === "approval")
-		return ended.approved ? "approved" : "declined";
-	return ended.type === "cancel" ? "declined" : "answered";
-};
-
-/** What a question card was answered, in the shape the history keeps. */
-function answerOf(ended: Ended): CardAnswer | undefined {
-	if (ended.type === "answer") return { kind: "ask", answer: ended.answer };
-	if (ended.type === "answers")
-		return {
-			kind: "questionnaire",
-			answers: ended.answer.answers.map((one) => one ?? null),
-			...(ended.answer.note ? { note: ended.answer.note } : {}),
-		};
-	return undefined;
-}
+export type { Answerer, OwnerDeskOptions } from "./desk-types.ts";
 
 /**
  * The cards open in the app's rooms: approvals of held actions and questions the turn asks. Every
@@ -191,7 +80,7 @@ export class OwnerDesk {
 				options,
 			) => {
 				const speakerOnly = options?.speakerOnly === true;
-				const audience = this.#approvalAudience(
+				const audience = approvalAudience(
 					scope,
 					minTier,
 					options?.approvers,
@@ -253,7 +142,7 @@ export class OwnerDesk {
 					...pendingOf(wait),
 					cancelled: undefined,
 					expired: undefined,
-					admits: this.#questionAudience(scope),
+					admits: questionAudience(scope),
 					valueOf: (ended) =>
 						ended.type === "answer" ? ended.answer : "declined",
 					lateText: (ended, by) =>
@@ -279,7 +168,7 @@ export class OwnerDesk {
 					...pendingOf(wait),
 					cancelled: undefined,
 					expired: undefined,
-					admits: this.#questionAudience(scope),
+					admits: questionAudience(scope),
 					valueOf: (ended) =>
 						ended.type === "answers" ? ended.answer : "declined",
 					lateText: (ended, by) =>
@@ -379,63 +268,6 @@ export class OwnerDesk {
 		if (!open.admits(from)) return "forbidden";
 		open.end({ type: "cancel" }, from);
 		return undefined;
-	}
-
-	/**
-	 * Who may approve a call held at `minTier`, as a test of the person who answers; undefined when
-	 * no one may, so the call is unavailable at once.
-	 */
-	#approvalAudience(
-		scope: PromptScope | undefined,
-		minTier: Tier,
-		approvers: readonly string[] | undefined,
-		speakerOnly: boolean,
-	): ((from: Answerer) => boolean) | undefined {
-		const tierOk = (from: Answerer) => atLeast(from.tier, minTier);
-		const owner = (from: Answerer) => from.tier === "owner";
-		if (speakerOnly) {
-			// The speaker's alone: below the tier, or a speaker who is no person, no one answers.
-			if (
-				!scope ||
-				scope.principalId === SYSTEM_PRINCIPAL ||
-				!atLeast(scope.tier, minTier)
-			)
-				return undefined;
-			const speaker = scope.principalId;
-			return (from) => from.principalId === speaker && tierOk(from);
-		}
-		// Without a scope a card is the owners'.
-		if (!scope) return owner;
-		const person = scope.principalId;
-		if (scope.escalate === "none") {
-			// A private conversation's person is the only one who answers, and a call naming others is theirs only if named or an owner.
-			if (!atLeast(scope.tier, minTier)) return undefined;
-			if (
-				approvers?.length &&
-				!approvers.includes(person) &&
-				scope.tier !== "owner"
-			)
-				return undefined;
-			return (from) => from.principalId === person && tierOk(from);
-		}
-		if (approvers?.length) {
-			// Named approvers answer it, at the tier it needs now, and so do the owners; the speaker does not unless named.
-			const named = new Set(approvers);
-			return (from) =>
-				(named.has(from.principalId) && tierOk(from)) || owner(from);
-		}
-		return (from) =>
-			(from.principalId === person && tierOk(from)) || owner(from);
-	}
-
-	/** Who may answer a question: the speaker, and the owners where the scope escalates; without a scope, the owners. */
-	#questionAudience(scope: PromptScope | undefined) {
-		if (!scope) return (from: Answerer) => from.tier === "owner";
-		const person = scope.principalId;
-		if (scope.escalate === "none")
-			return (from: Answerer) => from.principalId === person;
-		return (from: Answerer) =>
-			from.principalId === person || from.tier === "owner";
 	}
 
 	/**
@@ -559,15 +391,6 @@ export class OwnerDesk {
 	stop(): void {
 		for (const open of [...this.#open.values()]) open.abandon();
 	}
-}
-
-function approvedBy(by: Answerer): ApprovedBy {
-	return {
-		principalId: by.principalId,
-		speakerId: by.speakerId,
-		name: by.name,
-		...(by.tier === "owner" ? { owner: true as const } : {}),
-	};
 }
 
 export type { LateAnswer };
