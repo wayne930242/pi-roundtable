@@ -1,200 +1,37 @@
-import {
-	createHash,
-	createHmac,
-	randomBytes,
-	timingSafeEqual,
-} from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from "jose";
-import type { ActorFacts, Logger } from "pi-roundtable";
-import { PluginError } from "pi-roundtable";
 import { oidcProvider } from "pi-roundtable/kit";
-import type { ConsolePresentation } from "../features.ts";
-import type { ResolvedOidc } from "../options.ts";
 import type { Identified } from "../visitors.ts";
-import type { Credential, Unauthenticated } from "./authenticator.ts";
+import type { Credential } from "./authenticator.ts";
 import { allowedNext, routeOfNext } from "./next.ts";
 import { oidcPage } from "./oidc-pages.ts";
-import type { SessionActor, WebSessions } from "./sessions.ts";
+import {
+	discoverProvider,
+	type ProviderMetadata,
+	urlOf,
+} from "./oidc-provider.ts";
+import {
+	cookieValue,
+	INTERACTION_NEEDED,
+	MAX_CLAIM_CHARS,
+	MAX_NAME_CHARS,
+	MAX_ROLE_CHARS,
+	MAX_ROLES,
+	MAX_SUBJECT_CHARS,
+	needsSignIn,
+	PENDING_MS,
+	PROVIDER_TIMEOUT_MS,
+	same,
+	sha256,
+	textClaim,
+	VERIFIED_EVERY_MS,
+	VERIFIED_PRUNE_AT,
+} from "./oidc-support.ts";
+import type { OidcLoginOptions, Pending, SignedIn } from "./oidc-types.ts";
+import type { SessionActor } from "./sessions.ts";
 
-/** How long a sign-in may take between the redirect to the provider and its callback. */
-const PENDING_MS = 600_000;
-/** How long the provider's answers may take. */
-const PROVIDER_TIMEOUT_MS = 10_000;
-/** The most roles one sign-in carries, and the longest role name. */
-const MAX_ROLES = 50;
-const MAX_ROLE_CHARS = 100;
-const MAX_NAME_CHARS = 100;
-const MAX_SUBJECT_CHARS = 256;
-/** The most characters of one stored claim, as JSON. */
-const MAX_CLAIM_CHARS = 2000;
-/** How seldom a live session is reported again to `onSessionVerified`. */
-const VERIFIED_EVERY_MS = 300_000;
-/** The most sessions whose last report is remembered before the lapsed ones are dropped. */
-const VERIFIED_PRUNE_AT = 1024;
-/** Answers to a silent request that mean "the person must be asked", not "something is wrong". */
-const INTERACTION_NEEDED = new Set([
-	"login_required",
-	"interaction_required",
-	"account_selection_required",
-	"consent_required",
-]);
-
-/** The provider's endpoints, from its discovery document. */
-export interface ProviderMetadata {
-	authorizationEndpoint: string;
-	tokenEndpoint: string;
-	jwksUri: string;
-	/** Where logout can also sign out at the provider; absent when it offers none. */
-	endSessionEndpoint?: string;
-}
-
-/** A URL the provider's discovery document named, already checked; throws if it somehow is none. */
-function urlOf(value: string): URL {
-	const url = URL.parse(value);
-	if (!url)
-		throw new PluginError("pi-roundtable-web: an oidc endpoint is no URL");
-	return url;
-}
-
-const endpoint = (value: unknown): string | undefined => {
-	const url = typeof value === "string" ? URL.parse(value) : null;
-	if (!url) return undefined;
-	const loopback =
-		url.protocol === "http:" &&
-		["127.0.0.1", "[::1]", "localhost"].includes(url.hostname);
-	return url.protocol === "https:" || loopback ? url.href : undefined;
-};
-
-/**
- * Reads the provider's discovery document and checks it names this issuer. Throws a PluginError
- * naming what is wrong, so a host with a wrong issuer or an unreachable provider stops at start.
- */
-export async function discoverProvider(
-	settings: Pick<ResolvedOidc, "issuer" | "discoveryUrl">,
-	fetcher: typeof fetch = fetch,
-): Promise<ProviderMetadata> {
-	const fail = (what: string): never => {
-		throw new PluginError(
-			`pi-roundtable-web: the oidc discovery document at ${settings.discoveryUrl} ${what}`,
-		);
-	};
-	let body: Record<string, unknown>;
-	try {
-		const response = await fetcher(settings.discoveryUrl, {
-			signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
-		});
-		if (!response.ok) return fail(`answered ${response.status}`);
-		body = (await response.json()) as Record<string, unknown>;
-	} catch (error) {
-		if (error instanceof PluginError) throw error;
-		return fail("could not be read");
-	}
-	if (body.issuer !== settings.issuer)
-		fail(
-			`names the issuer ${JSON.stringify(body.issuer)}, not ${JSON.stringify(settings.issuer)}`,
-		);
-	const authorizationEndpoint = endpoint(body.authorization_endpoint);
-	const tokenEndpoint = endpoint(body.token_endpoint);
-	const jwksUri = endpoint(body.jwks_uri);
-	if (!authorizationEndpoint || !tokenEndpoint || !jwksUri)
-		fail("lacks an https authorization_endpoint, token_endpoint or jwks_uri");
-	const end = endpoint(body.end_session_endpoint);
-	return {
-		authorizationEndpoint: authorizationEndpoint as string,
-		tokenEndpoint: tokenEndpoint as string,
-		jwksUri: jwksUri as string,
-		...(end ? { endSessionEndpoint: end } : {}),
-	};
-}
-
-/** What a sign-in did, for the event and the people-naming hooks; never carries a token or a claim. */
-export interface SignedIn {
-	principalId: string;
-	/** `<provider>:<subject>`. */
-	speakerId: string;
-	provider: string;
-	name: string;
-}
-
-export interface OidcLoginOptions {
-	settings: ResolvedOidc;
-	metadata: ProviderMetadata;
-	/** The client secret, when the client is confidential. */
-	clientSecret?: string;
-	sessions: WebSessions;
-	/** The session key, which signs the pending-login cookie. */
-	key: Buffer;
-	origin: string;
-	mount: string;
-	/** The app's surface, such as `app`: the prefix of the roles a sign-in carries. */
-	surface: string;
-	routing: "hash" | "path";
-	title: string;
-	presentation?: ConsolePresentation | undefined;
-	/** Who the actor is and the tier they hold; the same admission every request passes. */
-	identify(actor: ActorFacts): Promise<Identified>;
-	/** A sign-in completed: the host's event and name hooks. Never throws into the flow. */
-	onSignIn?(info: SignedIn): void | Promise<void>;
-	/** A session ended (logout), so the sockets on it can close. */
-	onEnded?(sessionId: string): void;
-	/** A request or an open socket proved a live session of this person: the host's `onSessionVerified`. */
-	onSessionVerified?(principalId: string): void | Promise<void>;
-	logger: Logger;
-	/** The provider's signing keys; the published ones by default. */
-	keys?: JWTVerifyGetKey;
-	fetch?: typeof fetch;
-	/** The clock, in milliseconds; default `Date.now`. */
-	now?: () => number;
-}
-
-interface Pending {
-	/** state */
-	s: string;
-	/** nonce */
-	n: string;
-	/** PKCE verifier */
-	v: string;
-	/** where to go afterwards */
-	x?: string;
-	/** the request was silent (`prompt=none`) */
-	i: boolean;
-	/** expires, ms */
-	e: number;
-}
-
-/** A request with no usable session, which signing in would fix. */
-const needsSignIn = (why: string): Unauthenticated => ({
-	refusal: why,
-	status: 401,
-	login: true,
-});
-
-const sha256 = (value: string | Buffer) =>
-	createHash("sha256").update(value).digest();
-
-const same = (a: Buffer, b: Buffer) =>
-	a.length === b.length && timingSafeEqual(a, b);
-
-const cookieValue = (
-	header: string | null,
-	name: string,
-): string | undefined => {
-	for (const part of (header ?? "").split(";")) {
-		const at = part.indexOf("=");
-		if (at > 0 && part.slice(0, at).trim() === name)
-			return part.slice(at + 1).trim();
-	}
-	return undefined;
-};
-
-/** A claim's text, or undefined when it is not a usable string. */
-const textClaim = (value: unknown, limit: number): string | undefined => {
-	const text =
-		typeof value === "number" && Number.isFinite(value) ? String(value) : value;
-	return typeof text === "string" && text.trim() && text.length <= limit
-		? text.trim()
-		: undefined;
-};
+export type { OidcLoginOptions, SignedIn };
+export { discoverProvider, type ProviderMetadata };
 
 /**
  * Sign-in with an OpenID Connect provider, and the app's session behind it.
