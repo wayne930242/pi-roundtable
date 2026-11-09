@@ -1,5 +1,6 @@
 import { readCharacter } from "../../characters/index.ts";
 import { scopeToGuild } from "../db/guild-scope.ts";
+import { convergeLegacyChannelPlaces } from "../db/legacy-channels.ts";
 import type { Migration } from "../db/migrations.ts";
 import type { ThinkingLevel } from "../domain/models.ts";
 import { promptHistoryMigration } from "../modules/prompts/prompt-history.ts";
@@ -113,18 +114,36 @@ export const agentsMigration: Migration = {
 	},
 };
 
+/** The table of stored places: one row per agent or group per surface, under the team's id. */
+export const agentPlacesMigration: Migration = {
+	name: "agent-places",
+	up: async (sql) => {
+		await sql`
+			CREATE TABLE IF NOT EXISTS agent_places (
+				team_id text NOT NULL,
+				kind text NOT NULL CHECK (kind IN ('agent', 'group')),
+				name text NOT NULL,
+				surface text NOT NULL,
+				external_id text NOT NULL,
+				created_at timestamptz NOT NULL DEFAULT now(),
+				PRIMARY KEY (team_id, kind, name, surface),
+				UNIQUE (team_id, surface, external_id)
+			)`;
+	},
+};
+
 /**
  * The migrations of the store's tables for the guild the process serves, or the local team
- * without Discord: the tables, then each row's guild, with existing rows given `guildId`, then
+ * without Discord: the tables, then each row's guild, with existing rows given `teamId`, then
  * the group channel made optional.
  */
-export function agentMigrations(guildId: string): Migration[] {
+export function agentMigrations(teamId: string): Migration[] {
 	return [
 		agentsMigration,
 		{
 			name: "agents-guild",
 			up: (sql) =>
-				scopeToGuild(sql, guildId, [
+				scopeToGuild(sql, teamId, [
 					{ table: "agents", key: ["name"] },
 					{ table: "agent_groups", key: ["name"] },
 					{ table: "agent_group_messages", key: ["id"] },
@@ -178,5 +197,20 @@ export function agentMigrations(guildId: string): Migration[] {
 		},
 		// Whom a preset is shared with, besides the agent that saved it.
 		HelperPresets.sharingMigration,
+		// The places of agents and groups on the surfaces that make or bind their own; stored places only.
+		agentPlacesMigration,
 	];
+}
+
+/**
+ * Until 1.0 the channel columns stay the source a rollback reads: the table follows them at every
+ * boot, for this team's rows. Declared after `moveTeam`, which moves the rows of a former id in
+ * with their channel ids, so the rows it moved get their places at that same boot.
+ */
+export function agentPlacesConvergence(teamId: string): Migration {
+	return {
+		name: "agent-places-from-channels",
+		runs: "every-boot",
+		up: convergeLegacyChannelPlaces(teamId),
+	};
 }

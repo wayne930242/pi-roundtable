@@ -14,6 +14,7 @@ import { agentOfChannel, discordKey } from "../agents/team-keys.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
 import { ROOM_LAYOUT } from "../contract/room-layout.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
+import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
 import { moveTeam } from "../db/team-move.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
@@ -136,7 +137,16 @@ export function agentServerPlugin(
 				...(options.guildId === undefined
 					? { clearChannels: true }
 					: { discordGuild: options.guildId }),
+				// The legacy channels' places follow their columns: kept in the agent guild, dropped elsewhere.
+				places: [
+					{
+						surface: LEGACY_CHANNEL_SURFACE,
+						...(options.guildId === undefined ? {} : { keep: options.guildId }),
+					},
+				],
 			}),
+			// After the move, so the rows it brought in with their channel ids get their places at this boot.
+			PgAgentStore.placesConvergence(teamId),
 		],
 		provides: [AGENTS],
 		requires: [RUNTIME],

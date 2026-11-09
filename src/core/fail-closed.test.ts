@@ -54,8 +54,18 @@ const ALLOWED: Record<string, string> = {
 		"the app suites' owner scope, a test fixture",
 	'packages/mcp/src/remote-mcp/default-conversation.ts: tier: "owner"':
 		"REMOTE_SPEAKER, deprecated and no longer used for a turn",
-	'packages/web/src/console-api.ts: ?? "owner"':
+	'packages/web/src/conversation-views.ts: ?? "owner"':
 		"the console's label of a conversation's kind, not a tier",
+	'packages/web/src/testing/auth-harness.ts: tier: "owner"':
+		"the auth suites' owner scope, a test fixture",
+	'packages/web/src/testing/console-api-host.ts: tier: "owner"':
+		"the console API suites' owner scope, a test fixture",
+	'packages/web/src/testing/edit-routes-host.ts: tier: "owner"':
+		"the edit routes suites' owner scope, a test fixture",
+	'packages/web/src/testing/team-routes-host.ts: tier: "owner"':
+		"the team routes suites' owner scope, a test fixture",
+	'packages/web/src/testing/web-plugin-host.ts: tier: "owner"':
+		"the web plugin suites' owner scope, a test fixture",
 	'examples/echo-runtime.ts: ?? "owner"':
 		"the example runtime's persona kind, not a tier",
 	'src/core/testing/fake-discord.ts: ?? "owner"':

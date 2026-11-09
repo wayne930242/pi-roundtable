@@ -1,134 +1,29 @@
-import { join } from "node:path";
-import type {
-	AgentTeam,
-	ChannelKey,
-	ConversationRecord,
-	ConversationRegistry,
-	IdentityService,
-	Logger,
-	MemoryKind,
-	QueuePort,
-	SpeakerMemory,
-	Tier,
-} from "pi-roundtable";
-import {
-	agentRoomKey,
-	groupRoomKey,
-	MemoryError,
-	parseChannelKey,
-	SYSTEM_PRINCIPAL,
-} from "pi-roundtable";
+import type { ChannelKey } from "pi-roundtable";
+import { agentRoomKey, groupRoomKey, MemoryError } from "pi-roundtable";
 import { thinkingLabel } from "pi-roundtable/kit";
 import type {
 	ApiError,
-	ChannelName,
 	ConfigView,
-	ConversationKind,
 	ConversationsView,
-	ConversationView,
 	DashboardView,
-	GateStepView,
-	KindLinkView,
-	NoteInput,
-	NoteView,
 	OverviewView,
-	PageLinkView,
 	PaneName,
-	PrincipalName,
 	PrincipalsView,
 	TranscriptView,
 } from "./api-types.ts";
-import {
-	archiveNames,
-	conversationFiles,
-	parseKey,
-	readTranscript,
-	registeredConversations,
-	registeredDir,
-	type StoredConversation,
-	type StoredKind,
-	storedConversations,
-} from "./conversations.ts";
-import {
-	type ConsoleFeatures,
-	type ConsolePresentation,
-	message,
-	safeAdminUrl,
-} from "./features.ts";
+import { readBody } from "./console-body.ts";
+import type { ConsolePorts } from "./console-ports.ts";
+import { ConversationViews } from "./conversation-views.ts";
+import { message, safeAdminUrl } from "./features.ts";
+import { NotesApi } from "./notes-api.ts";
 import type { Visitor } from "./visitors.ts";
 
-const NOTE_SEARCH_LIMIT = 500;
-/** The largest note body the console reads. */
-const MAX_BODY_BYTES = 64 * 1024;
-
-/** What the app adds to the page's config for one visitor, where it admits more than the owners. */
-export interface AccessView {
-	/** Who may use push, and the key browsers subscribe against when an external sender holds it. */
-	push: { tiers: readonly Tier[]; key?: string; subscribe?: string };
-	/** The required steps the visitor still owes. */
-	gate(visitor: Visitor): Promise<GateStepView[]>;
-}
-
-export interface ConsolePorts {
-	title: string;
-	timeZone: string;
-	/** The owners' panes, which every host serves. */
-	panes: readonly PaneName[];
-	/** The panes of the other tiers, when the host admits more than its owners; absent = none. */
-	tierPanes?: Readonly<Record<Tier, readonly PaneName[]>>;
-	/** Present when the host admits more than its owners (`admission: "access"`). */
-	access?: AccessView;
-	/**
-	 * The pages and kinds of room the host registered, as far as this visitor may see them. The
-	 * config carries them whatever the admission, but only when there are any, so a host that
-	 * registers none sends the page exactly what it did before.
-	 */
-	hosted?: (visitor: Visitor) => Promise<{
-		pages: PageLinkView[];
-		kinds: KindLinkView[];
-	}>;
-	/** The host's `sessions/` directory. */
-	sessionsDir: string;
-	/** Present when the overview pane is served, or the agent server is there to classify channels. */
-	team?: Pick<AgentTeam, "status" | "owns" | "guildId" | "discordGuild">;
-	/**
-	 * The web app's surface, when it hosts the agents' and groups' rooms: the overview then names
-	 * each one's room, which its start-over resets instead of the Discord channel's conversation.
-	 */
-	roomSurface?: string;
-	queue: Pick<QueuePort, "size">;
-	/** Undefined when Discord no longer knows the channel; throws when it cannot be asked. */
-	channelName?: (channelId: string) => Promise<ChannelName | undefined>;
-	/** A principal's memory; present when the notes pane is served. */
-	memoryOf?: (
-		principalId: string,
-	) => Pick<SpeakerMemory, "list" | "search" | "add" | "update" | "removeById">;
-	/** The host's principals, read only: whose notes the pane may show, and the names of conversations' principals. */
-	people?: Pick<IdentityService, "principal" | "list">;
-	/** Conversations the console must not list or read; `record` is what the registry holds of it, if anything. */
-	exclude?: (key: ChannelKey, record?: ConversationRecord) => boolean;
-	/** The host's conversation registry; without it only the conversations found by name are listed. */
-	registry?: Pick<ConversationRegistry, "list" | "get">;
-	/** Text a relayed message begins with, which is not the owner's words. */
-	relayNotes: readonly string[];
-	/** Called after a note is written, so every open page refreshes. */
-	changed(): void;
-	logger: Logger;
-	features?: ConsoleFeatures;
-	presentation?: ConsolePresentation;
-	mountPath?: string;
-	look?: "modern" | "camelot";
-	/** The host's six skin tones, which the page draws every character with. */
-	characterSkins?: readonly string[];
-	/** Present when the owner app is served: its rooms' key prefix, for the page. */
-	app?: { surface: string; protocol: string; modes?: false };
-}
+export type { AccessView, ConsolePorts } from "./console-ports.ts";
 
 import { cleanupConversation } from "./cleanup-api.ts";
 import { connectorRoutes, grantRoutes } from "./connector-manage-api.ts";
 import { connectorsView } from "./connectors-api.ts";
 import { ConsoleHttpError as HttpError, json } from "./http.ts";
-import { readLimited } from "./request-body.ts";
 import { skillCatalog, skillDetail } from "./skills-api.ts";
 
 /** Memory refusals as the Notes pane shows them. */
@@ -151,8 +46,13 @@ const iso = (date: Date | undefined) => date?.toISOString();
 export class ConsoleApi {
 	readonly #ports: ConsolePorts;
 
+	readonly #conversations: ConversationViews;
+	readonly #notes: NotesApi;
+
 	constructor(ports: ConsolePorts) {
 		this.#ports = ports;
+		this.#conversations = new ConversationViews(ports);
+		this.#notes = new NotesApi(ports);
 	}
 
 	/** `path` is what follows `<mount>/api/`; `visitor` is the owner the request comes from. */
@@ -276,7 +176,7 @@ export class ConsoleApi {
 			return this.#manage(request, parts.slice(1), visitor);
 		if (head === "notes" && parts.length <= 2) {
 			this.#pane("notes", visitor);
-			return this.#notes(request, id, visitor);
+			return this.#notes.notes(request, id, visitor);
 		}
 		if (method === "GET" && head === "principals" && !id) {
 			this.#pane("notes", visitor);
@@ -431,282 +331,21 @@ export class ConsoleApi {
 
 	// ── Conversations ──────────────────────────────────────────────────────
 
-	async conversations(visitor?: Visitor): Promise<ConversationsView> {
-		const { sessionsDir, relayNotes, registry } = this.#ports;
-		const owner = visitor === undefined || visitor.tier === "owner";
-		// A visitor who is not an owner reads their own private conversations, found by the registry alone.
-		const records = registry
-			? await registry.list(
-					owner ? undefined : { principal: visitor.principal.id },
-				)
-			: [];
-		const byKey = new Map(records.map((record) => [record.key, record]));
-		const filter = {
-			excluded: (key: ChannelKey) => this.#hidden(key, byKey.get(key)),
-			relayNotes,
-		};
-		const mine = owner
-			? records
-			: records.filter(
-					(record) =>
-						record.visibility === "private" &&
-						record.principalId === visitor.principal.id,
-				);
-		// The registry first; the directory scan reads the conversations from before it, by name.
-		const recorded = registeredConversations(sessionsDir, mine, filter);
-		const stored = [
-			...recorded,
-			...(owner ? storedConversations(sessionsDir, filter) : []),
-		].sort((a, b) => (b.lastActive ?? "").localeCompare(a.lastActive ?? ""));
-		const names = new Map<string, Promise<PrincipalName>>();
-		return {
-			conversations: await Promise.all(
-				stored.map((c) => this.#view(c, byKey.get(c.key), names)),
-			),
-		};
+	conversations(visitor?: Visitor): Promise<ConversationsView> {
+		return this.#conversations.conversations(visitor);
 	}
 
-	#hidden(key: ChannelKey, record?: ConversationRecord): boolean {
-		return (
-			(this.#ports.exclude?.(key, record) ?? false) ||
-			(this.#ports.features?.party?.contains(key) ?? false)
-		);
-	}
-
-	/** The session directory and identity of a conversation the console may read, or undefined. */
-	async #located(
-		key: string,
-	): Promise<
-		{ dir: string; kind: StoredKind; id: string; member?: string } | undefined
-	> {
-		const parsed = parseKey(key);
-		if (parsed) return parsed;
-		const record = await this.#ports.registry?.get(key as ChannelKey);
-		return record
-			? {
-					dir: registeredDir(record.key),
-					kind: "registered",
-					id: parseChannelKey(record.key).id,
-				}
-			: undefined;
-	}
-
-	async transcript(
+	transcript(
 		key: string,
 		archive: string | undefined,
 		visitor?: Visitor,
 	): Promise<TranscriptView> {
-		const { sessionsDir, relayNotes } = this.#ports;
-		const record = await this.#ports.registry?.get(key as ChannelKey);
-		const parsed = await this.#located(key);
-		// Anyone but an owner reads only a private conversation of their own, which the registry records.
-		const mayRead =
-			visitor === undefined ||
-			visitor.tier === "owner" ||
-			(record?.visibility === "private" &&
-				record.principalId === visitor.principal.id);
-		if (!parsed || !mayRead || this.#hidden(key as ChannelKey, record))
-			throw new HttpError(404, "There is no such conversation.");
-		const dir = join(sessionsDir, parsed.dir);
-		const files = conversationFiles(dir);
-		if (!files) throw new HttpError(404, "There is no such conversation.");
-		const archives = archiveNames(dir);
-		// The archive is chosen from the folder's listing, never joined from the request.
-		if (archive !== undefined && !archives.includes(archive))
-			throw new HttpError(404, "There is no such archive.");
-		const { entries, truncated } = readTranscript(dir, archive, relayNotes);
-		return {
-			conversation: await this.#view(
-				{
-					key: key as ChannelKey,
-					kind: parsed.kind,
-					id: parsed.id,
-					...(parsed.member ? { member: parsed.member } : {}),
-					...files,
-				},
-				record,
-			),
-			archives,
-			...(archive !== undefined ? { archive } : {}),
-			entries,
-			truncated,
-		};
-	}
-
-	/**
-	 * How the page shows a conversation. `record` is what the registry holds of it, which says whose
-	 * it is; `names` gathers the principals' names one listing reads, so each is read once.
-	 */
-	async #view(
-		stored: StoredConversation,
-		record: ConversationRecord | undefined,
-		names = new Map<string, Promise<PrincipalName>>(),
-	): Promise<ConversationView> {
-		const { team, queue } = this.#ports;
-		const owner = record?.principalId;
-		let principal: Promise<PrincipalName> | undefined;
-		if (owner !== undefined) {
-			principal = names.get(owner) ?? this.#principalName(owner);
-			names.set(owner, principal);
-		}
-		const kind: ConversationKind =
-			stored.kind === "mcp"
-				? "outside"
-				: stored.kind === "registered"
-					? "plugin"
-					: stored.kind === "group"
-						? "group"
-						: (team?.owns(stored.key) ?? "owner");
-		return {
-			key: stored.key,
-			kind,
-			id: stored.id,
-			...(stored.member ? { member: stored.member } : {}),
-			...(stored.kind === "mcp" || stored.kind === "registered"
-				? {}
-				: { channel: await this.#name(stored.id) }),
-			...(stored.title === undefined ? {} : { title: stored.title }),
-			liveBytes: stored.liveBytes,
-			archives: stored.archives,
-			...(stored.lastActive ? { lastActive: stored.lastActive } : {}),
-			...(stored.firstMessage ? { firstMessage: stored.firstMessage } : {}),
-			...(stored.startedAt ? { startedAt: stored.startedAt } : {}),
-			...(record ? { visibility: record.visibility } : {}),
-			...(principal ? { principal: await principal } : {}),
-			// A group's turns queue under the group channel, not under each member's conversation.
-			busy: queue.size(
-				stored.kind === "group" ? `discord:${stored.id}` : stored.key,
-			),
-		};
-	}
-
-	async #principalName(id: string): Promise<PrincipalName> {
-		const known = await this.#ports.people?.principal(id);
-		return { id, name: known?.displayName ?? id };
-	}
-
-	async #name(channelId: string): Promise<ChannelName> {
-		const lookup = this.#ports.channelName;
-		if (!lookup) return { kind: "unknown" };
-		try {
-			return (await lookup(channelId)) ?? { kind: "gone" };
-		} catch {
-			// Discord is reconnecting; the id is all the page can show until the next refresh.
-			return { kind: "unknown" };
-		}
+		return this.#conversations.transcript(key, archive, visitor);
 	}
 
 	// ── Notes ──────────────────────────────────────────────────────────────
 
-	/** The people whose notes the pane can show: every principal but the host's own, the visitor first. */
-	async principals(visitor: Visitor): Promise<PrincipalsView> {
-		const self = visitor.principal.id;
-		// Anyone but an owner has their own notes and no one else's to choose from.
-		if (visitor.tier !== "owner")
-			return {
-				self,
-				principals: [{ id: self, name: visitor.principal.displayName }],
-			};
-		const everyone = (await this.#ports.people?.list()) ?? [visitor.principal];
-		const listed = [
-			...everyone.filter((p) => p.id === self),
-			...everyone.filter((p) => p.id !== self && p.id !== SYSTEM_PRINCIPAL),
-		];
-		return {
-			self,
-			principals: listed.map((p) => ({
-				id: p.id,
-				name: p.displayName,
-				...(p.disabled ? { disabled: true as const } : {}),
-			})),
-		};
+	principals(visitor: Visitor): Promise<PrincipalsView> {
+		return this.#notes.principals(visitor);
 	}
-
-	/** The memory of the principal the request names, default the visitor's own. */
-	async #memoryFor(request: Request, visitor: Visitor) {
-		const { memoryOf, people } = this.#ports;
-		if (!memoryOf) throw new HttpError(404, "This pane is not served.");
-		const named = new URL(request.url).searchParams.get("principal");
-		if (named === null || named === visitor.principal.id)
-			return memoryOf(visitor.principal.id);
-		// Another person's notes are the owners' to read.
-		if (visitor.tier !== "owner")
-			throw new HttpError(403, "Only an owner may do this.");
-		// The host's own principal keeps no notes; anyone else must be a principal the host knows.
-		if (named === SYSTEM_PRINCIPAL || !(await people?.principal(named)))
-			throw new HttpError(404, "There is no such person.");
-		return memoryOf(named);
-	}
-
-	async #notes(
-		request: Request,
-		id: string | undefined,
-		visitor: Visitor,
-	): Promise<Response> {
-		const memory = await this.#memoryFor(request, visitor);
-		const method = request.method;
-		if (!id) {
-			if (method === "GET") {
-				const query = new URL(request.url).searchParams.get("q")?.trim();
-				const notes: NoteView[] = query
-					? await memory.search(query, NOTE_SEARCH_LIMIT)
-					: await memory.list();
-				return json(notes);
-			}
-			if (method === "POST") {
-				const input = await noteInput(request);
-				const added = await memory.add(input.fact, input.kind, input.eventDate);
-				this.#ports.changed();
-				return json(added, 201);
-			}
-		} else {
-			const noteId = Number(id);
-			if (!Number.isSafeInteger(noteId))
-				throw new HttpError(404, "There is no such note.");
-			if (method === "PATCH") {
-				const updated = await memory.update(noteId, await noteInput(request));
-				if (!updated) throw new HttpError(404, "There is no such note.");
-				this.#ports.changed();
-				return json(updated);
-			}
-			if (method === "DELETE") {
-				if (!(await memory.removeById(noteId)))
-					throw new HttpError(404, "There is no such note.");
-				this.#ports.changed();
-				return json({ deleted: noteId });
-			}
-		}
-		throw new HttpError(405, "This method is not supported.");
-	}
-}
-
-/** The JSON body; undefined when it is not JSON. */
-async function readBody(request: Request): Promise<unknown> {
-	const raw = await readLimited(request, MAX_BODY_BYTES);
-	if (!raw) throw new HttpError(413, "The request is too large.");
-	try {
-		return JSON.parse(raw.toString("utf8"));
-	} catch {
-		return undefined;
-	}
-}
-
-async function noteInput(request: Request): Promise<{
-	fact: string;
-	kind: MemoryKind;
-	eventDate?: string;
-}> {
-	const body = await readBody(request);
-	if (typeof body !== "object" || body === null)
-		throw new HttpError(400, "The body is not valid.");
-	const { fact, kind, eventDate } = body as Partial<NoteInput>;
-	if (typeof fact !== "string" || typeof kind !== "string")
-		throw new HttpError(400, "The body is not valid.");
-	if (eventDate !== undefined && typeof eventDate !== "string")
-		throw new HttpError(400, "The date is not valid.");
-	return {
-		fact,
-		kind: kind as MemoryKind,
-		...(eventDate ? { eventDate } : {}),
-	};
 }

@@ -109,13 +109,14 @@ export class AgentStatements {
 			RETURNING *`;
 	}
 
-	/** Deletes the agent's row, its group cursors and its prompt history together. */
+	/** Deletes the agent's row, its group cursors and its prompt history; run it in a transaction. */
 	async deleteAgent(name: string): Promise<void> {
-		await this.#sql.begin(async (tx) => {
-			await tx`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND agent_name = ${name}`;
-			await tx`DELETE FROM prompt_history WHERE guild_id = ${this.#guild} AND kind = 'agent' AND name = ${name}`;
-			await tx`DELETE FROM agents WHERE guild_id = ${this.#guild} AND name = ${name}`;
-		});
+		await this
+			.#sql`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND agent_name = ${name}`;
+		await this
+			.#sql`DELETE FROM prompt_history WHERE guild_id = ${this.#guild} AND kind = 'agent' AND name = ${name}`;
+		await this
+			.#sql`DELETE FROM agents WHERE guild_id = ${this.#guild} AND name = ${name}`;
 	}
 
 	/** Gives an agent a character and picture only while it has no character. */
@@ -183,13 +184,14 @@ export class AgentStatements {
 			RETURNING *`;
 	}
 
-	/** Deletes the group's row, messages and cursors, in the Discord channel's log and each room's. */
+	/** Deletes the group's row, messages and cursors, in the Discord channel's log and each room's; run it in a transaction. */
 	async deleteGroup(name: string): Promise<void> {
 		const rooms = `${name}@%`;
-		await this.#sql.begin(async (tx) => {
-			await tx`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND (group_name = ${name} OR group_name LIKE ${rooms})`;
-			await tx`DELETE FROM agent_group_messages WHERE guild_id = ${this.#guild} AND (group_name = ${name} OR group_name LIKE ${rooms})`;
-			await tx`DELETE FROM agent_groups WHERE guild_id = ${this.#guild} AND name = ${name}`;
-		});
+		await this
+			.#sql`DELETE FROM agent_group_cursors WHERE guild_id = ${this.#guild} AND (group_name = ${name} OR group_name LIKE ${rooms})`;
+		await this
+			.#sql`DELETE FROM agent_group_messages WHERE guild_id = ${this.#guild} AND (group_name = ${name} OR group_name LIKE ${rooms})`;
+		await this
+			.#sql`DELETE FROM agent_groups WHERE guild_id = ${this.#guild} AND name = ${name}`;
 	}
 }

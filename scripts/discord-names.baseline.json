@@ -17,13 +17,13 @@
 		"discord-surface": 2
 	},
 	"src/core/agents/agent-schema.ts": {
-		"guild": 7
+		"guild": 5
 	},
 	"src/core/agents/agent-statements.ts": {
 		"guild": 38
 	},
 	"src/core/agents/agent-store.ts": {
-		"guild": 19
+		"guild": 2
 	},
 	"src/core/agents/agent-team.ts": {
 		"discord-identifier": 5,

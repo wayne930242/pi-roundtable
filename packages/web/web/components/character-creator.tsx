@@ -1,280 +1,33 @@
 import {
 	AVATAR_STATES,
 	type AvatarState,
-	CATALOG,
 	type CharacterInput,
 	type CharacterSpec,
-	CLASS_IDS,
-	type ClassId,
-	type PaletteName,
 	resolveCharacter,
 	suggestCharacter,
 } from "pi-roundtable/characters";
-import {
-	memo,
-	type ReactNode,
-	useDeferredValue,
-	useEffect,
-	useId,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 import type { AgentProfileView } from "../../src/api-types.ts";
 import { ApiFailure, api, messageOf } from "../lib/api.ts";
-import {
-	characterJobs,
-	characterLabel,
-	type LabelKind,
-} from "../lib/character-labels.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { CREATOR_CSS } from "../lib/creator-style.ts";
 import { installStyle } from "../lib/lazy-style.ts";
 import { useMedia } from "../lib/media.ts";
-import { translate as t, wording } from "../lib/messages.ts";
-import { blockNavigation } from "../lib/router.ts";
+import { translate as t } from "../lib/messages.ts";
 import { useSkins } from "../lib/skins.ts";
 import { toast } from "../lib/toast.ts";
 import { PageCharacter } from "./character.tsx";
 import { Confirm } from "./confirm.tsx";
+import { creatorFields } from "./creator-fields.tsx";
+import { type Leaving, useLeaveGuard } from "./creator-leave.tsx";
+import {
+	canon,
+	inputOf,
+	RENDERED_FIELDS,
+	randomInput,
+	STATE_LABELS,
+} from "./creator-parts.ts";
 import { Sheet } from "./sheet.tsx";
-
-/** The fields a part strip changes. */
-type PartField = "hat" | "outfit" | "prop" | "hair" | "beard" | "accessory";
-
-const PARTS: {
-	field: PartField;
-	title: string;
-	ids: readonly string[];
-}[] = [
-	{ field: "hat", title: wording("Hat"), ids: CATALOG.hats },
-	{ field: "outfit", title: wording("Outfit"), ids: CATALOG.outfits },
-	{ field: "prop", title: wording("Prop"), ids: CATALOG.props },
-	{ field: "hair", title: wording("Hair"), ids: CATALOG.hair },
-	{ field: "beard", title: wording("Beard"), ids: ["none", ...CATALOG.beards] },
-	{
-		field: "accessory",
-		title: wording("Accessory"),
-		ids: ["none", ...CATALOG.accessories],
-	},
-];
-
-/** The fields the form renders an error under; any other field a server names is reported in the general slot. */
-const RENDERED_FIELDS: ReadonlySet<string> = new Set([
-	"class",
-	"colors",
-	"palette",
-	"build",
-	"skin",
-	"hairColor",
-	...PARTS.map((part) => part.field),
-]);
-
-const PALETTES = Object.keys(CATALOG.palettes) as PaletteName[];
-
-const STATE_LABELS: Record<AvatarState, string> = {
-	idle: wording("Idle"),
-	thinking: wording("Thinking"),
-	working: wording("Working"),
-	waiting: wording("Waiting for you"),
-	done: wording("Done"),
-	error: wording("Error"),
-	sleepy: wording("Sleepy"),
-};
-
-const BUILD_LABELS: Record<CharacterSpec["build"], string> = {
-	slim: wording("Slim"),
-	regular: wording("Regular"),
-	stout: wording("Stout"),
-};
-
-/** The fields the server takes, from a spec; `palette` is left to the server to work out from the colors. */
-function inputOf(spec: CharacterSpec): CharacterInput {
-	return {
-		class: spec.class,
-		outfit: spec.outfit,
-		hat: spec.hat,
-		prop: spec.prop,
-		hair: spec.hair,
-		beard: spec.beard,
-		accessory: spec.accessory,
-		build: spec.build,
-		skin: spec.skin,
-		hairColor: spec.hairColor,
-		colors: { ...spec.colors },
-	};
-}
-
-/** A spec as a string that is the same for the same look, to tell a change from none. */
-const canon = (spec: CharacterSpec): string => JSON.stringify(inputOf(spec));
-
-const pick = <T,>(list: readonly T[]): T =>
-	list[Math.floor(Math.random() * list.length)] as T;
-
-/** A random look from the catalog. */
-function randomInput(): CharacterInput {
-	return {
-		class: pick(CLASS_IDS),
-		outfit: pick(CATALOG.outfits),
-		hat: pick(CATALOG.hats),
-		prop: pick(CATALOG.props),
-		hair: pick(CATALOG.hair),
-		beard: pick(["none", ...CATALOG.beards] as const),
-		accessory: pick(["none", ...CATALOG.accessories] as const),
-		build: pick(["slim", "regular", "stout"] as const),
-		skin: pick([0, 1, 2, 3, 4, 5] as const),
-		hairColor: pick(CATALOG.hairColors),
-		palette: pick(PALETTES),
-	};
-}
-
-/** One choice of a strip or grid: a small drawing and its name. */
-const Tile = memo(function Tile(props: {
-	data: Record<string, string>;
-	spec: CharacterSpec;
-	size: number;
-	label: string;
-	hint?: string | undefined;
-	pressed: boolean;
-	onPick(): void;
-}) {
-	return (
-		<button
-			type="button"
-			className="creator-tile"
-			aria-pressed={props.pressed}
-			title={props.hint ? `${props.label} — ${props.hint}` : props.label}
-			onClick={props.onPick}
-			{...props.data}
-		>
-			<PageCharacter spec={props.spec} size={props.size} live={false} />
-			<span>{props.label}</span>
-		</button>
-	);
-});
-
-/** The wearer with each choice of one field, drawn small, so the strip shows what the choice does. */
-function usePreviews(
-	base: CharacterSpec,
-	field: PartField,
-	ids: readonly string[],
-): CharacterSpec[] {
-	const rest = JSON.stringify({ ...base, [field]: 0 });
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `rest` is the base without the field
-	return useMemo(
-		() => ids.map((id) => ({ ...base, [field]: id }) as CharacterSpec),
-		[rest, field, ids],
-	);
-}
-
-/**
- * Which ends of a row that scrolls sideways have more of it beyond them, so the row can fade there and
- * a person sees that it goes on: `start` (more to the left), `end`, `both`, or nothing when it fits.
- */
-function useScrollCue(): [
-	React.RefObject<HTMLDivElement | null>,
-	"start" | "end" | "both" | undefined,
-] {
-	const row = useRef<HTMLDivElement>(null);
-	const [cue, setCue] = useState<"start" | "end" | "both" | undefined>();
-	useEffect(() => {
-		const element = row.current;
-		if (!element) return;
-		const measure = () => {
-			const before = element.scrollLeft > 1;
-			const after =
-				element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
-			setCue(
-				before && after ? "both" : after ? "end" : before ? "start" : undefined,
-			);
-		};
-		measure();
-		element.addEventListener("scroll", measure, { passive: true });
-		const watch =
-			typeof ResizeObserver === "undefined"
-				? undefined
-				: new ResizeObserver(measure);
-		watch?.observe(element);
-		return () => {
-			element.removeEventListener("scroll", measure);
-			watch?.disconnect();
-		};
-	}, []);
-	return [row, cue];
-}
-
-function Strip(props: {
-	part: (typeof PARTS)[number];
-	draft: CharacterSpec;
-	shown: CharacterSpec;
-	onPick(id: string): void;
-}) {
-	const { part } = props;
-	const previews = usePreviews(props.shown, part.field, part.ids);
-	const [row, cue] = useScrollCue();
-	return (
-		<div className="creator-strip" ref={row} data-more={cue}>
-			{part.ids.map((id, index) => (
-				<Tile
-					key={id}
-					data={{ [`data-${part.field}`]: id }}
-					spec={previews[index] as CharacterSpec}
-					size={44}
-					label={characterLabel(part.field as LabelKind, id)}
-					pressed={props.draft[part.field] === id}
-					onPick={() => props.onPick(id)}
-				/>
-			))}
-		</div>
-	);
-}
-
-/** A swatch button. */
-function Swatch(props: {
-	data: Record<string, string>;
-	label: string;
-	pressed: boolean;
-	background: string;
-	onPick(): void;
-}) {
-	return (
-		<button
-			type="button"
-			className="creator-swatch"
-			aria-pressed={props.pressed}
-			aria-label={props.label}
-			title={props.label}
-			style={{ background: props.background }}
-			onClick={props.onPick}
-			{...props.data}
-		/>
-	);
-}
-
-function Field(props: {
-	field: string;
-	title?: string;
-	error: string | undefined;
-	children: ReactNode;
-}) {
-	return (
-		<div className="creator-field" data-field={props.field}>
-			{props.title ? <h3>{props.title}</h3> : null}
-			{props.children}
-			{props.error ? (
-				<p className="field-error" role="alert">
-					{props.error}
-				</p>
-			) : null}
-		</div>
-	);
-}
-
-/** What the person is trying to leave with unsaved changes: the form itself, or by a link. */
-type Leaving =
-	| { kind: "cancel" }
-	| { kind: "link"; anchor: HTMLAnchorElement }
-	| { kind: "navigate"; proceed(): void };
 
 /**
  * The creator and re-dress form of an agent's character: a live preview, the 24 classes, the
@@ -313,40 +66,8 @@ export function CharacterCreator(props: {
 	// A new saved character (after Save, or another tab's change) starts a fresh draft.
 	useEffect(() => setDraft(props.character), [props.character]);
 
-	// Unsaved changes ask before the page is left: closing or reloading, and a link inside the app.
-	useEffect(() => {
-		// A look still to be picked for an agent not made yet is not a change to something saved.
-		if (!dirty || props.onPick) return;
-		const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
-		const onClick = (event: MouseEvent) => {
-			if (
-				event.button !== 0 ||
-				event.metaKey ||
-				event.ctrlKey ||
-				event.shiftKey ||
-				event.altKey
-			)
-				return;
-			const anchor =
-				event.target instanceof Element ? event.target.closest("a") : null;
-			if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
-			if (root.current?.contains(anchor)) return;
-			event.preventDefault();
-			event.stopPropagation();
-			setLeaving({ kind: "link", anchor });
-		};
-		// Navigation by code (the room switcher) and the browser's back or a swipe.
-		const release = blockNavigation((proceed) =>
-			setLeaving({ kind: "navigate", proceed }),
-		);
-		window.addEventListener("beforeunload", beforeUnload);
-		document.addEventListener("click", onClick, true);
-		return () => {
-			release();
-			window.removeEventListener("beforeunload", beforeUnload);
-			document.removeEventListener("click", onClick, true);
-		};
-	}, [dirty, props.onPick]);
+	// Unsaved changes ask before the page is left. A look still to be picked for an agent not made yet is not a change to something saved.
+	useLeaveGuard(root, dirty && !props.onPick, setLeaving);
 
 	const change = (input: CharacterInput) => {
 		setErrors({});
@@ -387,183 +108,14 @@ export function CharacterCreator(props: {
 		} else if (target?.kind === "navigate") target.proceed();
 	};
 
-	const classGrid = (
-		<Field field="class" title={t("Class")} error={errors.class}>
-			<div className="creator-grid">
-				{CLASS_IDS.map((id) => (
-					<ClassTile
-						key={id}
-						id={id}
-						base={shown}
-						pressed={draft.class === id}
-						onPick={() => change({ class: id, colors: draft.colors })}
-					/>
-				))}
-			</div>
-		</Field>
-	);
-
-	const colors = (
-		<Field
-			field="colors"
-			title={t("Colors")}
-			error={errors.colors ?? errors.palette}
-		>
-			<fieldset className="creator-swatches">
-				<legend className="visually-hidden">{t("Palette")}</legend>
-				{PALETTES.map((name) => {
-					const colors = CATALOG.palettes[name];
-					return (
-						<Swatch
-							key={name}
-							data={{ "data-palette": name }}
-							label={characterLabel("palette", name)}
-							pressed={draft.palette === name}
-							background={`linear-gradient(135deg, ${colors.primary} 52%, ${colors.trim} 52%)`}
-							onPick={() => change({ palette: name })}
-						/>
-					);
-				})}
-			</fieldset>
-			<div className="creator-custom">
-				{(["primary", "secondary", "trim"] as const).map((key) => (
-					<label key={key}>
-						<span>
-							{key === "primary"
-								? t("Primary (the accent)")
-								: key === "secondary"
-									? t("Secondary")
-									: t("Trim")}
-						</span>
-						<input
-							type="color"
-							value={draft.colors[key]}
-							onChange={(event) =>
-								change({ colors: { [key]: event.target.value } })
-							}
-						/>
-					</label>
-				))}
-			</div>
-		</Field>
-	);
-
-	const parts = PARTS.map((part) => (
-		<Field
-			key={part.field}
-			field={part.field}
-			title={t(part.title)}
-			error={errors[part.field]}
-		>
-			<Strip
-				part={part}
-				draft={draft}
-				shown={shown}
-				onPick={(id) => change({ [part.field]: id })}
-			/>
-		</Field>
-	));
-
-	const body = (
-		<>
-			<Field field="build" title={t("Build")} error={errors.build}>
-				<fieldset className="segmented">
-					<legend className="visually-hidden">{t("Build")}</legend>
-					{(["slim", "regular", "stout"] as const).map((build) => (
-						<label key={build} data-checked={draft.build === build}>
-							<input
-								type="radio"
-								name={`${titleId}-build`}
-								checked={draft.build === build}
-								onChange={() => change({ build })}
-							/>
-							{characterLabelBuild(build)}
-						</label>
-					))}
-				</fieldset>
-			</Field>
-			<Field field="skin" title={t("Skin tone")} error={errors.skin}>
-				<fieldset className="creator-swatches">
-					<legend className="visually-hidden">{t("Skin tone")}</legend>
-					{(skins ?? CATALOG.skins).map((hex, index) => (
-						<Swatch
-							// biome-ignore lint/suspicious/noArrayIndexKey: six fixed positions, and a host may repeat a tone
-							key={index}
-							data={{ "data-skin": String(index) }}
-							label={t("Skin tone {n}", { n: index + 1 })}
-							pressed={draft.skin === index}
-							background={hex}
-							onPick={() => change({ skin: index as CharacterSpec["skin"] })}
-						/>
-					))}
-				</fieldset>
-			</Field>
-			<Field field="hairColor" title={t("Hair color")} error={errors.hairColor}>
-				<fieldset className="creator-swatches">
-					<legend className="visually-hidden">{t("Hair color")}</legend>
-					{CATALOG.hairColors.map((hex, index) => (
-						<Swatch
-							key={hex}
-							data={{ "data-hair-color": hex }}
-							label={t("Hair color {n}", { n: index + 1 })}
-							pressed={draft.hairColor === hex}
-							background={hex}
-							onPick={() => change({ hairColor: hex })}
-						/>
-					))}
-					<input
-						type="color"
-						aria-label={t("Hair color")}
-						value={draft.hairColor}
-						onChange={(event) =>
-							change({ hairColor: event.target.value as `#${string}` })
-						}
-					/>
-				</fieldset>
-			</Field>
-		</>
-	);
-
-	// On a phone each group opens in a bottom sheet instead of stacking down the page.
-	const groups: {
-		id: string;
-		title: string;
-		summary: string;
-		/** The message of a rejected field in this group; the sheet is shut on a phone, so the list carries it. */
-		error?: string | undefined;
-		node: ReactNode;
-	}[] = [
-		{
-			id: "class",
-			title: t("Class"),
-			summary: characterLabel("class", draft.class),
-			error: errors.class,
-			node: classGrid,
-		},
-		{
-			id: "colors",
-			title: t("Colors"),
-			summary: draft.palette
-				? characterLabel("palette", draft.palette)
-				: draft.colors.primary,
-			error: errors.colors ?? errors.palette,
-			node: colors,
-		},
-		...PARTS.map((part, index) => ({
-			id: part.field,
-			title: t(part.title),
-			summary: characterLabel(part.field as LabelKind, draft[part.field]),
-			error: errors[part.field],
-			node: parts[index],
-		})),
-		{
-			id: "body",
-			title: t("Body"),
-			summary: characterLabelBuild(draft.build),
-			error: errors.build ?? errors.skin ?? errors.hairColor,
-			node: body,
-		},
-	];
+	const { groups, classGrid, colors, parts, body } = creatorFields({
+		draft,
+		shown,
+		errors,
+		change,
+		titleId,
+		skins,
+	});
 
 	return (
 		<form
@@ -718,33 +270,5 @@ export function CharacterCreator(props: {
 				</p>
 			</Confirm>
 		</form>
-	);
-}
-
-const characterLabelBuild = (build: CharacterSpec["build"]) =>
-	t(BUILD_LABELS[build]);
-
-/** A class of the grid, drawn on the wearer's current colors. */
-function ClassTile(props: {
-	id: ClassId;
-	base: CharacterSpec;
-	pressed: boolean;
-	onPick(): void;
-}) {
-	const colors = props.base.colors;
-	const spec = useMemo(
-		() => resolveCharacter({ class: props.id, colors }),
-		[props.id, colors],
-	);
-	return (
-		<Tile
-			data={{ "data-class": props.id }}
-			spec={spec}
-			size={56}
-			label={characterLabel("class", props.id)}
-			hint={characterJobs(props.id)}
-			pressed={props.pressed}
-			onPick={props.onPick}
-		/>
 	);
 }

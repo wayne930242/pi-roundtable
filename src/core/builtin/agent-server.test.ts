@@ -237,7 +237,9 @@ describe("the agent server's runtime", () => {
 			"helper-presets",
 			"agents-helper-preset",
 			"helper-presets-shared",
+			"agent-places",
 			"team-move",
+			"agent-places-from-channels",
 		]);
 	});
 });
@@ -348,7 +350,8 @@ describe("the agent server without Discord", () => {
 			local({ teamId: "crew", formerTeamIds: ["old-guild"] }),
 		);
 		const names = moving.migrations?.map((m) => m.name) ?? [];
-		expect(names.at(-1)).toBe("team-move");
+		expect(names.at(-2)).toBe("team-move");
+		expect(names.at(-1)).toBe("agent-places-from-channels");
 		expect(moving.migrations?.find((m) => m.name === "team-move")?.runs).toBe(
 			"every-boot",
 		);

@@ -6,13 +6,13 @@ import { PANES } from "./api-types.ts";
 const packageDir = join(import.meta.dir, "..");
 const repository = join(packageDir, "..", "..");
 
-const options = readFileSync(join(import.meta.dir, "options.ts"), "utf8");
+const options = readFileSync(join(import.meta.dir, "options-types.ts"), "utf8");
 
 /** The source between a declaration line and the first line that closes it at column 0. */
 function block(start: string): string[] {
 	const lines = options.split("\n");
 	const from = lines.findIndex((line) => line.startsWith(start));
-	if (from < 0) throw new Error(`options.ts has no "${start}"`);
+	if (from < 0) throw new Error(`options-types.ts has no "${start}"`);
 	const body: string[] = [];
 	for (const line of lines.slice(from + 1)) {
 		if (/^[}\]]|^\S/.test(line)) break;
