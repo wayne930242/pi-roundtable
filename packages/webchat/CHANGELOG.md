@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-10
+
+- Release in lockstep with pi-roundtable 0.45.0 (Places reads, chat-first home, other-comments note); no package-specific behavior changes.
+
 ## [0.44.1] - 2026-11-09
 
 - Release in lockstep with pi-roundtable 0.44.1 (SVG attachments shown inline, sandboxed); no package-specific behavior changes.

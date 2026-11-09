@@ -5,6 +5,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-10
+
+### Added
+
+- pi-roundtable-web: The web console can open on a chat list: set `appearance.home: "chats"` and the app opens on the pinned rooms as big figures, folder chips that filter one list of the other rooms by latest activity, and one row for the hidden and archived rooms. The tab bar and the rail are gone; a grid button opens every other pane, a back bar leads home, and from 1024 px the home is a 380 px column beside the open room. The default `"rooms"` keeps the arranged room list.
+- pi-roundtable-web: Rooms can be hidden (`PUT api/rooms/<key>/hidden`, owner only, shared by every owner): a hidden room keeps answering, running schedules and pushing and leaves only the home and the switcher. `GET api/rooms` and the layout answers carry `hidden`; the migration `web-room-hidden` adds its table.
+- `PlaceProvider`, the contract for where an agent or group is spoken to on a chat surface, with `PlaceRef`, `PlacePost`, `PlaceSpec`, `PlaceCheck`, `PlaceAuthor`, `PlaceKind`, `ToolArgument` and `PlacePort`. A plugin contributes providers with the new `places` part, one per surface, and reads them through `context.places` once every plugin is set up (`of(surface or key)`, `stored()`, `all()`). Two providers for one surface, or one for a surface no plugin registers, stop the boot with a `PluginError` naming the plugins.
+- A surface that declares `agentRooms: true` and has no provider gets a derived one from the host, so the web app and any plugin written before this change keep working untouched. The Discord plugin contributes its own, over the agent guild's channels and threads, when `discord.guild` is set; its `check` tells a channel of another server (`foreign`) from a deleted one (`gone`). The agent team does not use providers yet.
+- `placeProviderContract` in `pi-roundtable/testing` runs the provider contract against any provider, with `checkPlaceProviderContract` for the failures as data, and `PlaceContractSubject`, `PlaceContractFailure` and `PlaceSeen` for what it takes and returns.
+- The agent team reads where its agents and groups are through the place providers: an agent's keys, who owns a key, the routing table, a group's seats and log names, a message the outbox replays, and the agent server's claim of a space. A provider that keeps its places in `agent_places` (a chat network the core has never heard of) now gets its places as keys, owners, routes and reply targets with no change to the core. Every key a Discord team has stays what it was, so sessions, schedules and held actions carry over. A row of a surface no provider serves on the host is ignored, which replaces the old "no Discord channels" switch.
+- `AgentTeam.placesOf(name)`, `AgentTeam.teamId`, `AgentDirectory.placeOwner(key)` and the `places` of the `TeamStatus` views (`TeamPlace`) are new, all optional on their interfaces. `roomsOf` lists every place, the stored ones first.
+- `Agent.channelId`, `AgentGroup.channelId`, `AgentSeed.channelId`, `AgentDirectory.agentByChannel` and `groupByChannel`, `AgentTeam.guildId` and `discordGuild`, and the `channelId` of the `TeamStatus` views are deprecated and removed in 1.0; read `placesOf` and `placeOwner`. The team still keeps them up to date.
+- The web console reads the team's `places` for its channel links and its `teamId` for the team's name.
+- The stand-in Discord of `testHost` contributes Discord's place provider when the test host has an agent guild, as the built-in plugin does. A plugin that replaces `DISCORD` with a Discord of its own, in a host with an agent guild, must contribute that provider too: `discordPlaceProvider` from `pi-roundtable/discord`, given the `guild`, the `connection` and a `logger` (`DiscordPlaceProviderOptions`), is the built-in one, with the keys, group seats and log names Discord's teams have always had, so contribute it with `places`. A host with an agent guild and a Discord that has no such provider now refuses to start, naming it, instead of leaving the agents unanswered.
+- A key of a surface no provider serves is no room: a message kept for one is dropped on the next start without a model turn, as before, and a group seat whose home is such a key posts there.
+
+### Changed
+
+- `pi-better-show` is pinned to 0.5.0. An interactive block (`options`, `suggest`, `form`, `checklist`, `review`) now has an "Other comments" box: the web app sends its text as the reserved field `pi-note`, keeps it in the block's recorded answer, and the owner's message to the agent ends with `Other comments: …`.
+- On Discord and LINE, a block read as text now says other comments are welcome (for example "Reply with a number. Other comments are welcome.").
+
 ## [0.44.1] - 2026-11-09
 
 ### Added
