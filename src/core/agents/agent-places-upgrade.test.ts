@@ -1,6 +1,9 @@
 import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { SQL } from "bun";
-import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
+import {
+	convergeLegacyChannelPlaces,
+	LEGACY_CHANNEL_SURFACE,
+} from "../db/legacy-channels.ts";
 import { type Migration, migrate } from "../db/migrations.ts";
 import { moveTeam } from "../db/team-move.ts";
 import { describeDb, migratedPool } from "../testing/database.ts";
@@ -100,14 +103,27 @@ describeDb("agent places: storage", () => {
 		expect(await places()).toEqual([]);
 	});
 
-	test("an upgraded database holds one place per channel id, under the id of the team that held it", async () => {
+	test("an upgraded database holds one place per channel id of the booting team", async () => {
 		await seed043();
 		await upgrade();
 		expect(await places()).toEqual([
 			[HOME, "agent", "infra", SURFACE, "10"],
 			[HOME, "agent", "old", SURFACE, "11"],
 			[HOME, "group", "ops", SURFACE, "20"],
-			[OTHER, "agent", "elsewhere", SURFACE, "30"],
+		]);
+	});
+
+	test("a boot converges its own team only: the rows of another team's host in the same database stay as they are", async () => {
+		await seed043();
+		await upgrade(OTHER);
+		// The other team's host holds a place its column does not show yet, as in the middle of its write.
+		await sql`UPDATE agent_places SET external_id = '99' WHERE team_id = ${OTHER}`;
+		await upgrade(HOME);
+		expect(await places()).toEqual([
+			[HOME, "agent", "infra", SURFACE, "10"],
+			[HOME, "agent", "old", SURFACE, "11"],
+			[HOME, "group", "ops", SURFACE, "20"],
+			[OTHER, "agent", "elsewhere", SURFACE, "99"],
 		]);
 	});
 
@@ -139,7 +155,6 @@ describeDb("agent places: storage", () => {
 		expect(await places()).toEqual([
 			[HOME, "agent", "fresh", SURFACE, "12"],
 			[HOME, "agent", "infra", SURFACE, "99"],
-			[OTHER, "agent", "elsewhere", SURFACE, "30"],
 		]);
 	});
 
@@ -250,6 +265,82 @@ describeDb("agent places: storage", () => {
 		expect(await places()).toEqual([[HOME, "agent", "seeded", SURFACE, "7"]]);
 	});
 
+	test("a write that gives an owner the channel id another owner of the team holds warns and keeps the column, without a row", async () => {
+		await upgrade();
+		const store = await PgAgentStore.attach(sql, HOME);
+		await store.createAgent({
+			name: "alpha",
+			displayName: "Alpha",
+			prompt: "p",
+			channelId: "1",
+		});
+		await store.createAgent({ name: "beta", displayName: "Beta", prompt: "p" });
+		await store.createGroup({
+			name: "pair",
+			displayName: "Pair",
+			channelId: "2",
+			members: ["alpha", "beta"],
+			host: "alpha",
+		});
+		await store.archiveGroup("pair");
+		const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+		try {
+			await store.restoreGroup("pair", "1");
+			expect(warn).toHaveBeenCalledTimes(1);
+			const [message] = warn.mock.calls[0] as [string];
+			expect(message).toContain('group "pair"');
+			expect(message).toContain('agent "alpha"');
+		} finally {
+			warn.mockRestore();
+		}
+		const [column]: { channel_id: string }[] =
+			await sql`SELECT channel_id FROM agent_groups WHERE name = 'pair'`;
+		expect(column?.channel_id).toBe("1");
+		// The group's earlier place is gone with its old id, and the agent keeps the id.
+		expect(await places()).toEqual([[HOME, "agent", "alpha", SURFACE, "1"]]);
+		expect(store.places.of("group", "pair")).toEqual([]);
+		expect(store.places.ownerOf(SURFACE, "1")).toEqual({
+			kind: "agent",
+			name: "alpha",
+		});
+	});
+
+	test("a boot of Merlin's shape writes no place rows twice: a record kept under the former guild gets none", async () => {
+		// Team `local`, no agent guild; the former guild's record "infra" could not move, as `local` holds one.
+		await agent(LOCAL, "infra", null);
+		await agent(FORMER, "infra", "10");
+		await group(FORMER, "ops", "20");
+		const boot = () =>
+			migrate(sql, [
+				...PgAgentStore.migrations(LOCAL),
+				moveTeam({
+					from: [FORMER],
+					to: LOCAL,
+					clearChannels: true,
+					places: [{ surface: SURFACE }],
+				}),
+			]);
+		const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+		try {
+			await boot();
+			await sql`CREATE TABLE place_write_log (op text NOT NULL)`;
+			await sql.unsafe(`
+				CREATE FUNCTION place_write_log_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+				BEGIN INSERT INTO place_write_log VALUES (TG_OP); RETURN NULL; END $$`);
+			await sql`CREATE TRIGGER place_write_log_trg AFTER INSERT OR UPDATE OR DELETE ON agent_places
+				FOR EACH ROW EXECUTE FUNCTION place_write_log_fn()`;
+			await boot();
+			const writes = await sql`SELECT op FROM place_write_log`;
+			expect(writes).toEqual([]);
+			expect(await places()).toEqual([]);
+		} finally {
+			warn.mockRestore();
+			await sql`DROP TRIGGER IF EXISTS place_write_log_trg ON agent_places`;
+			await sql`DROP FUNCTION IF EXISTS place_write_log_fn()`;
+			await sql`DROP TABLE IF EXISTS place_write_log`;
+		}
+	});
+
 	describe("moveTeam", () => {
 		/** Rows of a former team and of the team itself, with their places made by the convergence. */
 		const seedMove = async () => {
@@ -259,6 +350,8 @@ describeDb("agent places: storage", () => {
 			await group(FORMER, "council", "200");
 			await agent(OTHER, "elsewhere", "300");
 			await upgrade(LOCAL);
+			for (const team of [FORMER, OTHER])
+				await convergeLegacyChannelPlaces(team)(sql);
 			// A place of a surface the team code has never heard of.
 			await sql`INSERT INTO agent_places (team_id, kind, name, surface, external_id)
 				VALUES (${FORMER}, 'agent', 'moved', 'pager', 'p-1')`;
@@ -292,11 +385,10 @@ describeDb("agent places: storage", () => {
 				[LOCAL, "agent", "moved", "pager", "p-1"],
 			]);
 			// The columns of the moved rows were cleared, so the next convergence agrees; the row that
-			// stayed under the former id still has its column, and its place comes back with it.
+			// stayed under the former id keeps its column, and gets no place: it is not the team's.
 			await upgrade(LOCAL);
 			expect(await places()).toEqual([
 				[OTHER, "agent", "elsewhere", SURFACE, "300"],
-				[FORMER, "agent", "both", SURFACE, "101"],
 				[LOCAL, "agent", "both", SURFACE, "102"],
 				[LOCAL, "agent", "moved", "pager", "p-1"],
 			]);
@@ -359,6 +451,13 @@ describeDb("agent places: storage", () => {
 					"pager",
 					"p-1",
 				]);
+				// The place stays behind because the team holds its id, and a warning names it.
+				const messages = warn.mock.calls.map(([text]) => String(text));
+				expect(
+					messages.some(
+						(text) => text.includes('"agent_places"') && text.includes("pager"),
+					),
+				).toBe(true);
 			} finally {
 				warn.mockRestore();
 			}

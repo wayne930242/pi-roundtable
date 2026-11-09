@@ -35,7 +35,7 @@ const PLACES_TABLE = "agent_places";
  * Moves a former team's rows to the team id: every row of a table with a `guild_id` (or, for places, `team_id`) column whose id
  * is one of `from`, in the tables the host's plugins keep (agents, groups, skills, prompts, presets,
  * outbox, conversations, places). Rows of other guilds stay, such as the `discord_*` grants and audit of the
- * guilds a bot still serves. A row whose key the team already holds stays where it is (a warning
+ * guilds a bot still serves. A row whose key, or for places whose id, the team already holds stays where it is (a warning
  * names it), so a second boot changes nothing; of two former ids holding one key, the one listed
  * first moves.
  *
@@ -112,15 +112,20 @@ export function moveTeam(options: TeamMoveOptions): Migration {
 						);
 					}
 					if (!match || from.length === 0) continue;
+					// A place also stays when the team holds its id on the surface, which the key does not show.
+					const sameId =
+						table === PLACES_TABLE
+							? ` OR EXISTS (SELECT 1 FROM "${table}" l WHERE l.${scope} = $1 AND l.surface = t.surface AND l.external_id = t.external_id)`
+							: "";
 					const kept: Record<string, unknown>[] = await tx.unsafe(
 						`SELECT t.${scope} AS moved_from, ${key?.map((column) => `t."${column}"`).join(", ")} FROM "${table}" t
 							WHERE t.${scope} = ANY ($2::text[])
-								AND EXISTS (SELECT 1 FROM "${table}" l WHERE l.${scope} = $1 AND ${match})`,
+								AND (EXISTS (SELECT 1 FROM "${table}" l WHERE l.${scope} = $1 AND ${match})${sameId})`,
 						[options.to, from],
 					);
 					if (kept.length > 0)
 						console.warn(
-							`team-move: ${kept.length} row(s) of "${table}" stay under their former id, because team "${options.to}" already holds the same key: ${kept
+							`team-move: ${kept.length} row(s) of "${table}" stay under their former id, because team "${options.to}" already holds the same ${sameId ? "key or place id" : "key"}: ${kept
 								.map(
 									({ moved_from, ...rest }) =>
 										`${moved_from}/${Object.values(rest).join("/")}`,

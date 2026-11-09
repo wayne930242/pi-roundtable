@@ -199,11 +199,11 @@ export function agentMigrations(guildId: string): Migration[] {
 		HelperPresets.sharingMigration,
 		// The places of agents and groups on the surfaces that make or bind their own; stored places only.
 		agentPlacesMigration,
-		// Until 1.0 the channel columns stay the source a rollback reads: the table follows them at every boot.
+		// Until 1.0 the channel columns stay the source a rollback reads: the table follows them at every boot, for this team's rows.
 		{
 			name: "agent-places-from-channels",
 			runs: "every-boot",
-			up: convergeLegacyChannelPlaces,
+			up: convergeLegacyChannelPlaces(guildId),
 		},
 	];
 }

@@ -1,5 +1,8 @@
 import type { SQL } from "bun";
-import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
+import {
+	LEGACY_CHANNEL_SURFACE,
+	warnSharedChannel,
+} from "../db/legacy-channels.ts";
 
 /** What a place belongs to: an agent or a group, by name. */
 export type PlaceOwnerKind = "agent" | "group";
@@ -147,6 +150,22 @@ export class AgentPlaces {
 				const place = this.#byOwner.get(
 					ownerKey(kind, name, LEGACY_CHANNEL_SURFACE),
 				);
+				if (place) this.#forget(place);
+			};
+		}
+		// A place id belongs to one owner: the column keeps the id, and the owner has no row for it.
+		const [holder]: { kind: PlaceOwnerKind; name: string }[] = await tx`
+			SELECT kind, name FROM agent_places
+			WHERE team_id = ${this.#team} AND surface = ${owner.surface} AND external_id = ${channelId}
+				AND NOT (kind = ${kind} AND name = ${name})`;
+		if (holder) {
+			warnSharedChannel(this.#team, owner, channelId, holder);
+			await tx`
+				DELETE FROM agent_places
+				WHERE team_id = ${this.#team} AND kind = ${kind} AND name = ${name}
+					AND surface = ${owner.surface}`;
+			return () => {
+				const place = this.#byOwner.get(ownerKey(kind, name, owner.surface));
 				if (place) this.#forget(place);
 			};
 		}

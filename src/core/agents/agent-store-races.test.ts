@@ -27,6 +27,7 @@ function fakeDatabase() {
 			)
 		)
 			return [];
+		if (text.startsWith("SELECT kind, name FROM agent_places")) return [];
 		if (text.startsWith("INSERT INTO agent_places")) return [];
 		if (text.startsWith("DELETE FROM agent_places")) return [];
 		if (text.startsWith("INSERT INTO agents")) {
