@@ -16,6 +16,7 @@
 		"!src/**/*.test.ts",
 		"!src/testing/fakes.ts",
 		"!src/testing/memory-attachments.ts",
+		"!src/testing/chat-fixture.ts",
 		"LICENSE",
 		"README.md",
 		"CHANGELOG.md"
