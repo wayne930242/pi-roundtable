@@ -305,7 +305,7 @@ describeDb("agent places: storage", () => {
 		});
 	});
 
-	test("a boot of Merlin's shape writes no place rows twice: a record kept under the former guild gets none", async () => {
+	test("a boot of a team with no agent guild writes no place rows twice: a record kept under the former guild gets none", async () => {
 		// Team `local`, no agent guild; the former guild's record "infra" could not move, as `local` holds one.
 		await agent(LOCAL, "infra", null);
 		await agent(FORMER, "infra", "10");
