@@ -60,7 +60,7 @@ describe("the built-in zh-TW catalog", () => {
 				"web/components/agent-fields.tsx: t(AUTOMATIC)",
 				"web/components/agent-fields.tsx: t(THINKING_LABELS[level])",
 				"web/components/agent-fields.tsx: t(THINKING_LABELS[value as (typeof THINKING)[number]] ?? value)",
-				"web/components/cards.tsx: t(OUTCOMES[outcome])",
+				"web/components/cards-shell.tsx: t(OUTCOMES[outcome])",
 				"web/components/character-creator.tsx: t(BUILD_LABELS[build])",
 				"web/components/character-creator.tsx: t(STATE_LABELS[state])",
 				"web/components/character-creator.tsx: t(STATE_LABELS[state])",
