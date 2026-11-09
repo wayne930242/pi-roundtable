@@ -80,6 +80,8 @@ test("the page builds with relative URLs only, and every file it names is in the
  * choice of home and column, the `hidden` list in the room state and the sections, the Hide item
  * and the bare figure; the home, its grid, its page for hidden rooms, the room's threads control
  * and all of their styles are lazy chunks.
+ * The 20 bytes after that are the 0.45.0 branches (team reads through places, the chat home, the
+ * other-comments note) compressing together (2 over).
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -100,7 +102,8 @@ const FIRST_LOAD_BASELINE =
 	100 +
 	153 +
 	150 +
-	800;
+	800 +
+	20;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 const CHARACTER_BUDGET = 16 * 1024;
 
