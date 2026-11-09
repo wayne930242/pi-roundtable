@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-09
+
+- Release in lockstep with pi-roundtable 0.44.0 (agent places storage, every oversized file split, worker worktree race fixed); no package-specific behavior changes.
+
 ## [0.43.0] - 2026-11-09
 
 - Release in lockstep with pi-roundtable 0.43.0; no package-specific behavior changes.
