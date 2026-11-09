@@ -115,7 +115,7 @@ test("a pin's corner shows the waiting cards before the unread messages, and tho
 	store.dispatch({ type: "prompt_closed", prompt: "p1", outcome: "approved" });
 });
 
-test("there are no chips without a folder; with folders a chip filters the one list, and a dot marks a folder with unread", async () => {
+test("there are no chips without a folder; with folders a chip filters the one list, and a count marks a folder with unread", async () => {
 	loadChats({});
 	seed(0, { [NEWS]: 2 });
 	await show(<Home />);
@@ -129,26 +129,24 @@ test("there are no chips without a folder; with folders a chip filters the one l
 	seed(0, { [NEWS]: 2 });
 	await show(<Home />);
 	await until(() => q(".chips") !== null);
-	expect(names(".chip-face")).toEqual(["All", "Work", "Play", "Other"]);
-	// News has unread messages: its folder's chip has the dot, the others do not.
-	const faces = all(".chip-face");
-	expect(faces.map((one) => one.querySelector(".chip-dot") !== null)).toEqual([
-		false,
-		false,
-		true,
-		false,
-	]);
-	expect(names(".chat-row strong").sort()).toEqual([
-		"build",
-		"news",
-		"scout",
-		"team",
-	]);
+	expect(names(".chip-label")).toEqual(["All", "Work", "Play", "Other"]);
+	// News has unread messages: its folder's chip has the count, the others do not.
+	const faces = all(".chip");
+	expect(faces.map((one) => one.querySelector(".chip-count") !== null)).toEqual(
+		[false, false, true, false],
+	);
+	expect(
+		names(".chat-list:not(.elsewhere-list) .chat-row strong").sort(),
+	).toEqual(["build", "news", "scout", "team"]);
 	await page.click(all(".chip")[2] ?? null);
-	expect(names(".chat-row strong")).toEqual(["news"]);
+	expect(names(".chat-list:not(.elsewhere-list) .chat-row strong")).toEqual([
+		"news",
+	]);
 	expect(all(".chip")[2]?.getAttribute("aria-pressed")).toBe("true");
 	await page.click(all(".chip")[3] ?? null);
-	expect(names(".chat-row strong").sort()).toEqual(["build", "team"]);
+	expect(
+		names(".chat-list:not(.elsewhere-list) .chat-row strong").sort(),
+	).toEqual(["build", "team"]);
 	await page.click(all(".chip")[0] ?? null);
 	expect(all(".chat-row").length).toBe(4);
 });

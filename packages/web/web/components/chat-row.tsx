@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
+import { useFigureMotion } from "../lib/figure-motion.ts";
 import { ago } from "../lib/format.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { roomMenuOf } from "../lib/menus.ts";
@@ -24,12 +25,19 @@ export const ChatRow = memo(function ChatRow(
 		threads: number;
 		/** Messages of the room the person has not read. */
 		unread: number;
+		/** The room's folder, tagged on the row where the list mixes folders. */
+		folder?: string | undefined;
 	},
 ) {
 	const { view } = props;
 	const press = useMenuPress(() => roomMenuOf(view.key));
 	const accent = useAccentStyle(view.character);
 	const { unread } = props;
+	const { style: phase, ...motion } = useFigureMotion(
+		view.key,
+		props.typing,
+		unread,
+	);
 	return (
 		<li>
 			<ReadReveal />
@@ -39,7 +47,8 @@ export const ChatRow = memo(function ChatRow(
 				href={hrefFor("room", view.key)}
 				data-room={view.key}
 				aria-current={props.active ? "page" : undefined}
-				style={accent}
+				{...motion}
+				style={{ ...accent, ...phase }}
 			>
 				<RoomPicture view={view} size={52} bare />
 				<span className="room-row-main">
@@ -54,6 +63,9 @@ export const ChatRow = memo(function ChatRow(
 								aria-hidden={false}
 								aria-label={t("Notifications are off")}
 							/>
+						) : null}
+						{props.folder !== undefined ? (
+							<span className="folder-tag">{props.folder}</span>
 						) : null}
 						{view.kind === "group" ? (
 							<span className="badge">{t("Group")}</span>

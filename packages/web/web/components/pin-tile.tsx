@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
 import { pinBadge } from "../lib/chats-home.ts";
+import { useFigureMotion } from "../lib/figure-motion.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
@@ -24,6 +25,11 @@ export const PinTile = memo(function PinTile(
 	const { view } = props;
 	const press = useMenuPress(() => roomMenuOf(view.key));
 	const accent = useAccentStyle(view.character);
+	const { style: phase, ...motion } = useFigureMotion(
+		view.key,
+		props.typing,
+		props.unread,
+	);
 	const badge = pinBadge(props.waiting, props.unread, props.typing);
 	return (
 		<li className="pin-item">
@@ -34,7 +40,8 @@ export const PinTile = memo(function PinTile(
 				data-room-pin={view.key}
 				data-home={view.home || undefined}
 				aria-current={props.active ? "page" : undefined}
-				style={accent}
+				{...motion}
+				style={{ ...accent, ...phase }}
 			>
 				<span className="pin-picture">
 					<RoomPicture view={view} size={props.size} bare />

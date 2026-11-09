@@ -6,7 +6,9 @@
 // Status shows through a badge, an icon or a tint, and a card or a button has a border on all four
 // sides or on none: the open room's row keeps a uniform accent border, never one colored edge.
 
+import { CHATS_CHIPS_CSS } from "./chats-chips-style.ts";
 import { CHATS_FEATURES_CSS } from "./chats-features-style.ts";
+import { CHATS_MOTION_CSS } from "./chats-motion-style.ts";
 import { installStyle } from "./lazy-style.ts";
 
 export const CHATS_HOME_CSS = `
@@ -186,62 +188,6 @@ a.pin[aria-current="page"] {
 	background: transparent;
 }
 
-/* ── Folder chips: 32px tall inside a 44px hit area ───────────────────────────────────────────── */
-
-fieldset.chips {
-	display: flex;
-	min-width: 0;
-	border: 0;
-	gap: var(--space-1);
-	margin: 0 calc(var(--space-4) * -1);
-	padding: 0 var(--space-4);
-	overflow-x: auto;
-	scrollbar-width: none;
-}
-
-.chips::-webkit-scrollbar {
-	display: none;
-}
-
-button.chip {
-	flex: none;
-	min-height: 2.75rem;
-	padding: 0 var(--space-1);
-	border: 0;
-	background: none;
-	color: var(--text);
-}
-
-button.chip:hover:not(:disabled) {
-	background: none;
-	border-color: transparent;
-}
-
-.chip-face {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-2);
-	min-height: 2rem;
-	padding: 0 var(--space-4);
-	border-radius: var(--radius-full);
-	background: var(--surface-2);
-	white-space: nowrap;
-}
-
-button.chip[aria-pressed="true"] .chip-face {
-	background: var(--accent);
-	color: var(--on-accent);
-}
-
-.chip-dot {
-	display: inline-block;
-	flex: none;
-	width: 0.5rem;
-	height: 0.5rem;
-	border-radius: var(--radius-full);
-	background: var(--warn);
-}
-
 /* ── The list: rows with no card around them ──────────────────────────────────────────────────── */
 
 .chat-list {
@@ -387,15 +333,21 @@ button.chip[aria-pressed="true"] .chip-face {
 
 /* ── The bottom bar: the grid button and the search ───────────────────────────────────────────── */
 
-.chats-bar {
+.chats-foot {
 	position: sticky;
 	bottom: 0;
 	display: flex;
-	align-items: center;
-	gap: var(--space-3);
+	flex-direction: column;
+	gap: var(--space-2);
 	margin-top: auto;
 	padding: var(--space-3) 0 calc(var(--space-3) + var(--safe-bottom));
 	background: linear-gradient(to top, var(--bg) 75%, transparent);
+}
+
+.chats-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
 }
 
 button.chats-grid {
@@ -442,4 +394,6 @@ button.chats-search:hover:not(:disabled) {
 export function installChatsHomeStyle(): void {
 	installStyle("chats-home", CHATS_HOME_CSS);
 	installStyle("chats-features", CHATS_FEATURES_CSS);
+	installStyle("chats-chips", CHATS_CHIPS_CSS);
+	installStyle("chats-motion", CHATS_MOTION_CSS);
 }

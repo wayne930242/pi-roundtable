@@ -61,6 +61,15 @@ export function listFor(
 ): string[] {
 	const found = chipsOf(arrangement).find((one) => one.id === chip);
 	const keys = found?.rooms ?? everyRoom(arrangement);
+	return newestFirst(keys, at, order);
+}
+
+/** `keys` by latest activity, a tie in the server's `order`. */
+function newestFirst(
+	keys: readonly string[],
+	at: (key: string) => number,
+	order: readonly string[],
+): string[] {
 	const index = new Map(order.map((key, place) => [key, place]));
 	return [...keys].sort((a, b) => {
 		const x = at(a);
@@ -68,6 +77,57 @@ export function listFor(
 		return x === y ? (index.get(a) ?? 0) - (index.get(b) ?? 0) : y - x;
 	});
 }
+
+/** The unread messages in a chip's rooms. */
+export const chipUnread = (
+	chip: Pick<Chip, "rooms">,
+	unread: Readonly<Record<string, number>>,
+): number => chip.rooms.reduce((sum, key) => sum + (unread[key] ?? 0), 0);
+
+/** A room listed under a chip that is not its own, with the folder it belongs to (none for the rest). */
+export interface Elsewhere {
+	key: string;
+	folder?: { id: string; name: string };
+}
+
+/**
+ * With a folder (or the rest) chip active: the rooms of the other folders and of none that have
+ * something unread, newest first. All lists every room already, so it has none; a room that is read
+ * is back in its own chip only.
+ */
+export function elsewhereUnread(
+	arrangement: ListInput,
+	chip: string,
+	unread: Readonly<Record<string, number>>,
+	at: (key: string) => number,
+	order: readonly string[],
+): Elsewhere[] {
+	if (chip === "all" || !chipsOf(arrangement).some((one) => one.id === chip))
+		return [];
+	const owner = new Map<string, Elsewhere>();
+	for (const key of arrangement.rest) owner.set(key, { key });
+	for (const folder of arrangement.folders)
+		for (const key of folder.rooms)
+			owner.set(key, { key, folder: { id: folder.id, name: folder.name } });
+	const own = new Set(
+		chip === "other"
+			? arrangement.rest
+			: (arrangement.folders.find((one) => one.id === chip)?.rooms ?? []),
+	);
+	const keys = [...owner.keys()].filter(
+		(key) => !own.has(key) && (unread[key] ?? 0) > 0,
+	);
+	return newestFirst(keys, at, order).map((key) => owner.get(key) as Elsewhere);
+}
+
+/** The folder a room is in, for the tag on its row. */
+export const folderOf = (
+	arrangement: Pick<Sections, "folders">,
+	key: string,
+): { id: string; name: string } | undefined => {
+	const folder = arrangement.folders.find((one) => one.rooms.includes(key));
+	return folder ? { id: folder.id, name: folder.name } : undefined;
+};
 
 /**
  * Every room in the order the chat home shows them: Home and the pins, then the one list by latest

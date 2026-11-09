@@ -6,7 +6,14 @@ import { Empty } from "../components/states.tsx";
 import { useSelector } from "../lib/app-store.ts";
 import { useArchivedCount } from "../lib/archived-count.ts";
 import { lastChip, rememberChip } from "../lib/chat-chip.ts";
-import { chipsOf, hiddenDot, listFor, pinsOf } from "../lib/chats-home.ts";
+import {
+	chipsOf,
+	elsewhereUnread,
+	folderOf,
+	hiddenDot,
+	listFor,
+	pinsOf,
+} from "../lib/chats-home.ts";
 import { installChatsHomeStyle } from "../lib/chats-home-style.ts";
 import { useConfig } from "../lib/config.ts";
 import "../lib/home-icons.ts";
@@ -67,16 +74,63 @@ export default function ChatsHome(props: ChatsHomeProps) {
 	const [chosen, choose] = useState(lastChip);
 	const chips = chipsOf(arrangement);
 	const chip = chips.some((one) => one.id === chosen) ? chosen : "all";
-	const listKeys = listFor(arrangement, chip, at, order);
-	const pins = pinsOf(arrangement);
-	const rows = useRowData([...pins, ...listKeys]);
-	const byKey = new Map(rows.map((row) => [row.key, row]));
 	const unread = useUnreadMap();
+	const listKeys = listFor(arrangement, chip, at, order);
+	const elsewhere = elsewhereUnread(arrangement, chip, unread, at, order);
+	const pins = pinsOf(arrangement);
+	const rows = useRowData([
+		...pins,
+		...listKeys,
+		...elsewhere.map((one) => one.key),
+	]);
+	const byKey = new Map(rows.map((row) => [row.key, row]));
+	// On a phone the pins sit in a dock at the bottom, under the thumb; a column keeps them on top.
+	const dock = !props.column && props.active === undefined;
+	// Where the list mixes folders, each row says which one it is in.
+	const tagged = chips.length > 0 && chip === "all";
 	const archived = useArchivedCount();
 	const hidden = arrangement.hidden.length;
 	const none = listed && pins.length + listKeys.length === 0 && hidden === 0;
 	const hosted = Boolean(useConfig().kinds?.length);
 	const [features, setFeatures] = useState(false);
+	const rowFor = (key: string, folder?: { id: string; name: string }) => {
+		const row = byKey.get(key);
+		if (!row) return null;
+		const { key: _key, ...data } = row;
+		return (
+			<ChatRow
+				key={key}
+				{...data}
+				active={key === props.active}
+				now={now}
+				timeZone={timeZone}
+				threads={arrangement.threads[key]?.open.length ?? 0}
+				unread={unread[key] ?? 0}
+				folder={folder?.name}
+			/>
+		);
+	};
+	const pinsList =
+		pins.length > 0 ? (
+			<ul className={dock ? "pins pin-dock" : "pins"} aria-label={t("Pinned")}>
+				{pins.map((key) => {
+					const row = byKey.get(key);
+					if (!row) return null;
+					const { key: _key, ...data } = row;
+					return (
+						<PinTile
+							key={key}
+							{...data}
+							active={key === props.active}
+							size={
+								dock || props.column || props.active !== undefined ? 56 : 80
+							}
+							unread={unread[key] ?? 0}
+						/>
+					);
+				})}
+			</ul>
+		) : null;
 	return (
 		<div
 			ref={page}
@@ -95,24 +149,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 					{t("No rooms yet. Rooms appear when the team has a knight.")}
 				</Empty>
 			) : null}
-			{pins.length > 0 ? (
-				<ul className="pins" aria-label={t("Pinned")}>
-					{pins.map((key) => {
-						const row = byKey.get(key);
-						if (!row) return null;
-						const { key: _key, ...data } = row;
-						return (
-							<PinTile
-								key={key}
-								{...data}
-								active={key === props.active}
-								size={props.column || props.active !== undefined ? 56 : 80}
-								unread={unread[key] ?? 0}
-							/>
-						);
-					})}
-				</ul>
-			) : null}
+			{!dock ? pinsList : null}
 			{chips.length > 0 ? (
 				<HomeChips
 					chips={chips}
@@ -124,23 +161,18 @@ export default function ChatsHome(props: ChatsHomeProps) {
 					}}
 				/>
 			) : null}
+			{elsewhere.length > 0 ? (
+				<section className="elsewhere">
+					<h2>{t("Other unread")}</h2>
+					<ul className="room-list chat-list elsewhere-list">
+						{elsewhere.map((one) => rowFor(one.key, one.folder))}
+					</ul>
+				</section>
+			) : null}
 			<ul className="room-list chat-list">
-				{listKeys.map((key) => {
-					const row = byKey.get(key);
-					if (!row) return null;
-					const { key: _key, ...data } = row;
-					return (
-						<ChatRow
-							key={key}
-							{...data}
-							active={key === props.active}
-							now={now}
-							timeZone={timeZone}
-							threads={arrangement.threads[key]?.open.length ?? 0}
-							unread={unread[key] ?? 0}
-						/>
-					);
-				})}
+				{listKeys.map((key) =>
+					rowFor(key, tagged ? folderOf(arrangement, key) : undefined),
+				)}
 			</ul>
 			{hidden + (archived ?? 0) > 0 ? (
 				<HiddenRow
@@ -150,21 +182,28 @@ export default function ChatsHome(props: ChatsHomeProps) {
 				/>
 			) : null}
 			<HostKinds active={props.active} />
-			<div className="chats-bar">
-				<button
-					type="button"
-					className="icon-button chats-grid"
-					aria-label={t("All features")}
-					aria-haspopup="dialog"
-					onClick={() => setFeatures(true)}
-				>
-					<Icon name="grid" />
-				</button>
-				<button type="button" className="chats-search" onClick={props.onSearch}>
-					<Icon name="search" size={18} />
-					<span>{t("Find a room")}</span>
-					<kbd>⌘K</kbd>
-				</button>
+			<div className="chats-foot">
+				{dock ? pinsList : null}
+				<div className="chats-bar">
+					<button
+						type="button"
+						className="icon-button chats-grid"
+						aria-label={t("All features")}
+						aria-haspopup="dialog"
+						onClick={() => setFeatures(true)}
+					>
+						<Icon name="grid" />
+					</button>
+					<button
+						type="button"
+						className="chats-search"
+						onClick={props.onSearch}
+					>
+						<Icon name="search" size={18} />
+						<span>{t("Find a room")}</span>
+						<kbd>⌘K</kbd>
+					</button>
+				</div>
 			</div>
 			<AllFeatures open={features} onClose={() => setFeatures(false)} />
 		</div>
