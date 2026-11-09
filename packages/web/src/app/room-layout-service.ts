@@ -154,7 +154,7 @@ export function roomLayoutService(
 				const rest = next.folders
 					.filter((folder) => !ids.includes(folder.id))
 					.map((folder) => ({ ...folder, rooms: stay(folder.rooms) }));
-				return { pins: stay(next.pins), folders: [...ahead, ...rest] };
+				return { ...next, pins: stay(next.pins), folders: [...ahead, ...rest] };
 			});
 		},
 	};

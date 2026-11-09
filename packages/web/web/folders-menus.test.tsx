@@ -78,6 +78,7 @@ test("deleting a folder asks first, with the words of the spec, and then deletes
 	load({ folders: [WORK] });
 	const remove = spyOn(layoutApi, "deleteFolder").mockResolvedValue({
 		pins: [],
+		hidden: [],
 		folders: [],
 	});
 	try {
@@ -104,6 +105,7 @@ test("renaming shows the folder's name, refuses an empty one before asking the s
 	load({ folders: [WORK] });
 	const change = spyOn(layoutApi, "changeFolder").mockResolvedValue({
 		pins: [],
+		hidden: [],
 		folders: [{ ...WORK, name: "Office" }],
 	});
 	try {
@@ -159,6 +161,7 @@ test("the page's menu adds a folder outside arrange mode, and shows the server's
 		expect(form?.textContent).toContain("A folder of that name exists.");
 		create.mockResolvedValue({
 			pins: [],
+			hidden: [],
 			folders: [{ id: F2, name: "Play", rooms: [] }],
 		});
 		await page.click(
@@ -192,6 +195,7 @@ test("arrange mode shows a menu button on each row and a bar to add a folder; Do
 test("a row's menu pins and unpins it, and the list follows the server's answer", async () => {
 	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [SCOUT],
+		hidden: [],
 		folders: [],
 	});
 	try {
@@ -201,7 +205,7 @@ test("a row's menu pins and unpins it, and the list follows the server's answer"
 		await choose("Pin");
 		expect(pin).toHaveBeenCalledWith(SCOUT, true, null);
 		expect(headings()).toEqual(["Home", "Pinned", "Knights", "Groups"]);
-		pin.mockResolvedValue({ pins: [], folders: [] });
+		pin.mockResolvedValue({ pins: [], hidden: [], folders: [] });
 		await rightClick(rowOf("scout"));
 		expect(labels().slice(0, 2)).toEqual(["Unpin", "Move to folder…"]);
 		await choose("Unpin");
@@ -236,6 +240,7 @@ test("Home has no pin and no folder in its menu; a pinned room can step up and d
 	await page.act(() => closeMenu());
 	const place = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [BUILD, SCOUT, TEAM],
+		hidden: [],
 		folders: [],
 	});
 	try {
@@ -257,6 +262,7 @@ test("Move to folder lists the folders and Ungrouped, marks where the room is, a
 	load({ folders: [WORK, { id: F2, name: "Play", rooms: [] }] });
 	const place = spyOn(layoutApi, "placeRoom").mockResolvedValue({
 		pins: [],
+		hidden: [],
 		folders: [
 			{ ...WORK, rooms: [] },
 			{ id: F2, name: "Play", rooms: [SCOUT] },
@@ -288,10 +294,12 @@ test("Move to folder lists the folders and Ungrouped, marks where the room is, a
 test("Move to folder can add a folder first and then moves the room into it", async () => {
 	const create = spyOn(layoutApi, "createFolder").mockResolvedValue({
 		pins: [],
+		hidden: [],
 		folders: [{ id: F2, name: "Play", rooms: [] }],
 	});
 	const place = spyOn(layoutApi, "placeRoom").mockResolvedValue({
 		pins: [],
+		hidden: [],
 		folders: [{ id: F2, name: "Play", rooms: [BUILD] }],
 	});
 	try {
@@ -323,7 +331,7 @@ test("Move to folder can add a folder first and then moves the room into it", as
 });
 
 test("a row can be lifted: it and its folder block carry what the drag looks for", async () => {
-	load({ pins: [BUILD], folders: [WORK] });
+	load({ pins: [BUILD], hidden: [], folders: [WORK] });
 	await show(<List />);
 	const row = rowOf("scout")?.closest("li");
 	expect(row?.getAttribute("data-drop-item")).toBe("");
@@ -354,7 +362,7 @@ test("the pinned list is a place to drop before it holds a room: hidden until a 
 	expect(strip?.querySelector("h2")?.textContent).toBe("Pinned");
 	expect(strip?.querySelector(".room-row")).toBeNull();
 	// The first pin fills it.
-	load({ pins: [BUILD], folders: [WORK] });
+	load({ pins: [BUILD], hidden: [], folders: [WORK] });
 	await show(<List />);
 	expect(q('[data-drop-zone="pinned"]')?.hasAttribute("data-empty")).toBe(
 		false,

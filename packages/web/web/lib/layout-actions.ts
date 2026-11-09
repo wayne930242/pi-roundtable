@@ -9,6 +9,7 @@ import {
 	placeRoom,
 	removeFolder,
 	renameFolder,
+	setHidden,
 	setPinned,
 } from "../../src/layout-order.ts";
 import { messageOf } from "./api.ts";
@@ -27,6 +28,7 @@ const hold = (layout: LayoutView) =>
 	store.dispatch({
 		type: "layout_loaded",
 		pins: layout.pins,
+		hidden: layout.hidden,
 		folders: layout.folders,
 	});
 
@@ -67,6 +69,13 @@ export const pinRoom = (
 	apply(
 		(layout) => setPinned(layout, room, pinned, before),
 		() => layoutApi.pinRoom(room, pinned, before),
+	);
+
+/** Hides a room from the home, or shows it again; it keeps its pin and folder. */
+export const hideRoom = (room: string, hidden: boolean) =>
+	apply(
+		(layout) => setHidden(layout, room, hidden),
+		() => layoutApi.hideRoom(room, hidden),
 	);
 
 /** Puts a room in a folder before another room of it (`null` = last), or in none. */

@@ -31,5 +31,6 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 	PushSubscriptions.migration,
 	PushMutes.migration,
 	RoomLayout.migration,
+	RoomLayout.hiddenMigration,
 	...NOTICE_MIGRATIONS,
 ];

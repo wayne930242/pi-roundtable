@@ -295,12 +295,17 @@ export function withTurn(
 export function onRooms(
 	state: RoomsState,
 	rooms: readonly RoomView[],
-	layout: { pins?: string[] | undefined; folders?: FolderView[] | undefined },
+	layout: {
+		pins?: string[] | undefined;
+		hidden?: string[] | undefined;
+		folders?: FolderView[] | undefined;
+	},
 ): RoomsState {
 	let next: RoomsState = {
 		...state,
 		listed: true,
 		pins: layout.pins ?? state.pins,
+		hidden: layout.hidden ?? state.hidden,
 		folders: layout.folders ?? state.folders,
 	};
 	for (const view of rooms)

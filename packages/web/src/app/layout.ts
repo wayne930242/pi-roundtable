@@ -9,11 +9,15 @@ export interface LayoutStore {
 	view(): Promise<LayoutView>;
 	/**
 	 * Applies an edit to the stored layout as one step that no other edit overlaps, and returns the
-	 * result. An edit that throws changes nothing.
+	 * result. An edit that throws changes nothing. `by` is the principal who makes the change, which
+	 * a room hidden by it is recorded with; hiding a room without one is refused.
 	 */
-	change(edit: (layout: LayoutView) => LayoutView): Promise<LayoutView>;
+	change(
+		edit: (layout: LayoutView) => LayoutView,
+		by?: string,
+	): Promise<LayoutView>;
 	/**
-	 * Drops a room's pin and its place in a folder, for a room that is deleted for good (an archived
+	 * Drops a room's pin, its place in a folder and its hiding, for a room that is deleted for good (an archived
 	 * agent returns to its place when it comes back, so archiving does not call this).
 	 */
 	forget(room: string): Promise<void>;
@@ -31,7 +35,7 @@ interface RoomRow {
 /**
  * The arrangement of the room list, shared by every owner and device: the pinned rooms
  * (`web_room_pins`), the folders (`web_room_folders`) and the rooms in them
- * (`web_room_folder_rooms`). Positions are dense (0..n-1) within each list and rewritten on every
+ * (`web_room_folder_rooms`), and the rooms hidden from the home (`web_room_hidden`). Positions are dense (0..n-1) within each list and rewritten on every
  * change under one advisory lock, so two devices editing at once cannot leave a gap or a duplicate.
  * Rows of rooms that no longer exist are kept, so a re-created agent returns to its place.
  */
@@ -67,22 +71,37 @@ export class RoomLayout implements LayoutStore {
 		},
 	};
 
+	static readonly hiddenMigration: Migration = {
+		name: "web-room-hidden",
+		up: async (sql) => {
+			await sql`
+				CREATE TABLE IF NOT EXISTS web_room_hidden (
+					room text PRIMARY KEY,
+					hidden_by text NOT NULL,
+					hidden_at timestamptz NOT NULL DEFAULT now()
+				)`;
+		},
+	};
+
 	async forget(room: string): Promise<void> {
 		await this.change((layout) => forgetRoom(layout, room));
 	}
 
 	async view(): Promise<LayoutView> {
-		// The three SELECTs share one snapshot, so an edit that commits between them is seen whole or not at all.
+		// The four SELECTs share one snapshot, so an edit that commits between them is seen whole or not at all.
 		return this.#sql.begin("isolation level repeatable read, read only", read);
 	}
 
-	async change(edit: (layout: LayoutView) => LayoutView): Promise<LayoutView> {
+	async change(
+		edit: (layout: LayoutView) => LayoutView,
+		by?: string,
+	): Promise<LayoutView> {
 		return this.#sql.begin(async (tx) => {
 			await tx`SELECT pg_advisory_xact_lock(hashtextextended('web-room-layout', 0))`;
 			const before = await read(tx);
 			const after = edit(before);
 			if (JSON.stringify(after) !== JSON.stringify(before))
-				await write(tx, after);
+				await write(tx, after, by);
 			return after;
 		});
 	}
@@ -95,8 +114,11 @@ async function read(tx: SQL): Promise<LayoutView> {
 		SELECT room, folder FROM web_room_folder_rooms ORDER BY folder, position`;
 	const pins: { room: string }[] = await tx`
 		SELECT room FROM web_room_pins ORDER BY position`;
+	const hidden: { room: string }[] = await tx`
+		SELECT room FROM web_room_hidden ORDER BY hidden_at, room`;
 	return {
 		pins: pins.map((row) => row.room),
+		hidden: hidden.map((row) => row.room),
 		folders: folders.map((folder) => ({
 			id: folder.id,
 			name: folder.name,
@@ -107,8 +129,15 @@ async function read(tx: SQL): Promise<LayoutView> {
 	};
 }
 
-/** Rewrites the three tables to match the layout, positions dense. */
-async function write(tx: SQL, layout: LayoutView): Promise<void> {
+/**
+ * Rewrites the tables to match the layout, positions dense. A hidden room that is already stored
+ * keeps its row, who hid it and when; one that is no longer hidden loses it.
+ */
+async function write(
+	tx: SQL,
+	layout: LayoutView,
+	by: string | undefined,
+): Promise<void> {
 	await tx`DELETE FROM web_room_folder_rooms`;
 	await tx`DELETE FROM web_room_pins`;
 	const ids = layout.folders.map((folder) => folder.id);
@@ -130,4 +159,22 @@ async function write(tx: SQL, layout: LayoutView): Promise<void> {
 	);
 	if (placed.length > 0)
 		await tx`INSERT INTO web_room_folder_rooms ${tx(placed)}`;
+	if (layout.hidden.length === 0) await tx`DELETE FROM web_room_hidden`;
+	else {
+		await tx`DELETE FROM web_room_hidden WHERE room NOT IN ${tx(layout.hidden)}`;
+		if (by === undefined) {
+			const stored: { room: string }[] =
+				await tx`SELECT room FROM web_room_hidden`;
+			if (
+				layout.hidden.some((room) => !stored.some((row) => row.room === room))
+			)
+				throw new Error(
+					"Say who hid a room: a hidden room is stored with them.",
+				);
+		} else
+			for (const room of layout.hidden)
+				await tx`
+					INSERT INTO web_room_hidden (room, hidden_by) VALUES (${room}, ${by})
+					ON CONFLICT (room) DO NOTHING`;
+	}
 }

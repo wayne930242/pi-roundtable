@@ -267,6 +267,11 @@ export interface FolderView {
 export interface LayoutView {
 	/** The pinned rooms' keys, in order. */
 	pins: string[];
+	/**
+	 * The hidden rooms' keys: they answer, run schedules and push as before and are left off the
+	 * home and the switcher. A hidden room keeps its pin and folder.
+	 */
+	hidden: string[];
 	folders: FolderView[];
 }
 

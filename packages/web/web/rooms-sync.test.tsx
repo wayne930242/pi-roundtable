@@ -38,7 +38,9 @@ function answers() {
 	const spy = spyOn(api, "rooms").mockImplementation(
 		() =>
 			new Promise((resolve) => {
-				pending.push((rooms) => resolve({ rooms, pins: [], folders: [] }));
+				pending.push((rooms) =>
+					resolve({ rooms, pins: [], hidden: [], folders: [] }),
+				);
 			}) as ReturnType<typeof api.rooms>,
 	);
 	return { pending, spy };

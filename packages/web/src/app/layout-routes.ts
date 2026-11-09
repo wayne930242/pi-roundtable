@@ -9,6 +9,7 @@ import {
 	placeRoom,
 	removeFolder,
 	renameFolder,
+	setHidden,
 	setPinned,
 	shown,
 } from "../layout-order.ts";
@@ -88,7 +89,8 @@ export interface LayoutRoutesOptions {
 
 /**
  * The room list's arrangement over HTTP: `GET api/rooms` carries it, `api/folders` makes, renames,
- * places and removes folders, and `PUT api/rooms/<key>/folder` and `…/pin` place one room. Every
+ * places and removes folders, `PUT api/rooms/<key>/folder` and `…/pin` place one room, and
+ * `…/hidden` hides or shows it. Every
  * write is an owner's (tier read again) and answers with the whole layout, so the writing page
  * and the others converge on what the server stored.
  */
@@ -177,19 +179,34 @@ export class LayoutRoutes {
 		return json({ muted, rooms: folder.rooms });
 	}
 
-	/** `PUT api/rooms/<key>/folder` and `…/pin`, for a room that resolved. */
+	/** `PUT api/rooms/<key>/folder`, `…/pin` and `…/hidden`, for a room that resolved. */
 	async place(
 		request: Request,
 		room: ResolvedRoom,
-		action: "folder" | "pin",
+		action: "folder" | "pin" | "hidden",
 		admission: Authenticated,
 	): Promise<Response> {
 		return this.#guard(async () => {
-			await this.#options.owner(admission);
+			const owner = await this.#options.owner(admission);
 			if (room.kind === "thread") throw bad("A thread stays under its room.");
 			if (room.key === this.#options.home())
-				throw bad("Home stays at the top.");
+				throw bad(
+					action === "hidden"
+						? "Home cannot be hidden."
+						: "Home stays at the top.",
+				);
 			const body = await bodyOf(request);
+			if (action === "hidden") {
+				const { hidden } = body;
+				if (typeof hidden !== "boolean")
+					throw bad("hidden must be true or false.");
+				return json(
+					await this.#write(
+						(layout) => setHidden(layout, room.key, hidden),
+						owner.principalId,
+					),
+				);
+			}
 			const before = beforeOf(body);
 			if (action === "pin") {
 				const { pinned } = body;
@@ -213,8 +230,11 @@ export class LayoutRoutes {
 	}
 
 	/** Stores an edit, tells the other pages, and answers with the layout as readers see it. */
-	async #write(edit: (layout: LayoutView) => LayoutView): Promise<LayoutView> {
-		const stored = await this.#options.layout.change(edit);
+	async #write(
+		edit: (layout: LayoutView) => LayoutView,
+		by?: string,
+	): Promise<LayoutView> {
+		const stored = await this.#options.layout.change(edit, by);
 		this.#options.changed();
 		const rooms = this.#options.placeable();
 		return shown(stored, (key) => rooms.has(key));

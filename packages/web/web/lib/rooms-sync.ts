@@ -34,6 +34,7 @@ export function useRoomsSync(enabled: boolean, version: number): void {
 					type: "rooms_loaded",
 					rooms: view.rooms,
 					pins: view.pins,
+					hidden: view.hidden,
 					folders: view.folders,
 				});
 			},

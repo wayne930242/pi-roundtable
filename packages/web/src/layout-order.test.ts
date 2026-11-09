@@ -13,6 +13,7 @@ import {
 	placeRoom,
 	removeFolder,
 	renameFolder,
+	setHidden,
 	setPinned,
 	shown,
 } from "./layout-order.ts";
@@ -144,6 +145,7 @@ test("pinning takes a room out of its folder, and a move into a folder unpins it
 	state = setPinned(state, A, true, null);
 	expect(state).toEqual({
 		pins: [A],
+		hidden: [],
 		folders: [{ id: "f1", name: "One", rooms: [] }],
 	});
 	state = setPinned(state, B, true, A);
@@ -166,6 +168,7 @@ test("removing a folder sends its rooms to no folder and leaves the others in or
 	const left = removeFolder(state, "f1");
 	expect(left).toEqual({
 		pins: [C],
+		hidden: [],
 		folders: [{ id: "f2", name: "Two", rooms: [B] }],
 	});
 	expect(problem(() => removeFolder(left, "f1"))).toBe("no-folder");
@@ -174,11 +177,13 @@ test("removing a folder sends its rooms to no folder and leaves the others in or
 test("shown hides rooms that are gone and keeps their place in the stored layout untouched", () => {
 	const state: LayoutView = {
 		pins: [A, D],
+		hidden: [],
 		folders: [{ id: "f1", name: "One", rooms: [B, "app:agent.deleted", C] }],
 	};
 	const known = new Set([A, B, C]);
 	expect(shown(state, (key) => known.has(key))).toEqual({
 		pins: [A],
+		hidden: [],
 		folders: [{ id: "f1", name: "One", rooms: [B, C] }],
 	});
 	expect(state.pins).toEqual([A, D]);
@@ -194,4 +199,37 @@ test("forgetting a room drops its pin and its place in a folder, and leaves ever
 	expect(forgetRoom(state, D).folders).toEqual(state.folders);
 	// A room with no place changes nothing.
 	expect(forgetRoom(state, "app:agent.nobody")).toEqual(state);
+});
+
+test("hiding a room keeps its pin and folder; unhiding returns it to its place", () => {
+	let state = createFolder(layout(), "f1", "One");
+	state = placeRoom(state, A, "f1", null);
+	state = setPinned(state, B, true, null);
+	const hidden = setHidden(setHidden(state, A, true), B, true);
+	expect(hidden.hidden).toEqual([A, B]);
+	expect(hidden.pins).toEqual([B]);
+	expect(hidden.folders[0]?.rooms).toEqual([A]);
+	// Hiding twice is one entry; unhiding leaves the pin and the folder as they were.
+	expect(setHidden(hidden, A, true).hidden).toEqual([A, B]);
+	const back = setHidden(hidden, A, false);
+	expect(back.hidden).toEqual([B]);
+	expect(back.folders[0]?.rooms).toEqual([A]);
+});
+
+test("moving, pinning, folders and renames leave the hidden rooms hidden", () => {
+	let state = setHidden(createFolder(layout(), "f1", "One"), A, true);
+	state = placeRoom(state, A, "f1", null);
+	state = setPinned(state, A, true, null);
+	state = placeFolder(renameFolder(state, "f1", "Uno"), "f1", null);
+	expect(state.hidden).toEqual([A]);
+	expect(removeFolder(state, "f1").hidden).toEqual([A]);
+	expect(createFolder(state, "f2", "Two").hidden).toEqual([A]);
+});
+
+test("forgetting a room also drops it from the hidden rooms, and shown hides rooms that are gone from them", () => {
+	const state = setHidden(setHidden(layout(), A, true), D, true);
+	expect(forgetRoom(state, A).hidden).toEqual([D]);
+	const known = new Set([A, B]);
+	expect(shown(state, (key) => known.has(key)).hidden).toEqual([A]);
+	expect(state.hidden).toEqual([A, D]);
 });

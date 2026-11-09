@@ -166,6 +166,7 @@ beforeEach(() => {
 	rooms = spyOn(api, "rooms").mockResolvedValue({
 		rooms: listed,
 		pins: [],
+		hidden: [],
 		folders: [],
 	});
 });

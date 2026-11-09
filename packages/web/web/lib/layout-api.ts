@@ -34,6 +34,12 @@ export const layoutApi = {
 			method: "PUT",
 			body: JSON.stringify({ folder, before }),
 		}),
+	/** Hides a room from the home, or shows it again; the answer is the whole layout. */
+	hideRoom: (room: string, hidden: boolean) =>
+		request<LayoutView>(`rooms/${encodeURIComponent(room)}/hidden`, {
+			method: "PUT",
+			body: JSON.stringify({ hidden }),
+		}),
 	/** Pins a room before another pinned room (`null` = last), or unpins it. */
 	pinRoom: (room: string, pinned: boolean, before: string | null) =>
 		request<LayoutView>(`rooms/${encodeURIComponent(room)}/pin`, {

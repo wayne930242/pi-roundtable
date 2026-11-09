@@ -198,6 +198,7 @@ export function councilPage(): void {
 		});
 		rooms = spyOn(api, "rooms").mockImplementation(async () => ({
 			pins: [],
+			hidden: [],
 			folders: [],
 			rooms: Object.values(store.getState().rooms).flatMap((room) =>
 				room.view ? [room.view] : [],

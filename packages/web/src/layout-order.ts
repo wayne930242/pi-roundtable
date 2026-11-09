@@ -9,7 +9,7 @@ export const MAX_FOLDERS = 50;
 /** The most code points of a folder's name. */
 export const FOLDER_NAME_MAX = 40;
 
-export const EMPTY_LAYOUT: LayoutView = { pins: [], folders: [] };
+export const EMPTY_LAYOUT: LayoutView = { pins: [], hidden: [], folders: [] };
 
 /** Why an edit of the layout was refused. */
 export type LayoutProblem = "bad-name" | "no-folder" | "duplicate" | "full";
@@ -79,7 +79,7 @@ function folderIndex(layout: LayoutView, id: string): number {
 const withFolders = (
 	layout: LayoutView,
 	folders: FolderView[],
-): LayoutView => ({ pins: layout.pins, folders });
+): LayoutView => ({ ...layout, folders });
 
 /** The layout with a new last folder. */
 export function createFolder(
@@ -143,8 +143,9 @@ export function removeFolder(layout: LayoutView, id: string): LayoutView {
 	);
 }
 
-/** The layout without a room: not pinned and in no folder. For a room that is gone for good. */
-export const forgetRoom = (layout: LayoutView, room: string): LayoutView => ({
+/** The layout with a room out of its pin and its folder; it stays hidden if it was. */
+const leavePlace = (layout: LayoutView, room: string): LayoutView => ({
+	...layout,
 	pins: layout.pins.filter((one) => one !== room),
 	folders: layout.folders.map((folder) =>
 		folder.rooms.includes(room)
@@ -152,6 +153,28 @@ export const forgetRoom = (layout: LayoutView, room: string): LayoutView => ({
 			: folder,
 	),
 });
+
+/** The layout without a room: not pinned, in no folder and not hidden. For a room that is gone for good. */
+export const forgetRoom = (layout: LayoutView, room: string): LayoutView => ({
+	...leavePlace(layout, room),
+	hidden: layout.hidden.filter((one) => one !== room),
+});
+
+/**
+ * A room hidden from the home, or shown again. Hiding keeps the room's pin and folder, so it returns
+ * to its place; a room already hidden stays where it is in the list.
+ */
+export function setHidden(
+	layout: LayoutView,
+	room: string,
+	hidden: boolean,
+): LayoutView {
+	if (hidden)
+		return layout.hidden.includes(room)
+			? layout
+			: { ...layout, hidden: [...layout.hidden, room] };
+	return { ...layout, hidden: layout.hidden.filter((one) => one !== room) };
+}
 
 /**
  * A room into a folder before another room of it (or last), or into none with `folder` null. A
@@ -164,7 +187,7 @@ export function placeRoom(
 	before: string | null,
 ): LayoutView {
 	if (folder !== null) folderIndex(layout, folder);
-	const clear = forgetRoom(layout, room);
+	const clear = leavePlace(layout, room);
 	if (folder === null) return clear;
 	return withFolders(
 		clear,
@@ -183,15 +206,15 @@ export function setPinned(
 	pinned: boolean,
 	before: string | null,
 ): LayoutView {
-	const clear = forgetRoom(layout, room);
+	const clear = leavePlace(layout, room);
 	if (!pinned) return clear;
 	return {
+		...clear,
 		pins: moveBefore(
 			layout.pins.filter((one) => one !== room),
 			room,
 			before,
 		),
-		folders: clear.folders,
 	};
 }
 
@@ -202,6 +225,7 @@ export function shown(
 ): LayoutView {
 	return {
 		pins: layout.pins.filter(known),
+		hidden: layout.hidden.filter(known),
 		folders: layout.folders.map((folder) => ({
 			...folder,
 			rooms: folder.rooms.filter(known),
