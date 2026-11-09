@@ -6,6 +6,7 @@ import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
 import type { RoundtableConfig } from "../config/config.ts";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import { discordPlaces } from "../discord/agent-places.ts";
 import { discord as discordAdapter } from "../discord/discord-adapter.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
@@ -54,6 +55,8 @@ function quietDiscord(
 		dashboards: number;
 		deliver?: (message: InboundMessage) => void;
 	} = { created: [], dashboards: 0 },
+	/** The agent guild: with one, the stand-in contributes Discord's place provider, as the built-in plugin does. */
+	guild?: string,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
@@ -70,22 +73,23 @@ function quietDiscord(
 		replaces: [DISCORD],
 		setup: ({ services }) => {
 			// SAFETY: the built-in plugins after it hand these to the team and the tools, which read them only when a turn or a command runs.
+			const agentChannels = () => ({
+				post: async () => undefined,
+				createChannel: async (name: string) => {
+					seen.created.push(name);
+					return "900000000000000010";
+				},
+				placeIn: async () => false,
+				layout: async () => [],
+				arrange: async () => undefined,
+				setTopic: async () => undefined,
+				removeWebhook: async () => undefined,
+				exists: async () => true,
+				read: async () => [],
+			});
 			services.provide(DISCORD, {
 				connection: {
-					agentChannels: () => ({
-						post: async () => undefined,
-						createChannel: async (name: string) => {
-							seen.created.push(name);
-							return "900000000000000010";
-						},
-						placeIn: async () => false,
-						layout: async () => [],
-						arrange: async () => undefined,
-						setTopic: async () => undefined,
-						removeWebhook: async () => undefined,
-						exists: async () => true,
-						read: async () => [],
-					}),
+					agentChannels,
 					agentDashboard: () => ({
 						show: async () => {
 							seen.dashboards += 1;
@@ -99,7 +103,21 @@ function quietDiscord(
 				threads: { open: async () => undefined, sweep: async () => undefined },
 				guard: {},
 			} as unknown as DiscordServices);
-			return { surfaces: [surface] };
+			return {
+				surfaces: [surface],
+				places: guild
+					? [
+							discordPlaces({
+								// SAFETY: the provider is read for keys; nothing asks the client.
+								client: undefined as never,
+								guild,
+								channels: agentChannels() as never,
+								onRemoved: () => undefined,
+								logger: silentLogger(),
+							}),
+						]
+					: [],
+			};
 		},
 	};
 }
@@ -378,7 +396,10 @@ function hasWebAccess(): boolean {
 										discordAdapter({ ...config.discord, agentSpeakers }),
 									],
 								}),
-						plugins: [quietDiscord(), quietRuntime],
+						plugins: [
+							quietDiscord(undefined, config.discord.guild),
+							quietRuntime,
+						],
 					},
 					{ logger: silentLogger() },
 				);

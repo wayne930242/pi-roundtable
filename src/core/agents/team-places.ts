@@ -57,18 +57,18 @@ export class TeamPlaces {
 	}
 
 	/** The providers in "auto" order. */
-	providers(): readonly PlaceProvider[] {
+	ordered(): readonly PlaceProvider[] {
 		return this.#port?.all() ?? [];
 	}
 
 	/** The surfaces that hold places, in "auto" order. */
 	surfaces(): readonly string[] {
-		return this.providers().map((provider) => provider.surface);
+		return this.ordered().map((provider) => provider.surface);
 	}
 
 	/** The surfaces whose places are rooms named after the agent or group. */
 	rooms(): readonly string[] {
-		return this.providers().flatMap((provider) =>
+		return this.ordered().flatMap((provider) =>
 			provider.storage === "derived" ? [provider.surface] : [],
 		);
 	}
@@ -127,7 +127,7 @@ export class TeamPlaces {
 	placesOf(name: string): TeamPlace[] {
 		const ref = this.#ref(name);
 		if (!ref) return [];
-		return this.providers().flatMap((provider) => {
+		return this.ordered().flatMap((provider) => {
 			const key = this.#keyOn(ref, provider);
 			return key === undefined ? [] : [{ surface: provider.surface, key }];
 		});
@@ -208,7 +208,7 @@ export class TeamPlaces {
 				return roomSeat(parseChannelKey(channel).surface, group, agent);
 			return this.#seatOn(group, agent, provider);
 		}
-		for (const provider of this.providers())
+		for (const provider of this.ordered())
 			if (
 				provider.storage === "stored" &&
 				this.#stored.on("group", group.name, provider.surface) !== undefined
@@ -235,7 +235,7 @@ export class TeamPlaces {
 
 	/** Every conversation of an agent's seat in a group: one on each stored place of the group, then each room's. */
 	seatsOf(group: AgentGroup, agent: string): ChannelKey[] {
-		return this.providers().flatMap((provider) => {
+		return this.ordered().flatMap((provider) => {
 			if (provider.storage === "derived")
 				return [roomSeat(provider.surface, group, agent)];
 			return this.#stored.on("group", group.name, provider.surface) ===
@@ -293,7 +293,7 @@ export class TeamPlaces {
 	#ownKey(agent: Agent, channel: ChannelKey): ChannelKey {
 		const wanted = this.#provider(channel);
 		const ref: PlaceRef = { kind: "agent", name: agent.name };
-		for (const provider of this.providers()) {
+		for (const provider of this.ordered()) {
 			if (provider.storage !== "stored") continue;
 			if (wanted && provider.surface !== wanted.surface) continue;
 			const key = this.#keyOn(ref, provider);
