@@ -134,16 +134,16 @@ export const agentPlacesMigration: Migration = {
 
 /**
  * The migrations of the store's tables for the guild the process serves, or the local team
- * without Discord: the tables, then each row's guild, with existing rows given `guildId`, then
+ * without Discord: the tables, then each row's guild, with existing rows given `teamId`, then
  * the group channel made optional.
  */
-export function agentMigrations(guildId: string): Migration[] {
+export function agentMigrations(teamId: string): Migration[] {
 	return [
 		agentsMigration,
 		{
 			name: "agents-guild",
 			up: (sql) =>
-				scopeToGuild(sql, guildId, [
+				scopeToGuild(sql, teamId, [
 					{ table: "agents", key: ["name"] },
 					{ table: "agent_groups", key: ["name"] },
 					{ table: "agent_group_messages", key: ["id"] },
@@ -203,7 +203,7 @@ export function agentMigrations(guildId: string): Migration[] {
 		{
 			name: "agent-places-from-channels",
 			runs: "every-boot",
-			up: convergeLegacyChannelPlaces(guildId),
+			up: convergeLegacyChannelPlaces(teamId),
 		},
 	];
 }
