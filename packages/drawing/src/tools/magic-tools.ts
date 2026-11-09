@@ -2,11 +2,10 @@ import { Type } from "typebox";
 import {
 	CIRCLE_TYPES,
 	MAX_CIRCLE_TEXT,
-	MAX_LAYERS,
 	renderMagicCircle,
-	renderSacredGeometry,
-	renderSigil,
-} from "../magic.ts";
+} from "../magic-circle.ts";
+import { MAX_LAYERS, renderSacredGeometry } from "../sacred-geometry.ts";
+import { renderSigil } from "../sigil.ts";
 import type { ToolWording } from "../tool-text.ts";
 import {
 	background,
