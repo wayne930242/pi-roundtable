@@ -234,6 +234,11 @@ test("the grid button opens all features, grouped from the config's panes, with 
 	await show(<Home />);
 	await page.click(q(".chats-grid"));
 	await until(() => all(".feature-tile").length > 0);
+	// The dialog's own class is `features`: the groups' container must not share it, or the
+	// container's flex layout shows the closed dialog.
+	expect(
+		q("dialog.sheet.features > .sheet-body .feature-groups"),
+	).not.toBeNull();
 	expect(names(".feature-group h3")).toEqual([
 		"Organize",
 		"Work",

@@ -71,7 +71,7 @@ export function AllFeatures(props: { open: boolean; onClose(): void }) {
 			variant="features"
 			onClose={props.onClose}
 		>
-			<div className="features">
+			<div className="feature-groups">
 				{groups.map((group) => (
 					<section key={group.id} className="feature-group">
 						<h3>{group.title}</h3>

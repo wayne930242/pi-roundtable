@@ -333,6 +333,58 @@ button.chip[aria-pressed="true"] .chip-face {
 	color: var(--text);
 }
 
+/* ── The page of hidden and archived rooms ────────────────────────────────────────────────────── */
+
+.hidden-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.hidden-room {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2);
+	border-radius: var(--radius);
+}
+
+.hidden-room:hover {
+	background: var(--surface-2);
+}
+
+.hidden-room-link {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: var(--space-3);
+	min-width: 0;
+	color: inherit;
+	text-decoration: none;
+}
+
+.hidden-room .room-row-main {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	min-width: 0;
+}
+
+.hidden-room .room-row-top {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.hidden-room .meta {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* ── The bottom bar: the grid button and the search ───────────────────────────────────────────── */
 
 .chats-bar {

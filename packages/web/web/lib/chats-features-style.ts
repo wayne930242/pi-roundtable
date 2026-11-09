@@ -39,7 +39,7 @@ export const CHATS_FEATURES_CSS = `
 
 /* ── All features ─────────────────────────────────────────────────────────────────────────────── */
 
-.features {
+.feature-groups {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-4);
