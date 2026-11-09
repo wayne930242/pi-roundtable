@@ -286,6 +286,17 @@ test("a file that says it is an image but is not one is refused, and an empty fi
 	expect(filesIn(waiting)).toEqual([]);
 });
 
+test("SVG bytes declared text/plain stay text/plain", async () => {
+	const { uploads } = store();
+	const view = await upload(
+		uploads,
+		"data.txt",
+		'<svg xmlns="http://www.w3.org/2000/svg"/>',
+		"text/plain",
+	);
+	expect(view.type).toBe("text/plain");
+});
+
 test("a request that is no form, has no length or no file is refused", async () => {
 	const { uploads } = store();
 	const noLength = new Request("http://localhost/x", {

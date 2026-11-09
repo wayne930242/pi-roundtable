@@ -334,6 +334,8 @@ export function fileResponse(
 			"content-security-policy": svg ? SVG_POLICY : "sandbox",
 			"x-content-type-options": "nosniff",
 			"cache-control": "private, max-age=3600",
+			// The answer depends on how the request was made (an <img> or a page open), so a cache keeps them apart.
+			vary: "sec-fetch-dest",
 			"content-length": String(body.size),
 		},
 	});

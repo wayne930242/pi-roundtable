@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Authenticated } from "../auth/authenticator.ts";
+import { FileApi } from "./file-routes.ts";
 import { FileDir, fileResponse, safeName } from "./files.ts";
 
 test("RV-F006: a file name in the download header is percent-encoded to the characters RFC 5987 allows", () => {
@@ -46,6 +48,7 @@ test("an SVG is served inline as image/svg+xml, sandboxed with no script, and no
 	expect(response.headers.get("content-disposition")).toBe("inline");
 	expect(response.headers.get("content-security-policy")).toBe(SVG_POLICY);
 	expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+	expect(response.headers.get("vary")).toBe("sec-fetch-dest");
 	// Opened by its own address, the page may not run script: the sandbox has no allow-scripts.
 	expect(response.headers.get("content-security-policy")).not.toContain(
 		"allow-",
@@ -66,6 +69,7 @@ test("an SVG opened as a document or with no fetch destination is a download, st
 			"attachment; filename*=UTF-8''a%20b.svg",
 		);
 		expect(response.headers.get("content-security-policy")).toBe(SVG_POLICY);
+		expect(response.headers.get("vary")).toBe("sec-fetch-dest");
 	}
 });
 
@@ -111,6 +115,35 @@ test("a stored SVG with a script is served as it is, under the sandbox", async (
 		const response = fileResponse(meta, blob, "image");
 		expect(await response.text()).toBe(text);
 		expect(response.headers.get("content-security-policy")).toBe(SVG_POLICY);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("the file route serves a stored SVG inline to an image load and as a download to anything else", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "files-route-"));
+	try {
+		const files = new FileDir(dir);
+		const { id } = files.put(
+			"x.svg",
+			"image/svg+xml",
+			new TextEncoder().encode(SVG),
+		);
+		const api = new FileApi({
+			files,
+			log: () => {},
+		} as unknown as ConstructorParameters<typeof FileApi>[0]);
+		const owner = {
+			visitor: { id: "owner", tier: "owner" },
+		} as unknown as Authenticated;
+		const get = (headers: Record<string, string>) =>
+			api.file(id, owner, new Request(`http://x/api/files/${id}`, { headers }));
+		const image = await get({ "sec-fetch-dest": "image" });
+		expect(image.headers.get("content-type")).toBe("image/svg+xml");
+		expect(image.headers.get("content-disposition")).toBe("inline");
+		const bare = await get({});
+		expect(bare.headers.get("content-type")).toBe("application/octet-stream");
+		expect(bare.headers.get("content-disposition")).toStartWith("attachment");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
