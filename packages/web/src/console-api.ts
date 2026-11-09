@@ -309,7 +309,7 @@ export class ConsoleApi {
 			workspaces,
 			outside: stored.filter((c) => c.kind === "outside"),
 			party: (await features?.party?.list()) ?? [],
-			guildId: team.discordGuild ?? team.guildId,
+			guildId: team.discordGuild ?? team.teamId ?? team.guildId,
 			agents: status.agents.map((agent) => ({
 				name: agent.name,
 				displayName: agent.displayName,

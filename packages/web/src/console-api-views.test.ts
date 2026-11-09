@@ -79,6 +79,7 @@ describe("overview of a team without Discord", () => {
 			busy: 0,
 		};
 		const bare = partial<AgentTeam>({
+			teamId: "local",
 			guildId: "local",
 			discordGuild: undefined,
 			owns: () => undefined,
@@ -89,6 +90,23 @@ describe("overview of a team without Discord", () => {
 			"overview",
 		);
 		expect(body.groups).toEqual([crew]);
+	});
+});
+
+describe("overview of a team with its own id", () => {
+	test("names the team by teamId, not by the deprecated guildId, when there is no Discord guild", async () => {
+		const named = partial<AgentTeam>({
+			teamId: "team-x",
+			guildId: "deprecated-x",
+			discordGuild: undefined,
+			owns: () => undefined,
+			status: async () => ({ agents: [], groups: [] }),
+		});
+		const { body } = await call<OverviewView>(
+			api({ team: named }).api,
+			"overview",
+		);
+		expect(body.guildId).toBe("team-x");
 	});
 });
 
