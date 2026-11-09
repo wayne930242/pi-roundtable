@@ -32,7 +32,7 @@ test("RV-F006: a file name loses the bidirectional controls that make 'invoice\\
 const SVG =
 	'<svg xmlns="http://www.w3.org/2000/svg"><style>@keyframes a{}</style></svg>';
 const SVG_POLICY =
-	"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+	"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'";
 
 test("an SVG is served inline as image/svg+xml, sandboxed with no script, and nosniff", () => {
 	const meta = {
@@ -41,7 +41,7 @@ test("an SVG is served inline as image/svg+xml, sandboxed with no script, and no
 		type: "image/svg+xml",
 		size: SVG.length,
 	};
-	const response = fileResponse(meta, new Blob([SVG]));
+	const response = fileResponse(meta, new Blob([SVG]), "image");
 	expect(response.headers.get("content-type")).toBe("image/svg+xml");
 	expect(response.headers.get("content-disposition")).toBe("inline");
 	expect(response.headers.get("content-security-policy")).toBe(SVG_POLICY);
@@ -53,6 +53,20 @@ test("an SVG is served inline as image/svg+xml, sandboxed with no script, and no
 	expect(response.headers.get("content-security-policy")).not.toContain(
 		"script-src",
 	);
+});
+
+test("an SVG opened as a document or with no fetch destination is a download, still under its policy", () => {
+	const meta = { id: "i", name: "a b.svg", type: "image/svg+xml", size: 1 };
+	for (const dest of ["document", "iframe", null, undefined]) {
+		const response = fileResponse(meta, new Blob([SVG]), dest);
+		expect(response.headers.get("content-type")).toBe(
+			"application/octet-stream",
+		);
+		expect(response.headers.get("content-disposition")).toBe(
+			"attachment; filename*=UTF-8''a%20b.svg",
+		);
+		expect(response.headers.get("content-security-policy")).toBe(SVG_POLICY);
+	}
 });
 
 test("the other types are served as before: a raster inline under a bare sandbox, the rest a download", async () => {
@@ -94,7 +108,7 @@ test("a stored SVG with a script is served as it is, under the sandbox", async (
 		const meta = files.meta(stored.id);
 		const blob = files.blob(stored.id);
 		if (!meta || !blob) throw new Error("the file was not stored");
-		const response = fileResponse(meta, blob);
+		const response = fileResponse(meta, blob, "image");
 		expect(await response.text()).toBe(text);
 		expect(response.headers.get("content-security-policy")).toBe(SVG_POLICY);
 	} finally {

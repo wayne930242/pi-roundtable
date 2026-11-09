@@ -28,7 +28,7 @@ const INLINE_TYPES = new Set([
 /** An SVG is shown inline too, but its own page may carry script and CSS, so it is served under this policy: sandboxed with no script, no network, only its inline styles and data: images. */
 const SVG_TYPE = "image/svg+xml";
 const SVG_POLICY =
-	"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+	"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'";
 
 /** How long a reply's or a sent message's file stays: 30 days. */
 export const FILE_RETENTION_MS = 30 * 24 * 3_600_000;
@@ -309,12 +309,17 @@ export class FileDir {
 
 /**
  * The response for a stored file: a download, except for the image types the page shows (the four
- * raster ones and SVG), never interpreted as a page (`sandbox`, `nosniff`); an SVG also gets
+ * raster ones, and SVG when an image loads it), never interpreted as a page (`sandbox`, `nosniff`); an SVG also gets
  * `SVG_POLICY`, which lets its inline styles and animation run but no script.
  */
-export function fileResponse(meta: RoomFile, body: Blob): Response {
+export function fileResponse(
+	meta: RoomFile,
+	body: Blob,
+	dest?: string | null,
+): Response {
 	const svg = meta.type === SVG_TYPE;
-	const inline = svg || INLINE_TYPES.has(meta.type);
+	// An SVG opened as a page, not loaded by an <img>, would run as a document on the app's origin: it is a download then.
+	const inline = INLINE_TYPES.has(meta.type) || (svg && dest === "image");
 	// RFC 5987 leaves `'`, `(`, `)` and `*` out of a value's characters; encodeURIComponent keeps them.
 	const encoded = encodeURIComponent(meta.name).replace(
 		/['()*]/g,

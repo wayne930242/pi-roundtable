@@ -30,7 +30,7 @@ import type { NewRoomMessage, RoomLog } from "./room-log.ts";
 import type { AppSocket, Audience, Sockets } from "./sockets.ts";
 import { AppSurfaceThreads } from "./surface-threads.ts";
 import type { WebThreads } from "./threads.ts";
-import type { Uploads } from "./uploads.ts";
+import { keptType, type Uploads } from "./uploads.ts";
 
 /** The name a reply shows when its sender names none. */
 const ASSISTANT = "Knight";
@@ -380,7 +380,7 @@ export class AppSurface implements ChatSurface {
 		const files: RoomFile[] = (reply.files ?? []).map((file) =>
 			this.#options.files.put(
 				file.name,
-				typeByName(file.name),
+				keptType(typeByName(file.name), file.data, file.name),
 				file.data,
 				undefined,
 				this.#options.isHostRoom(channel)

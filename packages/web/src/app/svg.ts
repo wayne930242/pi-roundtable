@@ -3,6 +3,29 @@ export const SVG_HEAD_BYTES = 4096;
 
 const WHITESPACE = /^[\t\n\r ]+/;
 const ROOT = /^<svg(?=[\t\n\r />])/;
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+/** The end of the root's start tag, past quoted values; the text's end when it is cut off. */
+function tagEnd(rest: string): number {
+	let quote = "";
+	for (let at = 0; at < rest.length; at++) {
+		const char = rest[at] ?? "";
+		if (quote) {
+			if (char === quote) quote = "";
+		} else if (char === '"' || char === "'") quote = char;
+		else if (char === ">") return at;
+	}
+	return rest.length;
+}
+
+/** Whether the root's own default namespace, when it sets one, is SVG's: an XHTML root renders as a page. */
+function rootNamespaceOk(rest: string): boolean {
+	const tag = rest.slice(0, tagEnd(rest));
+	const set = /[\t\n\r ]xmlns[\t\n\r ]*=[\t\n\r ]*(?:"([^"]*)"|'([^']*)')/.exec(
+		tag,
+	);
+	return set === null || (set[1] ?? set[2]) === SVG_NAMESPACE;
+}
 
 /** The index after the `>` that closes a doctype, which may hold a `[ ... ]` subset; -1 when the text ends first. */
 function afterDoctype(text: string, from: number): number {
@@ -29,7 +52,7 @@ export function isSvg(head: Uint8Array): boolean {
 	for (;;) {
 		at += WHITESPACE.exec(text.slice(at))?.[0].length ?? 0;
 		const rest = text.slice(at);
-		if (ROOT.test(rest)) return true;
+		if (ROOT.test(rest)) return rootNamespaceOk(rest);
 		let end: number;
 		if (rest.startsWith("<?")) {
 			end = rest.indexOf("?>");

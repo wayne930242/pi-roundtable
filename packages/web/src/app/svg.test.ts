@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isSvg } from "./svg.ts";
+import { isSvg, SVG_HEAD_BYTES } from "./svg.ts";
 import { imageTypeOf } from "./uploads.ts";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -40,6 +40,29 @@ test("what only holds an <svg somewhere is not an SVG: an HTML page, plain text,
 	for (const text of negatives)
 		expect([text, isSvg(bytes(text))]).toEqual([text, false]);
 	expect(imageTypeOf(bytes("<html><svg/></html>"))).toBeUndefined();
+});
+
+test("an SVG root in another default namespace, a prolog past the head, or UTF-16 is not an SVG", () => {
+	expect(
+		isSvg(bytes('<svg xmlns="http://www.w3.org/1999/xhtml"><a/></svg>')),
+	).toBe(false);
+	expect(isSvg(bytes("<svg xmlns='http://www.w3.org/1999/xhtml'/>"))).toBe(
+		false,
+	);
+	expect(isSvg(bytes('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBe(true);
+	expect(
+		isSvg(
+			bytes(`<!--${"x".repeat(5000)}--><svg/>`).subarray(0, SVG_HEAD_BYTES),
+		),
+	).toBe(false);
+	const utf16 = Uint8Array.from([
+		0xff,
+		0xfe,
+		...[..."<svg/>"].flatMap((char) => [char.charCodeAt(0), 0]),
+	]);
+	expect(isSvg(utf16)).toBe(false);
+	expect(imageTypeOf(utf16)).toBeUndefined();
+	expect(imageTypeOf(bytes("<svg/>"), false)).toBeUndefined();
 });
 
 test("the raster signatures still win and are still found", () => {
