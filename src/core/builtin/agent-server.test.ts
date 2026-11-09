@@ -5,7 +5,6 @@ import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { PlaceProvider } from "../contract/places.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
-import type { ChatSurface } from "../contract/surface.ts";
 import { PluginError } from "../kernel/errors.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type {
@@ -46,6 +45,7 @@ import {
 	agentServerPlugin,
 	LOCAL_TEAM_ID,
 } from "./agent-server.ts";
+import { placesPlugin } from "./agent-server-test-kit.ts";
 import { DISCORD, type DiscordServices } from "./discord.ts";
 
 const dirs: string[] = [];
@@ -97,32 +97,6 @@ const stores = standIn({});
 
 /** The runtime plugin's runtime, as the agent server reads it. */
 const runtime = { name: "runtime" } as unknown as AgentRuntime;
-
-/** The surfaces and place providers the host would link: a stand-in surface for each provider and a room surface for each of `rooms`. */
-function placesPlugin(
-	rooms: readonly string[],
-	providers: readonly PlaceProvider[],
-): RoundtablePlugin[] {
-	if (rooms.length + providers.length === 0) return [];
-	const surface = (name: string, agentRooms: boolean): ChatSurface => ({
-		surface: name,
-		start: async () => undefined,
-		sendReply: async () => undefined,
-		...(agentRooms ? { agentRooms: true } : {}),
-	});
-	return [
-		{
-			name: "places-fixture",
-			setup: () => ({
-				surfaces: [
-					...providers.map((p) => surface(p.surface, false)),
-					...rooms.map((room) => surface(room, true)),
-				],
-				places: [...providers],
-			}),
-		},
-	];
-}
 
 /** The agent server set up over stand-in stores and Discord, as far as setup reads them. */
 async function setUp(
