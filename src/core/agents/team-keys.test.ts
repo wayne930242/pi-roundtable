@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { PlaceProvider } from "../contract/places.ts";
 import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { StoredPlace } from "./agent-places.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
@@ -158,6 +159,47 @@ test("a Discord key is nobody's on a host with no Discord provider, whatever row
 	expect(host.ownerKind(discordKey("1234567890"))).toBeUndefined();
 	expect(host.keysOf("coder")).toEqual(["app:agent.coder"]);
 	expect(host.placeOn("coder", "discord")).toBeUndefined();
+});
+
+test("a stale key of a surface no provider serves is not a room: a seat posts where its home is, and the scope never builds a room from it", () => {
+	const bare = testPlaces({
+		store,
+		rows: () => legacyRows(AGENTS, GROUPS),
+		rooms: () => ["app"],
+		discord: false,
+	});
+	const stale = discordKey("1234567890");
+	// 0.44: a Discord seat's home was its channel, whatever else the host had.
+	expect(bare.seatChannel(GROUP, { home: stale })).toBe(stale);
+	expect(bare.seatChannel(ROOM_GROUP, { home: stale })).toBe(stale);
+	expect(bare.scopeOf(AGENT, stale).home).toBe(stale);
+	// Another stored surface's place of the agent is its own place, not a room of the stale key's surface.
+	const chat: PlaceProvider = {
+		surface: "chat",
+		storage: "stored",
+		key: (_ref, id) => `chat:${id}`,
+		placeOf: (key) =>
+			key.startsWith("chat:") ? { id: key.slice(5) } : undefined,
+		post: async () => undefined,
+	};
+	const withChat = testPlaces({
+		store,
+		rows: () => [
+			{ kind: "agent", name: "coder", surface: "chat", externalId: "c1" },
+		],
+		rooms: () => ["app"],
+		discord: false,
+		stored: () => [chat],
+	});
+	expect(withChat.scopeOf(AGENT, stale)).toEqual({
+		name: "coder",
+		session: "chat:c1",
+		home: "chat:c1",
+	});
+	// A key of a surface that hosts rooms is still a room.
+	expect(withChat.seatChannel(ROOM_GROUP, { home: "app:agent.coder" })).toBe(
+		"app:group.crew",
+	);
 });
 
 test("discordIdOf reads only Discord keys", () => {

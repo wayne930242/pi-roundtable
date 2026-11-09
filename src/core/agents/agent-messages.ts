@@ -317,9 +317,11 @@ export class AgentMessages {
 		if (!(await store.outbox.claim(entry.id))) return;
 		const sender = store.agent(entry.sender);
 		const target = store.agent(entry.target);
-		// An agent archived or moved to another place since has no turn to give the entry.
+		// An agent archived or moved to another place since has no turn to give the entry; nor has a
+		// key of a surface no provider serves, which is no room.
 		const has = (agent: Agent | undefined, channel: ChannelKey) =>
 			agent?.status === "active" &&
+			places.serves(channel) &&
 			(!places.isStored(channel) ||
 				places.agentOf(channel)?.name === agent.name);
 		const origin = entry.origin ?? entry.channel;

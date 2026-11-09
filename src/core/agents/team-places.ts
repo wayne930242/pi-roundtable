@@ -86,6 +86,11 @@ export class TeamPlaces {
 			: parseChannelKey(key).surface;
 	}
 
+	/** Whether a provider of this host serves the key's surface; a key of any other surface is no place and no room here. */
+	serves(key: ChannelKey): boolean {
+		return this.#provider(key) !== undefined;
+	}
+
 	/** Whether the key is a stored place's: one a provider made or bound. */
 	isStored(key: ChannelKey): boolean {
 		return this.#provider(key)?.storage === "stored";
@@ -262,10 +267,11 @@ export class TeamPlaces {
 
 	/** An agent's conversation in the channel: its own place's, or its room's. */
 	scopeOf(agent: Agent, channel: ChannelKey): AgentTurnScope {
+		// A key no provider serves is no room: the agent's own place stands for it, else the key.
 		const home =
-			this.#provider(channel)?.storage === "stored"
-				? this.#ownKey(agent, channel)
-				: channel;
+			this.#provider(channel)?.storage === "derived"
+				? channel
+				: this.#ownKey(agent, channel);
 		return { name: agent.name, session: home, home };
 	}
 
@@ -313,7 +319,9 @@ export class TeamPlaces {
 	): ChannelKey {
 		const provider = this.#provider(scope.home);
 		const ref: PlaceRef = { kind: "group", name: group.name };
-		if (provider?.storage === "stored")
+		// A home no provider serves is no room: the seat stays where its home is.
+		if (!provider) return scope.home;
+		if (provider.storage === "stored")
 			return this.#keyOn(ref, provider) ?? scope.home;
 		return roomKey(parseChannelKey(scope.home).surface, ref);
 	}
