@@ -5,6 +5,7 @@ import { HeaderPicture } from "../components/header-picture.tsx";
 import { Icon } from "../components/icons.tsx";
 import { ModeBanner } from "../components/mode-banner.tsx";
 import { RoomChat } from "../components/room-chat.tsx";
+import { RoomThreadsButton } from "../components/room-threads.tsx";
 import { Empty, Loading } from "../components/states.tsx";
 import { RoomSwitcher, useSwitcher } from "../components/switcher.tsx";
 import { WaitingButton } from "../components/waiting-button.tsx";
@@ -12,6 +13,7 @@ import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import { useAccentStyle, useRoomState } from "../lib/characters.ts";
+import { chatsHome } from "../lib/home-mode.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -88,6 +90,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					type: "rooms_loaded",
 					rooms: listing.rooms,
 					pins: listing.pins,
+					hidden: chatsHome() ? listing.hidden : [],
 					folders: listing.folders,
 				});
 				// A thread dismissed from the list is not in it and still opens by its address.
@@ -230,6 +233,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<header className="room-head">
 						{lead}
 						<WaitingButton />
+						<RoomThreadsButton room={roomKey} />
 						<button
 							ref={menuButton}
 							type="button"
