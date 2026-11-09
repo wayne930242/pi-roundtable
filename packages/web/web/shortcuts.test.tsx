@@ -13,7 +13,7 @@ import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { closeMenu, openMenu } from "./lib/action-menu.ts";
 import { store } from "./lib/app-store.ts";
 import { rememberChip } from "./lib/chat-chip.ts";
-import { reloadCollapsed, toggleCollapsed } from "./lib/folds.ts";
+import { reloadCollapsed } from "./lib/folds.ts";
 import { loadKit } from "./lib/kit.ts";
 import { loadBuiltInMessages, setPresentation } from "./lib/messages.ts";
 import { currentRoute, setRouting } from "./lib/router.ts";
