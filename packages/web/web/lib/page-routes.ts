@@ -26,6 +26,8 @@ export const PAGE_ROUTES: Record<
 	presets: lazy(() => import("../pages/presets.tsx")),
 	// Every knight's incoming webhooks.
 	webhooks: lazy(() => import("../pages/webhooks.tsx")),
+	// The chat home's page for the rooms that are hidden and the archive.
+	hidden: lazy(() => import("../pages/hidden.tsx")),
 	// The host's own pages, `p/<id>`.
 	p: lazy(() => hostUi().then((ui) => ({ default: ui.HostPage }))),
 };
@@ -40,3 +42,23 @@ export const GATE_ROUTES: ReadonlySet<string> = new Set([
 	"settings",
 	"notices",
 ]);
+
+/** The routes only the chat home has: its arranged list and its hidden page. */
+const CHAT_ROUTES: ReadonlySet<string> = new Set(["arrange", "hidden"]);
+
+/** Whether `name` is a route this host opens; the chat home's own routes exist only on that home. */
+export function knownPane(
+	name: string,
+	panes: readonly string[],
+	hasApp: boolean,
+	chats: boolean,
+): boolean {
+	if (CHAT_ROUTES.has(name)) return hasApp && chats;
+	return (
+		panes.includes(name) ||
+		(hasApp &&
+			["room", "agent", "settings", "prompts", "more"].includes(name)) ||
+		name === "more" ||
+		(hasApp && name !== "profile" && name in PAGE_ROUTES)
+	);
+}

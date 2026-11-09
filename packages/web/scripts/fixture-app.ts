@@ -5,6 +5,7 @@
 //                                 makes `fixture_<time>` there and drops it when it stops
 //   PORT                          the app (default 4180); PORT + 1 is the control port below
 //   LOOK                          the host's look, `modern` (default) or `camelot`
+//   HOME_CHATS                   `1` opens the app on the chat list (`appearance.home: "chats"`)
 //   LOCALE                       the presentation locale, for example `zh-TW` (default: none, English)
 //   FIXTURE_SKILLS               `registry` lists the host's real skill registry (the built-in skills, plus
 //                                 two written ones made at start) so the skill editor works; default: the fake catalog below
@@ -289,8 +290,17 @@ host = await testHost({
 				},
 				...fixtureConnectorFeatures(),
 			}),
-			...(process.env.LOOK === "camelot"
-				? { appearance: { look: "camelot" as const } }
+			...(process.env.LOOK === "camelot" || process.env.HOME_CHATS === "1"
+				? {
+						appearance: {
+							...(process.env.LOOK === "camelot"
+								? { look: "camelot" as const }
+								: {}),
+							...(process.env.HOME_CHATS === "1"
+								? { home: "chats" as const }
+								: {}),
+						},
+					}
 				: {}),
 		}),
 		...(process.env.FIXTURE_HOST === "1" ? [hostFixture] : []),

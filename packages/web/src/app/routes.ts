@@ -434,7 +434,7 @@ export class AppApi {
 			return json({ ok: true });
 		}
 		if (
-			(action === "folder" || action === "pin") &&
+			(action === "folder" || action === "pin" || action === "hidden") &&
 			method === "PUT" &&
 			parts.length === 4
 		)

@@ -161,6 +161,8 @@ export const ZH_TW_SETTINGS: Readonly<Record<string, string>> = {
 	"A thread stays under its room.": "派工串跟著原本的聊天室。",
 	"Home stays at the top.": "首頁固定在最上面。",
 	"pinned must be true or false.": "pinned 必須是 true 或 false。",
+	"hidden must be true or false.": "hidden 必須是 true 或 false。",
+	"Home cannot be hidden.": "首頁不能隱藏。",
 	"folder must be a folder id or null.": "folder 必須是分組 ID 或 null。",
 	"Add a folder": "新增分組",
 	"New folder…": "新增分組…",

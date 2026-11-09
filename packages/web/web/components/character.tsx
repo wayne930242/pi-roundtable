@@ -21,6 +21,8 @@ export interface CharacterProps {
 	spec: CharacterSpec | undefined;
 	look: CharacterLook;
 	frame?: "disc" | "shield" | undefined;
+	/** The figure alone: no frame, no background and no clip, so it stands free on the page. */
+	bare?: boolean | undefined;
 	state?: AvatarState | undefined;
 	expr?: Expression | undefined;
 	/** Pixels, set through the style so the page's CSP stays as it is. */
@@ -62,7 +64,7 @@ function draw(
 	kit: Kit,
 	props: Pick<
 		CharacterProps,
-		"spec" | "look" | "frame" | "state" | "expr" | "name" | "label"
+		"spec" | "look" | "frame" | "bare" | "state" | "expr" | "name" | "label"
 	>,
 	uid: string,
 	skins: readonly Hex[] | undefined,
@@ -70,6 +72,7 @@ function draw(
 	const options = {
 		look: props.look,
 		frame: props.frame ?? "disc",
+		...(props.bare ? { bare: true } : {}),
 		expr: props.expr ?? kit.STATE_EXPRESSION[props.state ?? "idle"],
 		uid,
 		skins,
@@ -98,20 +101,26 @@ export const Character = memo(function Character(props: CharacterProps) {
 	const uid = uidOf(useId());
 	const kit = useKit();
 	const skins = useSkins();
-	const { spec, look, frame, state, expr, name, label } = props;
+	const { spec, look, frame, bare, state, expr, name, label } = props;
 	// The kit loads as a chunk of its own; until it has, the host stands empty at its size.
 	const svg = useMemo(
 		() =>
 			kit
-				? draw(kit, { spec, look, frame, state, expr, name, label }, uid, skins)
+				? draw(
+						kit,
+						{ spec, look, frame, bare, state, expr, name, label },
+						uid,
+						skins,
+					)
 				: "",
-		[kit, spec, look, frame, state, expr, name, label, uid, skins],
+		[kit, spec, look, frame, bare, state, expr, name, label, uid, skins],
 	);
 	const size = props.size;
 	return (
 		<span
 			className={props.live === false ? "av-host static" : "av-host"}
 			data-state={state ?? "idle"}
+			{...(bare ? { "data-bare": "" } : {})}
 			{...(label
 				? { role: "img", "aria-label": label }
 				: { "aria-hidden": true as const })}
@@ -134,6 +143,7 @@ export const PageCharacter = memo(function PageCharacter(
 export const CharacterStack = memo(function CharacterStack(props: {
 	members: readonly { name: string; spec: CharacterSpec | undefined }[];
 	size: number;
+	bare?: boolean;
 }) {
 	const shown = props.members.slice(0, 3);
 	return (
@@ -159,6 +169,7 @@ export const CharacterStack = memo(function CharacterStack(props: {
 						name={member.name}
 						size={props.size}
 						live={false}
+						bare={props.bare}
 					/>
 				</span>
 			))}

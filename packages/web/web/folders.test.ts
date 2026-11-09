@@ -60,7 +60,13 @@ beforeEach(() => {
 	load();
 });
 afterEach(() => {
-	store.dispatch({ type: "rooms_loaded", rooms: [], pins: [], folders: [] });
+	store.dispatch({
+		type: "rooms_loaded",
+		rooms: [],
+		pins: [],
+		hidden: [],
+		folders: [],
+	});
 });
 
 test("the room list carries the shared layout, and a layout answer replaces it", () => {
@@ -68,6 +74,7 @@ test("the room list carries the shared layout, and a layout answer replaces it",
 		type: "rooms_loaded",
 		rooms: [view(A)],
 		pins: [A],
+		hidden: [],
 		folders: [{ id: "f1", name: "One", rooms: [] }],
 	});
 	expect(state.pins).toEqual([A]);
@@ -79,6 +86,7 @@ test("the room list carries the shared layout, and a layout answer replaces it",
 	const answered = reduce(state, {
 		type: "layout_loaded",
 		pins: [],
+		hidden: [],
 		folders: [],
 	});
 	expect([answered.pins, answered.folders]).toEqual([[], []]);
@@ -97,6 +105,7 @@ test("a move shows at once and then takes the server's answer", async () => {
 		expect(layoutNow().folders[0]?.rooms).toEqual([A]);
 		release({
 			pins: [],
+			hidden: [],
 			folders: [{ id: "f1", name: "One", rooms: [A, HIDDEN] }],
 		});
 		await done;
@@ -107,7 +116,11 @@ test("a move shows at once and then takes the server's answer", async () => {
 });
 
 test("a move the server refuses is put back, the list is fetched again and the words are shown", async () => {
-	load({ pins: [A], folders: [{ id: "f1", name: "One", rooms: [] }] });
+	load({
+		pins: [A],
+		hidden: [],
+		folders: [{ id: "f1", name: "One", rooms: [] }],
+	});
 	const revision = store.getState().revision;
 	const place = spyOn(layoutApi, "placeRoom").mockRejectedValue(
 		new Error("There is no such folder."),
@@ -116,6 +129,7 @@ test("a move the server refuses is put back, the list is fetched again and the w
 		expect(await moveRoom(A, "f1", null)).toBeUndefined();
 		expect(layoutNow()).toEqual({
 			pins: [A],
+			hidden: [],
 			folders: [{ id: "f1", name: "One", rooms: [] }],
 		});
 		expect(store.getState().revision).toBe(revision + 1);
@@ -133,6 +147,7 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 	});
 	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [A],
+		hidden: [],
 		folders: [
 			{ id: "f1", name: "One", rooms: [] },
 			{ id: "f2", name: "Two", rooms: [] },
@@ -141,6 +156,7 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 	const change = spyOn(layoutApi, "changeFolder").mockImplementation(
 		async (_id, patch) => ({
 			pins: [A],
+			hidden: [],
 			folders: [
 				{ id: "f2", name: "Two", rooms: [] },
 				{ id: "f1", name: patch.name ?? "One", rooms: [] },
@@ -149,6 +165,7 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 	);
 	const remove = spyOn(layoutApi, "deleteFolder").mockResolvedValue({
 		pins: [A],
+		hidden: [],
 		folders: [{ id: "f2", name: "Two", rooms: [] }],
 	});
 	try {
@@ -172,6 +189,7 @@ test("pin, rename, delete and folder moves go through the API and show the answe
 test("creating a folder resolves to the new folder's id, the last one", async () => {
 	const create = spyOn(layoutApi, "createFolder").mockResolvedValue({
 		pins: [],
+		hidden: [],
 		folders: [
 			{ id: "f1", name: "One", rooms: [] },
 			{ id: "f9", name: "New", rooms: [] },

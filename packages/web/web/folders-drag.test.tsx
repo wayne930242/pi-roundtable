@@ -54,6 +54,7 @@ test("a room's own menu pins it and opens Move to folder…, and Home's has neit
 	expect(menuLabels()).toContain("Move to folder…");
 	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
 		pins: [BUILD, SCOUT],
+		hidden: [],
 		folders: [],
 	});
 	try {
@@ -272,6 +273,7 @@ test("while a row is lifted the list keeps its order, and the latest order shows
 				}),
 			],
 			pins: [],
+			hidden: [],
 			folders: [{ id: F1, name: "Work", rooms: [] }],
 		});
 	const names = () => all(".room-row strong").map((one) => one.textContent);

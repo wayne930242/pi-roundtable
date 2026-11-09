@@ -597,6 +597,7 @@ test("Archive asks first, naming the agent, and archives it through the server",
 	const rooms = spyOn(api, "rooms").mockResolvedValue({
 		rooms: [],
 		pins: [],
+		hidden: [],
 		folders: [],
 	});
 	try {

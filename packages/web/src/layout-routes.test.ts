@@ -34,7 +34,10 @@ class MemoryLayout implements LayoutStore {
 	async forget(room: string) {
 		this.stored = forgetRoom(this.stored, room);
 	}
-	async change(edit: (layout: LayoutView) => LayoutView) {
+	/** Who each change was made for, in order. */
+	by: (string | undefined)[] = [];
+	async change(edit: (layout: LayoutView) => LayoutView, by?: string) {
+		this.by.push(by);
 		this.stored = edit(structuredClone(this.stored));
 		return structuredClone(this.stored);
 	}
@@ -178,6 +181,7 @@ describe("the room list's layout", () => {
 	test("GET rooms carries the layout with it, and hides rooms that are gone", async () => {
 		store.stored = {
 			pins: [SCOUT, GONE],
+			hidden: [SCOUT, GONE],
 			folders: [{ id: "folder.x", name: "Old", rooms: [GONE, TEAM] }],
 		};
 		const view = (await (
@@ -185,11 +189,13 @@ describe("the room list's layout", () => {
 		).json()) as RoomsView;
 		expect(view.rooms).toEqual([]);
 		expect(view.pins).toEqual([SCOUT]);
+		expect(view.hidden).toEqual([SCOUT]);
 		expect(view.folders).toEqual([
 			{ id: "folder.x", name: "Old", rooms: [TEAM] },
 		]);
 		// The stored layout keeps the deleted agent's place.
 		expect(store.stored.pins).toEqual([SCOUT, GONE]);
+		expect(store.stored.hidden).toEqual([SCOUT, GONE]);
 	});
 
 	test("an owner makes, renames, places and removes folders; every answer is the whole layout", async () => {
@@ -251,6 +257,7 @@ describe("the room list's layout", () => {
 		});
 		expect(await layoutOf(pinned)).toEqual({
 			pins: [SCOUT],
+			hidden: [],
 			folders: [{ id: work, name: "Work", rooms: [TEAM] }],
 		});
 		const second = await call(server, "PUT", `rooms/${encoded(BUILD)}/pin`, {
@@ -359,6 +366,75 @@ describe("the room list's layout", () => {
 		expect(store.stored.pins).toEqual([]);
 	});
 
+	test("an owner hides and unhides a room; the answer is the whole layout, the pin and folder stay, and the change names who", async () => {
+		const server = setup();
+		const work = await folder(server, "Work");
+		await call(server, "PUT", `rooms/${encoded(SCOUT)}/folder`, {
+			body: { folder: work },
+		});
+		await call(server, "PUT", `rooms/${encoded(BUILD)}/pin`, {
+			body: { pinned: true },
+		});
+		changes = 0;
+		const hide = await call(server, "PUT", `rooms/${encoded(SCOUT)}/hidden`, {
+			body: { hidden: true },
+		});
+		expect(hide.status).toBe(200);
+		expect(await layoutOf(hide)).toEqual({
+			pins: [BUILD],
+			hidden: [SCOUT],
+			folders: [{ id: work, name: "Work", rooms: [SCOUT] }],
+		});
+		expect(store.by.at(-1)).toBe("owner");
+		expect(changes).toBe(1);
+		await call(server, "PUT", `rooms/${encoded(BUILD)}/hidden`, {
+			body: { hidden: true },
+		});
+		// Moving a hidden room into the pins leaves it hidden.
+		const moved = await call(server, "PUT", `rooms/${encoded(SCOUT)}/pin`, {
+			body: { pinned: true },
+		});
+		expect((await layoutOf(moved)).hidden).toEqual([SCOUT, BUILD]);
+		const show = await call(server, "PUT", `rooms/${encoded(SCOUT)}/hidden`, {
+			body: { hidden: false },
+		});
+		expect((await layoutOf(show)).hidden).toEqual([BUILD]);
+	});
+
+	test("hiding is an owner's, and Home, a thread and a wrong body are refused", async () => {
+		const server = setup();
+		const path = (key: string) => `rooms/${encoded(key)}/hidden`;
+		const home = await call(server, "PUT", path(HOME), {
+			body: { hidden: true },
+		});
+		expect(home.status).toBe(400);
+		expect(await errorOf(home)).toBe("Home cannot be hidden.");
+		const thread = await call(server, "PUT", path(THREAD), {
+			body: { hidden: true },
+		});
+		expect(thread.status).toBe(400);
+		expect(await errorOf(thread)).toBe("A thread stays under its room.");
+		for (const init of [
+			{ body: { hidden: "yes" } },
+			{ body: {} },
+			{ raw: "oops" },
+		])
+			expect((await call(server, "PUT", path(SCOUT), init)).status).toBe(400);
+		expect(
+			(
+				await call(server, "PUT", path("app:agent.nobody"), {
+					body: { hidden: true },
+				})
+			).status,
+		).toBe(404);
+		who = { id: "member", tier: "member" as Tier };
+		expect(
+			(await call(server, "PUT", path(SCOUT), { body: { hidden: true } }))
+				.status,
+		).toBe(404);
+		expect(store.stored.hidden).toEqual([]);
+	});
+
 	test("under a host that words the console in zh-TW a refusal reaches the API's client in that wording, and in English without one", async () => {
 		const pin = (server: ReturnType<typeof setup>) =>
 			call(server, "PUT", `rooms/${encoded(HOME)}/pin`, {
@@ -457,6 +533,7 @@ describe("the room list's layout", () => {
 		const work = await folder(server, "Work");
 		store.stored = {
 			pins: [],
+			hidden: [],
 			folders: [{ id: work, name: "Work", rooms: [SCOUT, GONE, TEAM] }],
 		};
 		muted.set(BUILD, "ada");
@@ -479,6 +556,7 @@ describe("the room list's layout", () => {
 		// An empty folder is a quiet no-op.
 		store.stored = {
 			pins: [],
+			hidden: [],
 			folders: [{ id: work, name: "Work", rooms: [] }],
 		};
 		const none = await call(server, "PUT", `folders/${work}/mute`, {
@@ -492,6 +570,7 @@ describe("the room list's layout", () => {
 		const work = await folder(server, "Work");
 		store.stored = {
 			pins: [],
+			hidden: [],
 			folders: [{ id: work, name: "Work", rooms: [SCOUT] }],
 		};
 		const path = `folders/${work}/mute`;

@@ -22,6 +22,8 @@ export interface OrderOptions {
 	expanded: ReadonlySet<string>;
 	/** The room open now; a folded group still shows it, whatever was kept. */
 	current: string | undefined;
+	/** On the chat home: the rooms of the list as drawn after the pins, so the run follows it. */
+	home?: readonly string[];
 }
 
 /**
@@ -52,9 +54,17 @@ export function roomStops(state: SectionsInput, options: OrderOptions): Stop[] {
 		for (const key of keys)
 			room(key, !folded || key === current || options.stays?.(key) === true);
 	};
-	group(sectionFold("pinned"), arrangement.pinned);
-	for (const folder of arrangement.folders) group(folder.id, folder.rooms);
-	if (arrangement.folders.length > 0)
+	if (options.home) {
+		for (const key of arrangement.pinned) room(key, true);
+		for (const key of options.home) room(key, true);
+	} else {
+		group(sectionFold("pinned"), arrangement.pinned);
+		for (const folder of arrangement.folders) group(folder.id, folder.rooms);
+	}
+	// With the chat home's run the chip's list already holds the rest.
+	if (options.home) {
+		// no more groups
+	} else if (arrangement.folders.length > 0)
 		group(sectionFold("rest"), arrangement.rest);
 	else {
 		group(sectionFold("agents"), arrangement.restAgents);

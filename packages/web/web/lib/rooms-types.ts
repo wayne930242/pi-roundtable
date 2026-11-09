@@ -104,6 +104,8 @@ export interface RoomsState {
 	order: string[];
 	/** The owners' pinned rooms, in their order; shared by every device. */
 	pins: string[];
+	/** The rooms the owners hid from the home, in the order they were hidden; shared by every device. */
+	hidden: string[];
 	/** The owners' folders and what is in them, in their order. */
 	folders: FolderView[];
 	/** Which agents work now, anywhere, as the last `presence` frame said. */
@@ -136,10 +138,16 @@ export type LocalAction =
 			rooms: RoomView[];
 			/** The shared arrangement; absent keeps the one held. */
 			pins?: string[];
+			hidden?: string[];
 			folders?: FolderView[];
 	  }
 	/** The arrangement of the list changed: the page's own edit, optimistic, or the server's answer. */
-	| { type: "layout_loaded"; pins: string[]; folders: FolderView[] }
+	| {
+			type: "layout_loaded";
+			pins: string[];
+			hidden: string[];
+			folders: FolderView[];
+	  }
 	/** The server took a room's mute or unmute. */
 	| { type: "room_muted"; room: string; muted: boolean }
 	/** A room the list does not carry (a dismissed thread) opened by its address. */
@@ -187,6 +195,7 @@ export function initialState(): RoomsState {
 		rooms: {},
 		order: [],
 		pins: [],
+		hidden: [],
 		folders: [],
 		presence: {},
 		listed: false,

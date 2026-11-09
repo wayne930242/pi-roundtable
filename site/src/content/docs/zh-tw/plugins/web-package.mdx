@@ -81,6 +81,14 @@ agent 都以組合出來的角色呈現。
 頁面有 Modern 與 Camelot 兩種外觀（Camelot 白天是羊皮紙、夜晚是夜間城堡，配上金色線條、盾形外框和蠟封），各有淺色與深色，在 Settings 依裝置選擇。
 `appearance.look` 設定 host 的預設外觀。
 
+### 聊天首頁
+
+`appearance.home: "chats"` 讓 app 開在聊天列表，而不是整理過的房間列表；沒設這個選項的 host 維持房間列表。
+釘選的房間是上方的大頭像（首頁在最前面，帶星號），資料夾變成篩選用的 chip，篩選下方依最新活動排序的同一份列表，最後一列收合的入口通向已隱藏的房間與封存。
+房間可以從選單隱藏：它照常回應、跑排程、推播，只是離開首頁與切換器；隱藏狀態像釘選一樣由所有 owner 共用（`PUT api/rooms/<key>/hidden`）。
+其他功能（整理、排程、檔案、設定）都在格狀按鈕後面，手機是底部面板，寬螢幕是浮出面板；沒有分頁列也沒有側欄，1024 px 以上首頁是 380 px 的欄位，開啟的房間佔滿其餘空間。
+派工串與臨時騎士在房間標頭的控制項裡查看。
+
 ### 傳入 Webhook
 
 正式騎士的聊天室可以接收外部的 JSON 發文，就像 Discord Webhook 發在它的頻道一樣：以 `{ "content": "...", "username": "..." }`（或任何 JSON，會顯示成程式碼區塊；最多 16 KB、每分鐘 30 則）`POST <mountPath>/hooks/<id>/<token>`，內容會標上 **Webhook** 顯示在聊天室，並以不可信輸入啟動騎士的回報。
@@ -123,7 +131,7 @@ Web Push 會在 owner 沒有任何頁面開著、看得到的時候喚醒裝置�
 | `uploads` | `{ keepDays: 30 }` | `uploads.keepDays`：app 騎士房間裡已儲存檔案的保留天數，1 到 3650。宿主房間種類自己的 `retention.fileDays` 管它自己的房間。 |
 | `push` | https origin 時開啟 | Web Push；金鑰見下表。 |
 | `icons` | 內建圖示 | `{ dir }`：放五個安裝圖示的目錄。 |
-| `appearance` | `{ look: "modern" }` | `{ look }`：`modern` 或 `camelot`。 |
+| `appearance` | `{ look: "modern", home: "rooms" }` | `{ look, home }`：`appearance.look` 是 `modern` 或 `camelot`；`appearance.home` 是 app 開啟的首頁，`rooms`（整理過的房間列表）或 `chats`（聊天列表）。 |
 | `title` | `Roundtable` | 頁面標題（直接寫在送出的 HTML 裡，也是 `og:title`），也是安裝後 app 的名稱。 |
 | `description` | 由 `title` 推得 | `<meta name="description">` 與 `og:description`，給搜尋結果與連結預覽用。 |
 | `presentation` | 英文 | `{ locale, messages }` 設定語言、日期格式與在地化文字；dictionary key 是英文原文。`zh-TW` 會使用內建的繁體中文（臺灣）文字，`messages` 可逐個 key 覆寫。 |

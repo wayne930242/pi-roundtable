@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import type { SQL } from "bun";
 import { RoomLayout } from "./layout.ts";
 
-// A reading that spans three SELECTs must see one snapshot, so a change that commits between them is
+// A reading that spans four SELECTs must see one snapshot, so a change that commits between them is
 // seen whole or not at all. The database's behavior is `layout.test.ts`'s; this checks how the read asks for it.
-test("the layout is read in one repeatable-read transaction, all three tables in it", async () => {
+test("the layout is read in one repeatable-read transaction, all four tables in it", async () => {
 	const begun: string[] = [];
 	const inside: string[] = [];
 	const tx = (strings: TemplateStringsArray): Promise<unknown[]> => {
@@ -12,6 +12,8 @@ test("the layout is read in one repeatable-read transaction, all three tables in
 		inside.push(/FROM (\w+)/.exec(text)?.[1] ?? text);
 		if (text.includes("web_room_folders"))
 			return Promise.resolve([{ id: "folder.1", name: "Work" }]);
+		if (text.includes("web_room_hidden"))
+			return Promise.resolve([{ room: "app:agent.quiet" }]);
 		if (text.includes("web_room_folder_rooms"))
 			return Promise.resolve([{ room: "app:agent.scout", folder: "folder.1" }]);
 		return Promise.resolve([{ room: "app:agent.build" }]);
@@ -34,9 +36,11 @@ test("the layout is read in one repeatable-read transaction, all three tables in
 		"web_room_folders",
 		"web_room_folder_rooms",
 		"web_room_pins",
+		"web_room_hidden",
 	]);
 	expect(view).toEqual({
 		pins: ["app:agent.build"],
+		hidden: ["app:agent.quiet"],
 		folders: [{ id: "folder.1", name: "Work", rooms: ["app:agent.scout"] }],
 	});
 });

@@ -1,5 +1,5 @@
 // How the room list is arranged: Home, then the pinned rooms in the owners' order, then the owners'
-// folders in theirs, then everything else by latest activity. A pure function of the room list and the
+// folders in theirs, then everything else by latest activity; the rooms the owners hid are kept apart. A pure function of the room list and the
 // shared layout, so the rooms page and the switcher drawer agree and a test needs no browser.
 
 import type { FolderView, RoomView } from "../../src/api-types.ts";
@@ -25,6 +25,8 @@ export interface Sections {
 	folders: FolderSection[];
 	/** The rooms in no pin or folder, newest activity first. */
 	rest: string[];
+	/** The hidden rooms that exist, in the order they were hidden; they are in no list above. */
+	hidden: string[];
 	/** `rest` split by kind, for the page that keeps Agents and Groups apart while there are no folders. */
 	restAgents: string[];
 	restGroups: string[];
@@ -39,6 +41,8 @@ export interface SectionsInput {
 	order: readonly string[];
 	rooms: Readonly<Record<string, { view?: RoomView | undefined }>>;
 	pins: readonly string[];
+	/** The rooms the owners hid; absent for a state that has none. */
+	hidden?: readonly string[] | undefined;
 	folders: readonly FolderView[];
 }
 
@@ -67,7 +71,9 @@ export function sections(
 			!nestedHelper(view, listed)
 		);
 	};
-	const taken = new Set<string>();
+	// A hidden room leaves the home's lists and keeps its pin and folder, which return when it is shown.
+	const hidden = (state.hidden ?? []).filter(isRoom);
+	const taken = new Set<string>(hidden);
 	/** Keeps the first mention of each room that exists and is not Home or a thread. */
 	const claim = (keys: readonly string[]): string[] =>
 		keys.filter((key) => {
@@ -108,6 +114,7 @@ export function sections(
 		pinned,
 		folders,
 		rest,
+		hidden,
 		restAgents: rest.filter((key) => kindOf(key) === "agent"),
 		restGroups: rest.filter((key) => kindOf(key) === "group"),
 		threads,

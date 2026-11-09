@@ -32,6 +32,21 @@ describe("config", () => {
 	});
 });
 
+describe("config app home", () => {
+	const app = { surface: "app", protocol: "roundtable.app.v1" };
+	test("tells the page to open on the chat list only when the host chose it", async () => {
+		const chats = await call<ConfigView>(
+			api({ app: { ...app, home: "chats" } }).api,
+			"config",
+		);
+		expect(chats.body.app).toEqual({ ...app, home: "chats" });
+		const rooms = await call<ConfigView>(api({ app }).api, "config");
+		// The default sends nothing, so a page of another host reads the config it read before.
+		expect(rooms.body.app).toEqual(app);
+		expect("home" in (rooms.body.app ?? {})).toBe(false);
+	});
+});
+
 describe("config skins", () => {
 	test("hands the page the host's six skin tones, and only when the host has them", async () => {
 		const skins = [

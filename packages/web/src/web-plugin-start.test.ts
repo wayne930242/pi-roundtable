@@ -182,6 +182,19 @@ describe("refuses to start", () => {
 		).toBe(1024 * 1024 * 1024);
 	});
 
+	test("appearance.home is rooms by default, takes chats, and refuses anything else", () => {
+		expect(resolveOptions(base()).home).toBe("rooms");
+		expect(
+			resolveOptions({ ...base(), appearance: { look: "camelot" } }).home,
+		).toBe("rooms");
+		expect(
+			resolveOptions({ ...base(), appearance: { home: "chats" } }).home,
+		).toBe("chats");
+		expect(() =>
+			webConsole({ ...base(), appearance: { home: "tiles" } } as never),
+		).toThrow("appearance.home must be rooms or chats");
+	});
+
 	test("a notes-less console needs no owner id", () => {
 		expect(() =>
 			webConsole({ ...base(), ownerId: undefined, panes: ["conversations"] }),

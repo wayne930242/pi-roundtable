@@ -32,6 +32,8 @@ export interface ConfigView {
 		protocol: string;
 		/** False when the host leaves the yolo and long-running switches out (`modes: false`). */
 		modes?: false;
+		/** `chats` when the host opens the app on the chat list; absent for the arranged room list. */
+		home?: "chats";
 	};
 	/** The visitor's tier. Sent only where the host admits more than its owners (`admission: "access"`). */
 	tier?: AppTier;

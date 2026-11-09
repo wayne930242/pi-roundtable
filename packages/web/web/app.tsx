@@ -18,6 +18,7 @@ import { WaitingButton } from "./components/waiting-button.tsx";
 import { api, messageOf, setPushSubscribe } from "./lib/api.ts";
 import { useSelector } from "./lib/app-store.ts";
 import { ConfigContext } from "./lib/config.ts";
+import { setHomeMode } from "./lib/home-mode.ts";
 import { LiveContext, useLiveSource } from "./lib/live.ts";
 import { initLook } from "./lib/look.ts";
 import { useMedia } from "./lib/media.ts";
@@ -26,7 +27,7 @@ import {
 	setPresentation,
 	translate as t,
 } from "./lib/messages.ts";
-import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
+import { GATE_ROUTES, knownPane, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, pageKey, setRouting, useRoute } from "./lib/router.ts";
 import { isSearchKey } from "./lib/search-key.ts";
@@ -50,6 +51,7 @@ export function App() {
 				initLook(loaded.look);
 				initSkins(loaded.characterSkins);
 				setRouting(loaded.mountPath, loaded.panes[0]);
+				setHomeMode(loaded.app?.home === "chats" ? "chats" : "rooms");
 				setPushSubscribe(loaded.push?.subscribe);
 				document.documentElement.lang = loaded.locale ?? "en";
 				setConfig(loaded);
@@ -76,11 +78,32 @@ export function App() {
 	);
 }
 
+/** What the back bar of a page other than the home calls it. */
+function barTitle(
+	pane: string,
+	items: readonly NavItem[],
+	current: string,
+	fallback: string,
+): string {
+	if (pane === "hidden") return t("Hidden and archived");
+	if (pane === "arrange") return t("Folders and order");
+	return items.find((item) => item.pane === current)?.label ?? fallback;
+}
+
 function Console({ config }: { config: ConfigView }) {
 	const live = useLiveSource();
 	const route = useRoute();
 	const app = config.app;
 	const hasApp = app !== undefined && config.panes.includes("rooms");
+	// The host opens the app on the chat list: no rail and no tab bar, and a back control on the other pages.
+	const chats = hasApp && app?.home === "chats";
+	// The rest of the home's styles load beside it; the shell's are in the page's stylesheet.
+	useEffect(() => {
+		if (chats)
+			import("./lib/chats-home-style.ts").then((m) =>
+				m.installChatsHomeStyle(),
+			);
+	}, [chats]);
 	const [palette, setPalette] = useState(false);
 	// Wide enough, the room list stands beside the open room.
 	const wide = useMedia("(min-width: 1024px)");
@@ -185,12 +208,7 @@ function Console({ config }: { config: ConfigView }) {
 	}, [config.panes, config.pages, hasApp, gated]);
 
 	const first = config.panes[0] ?? "conversations";
-	const known = (name: string) =>
-		config.panes.includes(name as PaneName) ||
-		(hasApp &&
-			["room", "agent", "settings", "prompts", "more"].includes(name)) ||
-		name === "more" ||
-		(hasApp && name !== "profile" && name in PAGE_ROUTES);
+	const known = (name: string) => knownPane(name, config.panes, hasApp, chats);
 	const pane = known(route.pane) ? route.pane : first;
 	// The pages that finish an owed step, besides the person's own.
 	const opensOwed = owed.some(
@@ -201,7 +219,13 @@ function Console({ config }: { config: ConfigView }) {
 	const fill =
 		(hasApp && (pane === "room" || pane === "agent") && Boolean(route.key)) ||
 		// The files fill the screen beside the rail, and a phone's file leaves the keyboard its room.
-		(pane === "workspace" && (sideRail || /[^:/]$/.test(route.key ?? "")));
+		(pane === "workspace" &&
+			((!chats && sideRail) || /[^:/]$/.test(route.key ?? ""))) ||
+		// Wide enough, the chat list is a column beside the room and fills the screen with it.
+		(chats && wide && (pane === "rooms" || pane === "room"));
+	const atHome = pane === "rooms" || (pane === "room" && !route.key);
+	// The page's own bar, with the way back to the chat home.
+	const bar = chats && !fill && !atHome;
 	const current =
 		pane === "room" || pane === "agent"
 			? "rooms"
@@ -261,7 +285,12 @@ function Console({ config }: { config: ConfigView }) {
 
 	return (
 		<LiveContext.Provider value={live}>
-			<div className="app" data-fill={fill || undefined}>
+			<div
+				className="app"
+				data-fill={fill || undefined}
+				data-home={chats ? "chats" : undefined}
+				data-bar={bar || undefined}
+			>
 				<aside className="rail">
 					<div className="brand">
 						<BrandMark />
@@ -302,16 +331,31 @@ function Console({ config }: { config: ConfigView }) {
 				</aside>
 				<div className="stage" ref={stage} data-fill={fill || undefined}>
 					<header className="topbar">
-						<div className="brand">
-							<BrandMark />
-							<h1>{config.title}</h1>
-						</div>
-						<div className="topbar-end">
-							{chip}
-							<WaitingButton />
-							{bell}
-							<ThemeButton />
-						</div>
+						{chats ? (
+							<>
+								<a
+									className="icon-button back-link"
+									href={hrefFor("rooms")}
+									aria-label={t("Back to rooms")}
+								>
+									<Icon name="back" />
+								</a>
+								<h1>{barTitle(pane, items, current, config.title)}</h1>
+							</>
+						) : (
+							<>
+								<div className="brand">
+									<BrandMark />
+									<h1>{config.title}</h1>
+								</div>
+								<div className="topbar-end">
+									{chip}
+									<WaitingButton />
+									{bell}
+									<ThemeButton />
+								</div>
+							</>
+						)}
 					</header>
 					<main className="route" key={pageKey(pane, route.key, wide)}>
 						<ErrorBoundary resetKey={`${pane}/${route.key ?? ""}`}>

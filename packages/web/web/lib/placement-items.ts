@@ -5,6 +5,7 @@ import { nudgeBefore } from "../../src/layout-order.ts";
 import type { MenuItem } from "./action-menu.ts";
 import { store } from "./app-store.ts";
 import { bulkItems } from "./bulk-items.ts";
+import { chatsHome } from "./home-mode.ts";
 import "./layout-icons.ts";
 import { askFolderDialog } from "./folder-dialogs.ts";
 import { arrangementNow } from "./layout-now.ts";
@@ -22,6 +23,18 @@ const edit = (): Promise<typeof import("./layout-actions.ts")> =>
 export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 	const place = placeOf(arrangementNow(), key);
 	const pinned = place.kind === "pinned";
+	// A hidden room is in none of the home's lists, so its place is not shown; showing it again is its one step.
+	if (chatsHome() && store.getState().hidden.includes(key))
+		return [
+			{
+				id: "unhide",
+				label: t("Unhide"),
+				icon: "eye",
+				run: () => {
+					void edit().then((one) => one.hideRoom(key, false));
+				},
+			},
+		];
 	const items: MenuItem[] = [
 		{
 			id: "pin",
@@ -38,6 +51,16 @@ export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 			run: () => leave(() => askFolderDialog({ kind: "move", room: key })),
 		},
 	];
+	// The chat list takes a room off the home without touching its pin or folder.
+	if (chatsHome())
+		items.push({
+			id: "hide",
+			label: t("Hide"),
+			icon: "eye-off",
+			run: () => {
+				void edit().then((one) => one.hideRoom(key, true));
+			},
+		});
 	if (place.kind === "rest") return items;
 	if (nudgeBefore(place.siblings, key, "up"))
 		items.push({

@@ -25,6 +25,7 @@ describeDb("ROOM_LAYOUT over the app's stored room layout", () => {
 	let tab: Client;
 	const clear = async () => {
 		const database = boot.host.context.database();
+		await database`DELETE FROM web_room_hidden`;
 		await database`DELETE FROM web_room_folder_rooms`;
 		await database`DELETE FROM web_room_pins`;
 		await database`DELETE FROM web_room_folders`;
@@ -114,6 +115,13 @@ describeDb("ROOM_LAYOUT over the app's stored room layout", () => {
 		);
 		expect(pinned.status).toBe(200);
 		await tab.take(ofType("changed"));
+		const hid = await rest(
+			boot,
+			`rooms/${encodeURIComponent("app:agent.lay-smith")}/hidden`,
+			{ method: "PUT", body: JSON.stringify({ hidden: true }) },
+		);
+		expect(hid.status).toBe(200);
+		await tab.take(ofType("changed"));
 		await drain();
 		await service.arrange([
 			{ group: "Work", names: ["lay-duo"] },
@@ -128,6 +136,8 @@ describeDb("ROOM_LAYOUT over the app's stored room layout", () => {
 			],
 			pins: [],
 		});
+		// A hidden room stays hidden through the agent's rearranging.
+		expect((await roomList()).hidden).toEqual(["app:agent.lay-smith"]);
 	});
 
 	test("a wrong name refuses the whole arrangement and nothing moves", async () => {

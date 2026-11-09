@@ -66,6 +66,7 @@
 		"web-console/web-push-subscriptions",
 		"web-console/web-push-muted-rooms",
 		"web-console/web-room-layout",
+		"web-console/web-room-hidden",
 		"web-console/web-notices",
 		"web-console/web-notices-json-values",
 		"web-console/web-push-outbox",

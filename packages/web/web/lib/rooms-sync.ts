@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { api } from "./api.ts";
 import { store, useSelector } from "./app-store.ts";
+import { chatsHome } from "./home-mode.ts";
 
 /**
  * Fetches the room list at the start, after every `changed`, after every reconnect and on `version`
@@ -34,6 +35,8 @@ export function useRoomsSync(enabled: boolean, version: number): void {
 					type: "rooms_loaded",
 					rooms: view.rooms,
 					pins: view.pins,
+					// Rooms are hidden only on the chat list; the room list shows every room.
+					hidden: chatsHome() ? view.hidden : [],
 					folders: view.folders,
 				});
 			},

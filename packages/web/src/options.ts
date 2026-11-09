@@ -170,6 +170,9 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 	const look = options.appearance?.look ?? "modern";
 	if (look !== "modern" && look !== "camelot")
 		fail("appearance.look must be modern or camelot");
+	const home = options.appearance?.home ?? "rooms";
+	if (home !== "rooms" && home !== "chats")
+		fail("appearance.home must be rooms or chats");
 	const title = options.title?.trim() ?? "Roundtable";
 	if (!title) fail("title is empty");
 	const description = options.description?.trim();
@@ -207,6 +210,7 @@ export function resolveOptions(options: WebConsoleOptions): ResolvedOptions {
 		description,
 		iconsDir: options.icons?.dir,
 		look,
+		home,
 		relayNotes: options.relayNotes ?? [DEFAULT_RELAY_NOTE],
 		exclude: options.exclude,
 		assetDir: options.assetDir,

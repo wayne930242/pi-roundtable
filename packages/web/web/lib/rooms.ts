@@ -192,7 +192,12 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 		case "rooms_loaded":
 			return onRooms(state, action.rooms, action);
 		case "layout_loaded":
-			return { ...state, pins: action.pins, folders: action.folders };
+			return {
+				...state,
+				pins: action.pins,
+				hidden: action.hidden,
+				folders: action.folders,
+			};
 		case "room_viewed":
 			return withRoom(state, action.view.key, (room) => ({
 				...room,

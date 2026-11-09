@@ -24,6 +24,7 @@ describeDb("the room list's layout in the database", () => {
 		// The tables are created if absent and never dropped: the host-migrated ledger would not recreate them.
 		sql = new SQL(testDatabaseUrl, { max: 8 });
 		await RoomLayout.migration.up(sql);
+		await RoomLayout.hiddenMigration.up(sql);
 		layout = new RoomLayout(sql);
 	});
 	afterAll(async () => {
@@ -82,7 +83,7 @@ describeDb("the room list's layout in the database", () => {
 	});
 
 	test("a fresh store is an empty layout", async () => {
-		expect(await layout.view()).toEqual({ pins: [], folders: [] });
+		expect(await layout.view()).toEqual({ pins: [], hidden: [], folders: [] });
 	});
 
 	test("folders, pins and rooms come back in the order they were placed, positions dense", async () => {
@@ -98,6 +99,7 @@ describeDb("the room list's layout in the database", () => {
 		await layout.change((view) => setPinned(view, B, true, A));
 		expect(await layout.view()).toEqual({
 			pins: [B, A],
+			hidden: [],
 			folders: [
 				{ id: "folder.Play", name: "Play", rooms: [] },
 				{ id: "folder.Work", name: "Work", rooms: [C] },
@@ -117,7 +119,7 @@ describeDb("the room list's layout in the database", () => {
 		);
 		expect((await layout.view()).folders).toHaveLength(1);
 		await layout.change((view) => removeFolder(view, "folder.Work"));
-		expect(await layout.view()).toEqual({ pins: [], folders: [] });
+		expect(await layout.view()).toEqual({ pins: [], hidden: [], folders: [] });
 		const left: unknown[] = await sql`SELECT 1 FROM web_room_folder_rooms`;
 		expect(left).toEqual([]);
 	});
@@ -147,6 +149,7 @@ describeDb("the room list's layout in the database", () => {
 		await layout.forget("app:agent.layout-never");
 		expect(await layout.view()).toEqual({
 			pins: [],
+			hidden: [],
 			folders: [{ id: "folder.Work", name: "Work", rooms: [B, C] }],
 		});
 		expect(dense((await positions()).rooms)).toBe(true);

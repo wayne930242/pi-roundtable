@@ -7,8 +7,8 @@ import { type Sections, sections } from "./sections.ts";
 
 /** The layout the page holds now. */
 export const layoutNow = (): LayoutView => {
-	const { pins, folders } = store.getState();
-	return { pins, folders };
+	const { pins, hidden, folders } = store.getState();
+	return { pins, hidden, folders };
 };
 
 /** The arrangement of the list as the page shows it now. */

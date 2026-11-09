@@ -1,10 +1,14 @@
 import type { CharacterSpec } from "pi-roundtable/characters";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
+import { homeOrder } from "../lib/chats-home.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
+import { chatsHome } from "../lib/home-mode.ts";
 import { composingKey } from "../lib/ime.ts";
 import { translate as t } from "../lib/messages.ts";
+import { activityAt, type RoomsState } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
+import { sections } from "../lib/sections.ts";
 import { PageCharacter } from "./character.tsx";
 import { Icon, type IconName } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
@@ -20,6 +24,14 @@ interface Target {
 	go(): void;
 }
 
+/** The store's rooms in the chat home's order, then the rest (threads, temp knights) as the server listed them. */
+function orderedAs(state: RoomsState): string[] {
+	const at = (key: string) => activityAt(state, key);
+	const first = homeOrder(sections(state, at), at, state.order);
+	const seen = new Set(first);
+	return [...first, ...state.order.filter((key) => !seen.has(key))];
+}
+
 /** The room switcher: type a few letters of a room or page, arrows to choose, Enter to go. */
 export function Palette(props: {
 	open: boolean;
@@ -29,8 +41,10 @@ export function Palette(props: {
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
 	const input = useRef<HTMLInputElement>(null);
-	const rooms = useSelector((state) =>
-		state.order.flatMap((key) => {
+	const rooms = useSelector((state) => {
+		// On the chat home the search lists rooms as the home does, the hidden ones last.
+		const keys = chatsHome() ? orderedAs(state) : state.order;
+		return keys.flatMap((key) => {
 			const view = state.rooms[key]?.view;
 			return view
 				? [
@@ -40,18 +54,20 @@ export function Palette(props: {
 							agent: view.name,
 							character: view.character,
 							kind: view.kind,
+							hidden: state.hidden.includes(key),
 						},
 					]
 				: [];
-		}),
-	);
+		});
+	});
 	const list = useMemo(() => {
 		const targets: Target[] = [
 			...rooms.map((room) => ({
 				id: room.key,
 				label: room.name,
-				hint:
-					room.kind === "agent"
+				hint: room.hidden
+					? t("Hidden")
+					: room.kind === "agent"
 						? t("Knight")
 						: room.kind === "group"
 							? t("Group")

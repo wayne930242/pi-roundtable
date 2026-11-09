@@ -12,6 +12,7 @@ import { openAgentSheet } from "../lib/agent-sheet.ts";
 import { api } from "../lib/api.ts";
 import { store, useSelector } from "../lib/app-store.ts";
 import { useAccentStyle, useRoomState } from "../lib/characters.ts";
+import { chatsHome } from "../lib/home-mode.ts";
 import { useMedia } from "../lib/media.ts";
 import { withoutLeadingAiMention } from "../lib/mention.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -31,6 +32,13 @@ const CouncilView = lazy(() =>
 const ModeToggle = lazy(() =>
 	import("../components/mode-toggle.tsx").then((m) => ({
 		default: m.ModeToggle,
+	})),
+);
+
+// The control for a room's threads is read only where the home is the chat list.
+const RoomThreadsButton = lazy(() =>
+	import("../components/room-threads.tsx").then((m) => ({
+		default: m.RoomThreadsButton,
 	})),
 );
 
@@ -88,6 +96,7 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					type: "rooms_loaded",
 					rooms: listing.rooms,
 					pins: listing.pins,
+					hidden: chatsHome() ? listing.hidden : [],
 					folders: listing.folders,
 				});
 				// A thread dismissed from the list is not in it and still opens by its address.
@@ -230,6 +239,11 @@ export function RoomPage({ roomKey }: { roomKey: string }) {
 					<header className="room-head">
 						{lead}
 						<WaitingButton />
+						{chatsHome() ? (
+							<Suspense fallback={null}>
+								<RoomThreadsButton room={roomKey} />
+							</Suspense>
+						) : null}
 						<button
 							ref={menuButton}
 							type="button"

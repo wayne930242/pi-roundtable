@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ArchivedEntry } from "../../src/api-types.ts";
+import { type MenuItem, openMenu } from "../lib/action-menu.ts";
 import { messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
@@ -28,7 +29,8 @@ export function groupedEntries(
  * The agents and groups that were archived, which stay here with their history until they are
  * restored or deleted for good. A delete asks first and names what it deletes.
  */
-export function ArchiveList() {
+export function ArchiveList(props: { deleteIn?: "button" | "menu" } = {}) {
+	const inMenu = props.deleteIn === "menu";
 	const [entries, setEntries] = useState<ArchivedEntry[]>();
 	const [error, setError] = useState<string>();
 	const [busy, setBusy] = useState<string>();
@@ -101,14 +103,45 @@ export function ArchiveList() {
 						>
 							{t("Restore")}
 						</button>
-						<button
-							type="button"
-							className="compact danger"
-							disabled={busy === entry.name}
-							onClick={() => setDeleting(entry)}
-						>
-							{t("Delete")}
-						</button>
+						{inMenu ? (
+							<button
+								type="button"
+								className="icon-button row-more"
+								aria-haspopup="menu"
+								aria-label={t("More")}
+								disabled={busy === entry.name}
+								onClick={(event) => {
+									const box = event.currentTarget.getBoundingClientRect();
+									const items: MenuItem[] = [
+										{
+											id: "delete",
+											label: t("Delete"),
+											icon: "trash",
+											tone: "danger",
+											run: () => setDeleting(entry),
+										},
+									];
+									openMenu({
+										title: entry.displayName,
+										items,
+										at: { x: box.left, y: box.bottom },
+										via: "key",
+										source: event.currentTarget,
+									});
+								}}
+							>
+								<Icon name="more" size={18} />
+							</button>
+						) : (
+							<button
+								type="button"
+								className="compact danger"
+								disabled={busy === entry.name}
+								onClick={() => setDeleting(entry)}
+							>
+								{t("Delete")}
+							</button>
+						)}
 					</li>
 				))}
 			</ul>

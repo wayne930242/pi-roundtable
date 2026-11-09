@@ -12,7 +12,8 @@ import { SheetHosts } from "./components/sheet-hosts.tsx";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { closeMenu, openMenu } from "./lib/action-menu.ts";
 import { store } from "./lib/app-store.ts";
-import { reloadCollapsed, toggleCollapsed } from "./lib/folds.ts";
+import { rememberChip } from "./lib/chat-chip.ts";
+import { reloadCollapsed } from "./lib/folds.ts";
 import { loadKit } from "./lib/kit.ts";
 import { loadBuiltInMessages, setPresentation } from "./lib/messages.ts";
 import { currentRoute, setRouting } from "./lib/router.ts";
@@ -215,43 +216,42 @@ test("Alt+Shift+↓ and Alt+Shift+↑ go to the next and the previous room with 
 	expect(open()).toBe(B);
 });
 
-test("the unread jump follows the list's order: folders before the rest, and a folded folder is still searched", () => {
+test("the unread jump follows the list's order, whatever the folders", () => {
 	const folders = [{ id: F1, name: "One", rooms: [G, C] }];
 	load({ [B]: 1, [C]: 1 }, folders);
 	at(HOME);
-	// Home, then the folder (G, C), then the rest (A, B).
-	press(document.body, alt("ArrowDown", { shiftKey: true }));
-	expect(open()).toBe(C);
-	toggleCollapsed(F1);
-	at(HOME);
-	press(document.body, alt("ArrowDown", { shiftKey: true }));
-	expect(open()).toBe(C);
 	press(document.body, alt("ArrowDown", { shiftKey: true }));
 	expect(open()).toBe(B);
+	press(document.body, alt("ArrowDown", { shiftKey: true }));
+	expect(open()).toBe(C);
 });
 
-test("Alt+↓ follows the folders in the list and skips a folded folder, except for the open room", () => {
+test("Alt+↓ steps through the list as drawn: the one list under All, not folder by folder", () => {
 	load({}, [{ id: F1, name: "One", rooms: [G, C] }]);
 	at(HOME);
-	press(document.body, alt("ArrowDown"));
-	expect(open()).toBe(G);
-	press(document.body, alt("ArrowDown"));
+	for (const next of [A, B, C, G]) {
+		press(document.body, alt("ArrowDown"));
+		expect(open()).toBe(next);
+	}
+	press(document.body, alt("ArrowUp"));
 	expect(open()).toBe(C);
-	press(document.body, alt("ArrowDown"));
-	expect(open()).toBe(A);
-	toggleCollapsed(F1);
-	at(HOME);
-	press(document.body, alt("ArrowDown"));
-	expect(open()).toBe(A);
-	press(document.body, alt("ArrowUp"));
-	expect(open()).toBe(HOME);
-	// A folded folder still shows the open room, but only that one: the room after it is hidden.
-	at(G);
-	press(document.body, alt("ArrowDown"));
-	expect(open()).toBe(A);
-	at(C);
-	press(document.body, alt("ArrowUp"));
-	expect(open()).toBe(HOME);
+});
+
+test("with a folder tab active it steps through the other folders' unread rooms, then that folder's list", () => {
+	load({ [B]: 1 }, [{ id: F1, name: "One", rooms: [G, C] }]);
+	rememberChip(F1);
+	try {
+		at(HOME);
+		for (const next of [B, C, G]) {
+			press(document.body, alt("ArrowDown"));
+			expect(open()).toBe(next);
+		}
+		// A is in no listed run under this tab.
+		press(document.body, alt("ArrowDown"));
+		expect(open()).toBe(G);
+	} finally {
+		rememberChip("all");
+	}
 });
 
 test("a room open that the list does not hold stays where it is", () => {

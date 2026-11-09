@@ -3,6 +3,7 @@ import type { RoomView } from "../src/api-types.ts";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
 import { api } from "./lib/api.ts";
 import { store } from "./lib/app-store.ts";
+import { setHomeMode } from "./lib/home-mode.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
 
 const room = (name: string, over: Partial<RoomView> = {}): RoomView => ({
@@ -38,7 +39,9 @@ function answers() {
 	const spy = spyOn(api, "rooms").mockImplementation(
 		() =>
 			new Promise((resolve) => {
-				pending.push((rooms) => resolve({ rooms, pins: [], folders: [] }));
+				pending.push((rooms) =>
+					resolve({ rooms, pins: [], hidden: [], folders: [] }),
+				);
 			}) as ReturnType<typeof api.rooms>,
 	);
 	return { pending, spy };
@@ -84,5 +87,32 @@ test("nothing is taken once the page no longer syncs", async () => {
 		await settle();
 	});
 	expect(store.getState().order).toEqual([]);
+	spy.mockRestore();
+});
+
+test("the hidden rooms are kept only where the home is the chat list", async () => {
+	const spy = spyOn(api, "rooms").mockImplementation(
+		async () =>
+			({
+				rooms: [room("quiet")],
+				pins: [],
+				hidden: ["app:agent.quiet"],
+				folders: [],
+			}) as Awaited<ReturnType<typeof api.rooms>>,
+	);
+	for (const [mode, hidden] of [
+		["rooms", []],
+		["chats", ["app:agent.quiet"]],
+	] as const) {
+		setHomeMode(mode);
+		store.dispatch({ type: "rooms_loaded", rooms: [], hidden: [] });
+		await page.render(<Sync enabled={false} />);
+		await page.render(<Sync enabled />);
+		await page.act(async () => {
+			await settle();
+		});
+		expect(store.getState().hidden).toEqual([...hidden]);
+	}
+	setHomeMode("rooms");
 	spy.mockRestore();
 });
