@@ -1,8 +1,10 @@
-import { type Hall, hallOf, STATE_COLOR } from "./hall";
+import { hallOf } from "./hall";
 import { fitLabel } from "./label";
 import { PLATE_FONT_STACK } from "./plate";
-import { PUFF_MS, planSeating, RISE_MS } from "./seating";
-import { talkFrames } from "./talk";
+import { planSeating } from "./seating";
+import { drawSeat, type SeatScene } from "./table2d-seat";
+import { showChange } from "./table2d-show";
+import { el, rimFilter } from "./table2d-svg";
 import type {
 	Scheme,
 	SeatInit,
@@ -12,7 +14,7 @@ import type {
 	TableStats,
 	ThemeName,
 } from "./types";
-import { ENGLISH_TABLE_LABELS, pointOf } from "./types";
+import { ENGLISH_TABLE_LABELS } from "./types";
 
 /**
  * The 2D council hall: the same ring of podiums with standees behind them, drawn as SVG in the hall's
@@ -22,26 +24,6 @@ import { ENGLISH_TABLE_LABELS, pointOf } from "./types";
  * mouth is its open-mouthed picture shown in discrete frames over the closed one, and reduced motion
  * drops both.
  */
-
-const NS = "http://www.w3.org/2000/svg";
-
-const el = <K extends keyof SVGElementTagNameMap>(
-	tag: K,
-	attrs: Record<string, string | number> = {},
-	parent?: Element,
-) => {
-	const e = document.createElementNS(NS, tag);
-	for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-	parent?.appendChild(e);
-	return e;
-};
-
-const dataUri = (svg: string) => {
-	const sized = /<svg[^>]*\swidth=/.test(svg)
-		? svg
-		: svg.replace("<svg", '<svg width="256" height="256"');
-	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sized)}`;
-};
 
 /** Counts tables, so the ids one table's filters carry are not the next table's: two tables share a page (the strip and the scene). */
 let tables = 0;
@@ -85,47 +67,6 @@ export function createTable2D(
 	container.appendChild(root);
 
 	/** The filter that cuts a figure out as a standee: a light rim and a dark line round it. */
-	function rimFilter(defs: Element, hall: Hall, size: number) {
-		const rim = Math.max(1.6, size * 0.022);
-		const line = rim + Math.max(1.2, size * 0.014);
-		const filter = el(
-			"filter",
-			{
-				id: `${uid}-rim`,
-				x: "-15%",
-				y: "-15%",
-				width: "130%",
-				height: "130%",
-			},
-			defs,
-		);
-		el(
-			"feMorphology",
-			{ in: "SourceAlpha", operator: "dilate", radius: line, result: "far" },
-			filter,
-		);
-		el("feFlood", { "flood-color": hall.ink, result: "ink" }, filter);
-		el(
-			"feComposite",
-			{ in: "ink", in2: "far", operator: "in", result: "line" },
-			filter,
-		);
-		el(
-			"feMorphology",
-			{ in: "SourceAlpha", operator: "dilate", radius: rim, result: "near" },
-			filter,
-		);
-		el("feFlood", { "flood-color": hall.paper, result: "paper" }, filter);
-		el(
-			"feComposite",
-			{ in: "paper", in2: "near", operator: "in", result: "rim" },
-			filter,
-		);
-		const merge = el("feMerge", {}, filter);
-		for (const node of ["line", "rim", "SourceGraphic"])
-			el("feMergeNode", { in: node }, merge);
-	}
-
 	function draw() {
 		const hall = hallOf(theme, scheme);
 		root.classList.toggle("reduced", reduced);
@@ -183,7 +124,7 @@ export function createTable2D(
 		const pw = Math.max(46, Math.min(slotW * 0.94, 132, room * 1.05, fits));
 		const ph = pw * 0.72;
 		const figure = pw * 1.05;
-		rimFilter(defs, hall, figure);
+		rimFilter(uid, defs, hall, figure);
 		seats.forEach((s2, i) => {
 			const rg = el("radialGradient", { id: `${uid}-h${i}` }, defs);
 			el(
@@ -198,283 +139,28 @@ export function createTable2D(
 			if (compact) return H * 0.92;
 			return rows === 1 ? H * 0.62 : H * (0.46 + row * 0.3);
 		};
+		const scene: SeatScene = {
+			svg,
+			hall,
+			uid,
+			opts,
+			labels,
+			states,
+			svgs,
+			talks,
+			marks,
+			reduced,
+			focusId,
+			pw,
+			ph,
+			figure,
+			slotW,
+		};
 		seats.forEach((s, i) => {
 			const row = Math.floor(i / perRow);
 			const inRow = Math.min(perRow, n - row * perRow);
 			const col = i - row * perRow;
-			const x = (W / inRow) * (col + 0.5);
-			const y = rowY(row);
-			const st = states.get(s.id) ?? "idle";
-			const g = el(
-				"g",
-				{
-					class: "seat",
-					"data-seat": s.id,
-					"data-state": st,
-					...(focusId === s.id ? { "data-focus": "" } : {}),
-					transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`,
-					tabindex: opts.listBelow ? -1 : 0,
-					role: "button",
-					"aria-label": labels.seat(s.name, st),
-					color: hall.css.text,
-					...(opts.listBelow ? { "aria-hidden": "true" } : {}),
-				},
-				svg,
-			);
-			el(
-				"ellipse",
-				{
-					cx: 0,
-					cy: 3,
-					rx: pw * 0.55,
-					ry: pw * 0.1,
-					fill: "#000",
-					opacity: 0.35,
-				},
-				g,
-			);
-			el(
-				"ellipse",
-				{
-					class: "halo",
-					cx: 0,
-					cy: -ph - figure * 0.35,
-					rx: figure * 0.8,
-					ry: figure * 0.8,
-					fill: `url(#${uid}-h${i})`,
-				},
-				g,
-			);
-			el(
-				"polygon",
-				{
-					class: "beam",
-					points: `${-figure * 0.12},${-figure * 2.1} ${figure * 0.12},${-figure * 2.1} ${figure * 0.5},0 ${-figure * 0.5},0`,
-					fill: s.color,
-					opacity: 0.2,
-				},
-				g,
-			);
-			const lift = el("g", { class: "lift" }, g);
-			const picture = svgs.get(s.id);
-			if (picture) {
-				const place = {
-					x: -figure / 2,
-					y: -ph - figure * 0.78,
-					width: figure,
-					height: figure * 0.88,
-					filter: `url(#${uid}-rim)`,
-				};
-				el(
-					"image",
-					{
-						href: dataUri(picture),
-						...place,
-						...(s.dim ? { opacity: 0.55 } : {}),
-					},
-					lift,
-				);
-				// A speaker's mouth: the open-mouthed picture over the closed one, shown and hidden at the talking beat.
-				const talk = talks.get(s.id);
-				if (st === "speaking" && talk && !reduced) {
-					const open = el(
-						"image",
-						{ class: "talk", href: dataUri(talk), ...place, opacity: 0 },
-						lift,
-					);
-					const { frames, seconds } = talkFrames(i);
-					el(
-						"animate",
-						{
-							attributeName: "opacity",
-							values: frames.join(";"),
-							dur: `${seconds.toFixed(3)}s`,
-							calcMode: "discrete",
-							repeatCount: "indefinite",
-						},
-						open,
-					);
-				}
-			} else {
-				el(
-					"circle",
-					{
-						cx: 0,
-						cy: -ph - figure * 0.3,
-						r: figure * 0.3,
-						fill: s.color,
-						stroke: hall.ink,
-						"stroke-width": 2,
-					},
-					lift,
-				);
-				const t = el(
-					"text",
-					{
-						x: 0,
-						y: -ph - figure * 0.3 + figure * 0.1,
-						"text-anchor": "middle",
-						"font-size": figure * 0.3,
-						"font-weight": 700,
-						fill: "#fff",
-						"font-family": PLATE_FONT_STACK,
-					},
-					lift,
-				);
-				t.textContent = Array.from(s.name)[0]?.toUpperCase() ?? "?";
-			}
-			// the podium in front of the figure: a desk top, a body and the gold plate
-			const top = ph * 0.22;
-			el(
-				"path",
-				{
-					d: `M ${-pw * 0.5} ${-ph} L ${pw * 0.5} ${-ph} L ${pw * 0.42} 0 L ${-pw * 0.42} 0 Z`,
-					fill: hall.wood,
-					stroke: hall.ink,
-					"stroke-width": 2,
-					"stroke-linejoin": "round",
-				},
-				g,
-			);
-			el(
-				"rect",
-				{
-					x: -pw * 0.54,
-					y: -ph - top * 0.2,
-					width: pw * 1.08,
-					height: top,
-					rx: 2,
-					fill: hall.woodLight,
-					stroke: hall.ink,
-					"stroke-width": 2,
-				},
-				g,
-			);
-			const fs = Math.max(11, Math.min(15, pw * 0.14));
-			// room for about eight Latin letters even on a small seat, so a short name is never cut
-			const plateW = Math.min(
-				Math.max(pw * 0.9, fs * 5.5 + 14),
-				Math.max(pw * 0.9, s.name.length * fs * 0.62 + 18),
-				slotW * 0.98,
-			);
-			const plateH = fs + 8;
-			el(
-				"rect",
-				{
-					class: "plate",
-					x: -plateW / 2,
-					y: -ph * 0.78,
-					width: plateW,
-					height: plateH,
-					rx: 3,
-					fill: hall.gold,
-					stroke: hall.ink,
-					"stroke-width": 2,
-				},
-				g,
-			);
-			const label = el(
-				"text",
-				{
-					x: 0,
-					y: -ph * 0.78 + fs + 1.5,
-					"text-anchor": "middle",
-					"font-size": fs,
-					"font-weight": 700,
-					"font-family": PLATE_FONT_STACK,
-					fill: hall.plateInk,
-				},
-				g,
-			);
-			const mark = marks.get(s.id);
-			label.textContent = fitLabel(
-				mark ? `${mark} ${s.name}` : s.name,
-				(plateW - 8) / fs,
-			);
-			// badges
-			const badge = el(
-				"g",
-				{ class: "badge" },
-				el(
-					"g",
-					{ transform: `translate(${figure * 0.4} ${-ph - figure * 0.78})` },
-					g,
-				),
-			);
-			const isDone = st === "done";
-			const isErr = st === "error";
-			let badgeFill: string = hall.gold;
-			if (isDone) badgeFill = STATE_COLOR.done;
-			else if (isErr) badgeFill = STATE_COLOR.error;
-			el(
-				"circle",
-				{
-					r: figure * 0.15,
-					fill: badgeFill,
-					stroke: hall.ink,
-					"stroke-width": 2,
-				},
-				badge,
-			);
-			const glyph = el(
-				"text",
-				{
-					x: 0,
-					y: figure * 0.06,
-					"text-anchor": "middle",
-					"font-size": figure * 0.2,
-					"font-weight": 800,
-					"font-family": PLATE_FONT_STACK,
-					fill: isDone || isErr ? "#fff" : hall.ink,
-				},
-				badge,
-			);
-			glyph.textContent = "!";
-			if (isDone) glyph.textContent = "✓";
-			else if (isErr) glyph.textContent = "✕";
-			// thinking mote
-			const orbit = el("g", { class: "orbit" }, g);
-			el(
-				"circle",
-				{
-					cx: figure * 0.4,
-					cy: -ph - figure * 0.5,
-					r: figure * 0.05,
-					fill: s.color,
-				},
-				orbit,
-			);
-			el(
-				"circle",
-				{
-					cx: -figure * 0.4,
-					cy: -ph - figure * 0.5,
-					r: figure * 0.035,
-					fill: s.color,
-					opacity: 0.6,
-				},
-				orbit,
-			);
-			g.addEventListener("click", (e) =>
-				opts.onSeatClick({
-					id: s.id,
-					name: s.name,
-					at: pointOf(e as MouseEvent, g),
-				}),
-			);
-			g.addEventListener("keydown", (e) => {
-				if (
-					(e as KeyboardEvent).key === "Enter" ||
-					(e as KeyboardEvent).key === " "
-				) {
-					e.preventDefault();
-					opts.onSeatClick({
-						id: s.id,
-						name: s.name,
-						at: pointOf({ clientX: 0, clientY: 0, detail: 0 }, g),
-					});
-				}
-			});
+			drawSeat(scene, s, i, (W / inRow) * (col + 0.5), rowY(row));
 		});
 		if (!compact) {
 			// the owner's own place: a low desk at the near edge
@@ -512,75 +198,8 @@ export function createTable2D(
 	}
 
 	/** The pieces of a show that are in the picture only for a while. */
+	/** The pieces of a show that are in the picture only for a while. */
 	const ephemera = new Set<ReturnType<typeof setTimeout>>();
-	const showChange = (
-		plan: ReturnType<typeof planSeating>,
-		standing: ReadonlyMap<string, SVGGElement>,
-	) => {
-		if (plan.mode === "cut") return;
-		const hall = hallOf(theme, scheme);
-		const later = (run: () => void, ms: number) => {
-			const timer = setTimeout(() => {
-				ephemera.delete(timer);
-				run();
-			}, ms);
-			ephemera.add(timer);
-		};
-		for (const id of plan.joining) {
-			const seat = [
-				...svg.querySelectorAll<SVGGElement>("g.seat[data-seat]"),
-			].find((g) => g.getAttribute("data-seat") === id);
-			if (!seat) continue;
-			seat.classList.add("seat-in");
-			seat.prepend(
-				el("ellipse", {
-					class: "seat-ring",
-					rx: 44,
-					ry: 12,
-					cy: 4,
-					stroke: hall.css.ring,
-				}),
-			);
-			later(() => {
-				seat.classList.remove("seat-in");
-				seat.querySelector(".seat-ring")?.remove();
-			}, RISE_MS);
-		}
-		for (const id of plan.leaving) {
-			const old = standing.get(id);
-			if (!old) continue;
-			const ghost = old.cloneNode(true) as SVGGElement;
-			ghost.classList.add("seat-out");
-			for (const name of ["data-seat", "tabindex", "role", "aria-label"])
-				ghost.removeAttribute(name);
-			ghost.setAttribute("aria-hidden", "true");
-			for (const [i, [x, y, r]] of (
-				[
-					[-26, -24, 20],
-					[24, -20, 22],
-					[0, -52, 24],
-					[-4, -4, 26],
-				] as const
-			).entries()) {
-				const puff = el(
-					"circle",
-					{
-						class: "puff",
-						cx: x,
-						cy: y,
-						r,
-						fill: hall.paper,
-						stroke: hall.ink,
-						"stroke-width": 3,
-					},
-					ghost,
-				);
-				puff.style.animationDelay = `${i * 40}ms`;
-			}
-			svg.appendChild(ghost);
-			later(() => ghost.remove(), PUFF_MS);
-		}
-	};
 
 	const ro = new ResizeObserver(draw);
 	ro.observe(container);
@@ -616,6 +235,9 @@ export function createTable2D(
 			// the first seats are not an arrival; a change of who sits plays a short show in CSS
 			if (before.length > 0 || standing.size > 0)
 				showChange(
+					svg,
+					hallOf(theme, scheme),
+					ephemera,
 					planSeating(
 						before,
 						list.map((s) => s.id),
