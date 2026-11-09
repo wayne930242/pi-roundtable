@@ -1,247 +1,42 @@
 import {
-	closeSync,
-	constants,
 	existsSync,
-	fstatSync,
 	lstatSync,
 	mkdirSync,
-	openSync,
 	readdirSync,
-	readSync,
 	realpathSync,
 	renameSync,
-	rmSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import {
-	AgentError,
-	checkRepoName,
-	childEnv,
-	scrubDiagnostic,
-} from "pi-roundtable/kit";
+import { AgentError, checkRepoName } from "pi-roundtable/kit";
+import { GitRunner, ghCloneWith } from "./git-run.ts";
+import { ciOnPush, summaryOf } from "./repo-metadata.ts";
+import type {
+	ChangeReport,
+	CloneCommand,
+	GithubToken,
+	Integration,
+	RepoState,
+	RepoSummary,
+	WorkerTree,
+} from "./repo-types.ts";
+import { WorkerTrees } from "./worktrees.ts";
 
-/** What a clone would push to its default branch (repos-and-skills spec behavior 10). */
-export interface ChangeReport {
-	repo: string;
-	/** The default branch the push goes to. */
-	branch: string;
-	/** HEAD's full SHA, the exact commit to push. */
-	sha: string;
-	/** `<short sha> <subject>`, newest first. */
-	commits: string[];
-	diffstat: string;
-	/** The credential-free configured push destination shown on the approval card. */
-	target: string;
-}
+export { reportPost } from "./repo-report.ts";
+export type {
+	ChangeReport,
+	CloneCommand,
+	GithubToken,
+	Integration,
+	RepoState,
+	RepoSummary,
+	WorkerTree,
+} from "./repo-types.ts";
+export { WORKTREES_DIR } from "./repo-types.ts";
 
-/** One managed repository as repo_list shows it (behavior 3). */
-export interface RepoSummary {
-	repo: string;
-	dir: string;
-	branch: string;
-	/** Commits ahead of and behind its upstream, as of the last fetch; absent without one. */
-	upstream?: { ahead: number; behind: number };
-	uncommitted: number;
-	/** `<short sha> <subject> (<date>)`, absent in an empty repository. */
-	lastCommit?: string;
-	summary?: string;
-	ciOnPush: boolean;
-	/** Set when git could not describe it. */
-	error?: string;
-}
-
-/** A clone's state, measured around a coding worker's run (behavior 8). */
-export interface RepoState {
-	branch: string;
-	head: string;
-	/** `git status --porcelain` lines. */
-	uncommitted: string[];
-}
-
-/**
- * The GitHub token git and gh calls get as GH_TOKEN, or a function read at each call; undefined
- * leaves them to gh's own login.
- */
-export type GithubToken = string | undefined | (() => string | undefined);
-
-export type CloneCommand = (repo: string, dir: string) => Promise<void>;
-
-/** A coding worker's own checkout: a linked worktree on its own branch, cut from the clone's HEAD. */
-export interface WorkerTree {
-	repo: string;
-	/** The worktree's real path, outside the shelf's list of managed repositories. */
-	dir: string;
-	/** The worker's branch, such as `worker/3`. */
-	branch: string;
-	/** The clone's full HEAD the branch was cut from. */
-	base: string;
-}
-
-/** What bringing a worker's branch back into its clone did. */
-export type Integration =
-	/** The branch had no commits beyond the clone; the worktree and branch are gone. */
-	| { status: "nothing" }
-	/** Rebased onto the clone's branch and fast-forwarded it; the worktree and branch are gone. */
-	| { status: "merged"; branch: string; commits: string[] }
-	/** The rebase stopped on these files; it was aborted, and the branch and worktree are kept. */
-	| { status: "conflict"; branch: string; dir: string; files: string[] }
-	/** The clone or the worktree had uncommitted changes, or the clone moved; nothing was touched. */
-	| {
-			status: "refused";
-			branch: string;
-			dir: string;
-			reason: string;
-	  };
-
-/** The folder under the shelf that holds worker worktrees; the shelf lists no repository there. */
-export const WORKTREES_DIR = ".worktrees";
-
-const GIT_TIMEOUT_MS = 60_000;
 const MAX_STAT_FILES = 40;
-const MAX_SUMMARY_CHARS = 120;
 
-/**
- * Host variables git and gh need besides the shell's: their config files and homes, the identity a
- * rebase commits as, ssh agent and ssh command, and gh's host; never a token, which comes from
- * `githubToken`.
- */
-const GIT_ENV_NAMES = [
-	"XDG_CONFIG_HOME",
-	"GIT_CONFIG_GLOBAL",
-	"GIT_CONFIG_SYSTEM",
-	"GIT_CONFIG_NOSYSTEM",
-	"GIT_AUTHOR_NAME",
-	"GIT_AUTHOR_EMAIL",
-	"GIT_COMMITTER_NAME",
-	"GIT_COMMITTER_EMAIL",
-	"GH_CONFIG_DIR",
-	"GH_HOST",
-	"SSH_AUTH_SOCK",
-	"GIT_SSH",
-	"GIT_SSH_COMMAND",
-];
-
-/** The environment of a git or gh call: the shell's whitelist, git's own names, and the token as GH_TOKEN. */
-function gitEnv(token: string | undefined): Record<string, string> {
-	return childEnv(process.env, {
-		pass: GIT_ENV_NAMES,
-		...(token ? { set: { GH_TOKEN: token } } : {}),
-	});
-}
-
-async function run(
-	command: string[],
-	cwd: string | undefined,
-	env: Record<string, string>,
-): Promise<{ out: string; err: string; code: number }> {
-	const safeCommand =
-		command[0] === "git"
-			? [
-					"git",
-					"-c",
-					"core.fsmonitor=false",
-					"-c",
-					"core.hooksPath=/dev/null",
-					...command.slice(1),
-				]
-			: command;
-	const child = Bun.spawn(safeCommand, {
-		...(cwd ? { cwd } : {}),
-		env,
-		stdout: "pipe",
-		stderr: "pipe",
-		timeout: GIT_TIMEOUT_MS,
-	});
-	const [out, err, code] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited,
-	]);
-	return { out: out.trimEnd(), err: err.trim(), code };
-}
-
-/**
- * Clones with gh, which authenticates with `token` as GH_TOKEN (default the host's GH_TOKEN, read
- * at each clone) or its own login; a failure's stderr is cut at `diagnosticChars`.
- */
-const ghCloneWith =
-	(diagnosticChars?: number, token?: () => string | undefined): CloneCommand =>
-	async (repo, dir) => {
-		checkRepoName(repo);
-		if (repo.startsWith("-"))
-			throw new AgentError("Repository owner cannot start with a dash.");
-		const { err, code } = await run(
-			["gh", "repo", "clone", repo, dir, "--", "--quiet"],
-			undefined,
-			gitEnv(token ? token() : process.env.GH_TOKEN),
-		);
-		if (code !== 0)
-			throw new AgentError(
-				`Cloning ${repo} failed: ${scrubDiagnostic(err, diagnosticChars) || `exit ${code}`}`,
-			);
-	};
+/** Clones with gh and the host's token; see `ghCloneWith`. */
 export const ghClone: CloneCommand = ghCloneWith();
-
-const MAX_METADATA_BYTES = 65_536;
-
-/** Metadata discovery never follows links or opens devices/FIFOs; each file is bounded. */
-function metadataText(path: string): string | undefined {
-	let fd: number | undefined;
-	try {
-		if (!lstatSync(path).isFile()) return undefined;
-		fd = openSync(
-			path,
-			constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-		);
-		if (!fstatSync(fd).isFile()) return undefined;
-		const bytes = Buffer.alloc(MAX_METADATA_BYTES);
-		const count = readSync(fd, bytes, 0, bytes.length, 0);
-		return bytes.subarray(0, count).toString("utf8");
-	} catch {
-		return undefined;
-	} finally {
-		if (fd !== undefined) closeSync(fd);
-	}
-}
-
-/** The first prose line of a README or AGENTS.md: no frontmatter, heading, badge, or markup. */
-function summaryOf(dir: string): string | undefined {
-	for (const name of ["README.md", "AGENTS.md"]) {
-		const file = join(dir, name);
-		const content = metadataText(file);
-		if (!content) continue;
-		const text = content.replace(/^---\n[\s\S]*?\n---\n/, "");
-		const line = text
-			.split("\n")
-			.map((l) => l.trim())
-			.find((l) => /\p{L}/u.test(l) && !/^([#!<>|`[\-*=]|\d+\.)/.test(l));
-		if (line)
-			return line.length > MAX_SUMMARY_CHARS
-				? `${line.slice(0, MAX_SUMMARY_CHARS - 1)}…`
-				: line;
-	}
-	return undefined;
-}
-
-function ciOnPush(dir: string): boolean {
-	const workflows = join(dir, ".github", "workflows");
-	try {
-		if (
-			!lstatSync(join(dir, ".github")).isDirectory() ||
-			!lstatSync(workflows).isDirectory()
-		)
-			return false;
-		return readdirSync(workflows)
-			.filter((name) => /\.ya?ml$/.test(name))
-			.some((name) =>
-				/^\s*(on:\s*\[?[^\n]*\bpush\b|push\s*:)/m.test(
-					metadataText(join(workflows, name)) ?? "",
-				),
-			);
-	} catch {
-		return false;
-	}
-}
 
 /** The managed repositories under one folder, read and pushed through git. */
 export class RepoShelf {
@@ -249,10 +44,8 @@ export class RepoShelf {
 	readonly #clone: CloneCommand;
 	readonly #reports = new Map<string, ChangeReport>();
 	readonly #adding = new Set<string>();
-
-	readonly #diagnosticChars: number | undefined;
-
-	readonly #token: () => string | undefined;
+	readonly #runner: GitRunner;
+	readonly #trees: WorkerTrees;
 
 	constructor(
 		dir: string,
@@ -263,19 +56,16 @@ export class RepoShelf {
 		} = {},
 	) {
 		this.dir = resolve(dir);
-		this.#diagnosticChars = options.diagnosticChars;
 		const { githubToken = process.env.GH_TOKEN } = options;
-		this.#token =
+		const token =
 			typeof githubToken === "function" ? githubToken : () => githubToken;
-		this.#clone = clone ?? ghCloneWith(options.diagnosticChars, this.#token);
-	}
-
-	/** A git or gh call with the shelf's token and no other host secret. */
-	#run(
-		command: string[],
-		cwd?: string,
-	): Promise<{ out: string; err: string; code: number }> {
-		return run(command, cwd, gitEnv(this.#token()));
+		this.#runner = new GitRunner(token, options.diagnosticChars);
+		this.#trees = new WorkerTrees(
+			this.dir,
+			(repo) => this.dirOf(repo),
+			this.#runner,
+		);
+		this.#clone = clone ?? ghCloneWith(options.diagnosticChars, token);
 	}
 
 	/** Adopt an existing standalone clone at startup; an existing destination is never replaced. */
@@ -492,44 +282,8 @@ export class RepoShelf {
 	 * Cuts a worktree for coding job `id` from the clone's HEAD, on a fresh branch `worker/<id>`
 	 * (with a suffix when an earlier run kept one of that name), under `<shelf>/.worktrees/`.
 	 */
-	async addWorktree(repo: string, id: number): Promise<WorkerTree> {
-		const clone = this.dirOf(repo);
-		const base = await this.#git(clone, "rev-parse", "HEAD");
-		const parent = join(this.dir, WORKTREES_DIR, repo);
-		mkdirSync(parent, { recursive: true });
-		const rel = relative(realpathSync(this.dir), realpathSync(parent));
-		if (rel.startsWith("..") || isAbsolute(rel))
-			throw new AgentError("The worktree folder escapes the shelf.");
-		for (let attempt = 1; ; attempt++) {
-			const name = attempt === 1 ? `${id}` : `${id}-${attempt}`;
-			const branch = `worker/${name}`;
-			const dir = join(parent, name);
-			const taken =
-				existsSync(dir) ||
-				(
-					await this.#run([
-						"git",
-						"-C",
-						clone,
-						"rev-parse",
-						"--verify",
-						"--quiet",
-						`refs/heads/${branch}`,
-					])
-				).code === 0;
-			if (taken) continue;
-			await this.#git(
-				clone,
-				"worktree",
-				"add",
-				"--quiet",
-				"-b",
-				branch,
-				dir,
-				base,
-			);
-			return { repo, dir: realpathSync(dir), branch, base };
-		}
+	addWorktree(repo: string, id: number): Promise<WorkerTree> {
+		return this.#trees.add(repo, id);
 	}
 
 	/**
@@ -538,147 +292,23 @@ export class RepoShelf {
 	 * mid-rebase: a conflict aborts the rebase in the worktree and keeps both. A clone or worktree
 	 * with uncommitted changes is not touched. The caller serializes integrations of one clone.
 	 */
-	async integrate(tree: WorkerTree): Promise<Integration> {
-		const clone = this.dirOf(tree.repo);
-		const kept = { branch: tree.branch, dir: tree.dir };
-		const dirty = await this.#git(clone, "status", "--porcelain");
-		if (dirty)
-			return {
-				status: "refused",
-				...kept,
-				reason: `the clone has uncommitted changes, so it was left as it is:\n${dirty}`,
-			};
-		const head = await this.#git(clone, "rev-parse", "HEAD");
-		const ahead = Number(
-			await this.#git(clone, "rev-list", "--count", `${head}..${tree.branch}`),
-		);
-		if (ahead === 0) {
-			await this.removeWorktree(tree);
-			return { status: "nothing" };
-		}
-		const treeDir = this.#treeDir(tree);
-		const treeDirty = await this.#git(treeDir, "status", "--porcelain");
-		if (treeDirty)
-			return {
-				status: "refused",
-				...kept,
-				reason: `the worker left uncommitted changes in its worktree:\n${treeDirty}`,
-			};
-		const rebase = await this.#run([
-			"git",
-			"-C",
-			treeDir,
-			"rebase",
-			"--quiet",
-			head,
-		]);
-		if (rebase.code !== 0) {
-			const conflicted = await this.#run([
-				"git",
-				"-C",
-				treeDir,
-				"diff",
-				"--name-only",
-				"--diff-filter=U",
-			]);
-			await this.#run(["git", "-C", treeDir, "rebase", "--abort"]);
-			return {
-				status: "conflict",
-				...kept,
-				files: conflicted.out ? conflicted.out.split("\n") : [],
-			};
-		}
-		const merge = await this.#run([
-			"git",
-			"-C",
-			clone,
-			"merge",
-			"--ff-only",
-			"--quiet",
-			tree.branch,
-		]);
-		if (merge.code !== 0)
-			return {
-				status: "refused",
-				...kept,
-				reason: `the clone could not fast-forward to the branch: ${scrubDiagnostic(merge.err, this.#diagnosticChars) || `exit ${merge.code}`}`,
-			};
-		const log = await this.#git(
-			clone,
-			"log",
-			"--format=%h %s",
-			"--abbrev=12",
-			`${head}..HEAD`,
-		);
-		await this.removeWorktree(tree);
-		return {
-			status: "merged",
-			branch: tree.branch,
-			commits: log ? log.split("\n") : [],
-		};
+	integrate(tree: WorkerTree): Promise<Integration> {
+		return this.#trees.integrate(tree);
 	}
 
 	/** A worker worktree's state, as `state` reads a clone's. */
-	async treeState(tree: WorkerTree): Promise<RepoState> {
-		const dir = this.#treeDir(tree);
-		const status = await this.#git(dir, "status", "--porcelain");
-		return {
-			branch: await this.#git(dir, "rev-parse", "--abbrev-ref", "HEAD"),
-			head: await this.#git(dir, "rev-parse", "--short=12", "HEAD"),
-			uncommitted: status ? status.split("\n") : [],
-		};
+	treeState(tree: WorkerTree): Promise<RepoState> {
+		return this.#trees.state(tree);
 	}
 
 	/** `<short sha> <subject>` of each commit on the worker's branch after its base, newest first. */
-	async treeCommits(tree: WorkerTree): Promise<string[]> {
-		const log = await this.#git(
-			this.#treeDir(tree),
-			"log",
-			"--format=%h %s",
-			"--abbrev=12",
-			`${tree.base}..HEAD`,
-		);
-		return log ? log.split("\n") : [];
+	treeCommits(tree: WorkerTree): Promise<string[]> {
+		return this.#trees.commits(tree);
 	}
 
 	/** Removes a worker's worktree and its branch; what is already gone is skipped. */
-	async removeWorktree(tree: WorkerTree): Promise<void> {
-		const clone = this.dirOf(tree.repo);
-		this.#treeDir(tree, false);
-		await this.#run([
-			"git",
-			"-C",
-			clone,
-			"worktree",
-			"remove",
-			"--force",
-			tree.dir,
-		]);
-		if (existsSync(tree.dir))
-			rmSync(tree.dir, { recursive: true, force: true });
-		await this.#run(["git", "-C", clone, "worktree", "prune"]);
-		await this.#run([
-			"git",
-			"-C",
-			clone,
-			"branch",
-			"-D",
-			"--quiet",
-			tree.branch,
-		]);
-	}
-
-	/** A worktree path, refused unless it lies in this repository's worktree folder. */
-	#treeDir(tree: WorkerTree, mustExist = true): string {
-		const parent = resolve(this.dir, WORKTREES_DIR, tree.repo);
-		const path = mustExist ? realpathSync(tree.dir) : resolve(tree.dir);
-		const root = existsSync(parent) ? realpathSync(parent) : parent;
-		const rel = relative(root, path);
-		if (!rel || rel.startsWith("..") || isAbsolute(rel) || rel.includes("/"))
-			throw new AgentError(
-				"The worktree lies outside the shelf's worktree folder.",
-			);
-		return path;
+	removeWorktree(tree: WorkerTree): Promise<void> {
+		return this.#trees.remove(tree);
 	}
 
 	async #summary(repo: string, fetch: boolean): Promise<RepoSummary> {
@@ -772,13 +402,15 @@ export class RepoShelf {
 		return head.out.slice("origin/".length);
 	}
 
-	async #git(dir: string, ...args: string[]): Promise<string> {
-		const { out, err, code } = await this.#run(["git", "-C", dir, ...args]);
-		if (code !== 0)
-			throw new AgentError(
-				`git ${args[0]} failed in ${dir}: ${scrubDiagnostic(err, this.#diagnosticChars) || `exit ${code}`}`,
-			);
-		return out;
+	#run(
+		command: string[],
+		cwd?: string,
+	): Promise<{ out: string; err: string; code: number }> {
+		return this.#runner.run(command, cwd);
+	}
+
+	#git(dir: string, ...args: string[]): Promise<string> {
+		return this.#runner.git(dir, ...args);
 	}
 }
 
@@ -788,19 +420,4 @@ function refuseHidden(repo: string): void {
 		throw new AgentError(
 			`"${repo}" is not a repository: owners starting with a dot are reserved for the shelf.`,
 		);
-}
-
-/** The report as posted for the owner. */
-export function reportPost(report: ChangeReport, direct = false): string {
-	return [
-		`**Change report**: \`${report.repo}\`, commit \`${report.sha}\`, default branch \`${report.branch}\`.`,
-		`**Push destination**: \`${report.target}\``,
-		`**Commits (${report.commits.length})**`,
-		...report.commits.map((c) => `- \`${c.slice(0, 12)}\`${c.slice(12)}`),
-		"**Changed files**",
-		`\`\`\`\n${report.diffstat}\n\`\`\``,
-		direct
-			? "This repository is explicitly owner-owned; repo_push does not need an approval card."
-			: `After approval: repo_push ${report.repo} ${report.sha}`,
-	].join("\n");
 }
