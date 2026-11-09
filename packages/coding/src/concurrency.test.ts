@@ -257,7 +257,15 @@ test("the worktrees of one clone change one at a time, so workers starting toget
 		...added.map((tree) => trees.remove(tree)),
 	]);
 	expect(calls.most).toBe(1);
-	expect(await git(clone, "branch", "--list", "worker/*")).toBe("  worker/5");
+	expect(
+		await git(
+			clone,
+			"branch",
+			"--list",
+			"worker/*",
+			"--format=%(refname:short)",
+		),
+	).toBe("worker/5");
 	if (fifth) await trees.remove(fifth);
 	expect(await git(clone, "worktree", "list")).not.toContain(WORKTREES_DIR);
 });
