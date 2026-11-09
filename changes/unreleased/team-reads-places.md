@@ -9,3 +9,5 @@ The agent team reads where its agents and groups are through the place providers
 `Agent.channelId`, `AgentGroup.channelId`, `AgentSeed.channelId`, `AgentDirectory.agentByChannel` and `groupByChannel`, `AgentTeam.guildId` and `discordGuild`, and the `channelId` of the `TeamStatus` views are deprecated and removed in 1.0; read `placesOf` and `placeOwner`. The team still keeps them up to date.
 
 The web console reads the team's `places` for its channel links.
+
+The stand-in Discord of `testHost` contributes Discord's place provider when the test host has an agent guild, as the built-in plugin does. A plugin that replaces `DISCORD` with a Discord of its own, in a host with an agent guild, must contribute a provider for the surface as well, or the team has no Discord places.
