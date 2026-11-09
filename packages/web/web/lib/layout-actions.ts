@@ -14,6 +14,7 @@ import {
 } from "../../src/layout-order.ts";
 import { messageOf } from "./api.ts";
 import { store } from "./app-store.ts";
+import { chatsHome } from "./home-mode.ts";
 import { layoutApi } from "./layout-api.ts";
 import { arrangementNow, layoutNow } from "./layout-now.ts";
 import { editFor, type RoomDrop } from "./reorder.ts";
@@ -28,7 +29,7 @@ const hold = (layout: LayoutView) =>
 	store.dispatch({
 		type: "layout_loaded",
 		pins: layout.pins,
-		hidden: layout.hidden,
+		hidden: chatsHome() ? layout.hidden : [],
 		folders: layout.folders,
 	});
 

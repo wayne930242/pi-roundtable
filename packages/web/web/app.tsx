@@ -27,7 +27,7 @@ import {
 	setPresentation,
 	translate as t,
 } from "./lib/messages.ts";
-import { GATE_ROUTES, PAGE_ROUTES } from "./lib/page-routes.ts";
+import { GATE_ROUTES, knownPane, PAGE_ROUTES } from "./lib/page-routes.ts";
 import { useRoomsSync } from "./lib/rooms-sync.ts";
 import { hrefFor, pageKey, setRouting, useRoute } from "./lib/router.ts";
 import { isSearchKey } from "./lib/search-key.ts";
@@ -208,14 +208,7 @@ function Console({ config }: { config: ConfigView }) {
 	}, [config.panes, config.pages, hasApp, gated]);
 
 	const first = config.panes[0] ?? "conversations";
-	const known = (name: string) =>
-		config.panes.includes(name as PaneName) ||
-		(hasApp &&
-			["room", "agent", "settings", "prompts", "more", "arrange"].includes(
-				name,
-			)) ||
-		name === "more" ||
-		(hasApp && name !== "profile" && name in PAGE_ROUTES);
+	const known = (name: string) => knownPane(name, config.panes, hasApp, chats);
 	const pane = known(route.pane) ? route.pane : first;
 	// The pages that finish an owed step, besides the person's own.
 	const opensOwed = owed.some(
