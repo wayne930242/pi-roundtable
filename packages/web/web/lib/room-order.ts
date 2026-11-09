@@ -2,7 +2,6 @@
 // of the room list, the owners' layout and what the person folded or opened, so a test needs no browser
 // and the order holds on a page that draws no list (a phone with a room open).
 
-import { elsewhereUnread, listFor } from "./chats-home.ts";
 import { sectionFold } from "./folds.ts";
 import { type SectionsInput, sections } from "./sections.ts";
 
@@ -23,8 +22,8 @@ export interface OrderOptions {
 	expanded: ReadonlySet<string>;
 	/** The room open now; a folded group still shows it, whatever was kept. */
 	current: string | undefined;
-	/** On the chat home: the chip chosen and the unread counts, so the run follows the list as drawn. */
-	home?: { chip: string; unread: Readonly<Record<string, number>> };
+	/** On the chat home: the rooms of the list as drawn after the pins, so the run follows it. */
+	home?: readonly string[];
 }
 
 /**
@@ -56,23 +55,8 @@ export function roomStops(state: SectionsInput, options: OrderOptions): Stop[] {
 			room(key, !folded || key === current || options.stays?.(key) === true);
 	};
 	if (options.home) {
-		// The chat home draws the pins, the other folders' unread rooms, then the chosen chip's list.
-		const { chip, unread } = options.home;
 		for (const key of arrangement.pinned) room(key, true);
-		const elsewhere = elsewhereUnread(
-			arrangement,
-			chip,
-			unread,
-			options.at,
-			state.order,
-		);
-		const listed = new Set<string>();
-		for (const one of elsewhere) {
-			listed.add(one.key);
-			room(one.key, true);
-		}
-		for (const key of listFor(arrangement, chip, options.at, state.order))
-			if (!listed.has(key)) room(key, true);
+		for (const key of options.home) room(key, true);
 	} else {
 		group(sectionFold("pinned"), arrangement.pinned);
 		for (const folder of arrangement.folders) group(folder.id, folder.rooms);

@@ -11,6 +11,7 @@
 import { closeMenu } from "./action-menu.ts";
 import { store } from "./app-store.ts";
 import { lastChip } from "./chat-chip.ts";
+import { elsewhereUnread, listFor } from "./chats-home.ts";
 import { collapsedNow } from "./folds.ts";
 import { unreadOf } from "./host-state.ts";
 import { composingKey } from "./ime.ts";
@@ -19,6 +20,7 @@ import { askQueuedEdit } from "./queued-edit.ts";
 import { neighbour, roomStops, type Stop } from "./room-order.ts";
 import { activityAt, waitingCards } from "./rooms.ts";
 import { currentRoute, hrefFor, navigate } from "./router.ts";
+import { sections } from "./sections.ts";
 import {
 	closeShortcutHelp,
 	openShortcutHelp,
@@ -161,6 +163,24 @@ function reveal(key: string, frames = 12): void {
 	else if (frames > 0) requestAnimationFrame(() => reveal(key, frames - 1));
 }
 
+/** The rooms the chat home draws under the pins: the other folders' unread rooms, then the chosen tab's list. */
+function homeList(state: ReturnType<typeof store.getState>): string[] {
+	const at = (key: string) => activityAt(state, key);
+	const arrangement = sections(state, at);
+	const chip = lastChip();
+	const unread = Object.fromEntries(
+		state.order.map((key) => [key, unreadOf(key)]),
+	);
+	const elsewhere = elsewhereUnread(arrangement, chip, unread, at, state.order);
+	const seen = new Set(elsewhere.map((one) => one.key));
+	return [
+		...seen,
+		...listFor(arrangement, chip, at, state.order).filter(
+			(key) => !seen.has(key),
+		),
+	];
+}
+
 /** Goes to the room before or after the open one, as clicking its row would. */
 function stepRoom(direction: 1 | -1, unread: boolean): void {
 	const state = store.getState();
@@ -172,12 +192,7 @@ function stepRoom(direction: 1 | -1, unread: boolean): void {
 		stays: (key) => waitingCards(state, key) > 0 || unreadOf(key) > 0,
 		expanded: openFolds(),
 		current,
-		home: {
-			chip: lastChip(),
-			unread: Object.fromEntries(
-				state.order.map((key) => [key, unreadOf(key)]),
-			),
-		},
+		home: homeList(state),
 	});
 	// A room open that the list does not hold (a host's room) is left where it is.
 	if (route.pane === "room" && !stops.some((stop) => stop.key === current))
