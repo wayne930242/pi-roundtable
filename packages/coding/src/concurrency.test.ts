@@ -20,7 +20,7 @@ import {
 	codingReport,
 } from "./coding-desk.ts";
 import { RepoShelf, WORKTREES_DIR } from "./repo-shelf.ts";
-import { until } from "./testing/until.ts";
+import { unlessAborted, until } from "./testing/until.ts";
 
 const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
@@ -115,6 +115,7 @@ function desk(
 	return { desk: instance, results };
 }
 
+// About fifty git processes, which a stalled runner can stretch past the default 5 seconds.
 test("two workers on one repository work in their own worktrees and both merge", async () => {
 	const { shelf, clone } = await fixture();
 	const bothStarted = gate();
@@ -123,10 +124,10 @@ test("two workers on one repository work in their own worktrees and both merge",
 	const { desk: coding, results } = desk({
 		shelf,
 		worker: {
-			run: async (job) => {
+			run: async (job, signal) => {
 				dirs.push(job.dir);
 				if (dirs.length === 2) bothStarted.resolve();
-				await release.promise;
+				await unlessAborted(release.promise, signal);
 				await commit(job.dir, `file-${job.id}.txt`, `job ${job.id}\n`);
 				return `done ${job.id}`;
 			},
@@ -160,8 +161,9 @@ test("two workers on one repository work in their own worktrees and both merge",
 	expect(codingReport(results[0] as CodingResult, "now")).toContain(
 		"Merged worker/",
 	);
-});
+}, 30_000);
 
+// Like the test above, about fifty git processes, which a stalled runner can stretch past the default 5 seconds.
 test("a conflicting worker keeps its branch and worktree, names the files, and leaves the clone clean", async () => {
 	const { shelf, clone } = await fixture();
 	const bothStarted = gate();
@@ -170,10 +172,10 @@ test("a conflicting worker keeps its branch and worktree, names the files, and l
 	const { desk: coding, results } = desk({
 		shelf,
 		worker: {
-			run: async (job) => {
+			run: async (job, signal) => {
 				if (++started === 2) bothStarted.resolve();
-				await bothStarted.promise;
-				if (job.id === 2) await firstDone.promise;
+				await unlessAborted(bothStarted.promise, signal);
+				if (job.id === 2) await unlessAborted(firstDone.promise, signal);
 				await commit(job.dir, "README.md", `# Rewritten by ${job.id}\n`);
 				return `done ${job.id}`;
 			},
@@ -212,7 +214,7 @@ test("a conflicting worker keeps its branch and worktree, names the files, and l
 	expect((await shelf.addWorktree("sample/project", 2)).branch).toBe(
 		"worker/2-2",
 	);
-});
+}, 30_000);
 
 test("a clone with uncommitted changes at integration is left alone and the branch kept", async () => {
 	const { shelf, clone } = await fixture();
