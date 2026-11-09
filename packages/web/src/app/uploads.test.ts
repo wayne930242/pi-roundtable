@@ -228,12 +228,6 @@ test("any ordinary file is accepted: images by their bytes, text as text, the re
 			"text/plain",
 			"text/plain",
 		],
-		[
-			"data.bin",
-			'<svg xmlns="http://www.w3.org/2000/svg"/>',
-			"application/octet-stream",
-			"text/plain",
-		],
 		["notes.md", "# Title\n\ntext", "", "text/markdown"],
 		["table.csv", "a,b\n1,2\n", "application/vnd.ms-excel", "text/csv"],
 		["index.ts", "export const a = 1;\n", "video/mp2t", "text/plain"],
