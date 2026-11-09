@@ -2,7 +2,7 @@ import type { ClassId } from "./catalog.ts";
 import { type ClassEntry, preset } from "./class-data.ts";
 
 /** Some of the classes of the catalog, by id. */
-export const CLASSES_3 = {
+export const CLASSES_C = {
 	envoy: {
 		label: "Envoy",
 		jobs: "email, partner comms, notifications",

@@ -100,7 +100,7 @@ export interface TestPluginResult {
 			speaker?: Speaker;
 			/** Where the turn's request came from, as `ToolTurn.origin` shows it to the tool. */
 			origin?: string;
-			/** What the party that started the turn can do for the tool, as `ToolTurn.client` shows it. */
+			/** What the side that started the turn can do for the tool, as `ToolTurn.client` shows it. */
 			client?: ClientPort;
 			channel?: ChannelKey;
 			workspace?: SessionContext["workspace"];

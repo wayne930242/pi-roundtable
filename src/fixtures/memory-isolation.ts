@@ -11,20 +11,23 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { testPlugin } from "../../../testing.ts";
-import { MEMORY_TIERS, memorySessionTool } from "../../builtin/stores.ts";
-import type { HeldActionStore } from "../../contract/runtime.ts";
-import type { ChannelKey } from "../../domain/conversation.ts";
-import type { TurnConversation } from "../../domain/ports.ts";
-import type { SessionTool } from "../../domain/sessions.ts";
-import type { Speaker } from "../../identity/speakers.ts";
+import { MEMORY_TIERS, memorySessionTool } from "../core/builtin/stores.ts";
+import type { HeldActionStore } from "../core/contract/runtime.ts";
+import type { ChannelKey } from "../core/domain/conversation.ts";
+import type { TurnConversation } from "../core/domain/ports.ts";
+import type { SessionTool } from "../core/domain/sessions.ts";
+import type { Speaker } from "../core/identity/speakers.ts";
 import type {
 	Memory,
 	MemoryKind,
-} from "../../modules/memory/owner-memory-store.ts";
-import { definePlugin, defineTool } from "../../plugin-api/define.ts";
-import type { MemoryStore, SpeakerMemory } from "../../plugin-api/services.ts";
-import { PiAgentRuntime } from "../../runtime/pi-agent-runtime.ts";
+} from "../core/modules/memory/owner-memory-store.ts";
+import { definePlugin, defineTool } from "../core/plugin-api/define.ts";
+import type {
+	MemoryStore,
+	SpeakerMemory,
+} from "../core/plugin-api/services.ts";
+import { PiAgentRuntime } from "../core/runtime/pi-agent-runtime.ts";
+import { testPlugin } from "../testing.ts";
 
 // Whose private memory a model request may carry, end to end over the real Pi runtime: a shared
 // conversation's requests carry only the speaker's, whatever its history holds of someone else's.

@@ -2,7 +2,7 @@ import type { ClassId } from "./catalog.ts";
 import { type ClassEntry, preset } from "./class-data.ts";
 
 /** Some of the classes of the catalog, by id. */
-export const CLASSES_1 = {
+export const CLASSES_A = {
 	wizard: {
 		label: "Wizard",
 		jobs: "coordinator, planner, main assistant",

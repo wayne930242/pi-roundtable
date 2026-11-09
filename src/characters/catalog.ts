@@ -1,7 +1,7 @@
 import { type ClassEntry, HAIR_COLORS, PALETTES, SKINS } from "./class-data.ts";
-import { CLASSES_1 } from "./classes-1.ts";
-import { CLASSES_2 } from "./classes-2.ts";
-import { CLASSES_3 } from "./classes-3.ts";
+import { CLASSES_A } from "./classes-a.ts";
+import { CLASSES_B } from "./classes-b.ts";
+import { CLASSES_C } from "./classes-c.ts";
 import type {
 	CharacterColors,
 	CharacterSpec,
@@ -268,9 +268,9 @@ export const STATE_EXPRESSION: Readonly<Record<AvatarState, Expression>> =
 	});
 
 const CLASSES: Record<ClassId, ClassEntry> = {
-	...CLASSES_1,
-	...CLASSES_2,
-	...CLASSES_3,
+	...CLASSES_A,
+	...CLASSES_B,
+	...CLASSES_C,
 };
 
 export const CATALOG: Readonly<{

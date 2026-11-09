@@ -27,7 +27,7 @@ import {
 	SECRETS,
 	STORE,
 	SYSTEM,
-} from "./core/testing/fixtures/memory-isolation.ts";
+} from "./fixtures/memory-isolation.ts";
 
 afterEach(() => {
 	for (const dir of dirs.splice(0))

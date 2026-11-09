@@ -35,6 +35,7 @@
 		"!src/core/testing/fixtures",
 		"!src/characters/fixtures",
 		"!src/m2-acceptance",
+		"!src/fixtures",
 		"!src/prompt-text.snapshot.json",
 		"!src/cli/testing",
 		"templates",
