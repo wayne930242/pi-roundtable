@@ -1,47 +1,26 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SQL } from "bun";
 import { CATALOG } from "./characters/index.ts";
 import { agentClaim } from "./core/agents/agent-claim.ts";
 import { ownerAttachmentDir } from "./core/attachments/attachment-dir.ts";
 import { attachmentPort } from "./core/attachments/attachment-port.ts";
 import { DISCORD, type DiscordServices } from "./core/builtin/discord.ts";
-import type { PeerBotsConfig } from "./core/config/peer-bots.ts";
-import type {
-	ConversationPort,
-	InboundMessage,
-} from "./core/contract/channels.ts";
+import type { InboundMessage } from "./core/contract/channels.ts";
 import type { Providers } from "./core/contract/providers.ts";
 import type { AgentRuntime, RuntimeDeps } from "./core/contract/runtime.ts";
-import type { ServiceKey } from "./core/contract/services.ts";
-import type { ChatSurface, SurfacePort } from "./core/contract/surface.ts";
-import { CommandCollection } from "./core/discord/command-collection.ts";
-import type { ComposedCommands } from "./core/discord/compose-commands.ts";
-import type {
-	CommandGuard,
-	CommandRegistrar,
-	InteractionContribution,
-} from "./core/discord/interaction-module.ts";
-import {
-	commandGuard,
-	ownerRootCommand,
-} from "./core/discord/owner-command.ts";
-import type { DiscordPoster } from "./core/discord/poster/poster.ts";
 import { supportOf } from "./core/domain/block-support.ts";
-import type { ClientPart, ClientPort } from "./core/domain/client.ts";
+import type { ClientPart } from "./core/domain/client.ts";
 import type { ReplyFile } from "./core/domain/conversation.ts";
 import type { ChannelKey, SessionContext } from "./core/domain/sessions.ts";
 import { EventBus } from "./core/host/events.ts";
-import { type ListenerConfig, listenerAddress } from "./core/http/listeners.ts";
+import { listenerAddress } from "./core/http/listeners.ts";
 import { contactsOf } from "./core/identity/identity-view.ts";
-import type { OwnerIdentity } from "./core/identity/owner-identity.ts";
-import { type Speaker, THE_SPEAKER } from "./core/identity/speakers.ts";
+import { THE_SPEAKER } from "./core/identity/speakers.ts";
 import { ConfirmationJudge } from "./core/judging/confirmation-judge.ts";
-import { NotLinkedError, PluginError } from "./core/kernel/errors.ts";
+import { PluginError } from "./core/kernel/errors.ts";
 import { silentLogger } from "./core/kernel/log.ts";
 import { ConversationBackgroundTurns } from "./core/modules/background/background-turns.ts";
-import type { HoldCheck } from "./core/plugin-api/holds.ts";
 import type {
 	Contribution,
 	HostEnv,
@@ -75,16 +54,25 @@ import {
 import { MessageObservers } from "./core/routing/message-observers.ts";
 import { PeerBots } from "./core/routing/peer-bots.ts";
 import { surfacePort } from "./core/routing/surface-port.ts";
-import { type ToolTierTable, toolTiers } from "./core/runtime/tool-tiers.ts";
+import { toolTiers } from "./core/runtime/tool-tiers.ts";
 import { PERSONAL_TARGET } from "./core/shared/personal-target.ts";
-import { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
-import { memoryHeldActions } from "./core/testing/memory-held-actions.ts";
 import { memberOf } from "./core/testing/partial.ts";
+import {
+	memoryHeldActions,
+	partialService,
+	routedConversations,
+	unlinked,
+} from "./core/testing/plugin-stand-ins.ts";
 import {
 	callRegisteredTool,
 	registeredTools,
 } from "./core/testing/run-tool.ts";
+import type {
+	RecordedEvent,
+	TestPluginOptions,
+	TestPluginResult,
+} from "./core/testing/test-plugin-types.ts";
 
 // Fixtures for plugin tests.
 
@@ -98,6 +86,8 @@ export {
 	testDatabaseUrl,
 } from "./core/testing/database.ts";
 export { eagerText, useEagerCatalog } from "./core/testing/eager-catalog.ts";
+export type { FakeDiscord } from "./core/testing/fake-discord.ts";
+export { fakeDiscord } from "./core/testing/fake-discord.ts";
 export type {
 	FakeDiscordPoster,
 	FakeForum,
@@ -137,6 +127,8 @@ export type {
 	RecordingLogger,
 } from "./core/testing/recording-logger.ts";
 export { recordingLogger } from "./core/testing/recording-logger.ts";
+export type { ServicePair } from "./core/testing/service-pair.ts";
+export { servicePair } from "./core/testing/service-pair.ts";
 export type {
 	SurfaceContractAnswerer,
 	SurfaceContractFailure,
@@ -150,206 +142,13 @@ export {
 } from "./core/testing/surface-contract.ts";
 export type { TestHost, TestHostOptions } from "./core/testing/test-host.ts";
 export { testHost } from "./core/testing/test-host.ts";
+export type {
+	RecordedEvent,
+	TestPluginOptions,
+	TestPluginResult,
+} from "./core/testing/test-plugin-types.ts";
 export type { FakeThreadHost } from "./core/testing/thread-host.ts";
 export { fakeThreads } from "./core/testing/thread-host.ts";
-
-/**
- * A service the plugin under test reads, with the members the test gives it, made by `servicePair(KEY,
- * { ... })`. Reading a member the test did not give throws a PluginError that names it.
- */
-export interface ServicePair {
-	readonly key: ServiceKey<unknown>;
-	readonly given: object;
-}
-
-/** Pairs a service key with the members the test gives it, for the `services` option of `testPlugin`. */
-export function servicePair<T extends object>(
-	key: ServiceKey<T>,
-	given: Partial<T>,
-): ServicePair {
-	return { key, given };
-}
-
-/** A stand-in for the Discord plugin's `DISCORD` service, made by `fakeDiscord()`. */
-export interface FakeDiscord {
-	/** Give this to `testPlugin`'s `services` option: `{ services: [discord.service] }`. */
-	readonly service: ServicePair;
-	/** What `DISCORD.commands` is to the plugin: the real registrar, which refuses what the Discord plugin refuses. */
-	readonly commands: CommandRegistrar;
-	/** What `DISCORD.poster` is: the one the test gave, else a `fakeDiscordPoster()`. */
-	readonly poster: DiscordPoster;
-	/** What `DISCORD.guard` is: the owner, `owner` unless the test gave another id, serving the root command. */
-	readonly guard: CommandGuard;
-	/** Every contribution the plugin added, in the order it added them. */
-	added(): readonly InteractionContribution[];
-	/** The tree the Discord plugin would register, composed under the root command the fake was made with. */
-	compose(): ComposedCommands;
-}
-
-/**
- * A `DISCORD` service for a plugin that adds slash commands, without a Discord connection: the
- * plugin's `commands.add` calls are recorded, and `compose()` shows the tree Discord would get.
- * `rootCommand` is the root command's name, `roundtable` by default. `channelContext` is what
- * `DISCORD.channelContext` answers, by default no context, as on a host with it off. Only
- * `commands`, `guard`, `poster`, and `channelContext` are given; reading another member throws.
- */
-export function fakeDiscord(
-	options: {
-		ownerId?: string;
-		rootCommand?: string;
-		channelContext?: DiscordServices["channelContext"];
-		poster?: DiscordPoster;
-	} = {},
-): FakeDiscord {
-	const collection = new CommandCollection();
-	const { rootCommand = "roundtable" } = options;
-	const guard = commandGuard({
-		ownerId: options.ownerId ?? "owner",
-		root: rootCommand,
-		logger: silentLogger(),
-	});
-	const poster = options.poster ?? fakeDiscordPoster();
-	return {
-		service: servicePair(DISCORD, {
-			commands: collection.registrar,
-			guard,
-			poster,
-			channelContext: options.channelContext ?? (async () => undefined),
-		}),
-		poster,
-		commands: collection.registrar,
-		guard,
-		added: () => collection.added(),
-		compose: () => collection.compose(ownerRootCommand(rootCommand)),
-	};
-}
-
-export interface TestPluginOptions {
-	/** The host environment the plugin sees; default en and UTC. */
-	env?: Partial<HostEnv>;
-	/**
-	 * The owner the runtime's dependencies and the agent server's claim know; default `owner`,
-	 * named Owner, who is addressed as they.
-	 */
-	owner?: { id: string; name: string; pronouns?: OwnerIdentity["pronouns"] };
-	database?: SQL;
-	providers?: Partial<Providers>;
-	/**
-	 * Chat surfaces besides the plugin's own, such as a fake one: they are in `context.surfaces`,
-	 * started with the plugin's services (their messages reach `conversations`), and stopped last.
-	 */
-	surfaces?: readonly ChatSurface[];
-	/**
-	 * What the plugin reads from `context.services`, one `servicePair(KEY, { ... })` per service.
-	 * `servicePair(RUNTIME, runtime)` is the runtime that `context.turns` runs turns on, given
-	 * whole rather than member by member; `servicePair(AGENTS, { runtime })` still works when no
-	 * `RUNTIME` is given. Without either, a plugin that fills the `runtime` slot gets the runtime its
-	 * provider builds, under both keys. A service
-	 * not given here reads as absent to `find`, and `get` names this option, except for what the
-	 * host supplies anyway: `BACKGROUND_TURNS`, the real background turns over the test's router,
-	 * and, once `AGENTS` is given, its `approvals` (the real confirmation judge over
-	 * `providers.judge`, when the test gives a judge). Giving `AGENTS` a `team` adds the agent
-	 * server's own claim to the router, answering as the host's would for the `owner`. The router
-	 * resolves who wrote each message through a given `IDENTITY`; without one only the `owner` is
-	 * anyone, at the owner tier, their principal their id.
-	 */
-	services?: readonly ServicePair[];
-	/**
-	 * The plugin's conversations: by default a router over the plugin's own `channels` claims, so a
-	 * message a surface delivers reaches them. Methods given here replace the router's.
-	 */
-	conversations?: Partial<ConversationPort>;
-	/** Replaces `context.turns`, which by default runs turns over the runtime and the surfaces. */
-	turns?: ConversationTurns;
-	/** The credentials `context.apiKey` returns, by provider name; a provider not listed reads as having none, as on a host not logged in to it. */
-	apiKeys?: Readonly<Record<string, string>>;
-	/** How long the router holds a bare forward for the message that follows it; the host option `conversations.forwardJoinMs`. */
-	forwardJoinMs?: number;
-	/** The peer bots the router answers, as the host option `peerBots` (`discord.peerBots`); default none. */
-	peerBots?: PeerBotsConfig;
-	/** The addresses `context.listener(id)` reports; a plugin that reads one gets `undefined` for any not listed. */
-	listeners?: readonly ListenerConfig[];
-}
-
-export interface RecordedEvent {
-	name: "turnStarted" | "turnEnded" | "changed";
-	turn?: TurnEvent | TurnEndEvent;
-}
-
-export interface TestPluginResult {
-	contribution: Contribution;
-	/** The hold rules the plugin contributed, chained as the host links them: the description of a call that must be approved first, or undefined. `holds.inTurn(tool, input, context, turn)` asks them as a turn does, so a hold that looks things up (and may return a promise) is called with the turn; the plain call has no turn, and counts a hold that declares `turn` as held under `run <tool>`. */
-	holds: HoldCheck;
-	/** What the plugin sees as `context.conversations`, for a test to drive its claims. */
-	conversations: ConversationPort;
-	/** What the plugin sees as `context.turns`. */
-	turns: ConversationTurns;
-	/** What the plugin sees as `context.surfaces`: its own surfaces and the injected ones. */
-	surfaces: SurfacePort;
-	/** The runtime the plugin's `runtime` provider built, given stand-in dependencies; undefined when it fills no such slot. */
-	runtime: AgentRuntime | undefined;
-	tools: readonly string[];
-	tiers: ToolTierTable;
-	events: RecordedEvent[];
-	/** Files accepted by successful runTool calls, copied and recorded with their channel. */
-	files: { channel: ChannelKey; file: ReplyFile }[];
-	/** Images returned by successful runTool calls, with their channel. */
-	images: { channel: ChannelKey; image: ClientPart }[];
-	runTool(
-		name: string,
-		args: Record<string, unknown>,
-		/** `workspace` gives the session a workspace and scratch dir, as an agent's session has. */
-		options?: {
-			speaker?: Speaker;
-			/** Where the turn's request came from, as `ToolTurn.origin` shows it to the tool. */
-			origin?: string;
-			/** What the party that started the turn can do for the tool, as `ToolTurn.client` shows it. */
-			client?: ClientPort;
-			channel?: ChannelKey;
-			workspace?: SessionContext["workspace"];
-		},
-	): Promise<string>;
-	stop(): Promise<void>;
-}
-
-/** The same pre-link failures and wording the host exposes during setup. */
-const NOT_LINKED = {
-	conversations:
-		"conversations are linked once every plugin is set up. Use them from a service's start or from a handler, not during setup.",
-	sessions:
-		"session parts are linked once every plugin is set up. Call sessions() from a service's start or from a handler, not during setup.",
-	surfaces:
-		"chat surfaces are linked once every plugin is set up. Use surfaces from a service's start or from a handler, not during setup.",
-	turns:
-		"conversation turns are linked once every plugin is set up. Use turns from a service's start or from a handler, not during setup.",
-	dashboard:
-		"dashboard lines are linked once every plugin is set up. Call dashboard() from a service's start or from a handler, not during setup.",
-	chatCommands:
-		"chat commands are linked once every plugin is set up. Call chatCommands() from a service's start or from a handler, not during setup.",
-};
-
-function unlinked(part: keyof typeof NOT_LINKED): never {
-	throw new NotLinkedError(NOT_LINKED[part]);
-}
-
-/** Members a probe may ask of any object: a test's partial service is not refused for them. */
-const PROBED = new Set(["then", "toJSON", "asymmetricMatch"]);
-
-/** A service the test gave only some members of: reading another names the option that adds it. */
-function partialService<T extends object>(
-	key: ServiceKey<unknown>,
-	given: T,
-): T {
-	return new Proxy(given, {
-		get(target, member, receiver) {
-			if (member in target || typeof member === "symbol" || PROBED.has(member))
-				return Reflect.get(target, member, receiver);
-			throw new PluginError(
-				`testPlugin gave service ${key.id} no "${member}". Give it in the services option: testPlugin(plugin, { services: [servicePair(KEY, { ${member}: ... })] }).`,
-			);
-		},
-	});
-}
 
 /** Build one plugin without Discord or PostgreSQL, retaining the host's validation and tier logic. */
 // pi-lens-ignore: high-complexity, large-function — one host's context and lifecycle, mirrored end to end
@@ -380,31 +179,10 @@ export async function testPlugin(
 	let linked: LinkedSessions | undefined;
 	let router: ChannelRouter | undefined;
 	const queue = new ChannelQueue();
-	const conversations: ConversationPort = {
-		handle: async (message) =>
-			(router ?? unlinked("conversations")).handle(message),
-		messageDeleted: async (channel, id, space) =>
-			(router ?? unlinked("conversations")).messageDeleted(channel, id, space),
-		messageEdited: async (message) =>
-			(router ?? unlinked("conversations")).messageEdited(message),
-		background: async (turn) =>
-			(router ?? unlinked("conversations")).background(turn),
-		runsAs: async (turn) => (router ?? unlinked("conversations")).runsAs(turn),
-		target: (name) => (router ?? unlinked("conversations")).target(name),
-		startFresh: async (channel) =>
-			(router ?? unlinked("conversations")).startFresh(channel),
-		deleteConversation: async (channel) =>
-			(router ?? unlinked("conversations")).deleteConversation(channel),
-		stop: (channel) => (router ?? unlinked("conversations")).stop(channel),
-		postsInPlace: (channel) =>
-			(router ?? unlinked("conversations")).postsInPlace(channel),
-		owns: (channel) => (router ?? unlinked("conversations")).owns(channel),
-		takesBackground: (channel) =>
-			(router ?? unlinked("conversations")).takesBackground(channel),
-		takesSystemReports: (channel) =>
-			(router ?? unlinked("conversations")).takesSystemReports(channel),
-		...options.conversations,
-	};
+	const conversations = routedConversations(
+		() => router,
+		options.conversations,
+	);
 	const surfaces = surfacePort(() =>
 		linked
 			? [...registry.surfaces, ...(options.surfaces ?? [])]

@@ -1,5 +1,6 @@
 export type { WebChatLimits, WebPersona } from "./chat.ts";
 export type { ClientCallLimits } from "./client-calls.ts";
+export { parseClientFrame } from "./client-frame.ts";
 export type { Notice } from "./notices.ts";
 export type {
 	EntraV2CheckOptions,
@@ -31,7 +32,6 @@ export type {
 } from "./protocol.ts";
 export {
 	CLOSE_CODES,
-	parseClientFrame,
 	TICKET_PROTOCOL_PREFIX,
 	WEBCHAT_PROTOCOL,
 	WEBCHAT_PROTOCOL_VERSION,

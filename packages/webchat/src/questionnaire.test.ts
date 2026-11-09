@@ -5,11 +5,11 @@ import {
 	promptScope,
 	type Questionnaire,
 } from "pi-roundtable";
+import { parseClientFrame } from "./client-frame.ts";
 import { PromptDesk } from "./prompts.ts";
 import {
 	ADVERTISED_ASK,
 	type PromptFrame,
-	parseClientFrame,
 	type ServerFrame,
 } from "./protocol.ts";
 import { type FakeSocket, speakerOf, testChat } from "./testing/fakes.ts";

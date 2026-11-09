@@ -1,198 +1,55 @@
 import {
-	type AgentRuntime,
-	type AttachmentPort,
-	AttachmentRefusal,
 	type ChannelClaim,
 	type ChannelKey,
-	type ConversationPort,
 	type ConversationRecord,
-	type ConversationRegistry,
-	type ConversationTurns,
 	channelKey,
-	type IdentityService,
-	type Logger,
-	PERSONAL_TARGET,
 	type RouteSocket,
 	type Speaker,
-	TIERS,
-	type Tier,
-	type ToolSelection,
 	type TranscriptEntry,
-	type TurnAttachments,
-	type TurnResult,
 } from "pi-roundtable";
 import { RateWindow, TurnBudget } from "./budget.ts";
-import { type ClientCallLimits, ClientDesk } from "./client-calls.ts";
-import { type Connection, Connections } from "./connections.ts";
+import { webChatClaim } from "./chat-claim.ts";
+import { acceptMessage } from "./chat-send.ts";
 import {
-	identityActor,
-	TokenRefused,
-	type TokenVerifier,
-	type WebIdentity,
-} from "./oidc.ts";
+	type Admitted,
+	atLeast,
+	type ChatInternals,
+	checkPersonas,
+	type Minted,
+	type Pending,
+	Refusal,
+	titleOf,
+	type WebChatDeps,
+	type WebPersona,
+} from "./chat-types.ts";
+import { ClientDesk } from "./client-calls.ts";
+import { parseClientFrame } from "./client-frame.ts";
+import { type Connection, Connections } from "./connections.ts";
+import { identityActor, TokenRefused, type WebIdentity } from "./oidc.ts";
 import { PromptDesk } from "./prompts.ts";
 import {
 	ADVERTISED_ASK,
 	CLOSE_CODES,
 	type ClientFrame,
-	type ErrorCode,
 	type PersonaSummary,
-	parseClientFrame,
 	type ServerFrame,
 	WEBCHAT_PROTOCOL_VERSION,
 } from "./protocol.ts";
 import { WebSurface } from "./surface.ts";
-import { type UploadedFile, type UploadLimits, Uploads } from "./uploads.ts";
+import { type UploadedFile, Uploads } from "./uploads.ts";
 
-/** A conversation kind a client may open. */
-export interface WebPersona {
-	/** The conversation kind; "owner" and "agent" belong to the host and are refused. */
-	kind: string;
-	/** How clients list it; default the kind. */
-	label?: string;
-	/**
-	 * Its system prompt, read when a conversation's session is made. Absent when another plugin
-	 * contributes the persona of this kind.
-	 */
-	prompt?(): string;
-	/** The lowest tier that may open and use it; default member. */
-	minTier?: Tier;
-	/** The tools of its turns; default the plugins' `agentSelection`. */
-	selection?: ToolSelection;
-}
+export {
+	type Admitted,
+	checkPersonas,
+	Refusal,
+	type WebChatDeps,
+	type WebChatLimits,
+	type WebPersona,
+} from "./chat-types.ts";
 
-/** The limits of one web chat, those of uploads and attachments included. */
-export interface WebChatLimits extends UploadLimits {
-	/** Connections one person may hold open at once; default 5. */
-	connectionsPerPrincipal: number;
-	/** New conversations one person may hold before writing in them; default 20. */
-	unusedConversationsPerPrincipal: number;
-	/** New conversations one person may open in any hour, written in or not; default 60. */
-	newConversationsPerHour: number;
-	/**
-	 * Interactive turns one person may have running or queued at once, across their conversations; default 2.
-	 * A conversation also holds at most its running turn and one queued behind it.
-	 */
-	turnsPerPrincipal: number;
-	/** The longest message text in characters; default 32 000. */
-	messageChars: number;
-	/** How long an approval or question waits for an answer; default 30 minutes. */
-	promptTimeoutMs: number;
-	/** How long before a token expires the client is asked for a fresh one; default 60 seconds. */
-	reauthLeadMs: number;
-	/** What the assistant's tools may ask a client that declared functions to run. */
-	clientCalls: ClientCallLimits;
-}
-
-export interface WebChatDeps {
-	surface: string;
-	/** How long a questionnaire no connection can show waits for one before it expires; default 60 seconds. */
-	promptGraceMs?: number;
-	verifier: TokenVerifier;
-	identity(): IdentityService;
-	personas: readonly WebPersona[];
-	limits: WebChatLimits;
-	logger: Logger;
-	/** Read when used, after the host linked every plugin. */
-	registry(): ConversationRegistry;
-	conversations(): ConversationPort;
-	/** Where uploaded files wait for the message that uses them. */
-	attachments(): AttachmentPort;
-	turns(): ConversationTurns;
-	runtime(): AgentRuntime;
-	/** What the model is told about how replies render; see `WebChatOptions.formatting`. */
-	formatting?: string | false;
-	/** The clock, in milliseconds; default `Date.now`. */
-	now?(): number;
-}
-
-/** A person, verified and admitted. */
-export interface Admitted {
-	identity: WebIdentity;
-	speaker: Speaker;
-}
-
-interface Minted {
-	principal: string;
-	persona: string;
-	title?: string;
-}
-
-interface Pending {
-	speaker: Speaker;
-	/** The connection the message arrived on, which a call the turn makes to its client goes to. */
-	connection: Connection;
-	/** The origin of the connection the message arrived on. */
-	origin?: string;
-	persona: WebPersona;
-	title: string;
-	/** The files the message references, moved into the conversation when it was accepted. */
-	attachments?: TurnAttachments;
-	/** Whether the conversation was new when the message was accepted. */
-	fresh: boolean;
-	/** Frees the message's place in the person's turn budget; called once its turn ends or never runs. */
-	release(): void;
-}
-
-/** Why a conversation or persona was refused. */
-export class Refusal extends Error {
-	override name = "Refusal";
-	readonly code: ErrorCode;
-
-	constructor(code: ErrorCode) {
-		super(code);
-		this.code = code;
-	}
-}
-
-const TITLE_CHARS = 80;
 const HOUR_MS = 60 * 60_000;
 /** The longest delay a timer keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
-const RESERVED_KINDS = new Set(["owner", "agent"]);
-
-const atLeast = (tier: Tier, least: Tier) =>
-	TIERS.indexOf(tier) >= TIERS.indexOf(least);
-
-/** A conversation's title from its first message: its first line, cut to 80 characters. */
-function titleOf(text: string): string {
-	const line = text.trim().split("\n")[0]?.trim() ?? "";
-	return line.length > TITLE_CHARS
-		? `${line.slice(0, TITLE_CHARS - 1)}…`
-		: line;
-}
-
-/**
- * The personas by kind; throws on a kind that is not a word, a reserved or repeated kind, a
- * `minTier` that is not a tier, or an empty list. A JavaScript configuration is not type-checked,
- * and an unknown `minTier` would let every tier open the persona.
- */
-export function checkPersonas(
-	personas: readonly WebPersona[],
-): Map<string, WebPersona> {
-	const byKind = new Map<string, WebPersona>();
-	for (const persona of personas) {
-		if (typeof persona.kind !== "string" || persona.kind === "")
-			throw new Error(
-				`webChat: a persona's kind must be a non-empty string; got ${JSON.stringify(persona.kind)}`,
-			);
-		if (persona.minTier !== undefined && !TIERS.includes(persona.minTier))
-			throw new Error(
-				`webChat: persona "${persona.kind}" minTier must be one of ${TIERS.join(", ")}; got ${JSON.stringify(persona.minTier)}`,
-			);
-		if (RESERVED_KINDS.has(persona.kind))
-			throw new Error(
-				`webChat: persona kind "${persona.kind}" belongs to the host; name yours another kind`,
-			);
-		if (byKind.has(persona.kind))
-			throw new Error(`webChat: persona "${persona.kind}" is listed twice`);
-		byKind.set(persona.kind, persona);
-	}
-	if (byKind.size === 0)
-		throw new Error("webChat: personas is empty; list at least one");
-	return byKind;
-}
-
 /**
  * One web chat: its connections, conversations, prompts, surface, and claim. Every conversation
  * is private to the person who opened it: only they see it listed, read it, write in it, stop it,
@@ -220,6 +77,7 @@ export class WebChat {
 	readonly #turns: TurnBudget;
 	/** Each person's newly opened conversations. */
 	readonly #opened: RateWindow;
+	readonly #internals: ChatInternals;
 
 	constructor(deps: WebChatDeps) {
 		this.#deps = deps;
@@ -264,6 +122,19 @@ export class WebChat {
 			prompts: this.desk,
 			...(deps.formatting === undefined ? {} : { formatting: deps.formatting }),
 		});
+		this.#internals = {
+			deps,
+			pending: this.#pending,
+			minted: this.#minted,
+			owners: this.#owners,
+			registered: this.#registered,
+			turns: this.#turns,
+			connections: this.connections,
+			clients: this.clients,
+			surface: this.surface,
+			own: (speaker, conversation) => this.own(speaker, conversation),
+			open: (speaker, kind, title) => this.open(speaker, kind, title),
+		};
 	}
 
 	/** The personas the claim's host must know: those this chat contributes a prompt for. */
@@ -550,7 +421,7 @@ export class WebChat {
 			case "auth":
 				return this.#reauth(connection, frame.token);
 			case "send":
-				return this.#send(connection, frame);
+				return acceptMessage(this.#internals, connection, frame);
 			case "stop": {
 				await this.own(speaker, frame.conversation);
 				this.#deps
@@ -621,335 +492,8 @@ export class WebChat {
 		this.#greet(connection);
 	}
 
-	async #send(
-		connection: Connection,
-		frame: Extract<ClientFrame, { type: "send" }>,
-	): Promise<void> {
-		const { speaker } = connection;
-		const text = frame.text;
-		if (!text.trim() || text.length > this.#deps.limits.messageChars)
-			throw new Refusal("bad_frame");
-		const files = frame.attachments ?? [];
-		if (files.length > this.#deps.limits.attachmentsPerMessage)
-			throw new Refusal("bad_frame");
-		// Checked before a conversation is opened for it, so a refused message opens none.
-		if (!this.#turns.allows(speaker.principalId, frame.conversation))
-			throw new Refusal("busy");
-		const conversation =
-			frame.conversation ?? this.open(speaker, frame.persona as string);
-		const { persona, record, minted } = await this.own(speaker, conversation);
-		const release = this.#turns.take(speaker.principalId, conversation);
-		if (!release) {
-			// Another message took the last place meanwhile.
-			if (!frame.conversation) this.#minted.delete(conversation);
-			throw new Refusal("busy");
-		}
-		let attachments: TurnAttachments | undefined;
-		if (files.length > 0) {
-			try {
-				attachments = await this.#deps
-					.attachments()
-					.turnAttachments(
-						channelKey(this.#deps.surface, conversation),
-						speaker.principalId,
-						files,
-						{
-							usedBytesLimit: this.#deps.limits.usedAttachmentBytesPerPrincipal,
-						},
-					);
-			} catch (error) {
-				// The refused message holds no place and opens no conversation.
-				release();
-				if (!frame.conversation) this.#minted.delete(conversation);
-				if (!(error instanceof AttachmentRefusal)) throw error;
-				throw new Refusal(
-					error.code === "unknown_file"
-						? "unknown_attachment"
-						: error.code === "quota_exceeded"
-							? "attachment_quota"
-							: "forbidden",
-				);
-			}
-		}
-		const messageId = crypto.randomUUID();
-		this.#pending.set(messageId, {
-			speaker,
-			connection,
-			...(connection.origin ? { origin: connection.origin } : {}),
-			persona,
-			title: minted?.title ?? titleOf(text),
-			fresh: record === undefined,
-			...(attachments ? { attachments } : {}),
-			release,
-		});
-		this.connections.send(connection, {
-			type: "accepted",
-			id: frame.id,
-			conversation,
-		});
-		try {
-			this.surface.deliver({
-				channel: channelKey(this.#deps.surface, conversation),
-				messageId,
-				actor: identityActor(connection.identity, this.#deps.surface),
-				authorId: speaker.id,
-				authorName: speaker.name,
-				authorIsBot: false,
-				authorRoleIds: connection.identity.roles,
-				isDirect: true,
-				mentionsBot: false,
-				repliesToBot: false,
-				text,
-				attachments: [],
-			});
-		} catch (error) {
-			this.#pending.delete(messageId);
-			release();
-			throw error;
-		}
-	}
-
-	// The claim.
-
 	/** The claim of this chat's conversations: only messages this chat accepted run, as their person's turns. */
 	claim(): ChannelClaim {
-		const { surface } = this.#deps;
-		return {
-			name: `webchat:${surface}`,
-			priority: 10,
-			postsInPlace: true,
-			takesSystemReports: false,
-			owns: (channel) => channel.startsWith(`${surface}:`),
-			admit: (message) => {
-				const pending = this.#pending.get(message.messageId);
-				this.#pending.delete(message.messageId);
-				const speaker = message.speaker;
-				if (
-					!pending ||
-					pending.speaker.id !== message.authorId ||
-					!speaker ||
-					speaker.principalId !== pending.speaker.principalId
-				) {
-					pending?.release();
-					if (pending)
-						this.connections.sendTo(pending.speaker.principalId, {
-							type: "failed",
-							conversation: this.surface.conversationOf(message.channel),
-							stopped: false,
-						});
-					return undefined;
-				}
-				return {
-					kind: "turn",
-					run: async () => {
-						try {
-							await this.#turn(message.channel, message.text, {
-								...pending,
-								speaker,
-							});
-						} finally {
-							pending.release();
-						}
-					},
-					// Dropped by the router after all: the message never runs, so its place is free, and its
-					// person, told it was accepted, is told it failed, as for a turn the host refused.
-					dropped: () => {
-						pending.release();
-						this.connections.sendTo(pending.speaker.principalId, {
-							type: "failed",
-							conversation: this.surface.conversationOf(message.channel),
-							stopped: false,
-						});
-					},
-					failure: "a web chat turn failed",
-				};
-			},
-			background: async (turn) => {
-				if (turn.target !== PERSONAL_TARGET.name)
-					return {
-						status: "skipped",
-						reason: "webchat takes only personal background turns",
-					};
-				const { speaker } = turn;
-				if (!speaker || speaker.principalId !== turn.author.principalId)
-					return {
-						status: "skipped",
-						reason: "webchat needs the router's checked principal",
-					};
-				const conversation = this.surface.conversationOf(turn.channel);
-				const record = await this.#deps.registry().get(turn.channel);
-				if (
-					record?.visibility !== "private" ||
-					record.principalId !== turn.author.principalId
-				)
-					return {
-						status: "skipped",
-						reason:
-							"the background author does not own this private conversation",
-					};
-				let persona: WebPersona;
-				try {
-					persona = (await this.own(speaker, conversation)).persona;
-				} catch (error) {
-					if (!(error instanceof Refusal)) throw error;
-					return { status: "skipped", reason: error.code };
-				}
-				// Background work has already been admitted by core. Its runtime queue is
-				// separate from interactive admission: a busy browser must not discard
-				// a completed delegation or scheduled reminder. Runtime owns stop/shutdown.
-				const result = await this.#deps.turns().run({
-					channel: turn.channel,
-					kind: persona.kind,
-					text: turn.text,
-					speaker,
-					interactive: turn.report === true,
-					unattended: turn.report !== true,
-					...(turn.timeLimitMs === undefined
-						? {}
-						: { timeLimitMs: turn.timeLimitMs }),
-					conversation: { visibility: "private" },
-					...(persona.selection
-						? {
-								selection: {
-									id: `webchat:${persona.kind}`,
-									...persona.selection,
-								},
-							}
-						: {}),
-					reply: async (result) =>
-						this.#reply(speaker.principalId, conversation, result),
-				});
-				return result.ok
-					? { status: "ran" }
-					: { status: "failed", error: "a webchat background turn failed" };
-			},
-			startFresh: async (channel) => {
-				const record = await this.#deps.registry().get(channel);
-				if (record?.visibility !== "private" || !record.principalId)
-					throw new Refusal("unknown_conversation");
-				this.#owners.set(
-					this.surface.conversationOf(channel),
-					record.principalId,
-				);
-				this.#registered.add(channel);
-				await this.#deps.runtime().startFresh(channel);
-				return record.kind;
-			},
-			stop: (channel) =>
-				this.#registered.has(channel) && this.#deps.runtime().stop(channel),
-		};
-	}
-
-	/** One turn, after checking again, inside the queue, that the conversation is still the speaker's. */
-	async #turn(
-		channel: ChannelKey,
-		text: string,
-		pending: Pending,
-	): Promise<void> {
-		const { speaker, persona } = pending;
-		const conversation = this.surface.conversationOf(channel);
-		let registered = false;
-		try {
-			registered = (await this.own(speaker, conversation)).record !== undefined;
-		} catch (error) {
-			if (!(error instanceof Refusal)) throw error;
-			this.#deps.logger.warn(
-				{ channel, code: error.code },
-				"a web chat message was refused before its turn",
-			);
-			this.connections.sendTo(speaker.principalId, {
-				type: "error",
-				code: error.code,
-			});
-			return;
-		}
-		let answered = false;
-		try {
-			if (!registered) {
-				const kept = await this.#deps.registry().register({
-					key: channel,
-					kind: persona.kind,
-					visibility: "private",
-					principalId: speaker.principalId,
-					...(pending.title ? { title: pending.title } : {}),
-				});
-				if (
-					kept.visibility !== "private" ||
-					kept.principalId !== speaker.principalId
-				)
-					throw new Refusal("forbidden");
-			}
-			this.#registered.add(channel);
-			// What the connection that sent the message can do for the turn's tools, until the turn ends.
-			const client = this.clients.portFor(pending.connection, conversation);
-			try {
-				await this.#deps.turns().run({
-					channel,
-					kind: persona.kind,
-					text,
-					speaker,
-					...(pending.origin ? { origin: pending.origin } : {}),
-					...(client ? { client } : {}),
-					interactive: true,
-					byMessage: true,
-					...(pending.attachments ? { attachments: pending.attachments } : {}),
-					...(persona.selection
-						? {
-								selection: {
-									id: `webchat:${persona.kind}`,
-									...persona.selection,
-								},
-							}
-						: {}),
-					conversation: {
-						visibility: "private",
-						...(pending.fresh && pending.title ? { title: pending.title } : {}),
-					},
-					reply: async (result) => {
-						answered = true;
-						this.#reply(speaker.principalId, conversation, result);
-					},
-				});
-			} finally {
-				client?.end();
-			}
-		} catch (error) {
-			// A turn the host refused before it ran, such as one whose conversation could not be
-			// recorded, has no reply: the person is told it failed, and the router logs the cause.
-			if (!answered)
-				this.connections.sendTo(speaker.principalId, {
-					type: "failed",
-					conversation,
-					stopped: false,
-				});
-			throw error;
-		}
-		// The registry now records it, so the opened-but-unused entry is spent.
-		this.#minted.delete(conversation);
-	}
-
-	#reply(principal: string, conversation: string, result: TurnResult): void {
-		if (!result.ok) {
-			this.connections.sendTo(principal, {
-				type: "failed",
-				conversation,
-				stopped: result.stopped === true,
-			});
-			return;
-		}
-		this.connections.sendTo(principal, {
-			type: "reply",
-			conversation,
-			text: this.surface.readable(result.text),
-			...(result.thinking ? { thinking: result.thinking } : {}),
-			...(result.files?.length
-				? {
-						files: result.files.map((file) => ({
-							name: file.name,
-							data: Buffer.from(file.data).toString("base64"),
-						})),
-					}
-				: {}),
-		});
+		return webChatClaim(this.#internals);
 	}
 }

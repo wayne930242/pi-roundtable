@@ -270,6 +270,16 @@ export function messageRoutes(state: EmuState, pins: { at: number }): Route[] {
 			},
 		],
 		[
+			"DELETE",
+			/^\/webhooks\/(\d+)$/,
+			({ params }) => {
+				const id = params[0] ?? "";
+				if (!state.webhooks.delete(id))
+					throw new HttpError(404, 10015, "Unknown Webhook");
+				return undefined;
+			},
+		],
+		[
 			"PATCH",
 			/^\/webhooks\/(\d+)\/([^/]+)$/,
 			({ params, body }) => {

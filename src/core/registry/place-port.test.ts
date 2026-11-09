@@ -5,7 +5,7 @@ import { FakePager } from "../testing/fake-pager-places.ts";
 import { FakeRoomSurface } from "../testing/fake-room-surface.ts";
 import { placeProviderContract } from "../testing/place-contract.ts";
 import { derivedPlaces, placePort } from "./place-port.ts";
-import { surfacePort } from "./surface-port.ts";
+import { surfacePort } from "../routing/surface-port.ts";
 
 /** A surface that serves channels but no agent rooms. */
 const plain = (surface: string): ChatSurface => ({
