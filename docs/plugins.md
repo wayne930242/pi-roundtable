@@ -4800,10 +4800,10 @@ Import from the entries listed below; source area files are internal.
 | `TierConfig` | `pi-roundtable` | type |
 | `ToolAttachment` | `pi-roundtable` | type |
 | `ToolAttachmentInfo` | `pi-roundtable` | type |
+| `ToolArgument` | `pi-roundtable` | type |
 | `ToolContribution` | `pi-roundtable` | type |
 | `ToolOutput` | `pi-roundtable` | type |
 | `ToolRefusal` | `pi-roundtable` | value |
-| `ToolArgument` | `pi-roundtable` | type |
 | `ToolSelection` | `pi-roundtable` | type |
 | `ToolSpec` | `pi-roundtable` | type |
 | `ToolTierTable` | `pi-roundtable` | type |

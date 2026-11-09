@@ -12,8 +12,6 @@ const SURFACE = "discord";
 
 /** Discord's error code for a channel that does not exist. */
 const UNKNOWN_CHANNEL = 10003;
-/** Discord's error code for a channel the bot cannot see, such as one of a server it has left. */
-const MISSING_ACCESS = 50001;
 
 export interface DiscordPlacesOptions {
 	client: Client;
@@ -142,13 +140,16 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			const found = await client.channels
 				.fetch(id, { force: true })
 				.catch((error: unknown) => {
-					if (error instanceof DiscordAPIError) {
-						if (error.code === UNKNOWN_CHANNEL) return "gone" as const;
-						if (error.code === MISSING_ACCESS) return "foreign" as const;
-					}
+					// Only Discord's own "unknown" says gone. Missing Access (50001) says nothing of whose
+					// guild the channel is in: a hidden channel of the agent guild answers it too, so it throws.
+					if (
+						error instanceof DiscordAPIError &&
+						error.code === UNKNOWN_CHANNEL
+					)
+						return "gone" as const;
 					throw error;
 				});
-			if (found === "gone" || found === "foreign") return found;
+			if (found === "gone") return found;
 			// A channel discord.js cannot build is none of the agent guild's; only Discord's own "unknown" says gone.
 			if (found === null) return "foreign";
 			return !found.isDMBased() && found.guildId === guild ? "ok" : "foreign";
