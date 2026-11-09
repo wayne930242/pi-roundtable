@@ -54,6 +54,7 @@ function hits(pattern: RegExp, allowed: (path: string) => boolean): string[] {
 const CHANNEL_ID_READERS: Record<string, string> = {
 	"src/core/agents/agent-store.ts": "stores the column",
 	"src/core/agents/agent-statements.ts": "stores the column",
+	"src/core/agents/agent-group-store.ts": "stores the column",
 	"src/core/agents/agent-book.ts":
 		"finds the agent a Discord channel belongs to",
 	"src/core/agents/team-keys.ts": "names the conversation keys of an agent",

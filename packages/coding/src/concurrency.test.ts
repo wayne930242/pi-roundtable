@@ -19,8 +19,10 @@ import {
 	type CodingResult,
 	codingReport,
 } from "./coding-desk.ts";
+import { GitRunner } from "./git-run.ts";
 import { RepoShelf, WORKTREES_DIR } from "./repo-shelf.ts";
 import { until } from "./testing/until.ts";
+import { WorkerTrees } from "./worktrees.ts";
 
 const dirs: string[] = [];
 const stops: (() => Promise<void>)[] = [];
@@ -180,12 +182,18 @@ test("a conflicting worker keeps its branch and worktree, names the files, and l
 		},
 		deliver: async (result) => {
 			results.push(result);
+			// A job that ended before its worker ran must not leave the other waiting for it.
+			bothStarted.resolve();
 			if (result.job.id === 1) firstDone.resolve();
 		},
 	});
 	await coding.start(request());
 	await coding.start(request());
 	await coding.idle();
+	expect(results.map((result) => result.outcome)).toEqual([
+		{ ok: true, report: "done 1" },
+		{ ok: true, report: "done 2" },
+	]);
 	const [first, second] = results;
 	expect(first?.integration?.status).toBe("merged");
 	expect(second?.integration).toMatchObject({
@@ -212,6 +220,54 @@ test("a conflicting worker keeps its branch and worktree, names the files, and l
 	expect((await shelf.addWorktree("sample/project", 2)).branch).toBe(
 		"worker/2-2",
 	);
+});
+
+test("the worktrees of one clone change one at a time, so workers starting together never read each other's half-made folders", async () => {
+	const { shelf, clone } = await fixture();
+	const calls = { now: 0, most: 0 };
+	// Git fails with "failed to read .git/worktrees/1/commondir" when it lists the worktrees while
+	// another call is still writing one; the pause keeps each call in flight long enough to overlap.
+	class Watching extends GitRunner {
+		override async run(command: string[], cwd?: string) {
+			const changes =
+				command[3] === "worktree" ||
+				(command[3] === "branch" && command[4] === "-D");
+			if (!changes) return super.run(command, cwd);
+			calls.most = Math.max(calls.most, ++calls.now);
+			try {
+				await Bun.sleep(20);
+				return await super.run(command, cwd);
+			} finally {
+				calls.now--;
+			}
+		}
+	}
+	const trees = new WorkerTrees(
+		shelf.dir,
+		(repo) => shelf.dirOf(repo),
+		new Watching(() => undefined),
+	);
+	const added = await Promise.all(
+		[1, 2, 3, 4].map((id) => trees.add("sample/project", id)),
+	);
+	expect(new Set(added.map((tree) => tree.dir)).size).toBe(4);
+	// One worker's branch is removed as another starts.
+	const [fifth] = await Promise.all([
+		trees.add("sample/project", 5),
+		...added.map((tree) => trees.remove(tree)),
+	]);
+	expect(calls.most).toBe(1);
+	expect(
+		await git(
+			clone,
+			"branch",
+			"--list",
+			"worker/*",
+			"--format=%(refname:short)",
+		),
+	).toBe("worker/5");
+	if (fifth) await trees.remove(fifth);
+	expect(await git(clone, "worktree", "list")).not.toContain(WORKTREES_DIR);
 });
 
 test("a clone with uncommitted changes at integration is left alone and the branch kept", async () => {

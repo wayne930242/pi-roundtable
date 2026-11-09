@@ -9,32 +9,30 @@ import {
 	type PromptVersion,
 } from "../modules/prompts/prompt-history.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
-import { AgentBook } from "./agent-book.ts";
 import { AgentConversations } from "./agent-conversations.ts";
+import { AgentGroupStore } from "./agent-group-store.ts";
 import { AgentOutbox } from "./agent-outbox.ts";
+import { AgentPlaces } from "./agent-places.ts";
 import {
 	type Agent,
 	type AgentGroup,
 	type AgentSeed,
-	type Backlog,
 	checkAgentName,
 	checkAvatarPrompt,
 	checkDisplayName,
 	checkModelRef,
 	checkPrompt,
 	checkThinking,
-	type GroupMessage,
 	MIN_GROUP_MEMBERS,
 } from "./agent-rules.ts";
 import {
 	type AgentRow,
 	agentMigrations,
+	agentPlacesConvergence,
 	agentsMigration,
 	type GroupRow,
 	toGroup,
 } from "./agent-schema.ts";
-import { AgentStatements } from "./agent-statements.ts";
-import { GroupMessages } from "./group-messages.ts";
 import { HelperPresets } from "./helper-presets.ts";
 
 export {
@@ -60,14 +58,7 @@ export {
  * Agents, groups, and group messages, in the database. Agents and groups are also held
  * in memory, because every inbound message asks and only this process changes them.
  */
-export class PgAgentStore extends AgentBook implements AgentDirectory {
-	readonly #sql: SQL;
-	/** The tail of the agent and group writes, which run one at a time so none reads a map another is about to change. */
-	#queue: Promise<unknown> = Promise.resolve();
-
-	readonly #guild: string;
-	readonly #statements: AgentStatements;
-	readonly #messages: GroupMessages;
+export class PgAgentStore extends AgentGroupStore implements AgentDirectory {
 	readonly #prompts: PromptHistory;
 	/** Agent messages the host stopped before delivering them. */
 	readonly outbox: AgentOutbox;
@@ -78,38 +69,43 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 
 	private constructor(
 		sql: SQL,
-		guildId: string,
+		teamId: string,
 		conversations: AgentConversations,
+		places: AgentPlaces,
 	) {
-		super();
+		super(sql, teamId, places);
 		this.conversations = conversations;
-		this.#sql = sql;
-		this.#guild = guildId;
-		this.#statements = new AgentStatements(sql, guildId);
-		this.#messages = new GroupMessages(sql, guildId);
-		this.#prompts = new PromptHistory(sql, guildId);
-		this.outbox = new AgentOutbox(sql, guildId);
-		this.presets = new HelperPresets(sql, guildId);
+		this.#prompts = new PromptHistory(sql, teamId);
+		this.outbox = new AgentOutbox(sql, teamId);
+		this.presets = new HelperPresets(sql, teamId);
 	}
 
 	/** The store's tables; the host runs this before any store attaches. */
 	static readonly migration: Migration = agentsMigration;
 
-	/** The migrations of the store's tables for the guild the process serves. */
-	static migrations(guildId: string): Migration[] {
-		return agentMigrations(guildId);
+	/** The migrations of the store's tables for the team the process serves. */
+	static migrations(teamId: string): Migration[] {
+		return agentMigrations(teamId);
 	}
 
-	/** The store over the host's migrated pool, holding the rows of one guild. */
-	static async attach(sql: SQL, guildId: string): Promise<PgAgentStore> {
+	/** The every-boot migration that makes the place table follow the channel columns; it runs after the team move. */
+	static placesConvergence(teamId: string): Migration {
+		return agentPlacesConvergence(teamId);
+	}
+
+	/** The store over the host's migrated pool, holding the rows of one team. */
+	static async attach(sql: SQL, teamId: string): Promise<PgAgentStore> {
 		// `Roundtable.check()` has no database to read the rows from: the store starts empty.
 		const checking = isCheckDatabase(sql);
 		const store = new PgAgentStore(
 			sql,
-			guildId,
+			teamId,
 			checking
 				? AgentConversations.memory()
-				: await AgentConversations.load(sql, guildId),
+				: await AgentConversations.load(sql, teamId),
+			checking
+				? AgentPlaces.empty(sql, teamId)
+				: await AgentPlaces.load(sql, teamId),
 		);
 		if (!checking) await store.#reload();
 		return store;
@@ -117,9 +113,9 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 
 	async #reload(): Promise<void> {
 		const agents: AgentRow[] = await this
-			.#sql`SELECT * FROM agents WHERE guild_id = ${this.#guild}`;
+			.sql`SELECT * FROM agents WHERE guild_id = ${this.teamId}`;
 		const groups: GroupRow[] = await this
-			.#sql`SELECT * FROM agent_groups WHERE guild_id = ${this.#guild}`;
+			.sql`SELECT * FROM agent_groups WHERE guild_id = ${this.teamId}`;
 		this.agentMap.clear();
 		this.groupMap.clear();
 		this.dressed.clear();
@@ -129,25 +125,21 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 
 	/** Inserts seed agents that do not exist yet; existing rows, edited or not, are left alone. */
 	async seed(seeds: readonly AgentSeed[]): Promise<string[]> {
-		return this.#serial(async () => {
+		return this.serial(async () => {
 			const added: string[] = [];
 			for (const seed of seeds) {
-				const rows = await this.#statements.insertSeed({
-					...seed,
-					avatarPrompt: seed.avatarPrompt ?? "",
-					channelId: seed.channelId ?? null,
-				});
+				const rows = await this.places.legacy("agent", (tx) =>
+					this.statementsOn(tx).insertSeed({
+						...seed,
+						avatarPrompt: seed.avatarPrompt ?? "",
+						channelId: seed.channelId ?? null,
+					}),
+				);
 				// Only inserted rows join the map: a whole reload drops a write committed after its SELECT.
 				if (rows[0]) added.push(this.keepAgent(rows[0]).name);
 			}
 			return added;
 		});
-	}
-
-	#serial<T>(write: () => Promise<T>): Promise<T> {
-		const run = this.#queue.then(write);
-		this.#queue = run.catch(() => undefined);
-		return run;
 	}
 
 	async createAgent(agent: {
@@ -165,7 +157,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		origin?: string; // the conversation a temp knight was made from
 		preset?: string; // the preset it was made from
 	}): Promise<Agent> {
-		return this.#serial(async () => {
+		return this.serial(async () => {
 			checkAgentName(agent.name);
 			if (agent.parent !== undefined) this.checkParent(agent.parent);
 			checkDisplayName(agent.displayName);
@@ -173,18 +165,20 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 			const avatarPrompt = agent.avatarPrompt ?? "";
 			if (avatarPrompt !== "") checkAvatarPrompt(avatarPrompt);
 			this.checkFree(agent.name);
-			const rows = await this.#statements.insertAgent({
-				name: agent.name,
-				displayName: agent.displayName.trim(),
-				prompt: agent.prompt,
-				avatarPrompt,
-				channelId: agent.channelId ?? null,
-				avatarHash: agent.avatarHash ?? null,
-				character: agent.character ?? null,
-				parent: agent.parent ?? null,
-				origin: agent.origin ?? null,
-				preset: agent.preset ?? null,
-			});
+			const rows = await this.places.legacy("agent", (tx) =>
+				this.statementsOn(tx).insertAgent({
+					name: agent.name,
+					displayName: agent.displayName.trim(),
+					prompt: agent.prompt,
+					avatarPrompt,
+					channelId: agent.channelId ?? null,
+					avatarHash: agent.avatarHash ?? null,
+					character: agent.character ?? null,
+					parent: agent.parent ?? null,
+					origin: agent.origin ?? null,
+					preset: agent.preset ?? null,
+				}),
+			);
 			return this.keepAgent(rows[0]);
 		});
 	}
@@ -193,7 +187,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	setFinished(name: string, finished: boolean): Promise<boolean> {
 		return this.#writeOne(() =>
 			this.stampChanges(name, finished)
-				? this.#statements.setFinished(name, finished ? new Date() : null)
+				? this.statements.setFinished(name, finished ? new Date() : null)
 				: Promise.resolve([]),
 		);
 	}
@@ -214,7 +208,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		/** Who made the change; a changed prompt is kept in the agent's prompt history under this name. */
 		by = "unknown",
 	): Promise<Agent> {
-		return this.#serial(async () => {
+		return this.serial(async () => {
 			const current = this.activeAgent(name);
 			if (change.displayName !== undefined)
 				checkDisplayName(change.displayName);
@@ -242,22 +236,17 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 			};
 			const prompt = change.prompt;
 			// A new prompt and its history row commit together, so no change goes unrecorded.
-			const rows =
-				prompt !== undefined && prompt !== current.prompt
-					? await this.#sql.begin(async (tx) => {
-							const written = await new AgentStatements(
-								tx,
-								this.#guild,
-							).updateAgent(name, row);
-							await this.#prompts.record(
-								"agent",
-								name,
-								{ action: "set", text: prompt, previous: current.prompt, by },
-								tx,
-							);
-							return written;
-						})
-					: await this.#statements.updateAgent(name, row);
+			const rows = await this.places.legacy("agent", async (tx) => {
+				const written = await this.statementsOn(tx).updateAgent(name, row);
+				if (prompt !== undefined && prompt !== current.prompt)
+					await this.#prompts.record(
+						"agent",
+						name,
+						{ action: "set", text: prompt, previous: current.prompt, by },
+						tx,
+					);
+				return written;
+			});
 			return this.keepAgent(rows[0]);
 		});
 	}
@@ -273,19 +262,19 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	 * once they are all active again.
 	 */
 	async archiveAgent(name: string): Promise<AgentGroup[]> {
-		return this.#serial(async () => {
-			this.keepAgent((await this.#statements.archiveAgent(name))[0]);
+		return this.serial(async () => {
+			this.keepAgent((await this.statements.archiveAgent(name))[0]);
 			const left: AgentGroup[] = [];
 			for (const group of this.groups()) {
 				if (group.status !== "active" || !group.members.includes(name))
 					continue;
 				const members = group.members.filter((m) => m !== name);
 				if (members.length < MIN_GROUP_MEMBERS) {
-					left.push(await this.#writeGroup(group.name, { status: "archived" }));
+					left.push(await this.writeGroup(group.name, { status: "archived" }));
 					continue;
 				}
 				const host = group.host === name ? (members[0] ?? name) : group.host;
-				left.push(await this.#writeGroup(group.name, { members, host }));
+				left.push(await this.writeGroup(group.name, { members, host }));
 			}
 			return left;
 		});
@@ -296,14 +285,16 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	 * does not rejoin the groups it left.
 	 */
 	async restoreAgent(name: string, channelId?: string): Promise<Agent> {
-		return this.#serial(async () => {
+		return this.serial(async () => {
 			const current = this.agentMap.get(name);
 			if (!current) throw new AgentError(`There is no agent "${name}".`);
 			if (current.status === "active")
 				throw new AgentError(`"${name}" is not archived.`);
-			const rows = await this.#statements.restoreAgent(
-				name,
-				channelId ?? current.channelId ?? null,
+			const rows = await this.places.legacy("agent", (tx) =>
+				this.statementsOn(tx).restoreAgent(
+					name,
+					channelId ?? current.channelId ?? null,
+				),
 			);
 			return this.keepAgent(rows[0]);
 		});
@@ -315,21 +306,23 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 	 * starts with an empty history. An active agent is never deleted: archive it first.
 	 */
 	async deleteAgent(name: string): Promise<void> {
-		return this.#serial(async () => {
+		return this.serial(async () => {
 			const current = this.agentMap.get(name);
 			if (!current) throw new AgentError(`There is no agent "${name}".`);
 			if (current.status === "active")
 				throw new AgentError(
 					`"${name}" is active; archive it before deleting it.`,
 				);
-			await this.#statements.deleteAgent(name);
+			await this.places.dropping("agent", name, (tx) =>
+				this.statementsOn(tx).deleteAgent(name),
+			);
 			this.agentMap.delete(name);
 			this.dressed.delete(name);
 			// An archived group still lists the agent; a new agent of this name must not join it unasked.
 			for (const group of this.groups()) {
 				if (!group.members.includes(name)) continue;
 				const members = group.members.filter((m) => m !== name);
-				await this.#writeGroup(group.name, {
+				await this.writeGroup(group.name, {
 					members,
 					host: group.host === name ? (members[0] ?? "") : group.host,
 				});
@@ -347,7 +340,7 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		avatarHash: string,
 	): Promise<boolean> {
 		return this.#writeOne(() =>
-			this.#statements.dressIfUndressed(name, character, avatarHash),
+			this.statements.dressIfUndressed(name, character, avatarHash),
 		);
 	}
 
@@ -362,139 +355,16 @@ export class PgAgentStore extends AgentBook implements AgentDirectory {
 		avatarHash: string,
 	): Promise<boolean> {
 		return this.#writeOne(() =>
-			this.#statements.setAvatarIfLook(name, character, avatarHash),
+			this.statements.setAvatarIfLook(name, character, avatarHash),
 		);
 	}
 
 	/** Runs a conditional row write in the queue; true when it wrote a row, which joins the map. */
 	#writeOne(write: () => Promise<AgentRow[]>): Promise<boolean> {
-		return this.#serial(async () => {
+		return this.serial(async () => {
 			const [row] = await write();
 			if (row) this.keepAgentRow(row);
 			return row !== undefined;
 		});
-	}
-
-	async createGroup(group: {
-		name: string;
-		displayName: string;
-		/** Absent in a team without Discord, whose groups live in rooms. */
-		channelId?: string;
-		members: string[];
-		host: string;
-	}): Promise<AgentGroup> {
-		return this.#serial(async () => {
-			this.checkNewGroup(group.name, group.members, group.host);
-			checkDisplayName(group.displayName);
-			const rows = await this.#statements.insertGroup({
-				...group,
-				displayName: group.displayName.trim(),
-				channelId: group.channelId ?? null,
-			});
-			return this.keepGroup(rows[0]);
-		});
-	}
-
-	async updateGroup(
-		name: string,
-		change: { displayName?: string; members?: string[]; host?: string },
-	): Promise<AgentGroup> {
-		return this.#serial(async () => {
-			const current = this.groupMap.get(name);
-			if (current?.status !== "active")
-				throw new AgentError(`There is no active group "${name}".`);
-			if (change.displayName !== undefined)
-				checkDisplayName(change.displayName);
-			const members = change.members ?? current.members;
-			const host =
-				change.host ??
-				(members.includes(current.host) ? current.host : (members[0] ?? ""));
-			this.checkMembers(members, host);
-			return this.#writeGroup(name, {
-				displayName: change.displayName?.trim() ?? current.displayName,
-				members,
-				host,
-				status: "active",
-			});
-		});
-	}
-
-	async archiveGroup(name: string): Promise<AgentGroup> {
-		return this.#serial(() => this.#writeGroup(name, { status: "archived" }));
-	}
-
-	/**
-	 * Returns an archived group to the active ones, on a new channel when its old one is gone. Its
-	 * members must all be active still and number enough; otherwise it refuses and stays archived.
-	 */
-	async restoreGroup(name: string, channelId?: string): Promise<AgentGroup> {
-		return this.#serial(async () => {
-			const current = this.checkRestorableGroup(name);
-			const rows = await this.#statements.restoreGroup(
-				name,
-				channelId ?? current.channelId ?? null,
-			);
-			return this.keepGroup(rows[0]);
-		});
-	}
-
-	/**
-	 * Deletes an archived group with its messages and cursors, in the Discord channel's log and in
-	 * each room's (`<group>@<surface>`); its name is free again. An active group is never deleted.
-	 */
-	async deleteGroup(name: string): Promise<void> {
-		return this.#serial(async () => {
-			const current = this.groupMap.get(name);
-			if (!current) throw new AgentError(`There is no group "${name}".`);
-			if (current.status === "active")
-				throw new AgentError(
-					`"${name}" is active; archive it before deleting it.`,
-				);
-			await this.#statements.deleteGroup(name);
-			this.groupMap.delete(name);
-		});
-	}
-
-	async #writeGroup(
-		name: string,
-		change: Partial<
-			Pick<AgentGroup, "displayName" | "members" | "host" | "status">
-		>,
-	): Promise<AgentGroup> {
-		const current = this.groupMap.get(name);
-		if (!current) throw new AgentError(`There is no group "${name}".`);
-		const rows = await this.#statements.updateGroup(name, {
-			displayName: change.displayName ?? current.displayName,
-			members: change.members ?? current.members,
-			host: change.host ?? current.host,
-			status: change.status ?? current.status,
-		});
-		return this.keepGroup(rows[0]);
-	}
-
-	appendGroupMessage(
-		group: string,
-		message: { author: string; authorName: string; text: string },
-	): Promise<number> {
-		return this.#messages.append(group, message);
-	}
-
-	/** The group's newest messages, oldest first. */
-	recentGroupMessages(group: string, limit: number): Promise<GroupMessage[]> {
-		return this.#messages.recent(group, limit);
-	}
-
-	/** Group messages the member has not received yet, its own excluded; the newest `limit` are carried. */
-	backlog(group: string, agent: string, limit: number): Promise<Backlog> {
-		return this.#messages.backlog(group, agent, limit);
-	}
-
-	advanceCursor(group: string, agent: string, lastId: number): Promise<void> {
-		return this.#messages.advanceCursor(group, agent, lastId);
-	}
-
-	/** Marks every message so far as received by every member, for a group started over. */
-	catchUp(group: AgentGroup, log?: string): Promise<void> {
-		return this.#messages.catchUp(group, log);
 	}
 }
