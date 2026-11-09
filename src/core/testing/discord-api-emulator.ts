@@ -133,6 +133,13 @@ export class DiscordEmulator {
 		return channel;
 	}
 
+	/** The bot loses sight of a channel in its own guild: a read of it answers 50001 Missing Access. */
+	hideChannel(id: string): void {
+		const channel = this.state.channels.get(id);
+		if (!channel) throw new Error(`no channel ${id}`);
+		channel.hidden = true;
+	}
+
 	/** Removes the bot's webhook of that name, as a person deleting it by hand. */
 	deleteWebhook(channelId: string, name: string): void {
 		for (const [id, hook] of this.state.webhooks)

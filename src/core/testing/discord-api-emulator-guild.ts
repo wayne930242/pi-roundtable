@@ -7,6 +7,7 @@ import {
 	type EmuState,
 	formError,
 	HttpError,
+	missingAccess,
 	missingPermissions,
 	newId,
 	replaceTags,
@@ -156,7 +157,11 @@ export function guildRoutes(state: EmuState): Route[] {
 		[
 			"GET",
 			/^\/channels\/(\d+)$/,
-			({ params }) => channelJson(channelOf(state, params[0])),
+			({ params }) => {
+				const channel = channelOf(state, params[0]);
+				if (channel.hidden) throw missingAccess();
+				return channelJson(channel);
+			},
 		],
 		[
 			"PATCH",

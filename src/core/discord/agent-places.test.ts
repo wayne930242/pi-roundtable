@@ -221,7 +221,7 @@ test("a temp knight's place is a thread of its parent's channel, closed by remov
 	}
 });
 
-test("check: ok in the agent guild, gone once deleted, foreign in another server or out of sight", async () => {
+test("check: ok in the agent guild, gone once deleted, foreign in another server", async () => {
 	const w = await world();
 	try {
 		w.emulator.addChannel("900000000000000050", GUILD, { name: "mine" });
@@ -231,6 +231,19 @@ test("check: ok in the agent guild, gone once deleted, foreign in another server
 		expect(await w.provider.check?.("900000000000000077")).toBe("gone");
 		w.emulator.state.channels.delete("900000000000000050");
 		expect(await w.provider.check?.("900000000000000050")).toBe("gone");
+	} finally {
+		await w.close();
+	}
+});
+
+test("check does not call a channel the bot cannot see foreign or gone: Missing Access also answers a hidden channel of its own guild", async () => {
+	const w = await world();
+	try {
+		w.emulator.addChannel("900000000000000050", GUILD, { name: "mine" });
+		w.emulator.hideChannel("900000000000000050");
+		await expect(w.provider.check?.("900000000000000050")).rejects.toThrow(
+			"Missing Access",
+		);
 	} finally {
 		await w.close();
 	}

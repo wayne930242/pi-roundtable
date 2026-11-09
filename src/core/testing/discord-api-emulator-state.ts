@@ -69,6 +69,8 @@ export interface EmuChannel {
 	/** The times of the renames Discord accepted. */
 	renames: number[];
 	recipientId?: string;
+	/** The bot cannot view it (a private channel, a changed overwrite): Discord answers 50001 to a read. */
+	hidden?: boolean;
 }
 
 export interface EmuWebhook {
@@ -157,6 +159,7 @@ export const unknownChannel = () =>
 	new HttpError(404, 10003, "Unknown Channel");
 export const unknownMessage = () =>
 	new HttpError(404, 10008, "Unknown Message");
+export const missingAccess = () => new HttpError(403, 50001, "Missing Access");
 export const missingPermissions = () =>
 	new HttpError(403, 50013, "Missing Permissions");
 
