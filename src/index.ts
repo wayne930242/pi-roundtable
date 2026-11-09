@@ -115,6 +115,17 @@ export type {
 export { QUEUED_MARK, STEERED_MARK } from "./core/contract/channels.ts";
 export type { ChatCommand } from "./core/contract/chat-command.ts";
 export type {
+	PlaceAuthor,
+	PlaceCheck,
+	PlaceKind,
+	PlacePort,
+	PlacePost,
+	PlaceProvider,
+	PlaceRef,
+	PlaceSpec,
+	ToolArgument,
+} from "./core/contract/places.ts";
+export type {
 	ImageDrawer,
 	Judge,
 	Providers,

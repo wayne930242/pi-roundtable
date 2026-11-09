@@ -13,11 +13,7 @@ import type {
 	InboundMessage,
 } from "./core/contract/channels.ts";
 import type { Providers } from "./core/contract/providers.ts";
-import type {
-	AgentRuntime,
-	HeldActionStore,
-	RuntimeDeps,
-} from "./core/contract/runtime.ts";
+import type { AgentRuntime, RuntimeDeps } from "./core/contract/runtime.ts";
 import type { ServiceKey } from "./core/contract/services.ts";
 import type { ChatSurface, SurfacePort } from "./core/contract/surface.ts";
 import { CommandCollection } from "./core/discord/command-collection.ts";
@@ -34,10 +30,7 @@ import {
 import type { DiscordPoster } from "./core/discord/poster/poster.ts";
 import { supportOf } from "./core/domain/block-support.ts";
 import type { ClientPart, ClientPort } from "./core/domain/client.ts";
-import type {
-	PendingConfirmation,
-	ReplyFile,
-} from "./core/domain/conversation.ts";
+import type { ReplyFile } from "./core/domain/conversation.ts";
 import type { ChannelKey, SessionContext } from "./core/domain/sessions.ts";
 import { EventBus } from "./core/host/events.ts";
 import { type ListenerConfig, listenerAddress } from "./core/http/listeners.ts";
@@ -53,7 +46,6 @@ import type {
 	Contribution,
 	HostEnv,
 	LinkedSessions,
-	PluginContext,
 	RoundtablePlugin,
 	TurnEndEvent,
 	TurnEvent,
@@ -68,6 +60,7 @@ import {
 	RUNTIME,
 } from "./core/plugin-api/services.ts";
 import {
+	type ContributionBase,
 	collectContributions,
 	linkSessions,
 } from "./core/registry/contributions.ts";
@@ -86,6 +79,7 @@ import { type ToolTierTable, toolTiers } from "./core/runtime/tool-tiers.ts";
 import { PERSONAL_TARGET } from "./core/shared/personal-target.ts";
 import { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
 import { mapIdentity } from "./core/testing/map-identity.ts";
+import { memoryHeldActions } from "./core/testing/memory-held-actions.ts";
 import { memberOf } from "./core/testing/partial.ts";
 import {
 	callRegisteredTool,
@@ -116,6 +110,15 @@ export type { TestLocale } from "./core/testing/locale.ts";
 export { useTestLocale } from "./core/testing/locale.ts";
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
 export { partial } from "./core/testing/partial.ts";
+export type {
+	PlaceContractFailure,
+	PlaceContractSubject,
+	PlaceSeen,
+} from "./core/testing/place-contract.ts";
+export {
+	checkPlaceProviderContract,
+	placeProviderContract,
+} from "./core/testing/place-contract.ts";
 export type { UsePostgresOptions } from "./core/testing/postgres.ts";
 export { usePostgresForTests } from "./core/testing/postgres.ts";
 export type {
@@ -348,18 +351,6 @@ function partialService<T extends object>(
 	});
 }
 
-/** Held actions kept in memory, for the runtime a plugin's provider builds under test. */
-function memoryHeldActions(): HeldActionStore {
-	const held = new Map<ChannelKey, PendingConfirmation>();
-	return {
-		load: async (conversation) => held.get(conversation),
-		save: async (conversation, actions) => {
-			if (actions) held.set(conversation, actions);
-			else held.delete(conversation);
-		},
-	};
-}
-
 /** Build one plugin without Discord or PostgreSQL, retaining the host's validation and tier logic. */
 // pi-lens-ignore: high-complexity, large-function — one host's context and lifecycle, mirrored end to end
 export async function testPlugin(
@@ -536,7 +527,7 @@ export async function testPlugin(
 		);
 	services.checkRequires();
 	const attachmentDir = mkdtempSync(join(tmpdir(), "roundtable-test-plugin-"));
-	const context: Omit<PluginContext, "services" | "directChannels"> = {
+	const context: ContributionBase = {
 		logger,
 		env,
 		sessions: () => linked ?? unlinked("sessions"),

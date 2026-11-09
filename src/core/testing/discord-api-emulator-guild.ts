@@ -186,6 +186,16 @@ export function guildRoutes(state: EmuState): Route[] {
 					if (forum?.type === 15)
 						channel.appliedTags = checkAppliedTags(forum, body.applied_tags);
 				}
+				if (typeof body.topic === "string") channel.topic = body.topic;
+				if (typeof body.parent_id === "string") {
+					if (channelOf(state, body.parent_id).type !== 4)
+						throw formError(
+							"parent_id",
+							"CHANNEL_PARENT_INVALID",
+							"Not a category",
+						);
+					channel.parentId = body.parent_id;
+				}
 				const name = str(body.name);
 				if (name) {
 					// The sublimit on renames: a third inside ten minutes is answered with a long wait.

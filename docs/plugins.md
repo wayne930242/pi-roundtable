@@ -180,12 +180,13 @@ A plugin that replaces `IDENTITY` replaces this too: the declarations are the bu
 | `services` | The services plugins provide to each other, read by key: `services.get(SCHEDULES)`; see [services](#services-what-plugins-provide-to-each-other) |
 | `attachments` | Files a plugin takes from a person outside a turn, such as an upload, kept for a conversation until a turn uses them: [`attachments`](#contextattachments-files-from-outside-a-turn) |
 | `surfaces` | Every contributed [chat surface](#surfaces-a-chat-network-of-your-own), chosen by the prefix of a channel key: `of`, `sendReply`, `startTyping`, `showStop`, `react`, `unreact`, `prompts` |
+| `places` | The agent team's [place providers](#places-where-the-agents-are-spoken-to-on-a-surface), chosen by surface or by a channel key: `of`, `stored()`, `all()` |
 | `turns` | Runs one turn of a conversation your claim owns, over the runtime and the surfaces: [`turns.run`](#personas-and-contextturns-conversations-of-a-kind-of-your-own) |
 | `observe(filter, observer)` | Hears inbound messages without owning or admitting them: [`observe`](#observe-hearing-messages-without-owning-them). Returns a function that stops it; may be called during `setup` |
 | `directChannels` | Every plugin's [direct channels](#directchannels-reaching-a-person-on-their-own): `providers()`, `reach(origin, principalId)`, `known(origin, principalId)`, and `notify(origin, principalId, text)`, each through the [delivery router](#where-things-are-delivered) |
-| `sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()`, `chatCommands()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
+| `sessions()`, `conversations`, `surfaces`, `places`, `directChannels`, `turns`, `dashboard()`, `chatCommands()` | Linked once every plugin has been set up; calling them during `setup` throws `NotLinkedError` |
 
-`sessions()`, `conversations`, `surfaces`, `directChannels`, `turns`, `dashboard()`, and `chatCommands()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
+`sessions()`, `conversations`, `surfaces`, `places`, `directChannels`, `turns`, `dashboard()`, and `chatCommands()` are available from a service's `start`, an event handler, a session tool, or a claim's turn.
 
 Use `QueuePort` from the main entry for `context.queue`; the kit's `ChannelQueue` is also type-only.
 
@@ -3238,6 +3239,19 @@ A turn whose channel has no surface, and a surface without `formatting`, add not
 The built-in values: Discord says that Markdown renders except tables, which show as raw pipes, so the model writes bullet lists or `key: value` lines instead; the `line` surface says it shows plain text only; the web chat says full Markdown renders, tables included.
 A host overrides or removes a built-in value through that surface's options (`discord.formatting`, `line({ formatting })`, `webChat({ formatting })`): a text replaces it, and `false` tells the model nothing.
 A custom runtime provider reads the same lookup as `RuntimeDeps.formatting(channel)`.
+
+### `places`: where the agents are spoken to on a surface
+
+A `PlaceProvider` tells the agent team where an agent or group lives on one surface and how to post there.
+A plugin contributes one per surface with `places: [provider]`, and reads them through `context.places` once every plugin is set up: `of(surface)` or `of(key)` for one, `stored()` for those that keep ids of their own, and `all()` in the order "auto" routing prefers (the stored ones in contribution order, then the derived ones in surface order).
+Two providers for one surface, or one for a surface no plugin registers, stop the boot with a `PluginError` naming the plugins.
+
+A provider is `derived` when the place exists with the name (a room, `<surface>:agent.<name>`) and `stored` when the surface makes the places and the team keeps their ids.
+The members a minimal provider needs are `surface`, `storage`, `key`, `placeOf` and `post`; `ensure`, `remove`, `check` (`ok`, `gone` or `foreign`), `describe`, `onRemoved`, `interim`, `space`, `mention`, `conversations`, `coordinatorPlace`, `createArguments` and `layoutText` are optional capabilities.
+A surface with `agentRooms: true` and no provider gets a derived one from the host, so a surface written before places needs no change.
+The agent team does not read providers yet; the Discord plugin contributes its own when `discord.guild` is set.
+
+`placeProviderContract(name, make)` from `pi-roundtable/testing` registers the provider contract as tests for any provider; `make` returns a `PlaceContractSubject` with the provider and a view of what a person on the surface sees.
 
 ### Display blocks in a reply
 

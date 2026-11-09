@@ -12,12 +12,12 @@ import type { Principal } from "../identity/principal-store.ts";
 import type { Tier } from "../identity/speakers.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { SkillStore } from "../modules/skills/skill-store.ts";
-import {
-	type Contribution,
-	type PluginContext,
-	pluginContext,
-	type RoundtablePlugin,
+import type {
+	Contribution,
+	PluginContext,
+	RoundtablePlugin,
 } from "../plugin-api/plugin.ts";
+import { pluginContext } from "../plugin-api/plugin-context.ts";
 import type {
 	AgentServer,
 	MemoryStore,

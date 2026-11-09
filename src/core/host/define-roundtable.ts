@@ -153,6 +153,7 @@ function discordAssembly(
 			ownerId: owner.id,
 			ownerName: owner.name,
 			rootCommand: discord.rootCommand,
+			...(discord.guild ? { agentGuild: discord.guild } : {}),
 			dataDir: config.dataDir,
 			...(discord.refusalHint === undefined
 				? {}

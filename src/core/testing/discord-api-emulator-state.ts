@@ -18,6 +18,8 @@ export interface EmuMessage {
 	channelId: string;
 	authorId: string;
 	webhookId?: string;
+	/** The name a webhook post spoke under (`username`), when the request gave one. */
+	username?: string;
 	content: string;
 	flags: number;
 	/** Components the message carries; a v2 card has them without `content`. */
