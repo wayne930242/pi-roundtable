@@ -70,10 +70,15 @@ button.chip[aria-pressed="true"]:hover:not(:disabled) {
 	height: 1.5rem;
 	padding: 0 0.45rem;
 	border-radius: var(--radius-full);
-	background: var(--warn);
-	color: var(--on-warn, #1a1300);
+	background: var(--accent);
+	color: var(--on-accent);
 	font-size: var(--text-sm);
 	font-weight: 600;
+}
+
+button.chip[aria-pressed="true"] .chip-count {
+	background: var(--on-accent);
+	color: var(--accent);
 }
 
 /* ── The folder tag on a row ──────────────────────────────────────────────────────────────────── */
