@@ -1,4 +1,5 @@
 ---
-type: none
+type: Fixed
+packages: [coding]
 ---
-Test-only change: the coding package's two-worker tests get a 30-second budget for their git work, and their parked workers end when the desk stops them, so a stalled CI runner no longer fails the conflict test and then its afterEach hook as well.
+Two coding workers that start at once on one repository no longer fail now and then with `fatal: failed to read .git/worktrees/1/commondir`, which ended one of the tasks before its worker ran. Git lists every linked worktree while it adds, removes or prunes one and fails on a folder another such call is still writing, so the desk now makes, removes and prunes the worktrees of one clone one at a time.

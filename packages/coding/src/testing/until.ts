@@ -17,20 +17,3 @@ export async function until<T>(
 		await Bun.sleep(10);
 	}
 }
-
-/**
- * Waits for `promise`, but not past `signal`. A worker parked on a gate that a stalled sibling
- * never opens must end when the desk stops it; otherwise the stop waits out its whole bound and
- * the test's afterEach times out on top of the test itself.
- */
-export function unlessAborted<T>(
-	promise: Promise<T>,
-	signal: AbortSignal,
-): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const stopped = () => reject(new Error("stopped"));
-		if (signal.aborted) return stopped();
-		signal.addEventListener("abort", stopped, { once: true });
-		promise.then(resolve, reject);
-	});
-}

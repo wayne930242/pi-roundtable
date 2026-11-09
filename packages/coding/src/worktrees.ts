@@ -14,6 +14,8 @@ export class WorkerTrees {
 	readonly #shelfDir: string;
 	readonly #dirOf: (repo: string) => string;
 	readonly #runner: GitRunner;
+	/** The last change to each clone's worktrees, which the next waits for. */
+	readonly #changing = new Map<string, Promise<unknown>>();
 
 	constructor(
 		shelfDir: string,
@@ -55,15 +57,17 @@ export class WorkerTrees {
 					])
 				).code === 0;
 			if (taken) continue;
-			await this.#runner.git(
-				clone,
-				"worktree",
-				"add",
-				"--quiet",
-				"-b",
-				branch,
-				dir,
-				base,
+			await this.#alone(clone, () =>
+				this.#runner.git(
+					clone,
+					"worktree",
+					"add",
+					"--quiet",
+					"-b",
+					branch,
+					dir,
+					base,
+				),
 			);
 			return { repo, dir: realpathSync(dir), branch, base };
 		}
@@ -187,27 +191,46 @@ export class WorkerTrees {
 	async remove(tree: WorkerTree): Promise<void> {
 		const clone = this.#dirOf(tree.repo);
 		this.#treeDir(tree, false);
-		await this.#runner.run([
-			"git",
-			"-C",
-			clone,
-			"worktree",
-			"remove",
-			"--force",
-			tree.dir,
-		]);
-		if (existsSync(tree.dir))
-			rmSync(tree.dir, { recursive: true, force: true });
-		await this.#runner.run(["git", "-C", clone, "worktree", "prune"]);
-		await this.#runner.run([
-			"git",
-			"-C",
-			clone,
-			"branch",
-			"-D",
-			"--quiet",
-			tree.branch,
-		]);
+		await this.#alone(clone, async () => {
+			await this.#runner.run([
+				"git",
+				"-C",
+				clone,
+				"worktree",
+				"remove",
+				"--force",
+				tree.dir,
+			]);
+			if (existsSync(tree.dir))
+				rmSync(tree.dir, { recursive: true, force: true });
+			await this.#runner.run(["git", "-C", clone, "worktree", "prune"]);
+			await this.#runner.run([
+				"git",
+				"-C",
+				clone,
+				"branch",
+				"-D",
+				"--quiet",
+				tree.branch,
+			]);
+		});
+	}
+
+	/**
+	 * Runs a change to a clone's worktrees after the one before it. Git lists every linked
+	 * worktree while it adds, removes or prunes one, and fails on a folder another such call is
+	 * still writing (`failed to read .git/worktrees/1/commondir`), so two workers starting at
+	 * once, or one starting as another's branch is removed, cannot each go ahead alone.
+	 */
+	async #alone<T>(clone: string, change: () => Promise<T>): Promise<T> {
+		const previous = this.#changing.get(clone) ?? Promise.resolve();
+		const mine = previous.catch(() => {}).then(change);
+		this.#changing.set(clone, mine);
+		try {
+			return await mine;
+		} finally {
+			if (this.#changing.get(clone) === mine) this.#changing.delete(clone);
+		}
 	}
 
 	/** A worktree path, refused unless it lies in this repository's worktree folder. */
