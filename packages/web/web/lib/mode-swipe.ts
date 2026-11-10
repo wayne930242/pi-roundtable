@@ -12,8 +12,11 @@ import { toast } from "./toast.ts";
 
 type Modes = Pick<RoomMode, "yolo" | "longRunning">;
 
-/** A room's row on the rooms page; not a temp knight's, not a thread card, not the drawer's. */
+/** A room's row on the rooms page or the chat home; not a temp knight's, not a thread card. */
 const ROW = "a.room-row[data-room]";
+
+/** The room drawer: it draws the home's rows, but a swipe left over them closes it. */
+const DRAWER = ".switcher";
 
 const keyOf = (row: HTMLElement): string => row.dataset.room ?? "";
 
@@ -72,8 +75,9 @@ async function cycle(room: string): Promise<void> {
 	});
 }
 
-/** Gives the room rows inside `root` the swipe that turns their modes; returns what takes it off. */
+/** Gives the room rows inside `root` the swipe that turns their modes; returns what takes it off. A drawer's rows get none. */
 export function attachModeSwipe(root: HTMLElement): () => void {
+	if (root.closest(DRAWER)) return () => undefined;
 	const swipe = attachRowSwipe(root, {
 		direction: "left",
 		row: ROW,
