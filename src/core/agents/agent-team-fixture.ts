@@ -28,7 +28,11 @@ import {
 } from "../testing/database.ts";
 import { useTestLocale } from "../testing/locale.ts";
 import { OWNER_SPEAKER, TEST_OWNER } from "../testing/owner.ts";
-import { discordTestPlaces, testPlacePort } from "../testing/team-places.ts";
+import {
+	discordTestChannelOps,
+	discordTestPlaces,
+	testPlacePort,
+} from "../testing/team-places.ts";
 import { PgAgentStore as AgentStore } from "./agent-store.ts";
 import {
 	AgentServerTeam as AgentTeam,
@@ -363,6 +367,12 @@ export function useTeamFixture(
 				guestPrompt: () => script.guest,
 				skills,
 				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
+				// Discord's side of the deprecated `arrange` and `read`, as the host hands it with a guild.
+				...(local
+					? {}
+					: {
+							formerChannelOps: () => discordTestChannelOps(channels, store),
+						}),
 				logger: silentLogger(),
 			});
 		team = build();

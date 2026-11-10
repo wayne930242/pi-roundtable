@@ -9,6 +9,7 @@ import { ownerWords } from "../identity/owner-identity.ts";
 import { THE_SPEAKER } from "../identity/speakers.ts";
 import type { Logger } from "../kernel/log.ts";
 import { timeZone, zonedStamp } from "../kernel/time.ts";
+import type { FormerChannelOps } from "../plugin-api/agent-ops.ts";
 import {
 	defineTool,
 	type ToolContribution,
@@ -93,6 +94,55 @@ async function refusing<T>(run: () => Promise<T> | T): Promise<T> {
 }
 
 /**
+ * What `channel_arrange` and `channel_read` run, and Discord's side of the deprecated
+ * `AgentOps.arrange` and `AgentOps.read`, which the host hands the team until 1.0. Each refuses
+ * with an `AgentError`.
+ */
+export function discordChannelOps(
+	options: DiscordAgentToolsOptions,
+): FormerChannelOps {
+	const { channels, logger } = options;
+	const directory = () => {
+		const found = options.directory();
+		if (!found)
+			throw new AgentError(
+				"This host has no agent team, so there are no agent channels here.",
+			);
+		return found;
+	};
+	return {
+		arrange: async (entries) => {
+			const team = directory();
+			const listed = resolveArrangement(entries, team);
+			const { layout, remove } = planArrangement(
+				listed,
+				await channels.layout(),
+			);
+			await channels.arrange(layout, remove);
+			logger.info(
+				{ entries: listed.map((l) => l.category), removed: remove.length },
+				"agent channels arranged",
+			);
+			const removed =
+				remove.length > 0
+					? ` ${remove.length} empty team categories were deleted.`
+					: "";
+			return `Arranged the channels.${removed}\n\n${categoryLayoutText(await channels.layout(), ownerNameOf(team))}`;
+		},
+		read: async (channel, around, limit) => {
+			const id = channelIdFromRef(channel);
+			const found = await channels.read(id, {
+				limit: Math.min(Math.max(limit ?? 20, 1), READ_LIMIT),
+				...(around ? { around } : {}),
+			});
+			return found.length > 0
+				? found.map(messageLine).join("\n")
+				: `<#${id}> has no messages there.`;
+		},
+	};
+}
+
+/**
  * The tools of the agent guild's channels: `channel_arrange` sorts agent and group channels into
  * categories and `channel_read` reads a channel's messages. Agents carry them, as they carried
  * them when the agent team offered them; a temp knight carries neither arrange nor creation.
@@ -100,16 +150,8 @@ async function refusing<T>(run: () => Promise<T> | T): Promise<T> {
 export function discordAgentTools(
 	options: DiscordAgentToolsOptions,
 ): ToolContribution[] {
-	const { channels, logger } = options;
+	const ops = discordChannelOps(options);
 	const speaker = ownerWords(THE_SPEAKER).name;
-	const directory = () => {
-		const found = options.directory();
-		if (!found)
-			throw new ToolRefusal(
-				"This host has no agent team, so there are no agent channels here.",
-			);
-		return found;
-	};
 	return [
 		defineTool({
 			name: "channel_arrange",
@@ -133,30 +175,14 @@ export function discordAgentTools(
 				),
 			}),
 			run: ({ categories }) =>
-				refusing(async () => {
-					const team = directory();
-					const listed = resolveArrangement(
+				refusing(() =>
+					ops.arrange(
 						categories.map((entry) => ({
 							category: entry.category,
 							names: entry.channels,
 						})),
-						team,
-					);
-					const { layout, remove } = planArrangement(
-						listed,
-						await channels.layout(),
-					);
-					await channels.arrange(layout, remove);
-					logger.info(
-						{ entries: listed.map((l) => l.category), removed: remove.length },
-						"agent channels arranged",
-					);
-					const removed =
-						remove.length > 0
-							? ` ${remove.length} empty team categories were deleted.`
-							: "";
-					return `Arranged the channels.${removed}\n\n${categoryLayoutText(await channels.layout(), ownerNameOf(team))}`;
-				}),
+					),
+				),
 		}),
 		defineTool({
 			name: "channel_read",
@@ -178,16 +204,7 @@ export function discordAgentTools(
 				),
 			}),
 			run: ({ channel, around, limit }) =>
-				refusing(async () => {
-					const id = channelIdFromRef(channel);
-					const found = await channels.read(id, {
-						limit: Math.min(Math.max(limit ?? 20, 1), READ_LIMIT),
-						...(around ? { around } : {}),
-					});
-					return found.length > 0
-						? found.map(messageLine).join("\n")
-						: `<#${id}> has no messages there.`;
-				}),
+				refusing(() => ops.read(channel, around, limit)),
 		}),
 	].map(agentsOnly);
 }

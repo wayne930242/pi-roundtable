@@ -1397,7 +1397,7 @@ export function turnLog(lines: string[]) {
 <!-- /example -->
 
 `serviceStarted` names the plugin and the service.
-When the agent server's channels and dashboard are up, it reports `AGENT_SERVER_PLUGIN` and `AGENT_TEAM_SERVICE` (`"agent-server"` and `"team"`) with `outcome === "ready"`.
+When the agent server's team is up, with its places made and checked, it reports `AGENT_SERVER_PLUGIN` and `AGENT_TEAM_SERVICE` (`"agent-server"` and `"team"`) with `outcome === "ready"`. The Discord plugin starts the dashboard message on that event, so the dashboard comes after it.
 Wait for that event to do something that needs the team running, such as posting a notice.
 
 A turn event has a `kind`: `"agent"` for an agent's turn, else the kind the turn ran as (`"study"` in the example below).
@@ -2217,7 +2217,7 @@ export const echo = (tickets: Set<string>) =>
 
 ### `dashboard`: lines on the dashboard message
 
-The agent server keeps a dashboard message pinned in Discord that shows the team's state.
+On a host with `discord.guild`, the Discord plugin keeps a dashboard message pinned in the agent guild that shows the team's state; it starts once the agent server's team is ready.
 Each string here is added under its title, in plugin order.
 
 <!-- example: examples/dashboard.ts -->
@@ -3250,7 +3250,25 @@ A provider is `derived` when the place exists with the name (a room, `<surface>:
 The members a minimal provider needs are `surface`, `storage`, `key`, `placeOf` and `post`; `ensure`, `remove`, `check` (`ok`, `gone` or `foreign`), `describe`, `onRemoved`, `interim`, `space`, `mention`, `conversations`, `coordinatorPlace`, `createArguments` and `layoutText` are optional capabilities.
 A surface with `agentRooms: true` and no provider gets a derived one from the host, so a surface written before places needs no change.
 The Discord plugin contributes its own when `discord.guild` is set.
-A plugin that replaces `DISCORD` with a Discord of its own, on a host with `discord.guild`, contributes `discordPlaceProvider({ guild, connection, logger })` from `pi-roundtable/discord` with `places`: it gives the guild's channels the keys, group seats and log names the built-in Discord gives them (pass `client` too to have the team check its stored channels at start). Without a provider for the `discord` surface the host refuses to start, since the team would make channels it cannot read.
+A plugin that replaces `DISCORD` with a Discord of its own leaves the built-in Discord plugin out whole, and with it everything that plugin gives the agent team. On a host with `discord.guild` the replacement contributes Discord's side of the agent guild itself, by spreading `discordAgentGuild(context, { guild, connection, entryChannel })` from `pi-roundtable/discord` into what its setup returns:
+
+```ts
+setup: (context) => {
+	context.services.provide(DISCORD, { connection, /* ... */ });
+	return {
+		surfaces: [surface],
+		...discordAgentGuild(context, { guild, connection, entryChannel }),
+	};
+},
+```
+
+It returns four contributions, the same the built-in plugin makes:
+
+- `places`: the provider that gives the guild's channels the keys, group seats and log names the built-in Discord gives them, names the coordinator's place from `entryChannel`, and writes the categories section of `agent_list` with the agents' and groups' names. Pass `client` too to have the team check its stored channels at start.
+- `tools`: `channel_arrange` and `channel_read`, which an agent's turn carries.
+- `services` and `events`: the `#dashboard` message over `connection.agentDashboard(guild)`, started when the agent server's team is ready. A plugin with services or event handlers of its own merges them with these.
+
+`guild` and `entryChannel` are the host's `discord.guild` and `discord.entryChannel`. Without `entryChannel` the coordinator is the first agent the host seeds, since a host with `discord.guild` names no coordinator in its configuration. `discordPlaceProvider({ guild, connection, logger })` is the provider alone: a replacement that contributes only it has no channel tools and no dashboard, and its `agent_list` shows channel mentions where the names were. Without a provider for the `discord` surface the host refuses to start, since the team would make channels it cannot read.
 
 The agent team reads its places through the providers: the keys of an agent or group (`AGENTS.team.roomsOf(name)`, and `placesOf(name)` with each key's surface), who owns a key (`AGENTS.team.owns(key)`, and `AGENTS.directory.placeOwner(key)` for an archived owner too), the routing table, the conversation keys of a group's seats and log, and the outbox replay. A stored provider's places are the rows of `agent_places`; a derived provider's are rooms. "Auto" order puts every stored place before the rooms, so with Discord configured the Discord channel is still an agent's primary place. A row of a surface no provider serves on this host is kept and ignored. `TeamStatus` views carry `places` (`TeamPlace`: `{ surface, key }`). `Agent.channelId`, `AgentGroup.channelId`, `AgentDirectory.agentByChannel` and `groupByChannel`, `AgentTeam.guildId` and `discordGuild`, and the status views' `channelId` are deprecated and removed in 1.0; the team still writes them.
 
@@ -3688,7 +3706,7 @@ A host that keeps Discord may write it as an adapter instead, as [`adapters`](#a
 - `coordinator` names the agent that coordinates the team; it must be one of `agents` and defaults to the first. With `discord.guild` the agent in `discord.entryChannel` is the coordinator, and `coordinator` is a `ConfigError`. The coordinator cannot be archived. `AGENTS.team.coordinator()` answers with either.
 - The team's id is `LOCAL_TEAM_ID`, `"local"`, where Discord's is the guild's id; the rows are stored under it as under the guild's, and `AGENTS.team.guildId` is it.
 - The start fails, naming the fix ("agents need a surface that hosts their rooms, such as pi-roundtable-web"), when no installed surface declares `agentRooms`: without Discord channels the agents could never be spoken to. The check runs when the plugins are linked, so a surface added by any plugin counts.
-- No channel is made, checked or arranged, and the dashboard (a Discord message) does not exist. `channel_arrange` and `channel_read` are not offered, and `agent_create` and `group_create` take no `category`; called anyway through `AgentTeam`, arranging and reading answer that the host has no Discord channels. `agent_create` and `group_create` make no channel, and a new agent starts its opening task in its room on the first surface that hosts rooms. Archiving an agent or group stops its rooms from answering.
+- No channel is made, checked or arranged, and the dashboard (a Discord message) does not exist. `channel_arrange` and `channel_read` are not offered, since the Discord plugin contributes them only with `discord.guild`, and `agent_create` and `group_create` take no `category`. `AgentTeam` has no arranging or reading; the deprecated `AgentOps.arrange` and `AgentOps.read` of `pi-roundtable/kit`, called anyway, answer that the host has no Discord channels. `agent_create` and `group_create` make no channel, and a new agent starts its opening task in its room on the first surface that hosts rooms. Archiving an agent or group stops its rooms from answering.
 - `category` on `agent_create` and `group_create`, offered only to a team with Discord channels, places a Discord channel. Their `group` places the new room in a group of the app's room list through `ROOM_LAYOUT`, made when missing; without `group` the room stays ungrouped. `agent_list` ends with the app's groups and pinned rooms, and `room_arrange { groups: [{ group, names }] }` sorts rooms into groups the way `channel_arrange` sorts channels into categories, an owner's tool like it. On a host without the app's room list, `group` and `room_arrange` are refused before anything is made.
 - An agent's pictures have no public address unless `http.publicUrl` is set: `AGENTS.avatars.url(hash)` is then the path `/avatars/<hash>.png`, which the surface serves itself through `AGENTS.avatars.serve(pathname)` under its own origin, as the web console does. With `http.publicUrl` they are served on the `public` listener as with Discord.
 - `AgentTeam.channelOf(name, near?)` answers with the agent's room on the surface of `near` (the asker's own conversation) when that surface hosts rooms, so `schedule_list` from a room reads the room's schedules; for an agent with no Discord channel it falls back to its room on the first surface that hosts rooms. The status the dashboard and the web read counts an agent's schedules, waiting turns and context use across its Discord channel and its rooms.
@@ -5139,6 +5157,8 @@ Import from the entries listed below; source area files are internal.
 | `DiscordCard` | `pi-roundtable/discord` | type |
 | `DiscordFailure` | `pi-roundtable/discord` | type |
 | `DiscordMessage` | `pi-roundtable/discord` | type |
+| `DiscordAgentGuild` | `pi-roundtable/discord` | type |
+| `DiscordAgentGuildOptions` | `pi-roundtable/discord` | type |
 | `DiscordPlaceProviderOptions` | `pi-roundtable/discord` | type |
 | `DiscordPoster` | `pi-roundtable/discord` | type |
 | `DiscordReason` | `pi-roundtable/discord` | type |
@@ -5167,6 +5187,7 @@ Import from the entries listed below; source area files are internal.
 | `commandGuard` | `pi-roundtable/discord` | value |
 | `composeCommands` | `pi-roundtable/discord` | value |
 | `discord` | `pi-roundtable/discord` | value |
+| `discordAgentGuild` | `pi-roundtable/discord` | value |
 | `discordPlaceProvider` | `pi-roundtable/discord` | value |
 | `ephemeralPanel` | `pi-roundtable/discord` | value |
 | `fetchManagedChannel` | `pi-roundtable/discord` | value |

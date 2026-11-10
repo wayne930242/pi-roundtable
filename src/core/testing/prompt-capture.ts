@@ -1,15 +1,10 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
-import {
-	createFauxCore,
-	fauxAssistantMessage,
-	type TranscriptContext,
-} from "@earendil-works/pi-ai";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { TranscriptContext } from "@earendil-works/pi-ai";
 import type { AgentServerTeam } from "../agents/agent-team.ts";
-import { FakeChannels } from "../agents/agent-team-fixture.ts";
 import { groupRoomKey } from "../agents/team-keys.ts";
+import type { DiscordServices } from "../builtin/discord.ts";
 import type { RoundtableConfig } from "../config/config.ts";
 import { discordKey } from "../contract/discord-key.ts";
 import { openPool } from "../db/migrations.ts";
@@ -26,6 +21,8 @@ import { silentLogger } from "../kernel/log.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { AGENTS, MEMORY, RUNTIME } from "../plugin-api/services.ts";
 import { testDatabaseUrl } from "./database.ts";
+import type { FakeChannels } from "./fake-agent-channels.ts";
+import { CaptureChannels, fauxModel } from "./prompt-capture-model.ts";
 import {
 	appRooms,
 	CAPTURE_ROOM_AGENTS,
@@ -67,65 +64,6 @@ export interface CapturedPrompt {
 }
 
 export { CAPTURE_GUILD, CAPTURE_MEMBER, CAPTURE_OWNER, CAPTURE_WEB_MEMBER };
-
-/** Channels with ids of their own, which no other test's rows hold. */
-class CaptureChannels extends FakeChannels {
-	#next = 1;
-	override async createChannel(
-		name: string,
-		topic: string,
-		category: Parameters<FakeChannels["createChannel"]>[2],
-	) {
-		this.created.push(name);
-		const id = `96666661000000000${this.#next++}`;
-		this.topics.set(id, topic);
-		this.put(id, category);
-		return id;
-	}
-}
-
-/** A faux model whose every answer is "OK." and that records the first request of each turn. */
-async function fauxModel(dir: string) {
-	const core = createFauxCore({ provider: "faux", models: [{ id: "faux-1" }] });
-	const modelRuntime = await ModelRuntime.create({
-		authPath: join(dir, "auth.json"),
-		modelsPath: null,
-		allowModelNetwork: false,
-		refreshOnCreate: false,
-	});
-	modelRuntime.registerProvider("faux", {
-		api: core.api,
-		apiKey: "test",
-		baseUrl: "http://faux.invalid",
-		streamSimple: core.streamSimple,
-		models: [
-			{
-				id: "faux-1",
-				name: "Faux",
-				reasoning: false,
-				input: ["text"],
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-				contextWindow: 100_000,
-				maxTokens: 1_000,
-			},
-		],
-	});
-	/** Runs the action and returns the first request the model saw during it. */
-	const capture = async (
-		action: () => Promise<unknown>,
-	): Promise<TranscriptContext> => {
-		let seen: TranscriptContext | undefined;
-		const step = (context: TranscriptContext) => {
-			seen ??= context;
-			return fauxAssistantMessage("OK.");
-		};
-		core.setResponses([step, step, step, step]);
-		await action();
-		if (!seen) throw new Error("the turn sent the model nothing");
-		return seen;
-	};
-	return { modelRuntime, capture };
-}
 
 const refuse = async (): Promise<never> => {
 	throw new JudgeError("the prompt capture has no judge");
@@ -215,6 +153,34 @@ export interface CaptureHost {
 /** How the capture hosts write their owner: the 0.8 `owner`, or the same person in `access`. */
 export type CaptureForm = "owner" | "access";
 
+/** The agent guild and entry channel of the capture host with Discord. */
+export const CAPTURE_DISCORD = {
+	guild: CAPTURE_GUILD,
+	entryChannel: "966666600000000004",
+};
+
+/** The plugin that provides `DISCORD` on the capture host, over the host's channels and channel context. */
+export type CaptureDiscord = (given: {
+	channels: FakeChannels;
+	channelContext: DiscordServices["channelContext"];
+}) => RoundtablePlugin;
+
+/** The stand-in the capture hosts run on unless a test brings a Discord of its own. */
+const standIn: CaptureDiscord = ({ channels, channelContext }) =>
+	standInDiscord(
+		new CommandCollection(),
+		commandGuard({
+			ownerId: CAPTURE_OWNER.id,
+			root: "roundtable",
+			logger: silentLogger(),
+		}),
+		{ agentChannels: () => channels },
+		CAPTURE_OWNER.id,
+		channelContext,
+		CAPTURE_DISCORD.guild,
+		CAPTURE_DISCORD.entryChannel,
+	);
+
 /** Boots `defineRoundtable` on the faux model, with or without the stand-in Discord. */
 export async function captureHost(
 	withDiscord: boolean,
@@ -223,6 +189,8 @@ export async function captureHost(
 	databaseUrl = testDatabaseUrl,
 	/** Seeds two agents on a host without Discord and gives it the web app's room surface. */
 	rooms = false,
+	/** The plugin that provides `DISCORD` in the stand-in's place. */
+	discordOf: CaptureDiscord = standIn,
 ): Promise<CaptureHost> {
 	const dataDir = mkdtempSync(join(tmpdir(), "roundtable-prompt-capture-"));
 	const { modelRuntime, capture } = await fauxModel(dataDir);
@@ -249,11 +217,7 @@ export async function captureHost(
 		thinking: "off",
 		...(withDiscord
 			? {
-					discord: {
-						token: "token",
-						guild: CAPTURE_GUILD,
-						entryChannel: "966666600000000004",
-					},
+					discord: { token: "token", ...CAPTURE_DISCORD },
 					http: {
 						publicUrl: "https://bot.example.com",
 						socketPath: join(dataDir, "public.sock"),
@@ -266,22 +230,12 @@ export async function captureHost(
 	};
 	if (withDiscord) await clearCaptureGuild();
 	if (rooms) await clearLocalGroup();
-	const channels = new CaptureChannels();
 	const discord = withDiscord
 		? [
-				standInDiscord(
-					new CommandCollection(),
-					commandGuard({
-						ownerId: CAPTURE_OWNER.id,
-						root: "roundtable",
-						logger: silentLogger(),
-					}),
-					{ agentChannels: () => channels },
-					CAPTURE_OWNER.id,
-					captureChannelContext(),
-					CAPTURE_GUILD,
-					"966666600000000004",
-				),
+				discordOf({
+					channels: new CaptureChannels(),
+					channelContext: captureChannelContext(),
+				}),
 			]
 		: [];
 	const defined = await defineRoundtable(
@@ -354,12 +308,19 @@ async function remember(context: PluginContext): Promise<void> {
 	}
 }
 
-/** The prompt and tools of every session the M2 work must keep, normalized, by scenario, with the owner written in `form`. */
-export async function capturePrompts(
+/**
+ * The scenarios of the host with Discord, (a) to (e) and (h), not yet normalized, with the host's
+ * temporary directories; `discordOf` provides `DISCORD` in the stand-in's place.
+ */
+export async function captureDiscordPrompts(
 	form: CaptureForm = "owner",
-): Promise<Record<string, CapturedPrompt | CapturedRefusal>> {
+	discordOf?: CaptureDiscord,
+): Promise<{
+	out: Record<string, CapturedPrompt | CapturedRefusal>;
+	dirs: string[];
+}> {
 	const out: Record<string, CapturedPrompt | CapturedRefusal> = {};
-	const discord = await captureHost(true, form);
+	const discord = await captureHost(true, form, undefined, false, discordOf);
 	try {
 		const { context } = discord;
 		await remember(context);
@@ -449,6 +410,15 @@ export async function capturePrompts(
 	} finally {
 		await discord.stop();
 	}
+	return { out, dirs: discord.dirs };
+}
+
+/** The prompt and tools of every session the M2 work must keep, normalized, by scenario, with the owner written in `form`. */
+export async function capturePrompts(
+	form: CaptureForm = "owner",
+): Promise<Record<string, CapturedPrompt | CapturedRefusal>> {
+	const discord = await captureDiscordPrompts(form);
+	const { out } = discord;
 	const web = await captureHost(false, form, undefined, true);
 	try {
 		out["i web group seat"] = await captureWebGroupSeat(

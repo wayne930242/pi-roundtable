@@ -4,6 +4,8 @@ import type { ResolvedRouting } from "../config/routing.ts";
 import type { ModelRef } from "../domain/models.ts";
 import type { OwnerIdentity } from "../identity/owner-identity.ts";
 import type { ErrorReporter } from "../ops/error-reporter.ts";
+import type { FormerChannelOps } from "../plugin-api/agent-ops.ts";
+import type { PluginContext } from "../plugin-api/plugin.ts";
 import type { AgentSessionsSlot } from "../runtime/runtime-plugin.ts";
 
 /**
@@ -109,4 +111,12 @@ export interface AgentServerOptions {
 	routing?: ResolvedRouting;
 	/** The temp knights' limits; `false` leaves `helper_create` and `helper_end` out. Without it the defaults apply. */
 	helpers?: ResolvedHelpers | false;
+	/**
+	 * @deprecated What `AgentOps.arrange` and `AgentOps.read` run while they stay: the side of the
+	 * surface whose own tools took their place, read at each call from the host's services.
+	 * Without it, or when it answers undefined, the two refuse. Removed in 1.0.
+	 */
+	formerChannelOps?: (
+		context: Pick<PluginContext, "services" | "logger">,
+	) => FormerChannelOps | undefined;
 }

@@ -120,6 +120,20 @@ export class TeamEditing {
 			throw new AgentError(
 				"agent_create can only be used during an agent turn.",
 			);
+		const {
+			name,
+			displayName,
+			prompt,
+			avatarPrompt: _,
+			character,
+			task,
+			hints,
+			skills,
+			longRunning,
+			...extras
+		} = input;
+		// A caller written before `hints` gives a provider's argument as a field of its own.
+		const given = providerHints(extras, hints);
 		// The opening task starts on the surface the caller's turn runs on, as the web form's does.
 		const working = this.#ctx.turns.workingIn(caller.name);
 		const made = await this.#create(
@@ -129,7 +143,16 @@ export class TeamEditing {
 				creator: this.#ctx.options.store.agent(caller.name),
 				openIn: working ? parseChannelKey(working).surface : undefined,
 			},
-			input,
+			{
+				name,
+				displayName,
+				prompt,
+				...(character ? { character } : {}),
+				task,
+				...(given ? { hints: given } : {}),
+				...(skills ? { skills } : {}),
+				...(longRunning === undefined ? {} : { longRunning }),
+			},
 		);
 		return made.text;
 	}

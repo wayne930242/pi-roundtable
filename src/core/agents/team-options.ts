@@ -4,6 +4,7 @@ import type { ChannelKey } from "../domain/conversation.ts";
 import type { ThinkingSetting } from "../domain/models.ts";
 import type { ToolSelection } from "../domain/sessions.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
+import type { FormerChannelOps } from "../plugin-api/agent-ops.ts";
 import type { AgentTools, PromptSection } from "../plugin-api/plugin.ts";
 import type { AvatarStudio, SkillRegistry } from "../plugin-api/services.ts";
 import type { AgentModels } from "./agent-ports.ts";
@@ -70,6 +71,11 @@ export interface AgentTeamOptions
 	helpers?: ResolvedHelpers | false;
 	/** The app's room groups, read at each call; absent or undefined, the tools refuse a room group. */
 	rooms?: () => RoomLayoutService | undefined;
+	/**
+	 * @deprecated What the team's own `arrange` and `read` run, read at each call: the side of the
+	 * surface whose tools took their place. Absent or undefined, the two refuse. Removed in 1.0.
+	 */
+	formerChannelOps?: () => FormerChannelOps | undefined;
 }
 
 /** What the team's collaborators share: its options, its turns, and its change signal. */

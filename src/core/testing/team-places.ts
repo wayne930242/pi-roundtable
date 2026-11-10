@@ -5,10 +5,15 @@ import type { PlacePort, PlaceProvider } from "../contract/places.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { discordPlaces } from "../discord/agent-places.ts";
 import {
+	type DiscordAgentToolsOptions,
+	discordChannelOps,
+} from "../discord/agent-tools.ts";
+import {
 	type FakeServer,
 	fakeDiscordClient,
 } from "../discord/place-fake-client.ts";
 import { silentLogger } from "../kernel/log.ts";
+import type { FormerChannelOps } from "../plugin-api/agent-ops.ts";
 import { derivedPlaces } from "../registry/place-port.ts";
 
 /** The surface of the legacy channel columns: what a store's `channelId` is a place on. */
@@ -88,6 +93,20 @@ export function discordTestPlaces(
 		channels: over.channels ?? (undefined as never),
 		onRemoved: over.onRemoved ?? (() => undefined),
 		...(over.nameOf ? { nameOf: over.nameOf } : {}),
+		logger: silentLogger(),
+	});
+}
+
+/** Discord's side of the team's deprecated `arrange` and `read`, as a host hands it with a guild. */
+export function discordTestChannelOps(
+	channels: AgentChannels,
+	directory: DiscordAgentToolsOptions["directory"] extends () => infer D
+		? NonNullable<D>
+		: never,
+): FormerChannelOps {
+	return discordChannelOps({
+		channels,
+		directory: () => directory,
 		logger: silentLogger(),
 	});
 }

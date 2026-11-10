@@ -133,7 +133,9 @@ export function agentServerPlugin(
 	)?.space;
 	/** Set once the plugin has set up; the preflight reads it after every plugin linked. */
 	let hostsRooms: (() => boolean) | undefined;
-	let servesSpaces: (() => string | undefined) | undefined;
+	let servesSpaces:
+		| (() => { surface: string; space: string } | undefined)
+		| undefined;
 	let linkRoutes: (() => void) | undefined;
 	return {
 		name: AGENT_SERVER_PLUGIN,
@@ -172,7 +174,9 @@ export function agentServerPlugin(
 			const unserved = servesSpaces?.();
 			if (unserved)
 				throw new ConfigError(
-					`the team has places in ${unserved}, but no plugin contributes the place provider of that surface, so the team cannot read them. A plugin that replaces DISCORD must contribute it with places: [discordPlaceProvider({ guild, connection, logger })] from pi-roundtable/discord.`,
+					unserved.surface === LEGACY_CHANNEL_SURFACE
+						? `the agent guild ${unserved.space} has Discord channels for the agents, but no plugin contributes the place provider of the "${unserved.surface}" surface, so the team cannot read them. A plugin that replaces DISCORD must contribute Discord's side of the agent guild, the place provider with its tools and dashboard: spread discordAgentGuild(context, { guild, connection }) from pi-roundtable/discord into what its setup returns.`
+						: `the team has places in the ${unserved.surface} space ${unserved.space}, but no plugin contributes the place provider of the "${unserved.surface}" surface, so the team cannot read them. Add the plugin that brings that surface's places.`,
 				);
 			// The surfaces the rules name exist only once every plugin has registered its own.
 			linkRoutes?.();
@@ -185,8 +189,9 @@ export function agentServerPlugin(
 				hostsRooms = () => surfaces.roomSurfaces().length > 0;
 			else
 				servesSpaces = () =>
-					spaces.find(({ surface }) => context.places.of(surface) === undefined)
-						?.surface;
+					spaces.find(
+						({ surface }) => context.places.of(surface) === undefined,
+					);
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
 				skins: context.env.characterSkins,
@@ -314,6 +319,7 @@ export function agentServerPlugin(
 				...(skills ? { skills } : {}),
 				modes: () => context.services.find(MODES),
 				rooms: () => context.services.find(ROOM_LAYOUT),
+				formerChannelOps: () => options.formerChannelOps?.(context),
 				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
 				principals: () => context.services.find(IDENTITY),
 				logger,

@@ -11,9 +11,7 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import { agentDashboardContribution } from "../discord/agent-dashboard-service.ts";
-import { discordPlaceProvider } from "../discord/agent-places.ts";
-import { discordAgentTools } from "../discord/agent-tools.ts";
+import { discordAgentGuild } from "../discord/agent-guild.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -35,7 +33,7 @@ import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { HoldDescription } from "../plugin-api/holds.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
-import { AGENTS, IDENTITY } from "../plugin-api/services.ts";
+import { IDENTITY } from "../plugin-api/services.ts";
 import { toolTurn } from "../plugin-api/tool-turn.ts";
 import { CompactionTiers } from "../runtime/compaction-tiers.ts";
 import { privateCompaction } from "../runtime/extensions/private-memory.ts";
@@ -232,43 +230,19 @@ export function standInDiscord(
 				poster: poster ?? fakeDiscordPoster(),
 				channelContext,
 			} as unknown as DiscordServices);
-			// The dashboard the built-in plugin contributes with an agent guild, over a board that shows nothing.
-			const agentDashboard = agentGuild
-				? agentDashboardContribution({
-						board: { show: async () => undefined },
-						agents: () => services.find(AGENTS)?.team,
-						lines: () => dashboard(),
-						logger: silentLogger(),
-					})
+			// Discord's side of the agent guild, as the built-in plugin contributes it with one, over a board that shows nothing.
+			const guild = agentGuild
+				? discordAgentGuild(
+						{ services, dashboard, logger: silentLogger() },
+						{
+							guild: agentGuild,
+							...(entryChannel === undefined ? {} : { entryChannel }),
+							// SAFETY: a stand-in's provider is read for keys, and a test host does not run the tools; nothing asks the channels.
+							connection: connection as never,
+						},
+					)
 				: undefined;
-			return {
-				...(agentDashboard?.services
-					? { services: agentDashboard.services }
-					: {}),
-				...(agentDashboard?.events ? { events: agentDashboard.events } : {}),
-				surfaces: [surface],
-				directChannels: [direct],
-				places: agentGuild
-					? [
-							discordPlaceProvider({
-								guild: agentGuild,
-								...(entryChannel === undefined ? {} : { entryChannel }),
-								// SAFETY: a stand-in's provider is read for keys; nothing asks the channels.
-								connection: connection as never,
-								logger: silentLogger(),
-							}),
-						]
-					: [],
-				// The tools of the agent guild's channels, as the built-in plugin contributes them with one.
-				tools: agentGuild
-					? discordAgentTools({
-							// SAFETY: a test host does not run the tools; nothing asks the channels.
-							channels: connection.agentChannels(agentGuild) as never,
-							directory: () => services.find(AGENTS)?.directory,
-							logger: silentLogger(),
-						})
-					: [],
-			};
+			return { ...guild, surfaces: [surface], directChannels: [direct] };
 		},
 	};
 }

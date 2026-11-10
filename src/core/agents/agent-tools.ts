@@ -1,12 +1,12 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { CharacterInput } from "../../characters/index.ts";
 import type { ToolArgument } from "../contract/places.ts";
 import { AgentError } from "../domain/errors.ts";
 import { THINKING_LEVELS } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { assistantName } from "../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../identity/owner-identity.ts";
+import type { AgentOps as TeamAgentOps } from "../plugin-api/agent-ops.ts";
 import {
 	optionalString,
 	requiredString,
@@ -24,7 +24,6 @@ import {
 	PARTS,
 	PROMPT,
 } from "./agent-tool-schema.ts";
-import type { HelperFields, PresetAction } from "./helper-preset-ops.ts";
 import { helperToolDefs } from "./helper-tools.ts";
 import { placedAfter, ROOM_GROUP, roomToolDefs } from "./room-tools.ts";
 import type { RoomOps } from "./team-rooms.ts";
@@ -79,85 +78,8 @@ export const WITHHELD_FROM_HELPERS: readonly string[] = [
  */
 export type AvatarMode = "redraw" | "new_prompt" | "edit";
 
-/** What the agent tools do; the agent team implements it. Each returns text for the model. */
-export interface AgentOps {
-	list(): Promise<string>;
-	get(name: string): string;
-	update(
-		name: string,
-		change: {
-			displayName?: string;
-			prompt?: string;
-			model?: string;
-			thinking?: string;
-		},
-		/** Who changes it: the agent whose turn asks, for the prompt history. */
-		by?: string,
-	): Promise<string>;
-	create(
-		caller: AgentTurnScope,
-		input: {
-			name: string;
-			displayName: string;
-			prompt: string;
-			/** Fields of its look; any left out come from the look its role suggests. */
-			character?: CharacterInput;
-			task: string;
-			/** The values of the arguments the surfaces' place providers add to the tool, by name. */
-			hints?: Readonly<Record<string, string>>;
-			skills?: string[];
-			/** Turn long-running mode on for its conversations; an owner's turn only. */
-			longRunning?: boolean;
-		},
-	): Promise<string>;
-	/** Makes a temp knight of the caller for one task; the answer returns to the caller's conversation. */
-	helperCreate(
-		caller: AgentTurnScope,
-		input: HelperFields & { name?: string; task: string },
-	): Promise<string>;
-	/** Saves, lists, or deletes the caller's own temp-knight presets. */
-	helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string>;
-	/** Archives the caller's own temp knights: the named ones, or every one that is finished. */
-	helperEnd(
-		caller: AgentTurnScope,
-		names: readonly string[] | "finished",
-	): Promise<string>;
-	/** Changes an agent's look; a field left out stays as it is. */
-	avatar(name: string, look: CharacterInput): Promise<string>;
-	/** Queues the message and returns at once. */
-	/**
-	 * Hands a request to another agent, in its conversation on the sender's surface, or in the
-	 * `conversation` named: "discord", "web" (or a room surface's name), or one of its conversation keys.
-	 */
-	message(
-		caller: AgentTurnScope,
-		to: string,
-		text: string,
-		conversation?: string,
-	): string;
-	/**
-	 * Readies the place a message is about to reach: a temp knight made in the web app gets its
-	 * Discord thread when the caller may message it and names "discord". Never rejects.
-	 */
-	reach?(
-		caller: AgentTurnScope,
-		to: string,
-		conversation?: string,
-	): Promise<void>;
-	createGroup(input: {
-		name: string;
-		displayName: string;
-		members: string[];
-		host?: string;
-		/** The values of the arguments the surfaces' place providers add to the tool, by name. */
-		hints?: Readonly<Record<string, string>>;
-	}): Promise<string>;
-	updateGroup(
-		name: string,
-		change: { displayName?: string; members?: string[]; host?: string },
-	): Promise<string>;
-	archive(caller: AgentTurnScope, name: string): Promise<string>;
-}
+/** What the agent tools call of the team: `AgentOps` without the two calls a surface's own tools took over. */
+export type AgentOps = Omit<TeamAgentOps, "arrange" | "read">;
 
 const MEMBERS = Type.Array(Type.String(), {
 	minItems: MIN_GROUP_MEMBERS,

@@ -30,7 +30,7 @@ export interface DiscordPlacesOptions {
 	/** Reports a server channel deleted, by id; as `DiscordConnection.onChannelDeleted`. */
 	onRemoved(listener: (channelId: string) => void): void;
 	logger: Logger;
-	/** The channel the coordinator lives in; absent = the configured `coordinator`. */
+	/** The channel the coordinator lives in; absent = the agent server's `coordinator`, else the first seed. */
 	entryChannel?: string;
 	/** The name of the agent or group whose channel it is, for `layoutText`; a channel nobody owns shows as a mention. */
 	nameOf?(channelId: string): string | undefined;
@@ -202,15 +202,20 @@ export interface DiscordPlaceProviderOptions {
 	logger: Logger;
 	/** The discord.js client, so the team can check at start that its stored channels still exist; absent = they are taken as they are. */
 	client?: Client;
-	/** The channel the coordinator lives in (`discord.entryChannel`); absent = the configured `coordinator`. */
+	/**
+	 * The channel the coordinator lives in (`discord.entryChannel`): the agent in it is the
+	 * coordinator. Absent = the first agent the host seeds, since a host with `discord.guild`
+	 * names no coordinator in its configuration.
+	 */
 	entryChannel?: string;
 }
 
 /**
- * Discord's place provider for a plugin that replaces `DISCORD` with a Discord of its own: the
- * agent guild's channels as the team's places, with the keys, seats and log names the built-in
- * Discord plugin gives them, so no stored session, schedule or held action moves. Contribute it
- * with `places` from the replacing plugin whenever the host has `discord.guild`.
+ * Discord's place provider alone: the agent guild's channels as the team's places, with the keys,
+ * seats and log names the built-in Discord plugin gives them, so no stored session, schedule or
+ * held action moves. A plugin that replaces `DISCORD` contributes `discordAgentGuild`, which
+ * holds this provider with the names of `agent_list`, the two channel tools and the dashboard;
+ * with the provider alone the team has none of those.
  */
 export function discordPlaceProvider(
 	options: DiscordPlaceProviderOptions,

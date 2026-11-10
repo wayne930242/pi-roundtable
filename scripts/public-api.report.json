@@ -441,7 +441,7 @@
 			"AgentChannels": "src/core/contract/agent-channels.d.ts#AgentChannels",
 			"AgentError": "src/core/domain/errors.d.ts#AgentError",
 			"AgentModels": "src/core/agents/agent-ports.d.ts#AgentModels",
-			"AgentOps": "src/core/agents/agent-tools.d.ts#AgentOps",
+			"AgentOps": "src/core/plugin-api/agent-ops.d.ts#AgentOps",
 			"AgentPost": "src/core/contract/agent-channels.d.ts#AgentPost",
 			"AgentTurnRunner": "src/core/agents/agent-ports.d.ts#AgentTurnRunner",
 			"AssistantLike": "src/core/shared/session-messages.d.ts#AssistantLike",
@@ -656,6 +656,8 @@
 			"DISCORD_LIMITS": "src/core/discord/poster/poster.d.ts#DISCORD_LIMITS",
 			"DiscordActor": "src/core/discord/discord-owners.d.ts#DiscordActor",
 			"DiscordAdapterConfig": "src/core/config/config.d.ts#DiscordAdapterConfig",
+			"DiscordAgentGuild": "src/core/discord/agent-guild.d.ts#DiscordAgentGuild",
+			"DiscordAgentGuildOptions": "src/core/discord/agent-guild.d.ts#DiscordAgentGuildOptions",
 			"DiscordCard": "src/core/discord/poster/poster.d.ts#DiscordCard",
 			"DiscordConnection": "src/core/discord/connection.d.ts#DiscordConnection",
 			"DiscordFailure": "src/core/discord/poster/poster-errors.d.ts#DiscordFailure",
@@ -693,6 +695,7 @@
 			"commandGuard": "src/core/discord/owner-command.d.ts#commandGuard",
 			"composeCommands": "src/core/discord/compose-commands.d.ts#composeCommands",
 			"discord": "src/core/discord/discord-adapter.d.ts#discord",
+			"discordAgentGuild": "src/core/discord/agent-guild.d.ts#discordAgentGuild",
 			"discordPlaceProvider": "src/core/discord/agent-places.d.ts#discordPlaceProvider",
 			"ephemeralPanel": "src/core/discord/owner-panel.d.ts#ephemeralPanel",
 			"fetchManagedChannel": "src/core/discord/channel-executor.d.ts#fetchManagedChannel",
@@ -791,7 +794,6 @@
 		"src/core/agents/agent-rules.d.ts#GroupMessage": "interface GroupMessage {\n    id: number;\n    \n    author: string;\n    authorName: string;\n    text: string;\n    at: Date;\n}",
 		"src/core/agents/agent-rules.d.ts#helperSurface": "declare const helperSurface: (agent: Pick<Agent, \"parent\" | \"origin\"> | undefined) => string | undefined;",
 		"src/core/agents/agent-rules.d.ts#isHelper": "declare const isHelper: (agent: Pick<Agent, \"parent\"> | undefined) => boolean;",
-		"src/core/agents/agent-tools.d.ts#AgentOps": "interface AgentOps {\n    list(): Promise<string>;\n    get(name: string): string;\n    update(name: string, change: {\n        displayName?: string;\n        prompt?: string;\n        model?: string;\n        thinking?: string;\n    }, \n    \n    by?: string): Promise<string>;\n    create(caller: AgentTurnScope, input: {\n        name: string;\n        displayName: string;\n        prompt: string;\n        \n        character?: CharacterInput;\n        task: string;\n        \n        hints?: Readonly<Record<string, string>>;\n        skills?: string[];\n        \n        longRunning?: boolean;\n    }): Promise<string>;\n    \n    helperCreate(caller: AgentTurnScope, input: HelperFields & {\n        name?: string;\n        task: string;\n    }): Promise<string>;\n    \n    helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string>;\n    \n    helperEnd(caller: AgentTurnScope, names: readonly string[] | \"finished\"): Promise<string>;\n    \n    avatar(name: string, look: CharacterInput): Promise<string>;\n    \n    \n    message(caller: AgentTurnScope, to: string, text: string, conversation?: string): string;\n    \n    reach?(caller: AgentTurnScope, to: string, conversation?: string): Promise<void>;\n    createGroup(input: {\n        name: string;\n        displayName: string;\n        members: string[];\n        host?: string;\n        \n        hints?: Readonly<Record<string, string>>;\n    }): Promise<string>;\n    updateGroup(name: string, change: {\n        displayName?: string;\n        members?: string[];\n        host?: string;\n    }): Promise<string>;\n    archive(caller: AgentTurnScope, name: string): Promise<string>;\n}",
 		"src/core/agents/agent-tools.d.ts#AvatarMode": "type AvatarMode = \"redraw\" | \"new_prompt\" | \"edit\";",
 		"src/core/agents/character-png.d.ts#characterPng": "declare function characterPng(spec: CharacterSpec, options?: ComposeOptions): Promise<Uint8Array>;",
 		"src/core/agents/helper-ops.d.ts#HelpersEnded": "interface HelpersEnded {\n    \n    parent: string;\n    \n    names: string[];\n}",
@@ -943,6 +945,9 @@
 		"src/core/db/migrations.d.ts#Migration": "interface Migration {\n    name: string;\n    \n    runs?: \"once\" | \"every-boot\";\n    up(sql: SQL): Promise<void>;\n}",
 		"src/core/db/migrations.d.ts#MigrationReport": "interface MigrationReport {\n    \n    applied: string[];\n    \n    skipped: string[];\n    \n    everyBoot: string[];\n}",
 		"src/core/discord/agent-commands.d.ts#AgentPanelMessage": "interface AgentPanelMessage {\n    components: ContainerBuilder[];\n    flags: MessageFlags.IsComponentsV2;\n    allowedMentions: {\n        parse: never[];\n    };\n    files: AttachmentBuilder[];\n}",
+		"src/core/discord/agent-guild.d.ts#discordAgentGuild": "declare function discordAgentGuild(context: Pick<PluginContext, \"services\" | \"logger\" | \"dashboard\">, options: DiscordAgentGuildOptions): DiscordAgentGuild;",
+		"src/core/discord/agent-guild.d.ts#DiscordAgentGuild": "type DiscordAgentGuild = Required<Pick<Contribution, \"places\" | \"tools\" | \"services\" | \"events\">>;",
+		"src/core/discord/agent-guild.d.ts#DiscordAgentGuildOptions": "interface DiscordAgentGuildOptions {\n    \n    guild: string;\n    \n    connection: Pick<DiscordConnection, \"agentChannels\" | \"agentDashboard\" | \"onChannelDeleted\">;\n    \n    client?: Client;\n    \n    entryChannel?: string;\n}",
 		"src/core/discord/agent-panel.d.ts#agentPanel": "declare function agentPanel(options: AgentPanelOptions): AgentPanel;",
 		"src/core/discord/agent-panel.d.ts#AgentPanel": "interface AgentPanel {\n    \n    open(channelId: string): AgentPanelMessage;\n    \n    handles(interaction: Interaction): Promise<boolean>;\n}",
 		"src/core/discord/agent-panel.d.ts#AgentPanelOptions": "interface AgentPanelOptions {\n    \n    guard: CommandGuard;\n    \n    agents: AgentServer;\n    \n    skills?: Pick<SkillRegistry, \"carried\">;\n}",
@@ -1250,6 +1255,7 @@
 		"src/core/ops/ops-alerts.d.ts#OpsSink": "interface OpsSink {\n    (text: string, alert: OpsAlert): Promise<boolean>;\n    \n    resolved?(event: OpsResolution): Promise<void> | void;\n}",
 		"src/core/plugin-api/agent-assets.d.ts#AgentWorkspace": "interface AgentWorkspace {\n    \n    readonly workDir: string;\n    \n    readonly scratchDir?: string;\n}",
 		"src/core/plugin-api/agent-assets.d.ts#AvatarStudio": "interface AvatarStudio {\n    \n    readonly canDraw: boolean;\n    \n    url(hash: string | undefined): string;\n    \n    render(spec: CharacterSpec): Promise<string>;\n    \n    draw(avatarPrompt: string): Promise<string>;\n    \n    edit(hash: string | undefined, instruction: string): Promise<string>;\n    \n    fallback(displayName: string, name: string): Promise<string>;\n    \n    route(listener: string): HttpRoute;\n    \n    serve(pathname: string): Response | undefined;\n}",
+		"src/core/plugin-api/agent-ops.d.ts#AgentOps": "interface AgentOps {\n    list(): Promise<string>;\n    get(name: string): string;\n    update(name: string, change: {\n        displayName?: string;\n        prompt?: string;\n        model?: string;\n        thinking?: string;\n    }, \n    \n    by?: string): Promise<string>;\n    create(caller: AgentTurnScope, input: {\n        name: string;\n        displayName: string;\n        prompt: string;\n        \n        character?: CharacterInput;\n        task: string;\n        \n        category?: string;\n        \n        hints?: Readonly<Record<string, string>>;\n        skills?: string[];\n        \n        longRunning?: boolean;\n    }): Promise<string>;\n    \n    helperCreate(caller: AgentTurnScope, input: HelperFields & {\n        name?: string;\n        task: string;\n    }): Promise<string>;\n    \n    helperPreset(caller: AgentTurnScope, action: PresetAction): Promise<string>;\n    \n    helperEnd(caller: AgentTurnScope, names: readonly string[] | \"finished\"): Promise<string>;\n    \n    avatar(name: string, look: CharacterInput): Promise<string>;\n    \n    \n    message(caller: AgentTurnScope, to: string, text: string, conversation?: string): string;\n    \n    reach?(caller: AgentTurnScope, to: string, conversation?: string): Promise<void>;\n    createGroup(input: {\n        name: string;\n        displayName: string;\n        members: string[];\n        host?: string;\n        \n        category?: string;\n        \n        hints?: Readonly<Record<string, string>>;\n    }): Promise<string>;\n    updateGroup(name: string, change: {\n        displayName?: string;\n        members?: string[];\n        host?: string;\n    }): Promise<string>;\n    archive(caller: AgentTurnScope, name: string): Promise<string>;\n    \n    arrange(entries: {\n        category: string;\n        names: string[];\n    }[]): Promise<string>;\n    \n    read(channel: string, around: string | undefined, limit: number | undefined): Promise<string>;\n}",
 		"src/core/plugin-api/agent-server-ids.d.ts#AGENT_SERVER_PLUGIN": "declare const AGENT_SERVER_PLUGIN = \"agent-server\";",
 		"src/core/plugin-api/agent-server-ids.d.ts#AGENT_TEAM_SERVICE": "declare const AGENT_TEAM_SERVICE = \"team\";",
 		"src/core/plugin-api/define.d.ts#definePlugin": "declare function definePlugin(plugin: RoundtablePlugin): RoundtablePlugin;",
@@ -1490,13 +1496,13 @@
 		{
 			"id": "src/core/agents/helper-preset-ops.d.ts#HelperFields",
 			"references": [
-				"kit:AgentOps via src/core/agents/agent-tools.d.ts#AgentOps"
+				"kit:AgentOps via src/core/plugin-api/agent-ops.d.ts#AgentOps"
 			]
 		},
 		{
 			"id": "src/core/agents/helper-preset-ops.d.ts#PresetAction",
 			"references": [
-				"kit:AgentOps via src/core/agents/agent-tools.d.ts#AgentOps"
+				"kit:AgentOps via src/core/plugin-api/agent-ops.d.ts#AgentOps"
 			]
 		},
 		{
@@ -1545,6 +1551,7 @@
 		"discord": [
 			"src/core/discord/agent-commands.d.ts#AgentPanelMessage uses discord.js:AttachmentBuilder",
 			"src/core/discord/agent-commands.d.ts#AgentPanelMessage uses discord.js:ContainerBuilder",
+			"src/core/discord/agent-guild.d.ts#DiscordAgentGuildOptions uses discord.js:Client",
 			"src/core/discord/agent-panel.d.ts#AgentPanel uses discord.js:Interaction",
 			"src/core/discord/agent-places.d.ts#DiscordPlaceProviderOptions uses discord.js:Client",
 			"src/core/discord/channel-executor.d.ts#ManagedChannel uses discord.js:NewsChannel",

@@ -17,6 +17,11 @@ export {
 } from "../core/contract/channel-context.ts";
 export type { AgentPanelMessage } from "../core/discord/agent-commands.ts";
 export type {
+	DiscordAgentGuild,
+	DiscordAgentGuildOptions,
+} from "../core/discord/agent-guild.ts";
+export { discordAgentGuild } from "../core/discord/agent-guild.ts";
+export type {
 	AgentPanel,
 	AgentPanelOptions,
 } from "../core/discord/agent-panel.ts";

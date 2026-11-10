@@ -10,10 +10,14 @@ import type { TurnSelection } from "../domain/sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import type { PromptVersion } from "../modules/prompts/prompt-history.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
+import {
+	type AgentOps,
+	type FormerChannelOps,
+	NO_CHANNELS,
+} from "../plugin-api/agent-ops.ts";
 import type { AgentChange, AgentTeam } from "../plugin-api/services.ts";
 import type { Agent } from "./agent-store.ts";
 import {
-	type AgentOps,
 	type AgentToolOptions,
 	type AvatarMode,
 	agentToolsExtension,
@@ -465,5 +469,24 @@ export class AgentServerTeam implements AgentOps, AgentTeam {
 		change: Parameters<TeamEditing["updateGroup"]>[1],
 	): Promise<string> {
 		return this.#editing.updateGroup(name, change);
+	}
+
+	/** The surface's side of `arrange` and `read`, which its own tools took over; refuses without one. */
+	#formerChannelOps(): FormerChannelOps {
+		const ops = this.#options.formerChannelOps?.();
+		if (!ops) throw new AgentError(NO_CHANNELS);
+		return ops;
+	}
+
+	/** @deprecated The surface that holds the channels contributes the tool; see `AgentOps.arrange`. Removed in 1.0. */
+	async arrange(
+		...args: Parameters<FormerChannelOps["arrange"]>
+	): Promise<string> {
+		return this.#formerChannelOps().arrange(...args);
+	}
+
+	/** @deprecated The surface that holds the channels contributes the tool; see `AgentOps.read`. Removed in 1.0. */
+	async read(...args: Parameters<FormerChannelOps["read"]>): Promise<string> {
+		return this.#formerChannelOps().read(...args);
 	}
 }
