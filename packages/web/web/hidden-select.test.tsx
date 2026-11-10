@@ -146,6 +146,17 @@ test("Select shows a checkbox named by each row, and Done leaves selection mode"
 	expect(all('input[type="checkbox"]')).toHaveLength(0);
 });
 
+test("Escape leaves selection mode, unless a question is open", async () => {
+	await open();
+	await select();
+	await page.click(box("OLD-A"));
+	await page.act(async () => {
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+	});
+	expect(bar()).toBeNull();
+	expect(all('input[type="checkbox"]')).toHaveLength(0);
+});
+
 test("a hold on an archived row starts selection with that row chosen", async () => {
 	await open();
 	const row = all("li.menu-item")[0];

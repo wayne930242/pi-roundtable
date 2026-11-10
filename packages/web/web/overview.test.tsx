@@ -232,6 +232,25 @@ test("selecting the rows idle for 30+ days and deleting asks first, sends one de
 	expect(lastToast()?.textContent).toContain("Deleted 2 conversations");
 });
 
+test("a hold on a row starts selection with that row chosen", async () => {
+	await open();
+	await page.act(async () => {
+		rowOf("#research")?.dispatchEvent(
+			new PointerEvent("pointerdown", {
+				bubbles: true,
+				pointerType: "touch",
+				isPrimary: true,
+				clientX: 10,
+				clientY: 10,
+			}),
+		);
+		await settle(520);
+	});
+	await until(() => q('[role="toolbar"]') !== null);
+	expect(box("#research")?.checked).toBe(true);
+	expect(count()).toBe("1 selected");
+});
+
 test("Start over on a selection reports each result and archives each live conversation", async () => {
 	const startOver = spy(
 		spyOn(api, "startOver").mockImplementation(async (key: string) => {
