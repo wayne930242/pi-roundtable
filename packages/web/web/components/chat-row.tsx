@@ -2,6 +2,7 @@ import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
 import { useFigureMotion } from "../lib/figure-motion.ts";
 import { ago } from "../lib/format.ts";
+import type { Leave } from "../lib/menu-items.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
@@ -27,10 +28,12 @@ export const ChatRow = memo(function ChatRow(
 		unread: number;
 		/** The room's folder, tagged on the row where the list mixes folders. */
 		folder?: string | undefined;
+		/** Where the row's menu leaves the page from: the room drawer closes first. */
+		leave?: Leave | undefined;
 	},
 ) {
 	const { view } = props;
-	const press = useMenuPress(() => roomMenuOf(view.key));
+	const press = useMenuPress(() => roomMenuOf(view.key, props.leave));
 	const accent = useAccentStyle(view.character);
 	const { unread } = props;
 	const { style: phase, ...motion } = useFigureMotion(

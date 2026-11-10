@@ -1,9 +1,10 @@
-import { type MouseEvent, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSelector } from "../lib/app-store.ts";
 import { installArrangedStyle } from "../lib/arranged-style.ts";
 import { useAccentStyle } from "../lib/characters.ts";
 import { sectionFold, useCollapsed } from "../lib/folds.ts";
 import { fuzzyScore } from "../lib/fuzzy.ts";
+import { goInside } from "../lib/go-inside.ts";
 import { useHost } from "../lib/host-state.ts";
 import { composingKey } from "../lib/ime.ts";
 import { roomLifting } from "../lib/layout.ts";
@@ -39,28 +40,6 @@ function useThreads(): Record<string, ThreadKeys> {
 		() => JSON.parse(shape) as Record<string, ThreadKeys>,
 		[shape],
 	);
-}
-
-/**
- * A tap on a thread card or a temp knight under a row goes there as a tap on the row does: the
- * drawer closes first. A swipe or hold that already took the click has prevented it.
- */
-function goInside(event: MouseEvent, go: (key: string) => void): void {
-	if (
-		event.defaultPrevented ||
-		event.button !== 0 ||
-		event.metaKey ||
-		event.ctrlKey ||
-		event.shiftKey ||
-		event.altKey ||
-		!(event.target instanceof Element)
-	)
-		return;
-	const key =
-		event.target.closest<HTMLElement>("a[data-link-room]")?.dataset.linkRoom;
-	if (!key) return;
-	event.preventDefault();
-	go(key);
 }
 
 /** What the drawer lists of a room: key, name, and whether a card waits there. */
@@ -258,7 +237,7 @@ function Row(props: {
 }
 
 /** The drawer's rooms: the waiting ones, the pinned ones, each folder and the rest, each under a heading once anything is arranged. */
-export function SwitcherList(props: {
+export default function SwitcherList(props: {
 	current: string;
 	close(then?: () => void): void;
 }) {
