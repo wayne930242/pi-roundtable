@@ -10,14 +10,15 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { chatsHome } from "../lib/home-mode.ts";
 import { translate as t } from "../lib/messages.ts";
 import { blocksSwipe, overPage, Swipe } from "../lib/swipe.ts";
 
 // The rows load apart from the drawer's gesture code: they are only drawn once it opens, and are fetched when it is mounted.
-const loadList = () => import("./switcher-list.tsx");
-const List = lazy(() =>
-	loadList().then((one) => ({ default: one.SwitcherList })),
-);
+// A host with the chat home gets the home's own layout; the others keep the sections.
+const loadList = () =>
+	chatsHome() ? import("./switcher-chats.tsx") : import("./switcher-list.tsx");
+const List = lazy(loadList);
 
 type DrawerState = "closed" | "dragging" | "open";
 

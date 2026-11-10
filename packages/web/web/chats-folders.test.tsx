@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { F1, F2, Home, loadChats, NEWS, seed } from "./chats-fixture.tsx";
 import {
 	all,
@@ -78,6 +79,30 @@ test("on a phone the pins sit in a dock above the bar, in pin order with their b
 	await show(<Home column />);
 	expect(q(".pin-dock")).toBeNull();
 	expect(names(".pins .pin-name")).toEqual(["build", "scout"]);
+});
+
+test("the folder tabs scroll sideways on a phone though the page's own .chips wraps, and wrap only in a column", async () => {
+	// The page's stylesheet is in place before the home's lazy styles, as in a browser.
+	const style = document.createElement("style");
+	style.textContent = readFileSync(
+		new URL("./app.css", import.meta.url),
+		"utf8",
+	);
+	document.head.append(style);
+	try {
+		loadChats({ folders });
+		seed();
+		await show(<Home />);
+		await until(() => q("fieldset.chips") !== null);
+		const wrap = () =>
+			getComputedStyle(q("fieldset.chips") as HTMLElement).flexWrap;
+		expect(wrap()).toBe("nowrap");
+		await show(<Home column />);
+		await until(() => q("fieldset.chips") !== null);
+		expect(wrap()).toBe("wrap");
+	} finally {
+		style.remove();
+	}
 });
 
 const press = (

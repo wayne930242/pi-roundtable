@@ -330,6 +330,7 @@ export const ZH_TW_KNIGHTS: Readonly<Record<string, string>> = {
 	// 聊天室列表
 	Knights: "騎士",
 	"Dispatch threads": "派工討論串",
+	"{name}'s dispatch threads": "{name} 的派工串",
 	"Find a room": "尋找聊天室",
 	"Switch rooms": "切換聊天室",
 	"Find a room or page": "尋找聊天室或頁面",

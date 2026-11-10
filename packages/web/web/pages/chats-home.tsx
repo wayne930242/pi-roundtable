@@ -1,17 +1,18 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Icon } from "../components/icons.tsx";
 import { PinTile } from "../components/pin-tile.tsx";
 import { useReadSwipe } from "../components/read-swipe.tsx";
 import { Empty } from "../components/states.tsx";
-import { useSelector } from "../lib/app-store.ts";
 import { useArchivedCount } from "../lib/archived-count.ts";
 import { lastChip, rememberChip } from "../lib/chat-chip.ts";
+import { useChatsArrangement } from "../lib/chats-arrangement.ts";
 import {
 	chipsOf,
 	elsewhereUnread,
 	folderOf,
 	hiddenDot,
 	listFor,
+	pinSizeOf,
 	pinsOf,
 } from "../lib/chats-home.ts";
 import { installChatsHomeStyle } from "../lib/chats-home-style.ts";
@@ -25,8 +26,6 @@ import { HomeTop } from "../components/home-top.tsx";
 import { useLive } from "../lib/live.ts";
 import { openAddMenu } from "../lib/menus.ts";
 import { translate as t } from "../lib/messages.ts";
-import { activityAt } from "../lib/rooms.ts";
-import { type Sections, sections } from "../lib/sections.ts";
 import { useUnreadMap } from "../lib/unread-map.ts";
 import { HostKinds, useRowData } from "./rooms.tsx";
 
@@ -49,28 +48,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 	useReadSwipe(page);
 	const { now } = useLive();
 	const { timeZone } = useConfig();
-	// One string, so the page redraws only when the arrangement changes, not on every message.
-	const shape = useSelector((state) =>
-		JSON.stringify({
-			listed: state.listed,
-			order: state.order,
-			...sections(state, (key) => activityAt(state, key)),
-		}),
-	);
-	const { listed, order, ...arrangement } = useMemo(
-		() => JSON.parse(shape) as { listed: boolean; order: string[] } & Sections,
-		[shape],
-	);
-	// The times are read when the list is built; a message moves its room up, which changes `shape`.
-	const times = useSelector((state) =>
-		JSON.stringify(
-			Object.fromEntries(order.map((key) => [key, activityAt(state, key)])),
-		),
-	);
-	const at = useMemo(() => {
-		const known = JSON.parse(times) as Record<string, number>;
-		return (key: string) => known[key] ?? Number.NEGATIVE_INFINITY;
-	}, [times]);
+	const { listed, order, arrangement, at } = useChatsArrangement();
 	const [chosen, choose] = useState(lastChip);
 	const chips = chipsOf(arrangement);
 	const chip = chips.some((one) => one.id === chosen) ? chosen : "all";
@@ -136,9 +114,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 							key={key}
 							{...data}
 							active={key === props.active}
-							size={
-								dock || props.column || props.active !== undefined ? 56 : 80
-							}
+							size={pinSizeOf(props)}
 							unread={unread[key] ?? 0}
 						/>
 					);

@@ -2,14 +2,15 @@ import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
 import { useFigureMotion } from "../lib/figure-motion.ts";
 import { ago } from "../lib/format.ts";
+import type { Leave } from "../lib/menu-items.ts";
 import { useMenuPress } from "../lib/menu-press.ts";
 import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { type RowData, Typing } from "../pages/rooms.tsx";
+import { ChatPicture } from "./chat-picture.tsx";
 import { Icon } from "./icons.tsx";
 import { ReadReveal } from "./read-swipe.tsx";
-import { RoomPicture } from "./room-picture.tsx";
 
 /**
  * A room in the one list of the chat home: its figure, name, time, one line of its last message and,
@@ -27,17 +28,15 @@ export const ChatRow = memo(function ChatRow(
 		unread: number;
 		/** The room's folder, tagged on the row where the list mixes folders. */
 		folder?: string | undefined;
+		/** Where the row's menu leaves the page from: the room drawer closes first. */
+		leave?: Leave | undefined;
 	},
 ) {
 	const { view } = props;
-	const press = useMenuPress(() => roomMenuOf(view.key));
+	const press = useMenuPress(() => roomMenuOf(view.key, props.leave));
 	const accent = useAccentStyle(view.character);
 	const { unread } = props;
-	const { style: phase, ...motion } = useFigureMotion(
-		view.key,
-		props.typing,
-		unread,
-	);
+	const { style: phase, ...motion } = useFigureMotion(view.key, unread);
 	return (
 		<li>
 			<ReadReveal />
@@ -51,7 +50,11 @@ export const ChatRow = memo(function ChatRow(
 				style={{ ...accent, ...phase }}
 			>
 				{/* A group's stacked figures are 1.45 wide, so they are drawn smaller to keep the names in one column. */}
-				<RoomPicture view={view} size={view.kind === "group" ? 36 : 52} />
+				<ChatPicture
+					view={view}
+					size={view.kind === "group" ? 36 : 52}
+					motion="row"
+				/>
 				<span className="room-row-main">
 					<span className="room-row-top">
 						<strong>{view.displayName}</strong>

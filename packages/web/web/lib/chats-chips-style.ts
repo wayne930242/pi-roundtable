@@ -7,6 +7,8 @@ export const CHATS_CHIPS_CSS = `
 
 fieldset.chips {
 	display: flex;
+	/* The page's own .chips rule wraps; these tabs scroll sideways instead. */
+	flex-wrap: nowrap;
 	min-width: 0;
 	gap: var(--space-2);
 	margin: 0 calc(var(--space-4) * -1);
@@ -128,6 +130,6 @@ button.chip[aria-pressed="true"] .chip-count {
 
 .pin-dock .pin-item {
 	flex: none;
-	width: 4.5rem;
+	width: 5rem;
 }
 `;

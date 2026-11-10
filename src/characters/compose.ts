@@ -148,9 +148,10 @@ function tonesOf(
 	};
 }
 
-function group(name: string, inner: string, extra = ""): string {
+/** `follows` adds a class the stylesheet moves with: `hd` on every part that turns about the neck. */
+function group(name: string, inner: string, extra = "", follows = ""): string {
 	return inner
-		? `<g class="${name}" data-part="${name}"${extra}>${inner}</g>`
+		? `<g class="${name}${follows}" data-part="${name}"${extra}>${inner}</g>`
 		: "";
 }
 
@@ -258,8 +259,10 @@ export function composeSvg(
 	const inner =
 		(bare ? "" : group("frame", frameMarkup)) +
 		`<g class="ch">` +
-		group("back", hair.back + hood) +
+		group("back", hair.back + hood, "", " hd") +
 		group("body", body) +
+		// The head's parts are one group, so the page can turn the head about the neck (`PIVOTS.neck`).
+		`<g class="hd" data-part="headset">` +
 		group("head", head) +
 		group("hat", HATS[s.hat](tones)) +
 		group("eyes-brows", face.eyes + face.brows) +
@@ -269,6 +272,7 @@ export function composeSvg(
 			"acc",
 			s.accessory === "none" ? "" : ACCESSORIES[s.accessory](tones),
 		) +
+		`</g>` +
 		group("prop", PROPS[s.prop](tones), ` data-prop="${s.prop}"`) +
 		`</g>` +
 		group(

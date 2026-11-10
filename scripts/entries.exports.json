@@ -733,6 +733,7 @@
 			"CharacterError",
 			"EAST_ASIAN_SKINS",
 			"EXPRESSIONS",
+			"PIVOTS",
 			"STATE_EXPRESSION",
 			"accentOf",
 			"characterCss",

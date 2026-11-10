@@ -9,6 +9,7 @@
 import { CHATS_CHIPS_CSS } from "./chats-chips-style.ts";
 import { CHATS_FEATURES_CSS } from "./chats-features-style.ts";
 import { CHATS_MOTION_CSS } from "./chats-motion-style.ts";
+import { CHATS_PARTS_CSS } from "./chats-parts-style.ts";
 import { installStyle } from "./lazy-style.ts";
 
 export const CHATS_HOME_CSS = `
@@ -378,4 +379,5 @@ export function installChatsHomeStyle(): void {
 	installStyle("chats-features", CHATS_FEATURES_CSS);
 	installStyle("chats-chips", CHATS_CHIPS_CSS);
 	installStyle("chats-motion", CHATS_MOTION_CSS);
+	installStyle("chats-parts", CHATS_PARTS_CSS);
 }
