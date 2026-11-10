@@ -11,6 +11,7 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import { agentDashboardContribution } from "../discord/agent-dashboard-service.ts";
 import { discordPlaceProvider } from "../discord/agent-places.ts";
 import { discordAgentTools } from "../discord/agent-tools.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
@@ -197,7 +198,7 @@ export function standInDiscord(
 		name: "test-discord",
 		provides: [DISCORD],
 		replaces: [DISCORD],
-		setup: ({ services }) => {
+		setup: ({ services, dashboard }) => {
 			const identity = services.find(IDENTITY);
 			const { poster, ...overrides } = given ?? {};
 			const ownerChannel =
@@ -227,7 +228,20 @@ export function standInDiscord(
 				poster: poster ?? fakeDiscordPoster(),
 				channelContext,
 			} as unknown as DiscordServices);
+			// The dashboard the built-in plugin contributes with an agent guild, over a board that shows nothing.
+			const agentDashboard = agentGuild
+				? agentDashboardContribution({
+						board: { show: async () => undefined },
+						agents: () => services.find(AGENTS)?.team,
+						lines: () => dashboard(),
+						logger: silentLogger(),
+					})
+				: undefined;
 			return {
+				...(agentDashboard?.services
+					? { services: agentDashboard.services }
+					: {}),
+				...(agentDashboard?.events ? { events: agentDashboard.events } : {}),
 				surfaces: [surface],
 				directChannels: [direct],
 				places: agentGuild

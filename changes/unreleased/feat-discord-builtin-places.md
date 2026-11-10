@@ -7,3 +7,5 @@ Discord's two agent tools, `channel_arrange` and `channel_read`, and the `catego
 `defineTool` takes `withheldFromHelpers`, which keeps a plugin's tool out of temp knights' turns, and the creation tools take the arguments a place provider adds with `createArguments`, passed on as `hints`. `AgentOps.create` and `createGroup` take `hints` in place of `category`, and `AgentOps` no longer has `arrange` and `read`; `NewAgent.category` and the group's `category` still work and are deprecated in favor of `hints.category`, removed in 1.0.
 
 `AgentChannels`, `AgentPost`, `CategoryLayout`, `ChannelMessage` and `DashboardBoard` are exported from `pi-roundtable/discord`; their export from `pi-roundtable/kit` is deprecated and goes in 1.0.
+
+The `#dashboard` message in the agent guild is now kept by the Discord plugin instead of the agent server: it starts when the agent server's `team` service is ready and refreshes when the team changes, with the same text. The `dashboard` contribution lines are unchanged, and `agent_list` still ends with the categories section, now written by Discord's place provider.

@@ -2,7 +2,6 @@ import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { SQL } from "bun";
 import { agentClaim } from "../agents/agent-claim.ts";
-import { AgentDashboard } from "../agents/agent-dashboard.ts";
 import { PgAgentStore } from "../agents/agent-store.ts";
 import { AgentServerTeam } from "../agents/agent-team.ts";
 import { AGENT_TOOLS } from "../agents/agent-tools.ts";
@@ -24,6 +23,10 @@ import type { SessionTool } from "../domain/sessions.ts";
 import type { Tier } from "../identity/speakers.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
 import type { Logger } from "../kernel/log.ts";
+import {
+	AGENT_SERVER_PLUGIN,
+	AGENT_TEAM_SERVICE,
+} from "../plugin-api/agent-server-ids.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	AGENTS,
@@ -50,14 +53,10 @@ import {
 	LOCAL_TEAM_ID,
 } from "./agent-server-options.ts";
 
-/** The name of the agent server's plugin, as `serviceStarted` events name it. */
-export const AGENT_SERVER_PLUGIN = "agent-server";
-
-/**
- * The agent server's service that starts the team and the dashboard in the background: once its
- * `serviceStarted` event says `ready`, the agents' channels and the dashboard are up.
- */
-export const AGENT_TEAM_SERVICE = "team";
+export {
+	AGENT_SERVER_PLUGIN,
+	AGENT_TEAM_SERVICE,
+} from "../plugin-api/agent-server-ids.ts";
 
 /** The agent tools and the agent's own prompt, which only agent sessions load. */
 export function agentSessionTools(
@@ -338,17 +337,6 @@ export function agentServerPlugin(
 			});
 			const attachmentDir = (channel: ChannelKey) =>
 				ownerAttachmentDir(options.dataDir, channel);
-			// The dashboard is a Discord message; a team without Discord has none.
-			const dashboard =
-				connection && options.guildId
-					? new AgentDashboard({
-							status: () => built.status(),
-							board: connection.agentDashboard(options.guildId),
-							lines: () => context.dashboard(),
-							logger,
-						})
-					: undefined;
-			if (dashboard) built.onChange(() => dashboard.changed());
 			const connectErrorReporter = () =>
 				options.errorReporter?.connect({
 					channelOf: (name) =>
@@ -365,19 +353,14 @@ export function agentServerPlugin(
 				});
 			return {
 				services: [
-					...(dashboard
-						? [{ name: "dashboard", stop: () => dashboard.stop() }]
-						: []),
 					{
 						name: AGENT_TEAM_SERVICE,
 						stop: () => built.stop(),
 						busy: () => built.busy(),
-						// The dashboard shows the team, so it starts once the team has; the error
-						// reporter connects whether or not the team did, since it reports the failure.
+						// The error reporter connects whether or not the team started, since it reports the failure.
 						startInBackground: async () => {
 							try {
 								await built.start();
-								dashboard?.start();
 							} finally {
 								connectErrorReporter();
 							}

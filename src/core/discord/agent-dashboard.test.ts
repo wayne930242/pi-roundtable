@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { TeamStatus } from "../agents/agent-team.ts";
+import { silentLogger } from "../kernel/log.ts";
 import {
 	AGENT_SERVER_PLUGIN,
 	AGENT_TEAM_SERVICE,
-} from "../builtin/agent-server-ids.ts";
-import { silentLogger } from "../kernel/log.ts";
+} from "../plugin-api/agent-server-ids.ts";
 import { AgentDashboard, dashboardSections } from "./agent-dashboard.ts";
 import { agentDashboardContribution } from "./agent-dashboard-service.ts";
 

@@ -6,6 +6,7 @@ import type {
 	ChannelContextOptions,
 } from "../contract/channel-context.ts";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
+import { agentDashboardContribution } from "../discord/agent-dashboard-service.ts";
 import { discordAgentTools, ownerNameOf } from "../discord/agent-tools.ts";
 import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
@@ -130,7 +131,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				collection.compose(ownerRootCommand(options.rootCommand)),
 			);
 		},
-		setup: async ({ conversations, services, logger, events }) => {
+		setup: async ({ conversations, services, logger, events, dashboard }) => {
 			const identity = services.find(IDENTITY);
 			// A host that keeps no copy texts on disk drops what an earlier run left.
 			if (options.cardCopies === false)
@@ -247,6 +248,15 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				channelContext: (message, given) =>
 					connected.channelContext(message, given),
 			});
+			// The dashboard message of the agent guild, which shows the team the agent server runs.
+			const agentDashboard = options.agentGuild
+				? agentDashboardContribution({
+						board: connected.agentDashboard(options.agentGuild),
+						agents: () => services.find(AGENTS)?.team,
+						lines: () => dashboard(),
+						logger,
+					})
+				: undefined;
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.
 				surfaces: [connected],
@@ -270,7 +280,9 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 						ownerId: options.ownerId,
 					}),
 				],
+				...(agentDashboard?.events ? { events: agentDashboard.events } : {}),
 				services: [
+					...(agentDashboard?.services ?? []),
 					// The copy texts of the last cards are on disk before the host exits.
 					{
 						name: "card-copies",
