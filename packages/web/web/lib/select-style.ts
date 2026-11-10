@@ -32,7 +32,11 @@ input[type="checkbox"].select-box {
 
 .select-row {
 	display: flex;
+	flex: 1;
+	flex-direction: row;
 	align-items: center;
+	color: var(--text);
+	font-size: inherit;
 	gap: var(--space-3);
 	min-width: 0;
 	padding: var(--space-2);
@@ -202,6 +206,11 @@ body[data-selecting] .toaster {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* A folded body is hidden by its attribute, which .stack's display would otherwise override. */
+.fold-body[hidden] {
+	display: none;
 }
 
 .fold-head {

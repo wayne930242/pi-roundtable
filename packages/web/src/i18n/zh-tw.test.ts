@@ -82,7 +82,7 @@ describe("the built-in zh-TW catalog", () => {
 				"web/pages/onboarding.tsx: t(step.waiver.confirm)",
 				"web/pages/onboarding.tsx: t(step.waiver.label)",
 				"web/pages/onboarding.tsx: t(step.waiver.label)",
-				"web/pages/overview.tsx: t(labels[p.container])",
+				"web/components/overview-cards.tsx: t(labels[p.container])",
 				"web/pages/profile.tsx: t(TIER_LABELS[profile.tier])",
 				"web/pages/profile.tsx: t(source.label)",
 				"web/pages/schedules.tsx: t(WEEKDAYS[String(day)] ?? String(day))",

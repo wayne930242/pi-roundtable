@@ -35,4 +35,18 @@ export const ZH_TW_BATCH: Readonly<Record<string, string>> = {
 		"其中 {count} 位臨時騎士會隨它們的騎士一起刪除。",
 	"Their messages and threads in this app are deleted, and their names can be used again.":
 		"它們在這個應用裡的訊息與派工串會一併刪除，名稱也能再使用。",
+	"No live conversation": "沒有進行中的對話",
+	"{count} archive": "封存 {count}",
+	"{count} archives": "封存 {count}",
+	Transcript: "對話記錄",
+	"Starting over": "重新開始中",
+	"Started {count} conversation over": "已重新開始 {count} 個對話",
+	"Started {count} conversations over": "已重新開始 {count} 個對話",
+	"Deleted {count} conversation": "已刪除 {count} 個對話",
+	"Deleted {count} conversations": "已刪除 {count} 個對話",
+	"{count} group": "{count} 個群組",
+	"{count} groups": "{count} 個群組",
+	"{count} busy": "{count} 個忙碌中",
+	"all idle": "都閒置",
+	"Live conversations hold {size} in all.": "進行中的對話共 {size}。",
 };

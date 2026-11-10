@@ -33,6 +33,25 @@ export function SelectBox(props: {
 	);
 }
 
+/** "Select all in section", which becomes "Clear selection" once every row the section shows is chosen. */
+export function SelectAll(props: {
+	selecting: boolean;
+	allChosen: boolean;
+	empty: boolean;
+	onAll(): void;
+}) {
+	if (!props.selecting || props.empty) return null;
+	return (
+		<button
+			type="button"
+			className="secondary compact select-all"
+			onClick={props.onAll}
+		>
+			{props.allChosen ? t("Clear selection") : t("Select all in section")}
+		</button>
+	);
+}
+
 /** A section's heading, with "Select all in section" while the page is selecting. */
 export function SectionHead(props: {
 	title: ReactNode;
@@ -45,15 +64,7 @@ export function SectionHead(props: {
 	return (
 		<div className="section-head">
 			<h2 className="section-title">{props.title}</h2>
-			{props.selecting && !props.empty ? (
-				<button
-					type="button"
-					className="secondary compact select-all"
-					onClick={props.onAll}
-				>
-					{props.allChosen ? t("Clear selection") : t("Select all in section")}
-				</button>
-			) : null}
+			<SelectAll {...props} />
 		</div>
 	);
 }

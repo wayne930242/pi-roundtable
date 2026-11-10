@@ -66,7 +66,7 @@ export interface Batch<T> {
 	/** Puts the rows done back; absent for what cannot be undone. */
 	undo?(done: T[]): Promise<unknown>;
 	/** Reads the page's lists again; runs after the batch and after an undo. */
-	after(): Promise<unknown> | void;
+	after(): unknown;
 }
 
 /** Runs batches for a page and holds what the bar shows of the one running or just over. */
