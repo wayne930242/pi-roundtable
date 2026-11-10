@@ -5,14 +5,6 @@ export type { DiscordServices } from "../core/builtin/discord.ts";
 export { DISCORD } from "../core/builtin/discord.ts";
 export type { DiscordAdapterConfig } from "../core/config/config.ts";
 export type {
-	AgentCategory,
-	AgentChannels,
-	AgentPost,
-	CategoryLayout,
-	ChannelMessage,
-	DashboardBoard,
-} from "../core/contract/agent-channels.ts";
-export type {
 	ChannelContext,
 	ChannelContextAttachment,
 	ChannelContextAttachmentOptions,
