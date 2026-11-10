@@ -95,7 +95,7 @@ const READ_LIMIT = 50;
 
 /** channel_read: messages of a Discord channel, newest last, around one when given. */
 export async function readChannel(
-	channels: AgentChannels | undefined,
+	channels: Pick<AgentChannels, "read"> | undefined,
 	channel: string,
 	around: string | undefined,
 	limit: number | undefined,

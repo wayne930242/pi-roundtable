@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DiscordAgentTeam } from "./core/agents/agent-team.ts";
+import type { AgentServerTeam } from "./core/agents/agent-team.ts";
 import type { InboundMessage } from "./core/contract/channels.ts";
 import type { AgentRuntime } from "./core/contract/runtime.ts";
 import type { ChatSurface } from "./core/contract/surface.ts";
@@ -146,7 +146,7 @@ describeDb(
 			).toContain("roundtable");
 
 			const tools = await registeredTools(
-				(team as unknown as DiscordAgentTeam).extension(scope("scribe")),
+				(team as unknown as AgentServerTeam).extension(scope("scribe")),
 			);
 			const names = tools.map((tool) => tool.name);
 			expect(names).toContain("agent_list");

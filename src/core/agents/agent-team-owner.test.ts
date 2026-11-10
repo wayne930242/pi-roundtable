@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError } from "../domain/errors.ts";
 import { describeDb } from "../testing/database.ts";
@@ -9,7 +10,7 @@ import {
 	settle,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import { agentRoomKey, discordKey } from "./team-keys.ts";
+import { agentRoomKey } from "./team-keys.ts";
 
 const NOTES = {
 	name: "notes",

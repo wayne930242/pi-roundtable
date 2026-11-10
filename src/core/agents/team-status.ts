@@ -1,6 +1,6 @@
+import { legacyChannelIdOf } from "../db/legacy-channels.ts";
 import type { ThinkingSetting } from "../domain/models.ts";
 import type { ContextUse } from "./agent-ports.ts";
-import { discordIdOf } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
 import type { TeamPlace } from "./team-places.ts";
 
@@ -63,7 +63,8 @@ export async function teamStatus(ctx: TeamContext): Promise<TeamStatus> {
 		const keys = places.keysOf(agent.name);
 		const working = turns.workingIn(agent.name);
 		// The board links Discord channels; a turn in a room has none to link.
-		const workingIn = working === undefined ? undefined : discordIdOf(working);
+		const workingIn =
+			working === undefined ? undefined : legacyChannelIdOf(working);
 		const queued = keys.reduce((sum, key) => sum + queue.size(key), 0);
 		const context = keys
 			.map((key) => runtime.contextUsage?.(key))

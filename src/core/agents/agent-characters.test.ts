@@ -7,6 +7,7 @@ import {
 	resolveCharacter,
 	suggestCharacter,
 } from "../../characters/index.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import { AgentError } from "../domain/errors.ts";
 import { describeDb } from "../testing/database.ts";
 import { characterOf } from "./agent-rules.ts";
@@ -18,7 +19,6 @@ import {
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
 import { FileAvatarStudio } from "./avatar-studio.ts";
-import { discordKey } from "./team-keys.ts";
 
 const REFERENCE = join(import.meta.dir, "..", "assets", "neutral.png");
 const COORDINATOR = {

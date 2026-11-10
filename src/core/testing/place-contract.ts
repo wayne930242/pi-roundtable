@@ -325,8 +325,9 @@ const CHECKS: readonly Check[] = [
 			if (id === undefined) return;
 			const line = await provider.remove?.(id, { ...spec, helper: false });
 			expectThat(
-				line === undefined || typeof line === "string",
-				"remove resolved to something that is no line of text",
+				line === undefined ||
+					(typeof line === "string" && /^[;,]\s/.test(line)),
+				'remove resolved to something that is no line of text starting with its own separator, `; ` or `, `, as `Archived "<name>"; its channel is kept.` reads',
 			);
 			if (provider.check)
 				expectThat(

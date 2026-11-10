@@ -18,7 +18,7 @@ import { HelperWork } from "./helper-work.ts";
 import { roomProgress } from "./room-progress.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { mayApprove } from "./team-approval.ts";
-import { coordinatorOf, discordKey } from "./team-keys.ts";
+import { coordinatorOf } from "./team-keys.ts";
 import { TeamPosts } from "./team-posts.ts";
 import {
 	type Chain,
@@ -295,20 +295,20 @@ export class TeamTurns {
 
 	/**
 	 * The assistant's own notice, such as a new release, posted in the coordinator's channel under
-	 * its name: the entry channel, or, without Discord, its room on the first surface that hosts rooms.
+	 * its name: the entry channel, or, without one, its place on the first surface that has one.
 	 */
 	async announce(text: string): Promise<void> {
-		const { store, places, entryChannelId } = this.#options;
+		const { store, places, entryChannel } = this.#options;
 		const coordinator = coordinatorOf(store, places, this.#options);
 		if (!coordinator)
 			throw new AgentError(
-				entryChannelId === undefined
+				entryChannel === undefined
 					? "no active coordinator"
 					: "no active agent in the entry channel",
 			);
 		const home =
-			entryChannelId !== undefined
-				? discordKey(entryChannelId)
+			entryChannel !== undefined
+				? entryChannel
 				: this.routes.primary(coordinator.name);
 		if (!home)
 			throw new AgentError(`${coordinator.name} has no room to post in`);

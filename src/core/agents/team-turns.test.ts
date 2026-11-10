@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
+import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type {
 	PendingConfirmation,
@@ -16,7 +18,6 @@ import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, AgentGroup, PgAgentStore } from "./agent-store.ts";
-import { discordKey } from "./team-keys.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 const agent = (name: string, channelId: string): Agent => ({
@@ -75,26 +76,28 @@ function setup(
 	const team = new TeamTurns({
 		owner: OWNER,
 		toolTiers: tiers,
-		entryChannelId: "1000",
+		entryChannel: discordKey("1000"),
 		store,
 		places: testPlaces({
 			store,
 			rows: () => legacyRows(AGENTS, [GROUP]),
-		}),
-		channels: {
-			post: async (channelId, post) => {
-				posts.push({ channelId, post });
-			},
-			interim: (channelId, as) => ({
-				post: async (text) => {
-					interims.push(`${channelId} ${as.name}: ${text}`);
-					return {
-						edit: async (change) =>
-							void interims.push(`${channelId} ${as.name}: edit ${change}`),
-					};
+			channels: {
+				post: async (channelId, post) => {
+					posts.push({ channelId, post });
 				},
-			}),
-		},
+				interim: (channelId, as) => ({
+					post: async (text) => {
+						interims.push(`${channelId} ${as.name}: ${text}`);
+						return {
+							edit: async (change) =>
+								void interims.push(`${channelId} ${as.name}: edit ${change}`),
+						};
+					},
+				}),
+			},
+		}),
+		// A surface that declares `supportsFiles`, as Discord's does: a reply there may carry files.
+		surfaces: { of: () => ({ supportsFiles: true }) as ChatSurface },
 		studio: { url: () => "https://x/a.png" },
 		runtime: () => ({
 			runTurn: async (request) => {

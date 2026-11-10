@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatSurface } from "../contract/surface.ts";
+import { discordKey } from "../contract/discord-key.ts";
+import type { ChatSurface, SurfacePort } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { OutboundReply, TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
@@ -14,7 +15,6 @@ import { AgentConversations } from "./agent-conversations.ts";
 import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import { agentRoomKey } from "./team-keys.ts";
-import type { TeamTurnsOptions } from "./team-turn-types.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 const agent = (
@@ -57,7 +57,7 @@ function roomSurface(
 	const replies: { channel: string; reply: OutboundReply }[] = [];
 	/** Interim posts as `channel name/agent: text`, edits included. */
 	const interims: string[] = [];
-	const port: NonNullable<TeamTurnsOptions["surfaces"]> & {
+	const port: TestSurfaces & {
 		roomSurfaces(): readonly string[];
 	} = {
 		roomSurfaces: () => rooms,
@@ -86,35 +86,40 @@ function roomSurface(
 	return { port, replies, interims };
 }
 
+/** What a test stands in for the surfaces that host rooms with, which the room providers post through. */
+type TestSurfaces = Pick<
+	SurfacePort,
+	"sendReply" | "interim" | "of" | "lang" | "progress" | "groupRound"
+>;
+
 function setup(
 	answer: (request: TurnRequest) => TurnResult | Promise<TurnResult>,
-	surfaces:
-		| (TeamTurnsOptions["surfaces"] & { roomSurfaces?(): readonly string[] })
-		| undefined,
+	surfaces: (TestSurfaces & { roomSurfaces?(): readonly string[] }) | undefined,
 ) {
 	const posts: { channelId: string; post: AgentPost }[] = [];
 	const discordInterims: string[] = [];
 	const turns: TurnRequest[] = [];
 	const team = new TeamTurns({
 		owner: OWNER,
-		entryChannelId: "4000",
+		entryChannel: discordKey("4000"),
 		store,
 		places: testPlaces({
 			store,
 			rows: () => legacyRows(AGENTS),
 			rooms: () => surfaces?.roomSurfaces?.() ?? [],
-		}),
-		channels: {
-			post: async (channelId, post) => {
-				posts.push({ channelId, post });
-			},
-			interim: (channelId, as) => ({
-				post: async (text) => {
-					discordInterims.push(`${channelId} ${as.name}: ${text}`);
-					return { edit: async () => undefined };
+			channels: {
+				post: async (channelId, post) => {
+					posts.push({ channelId, post });
 				},
-			}),
-		},
+				interim: (channelId, as) => ({
+					post: async (text) => {
+						discordInterims.push(`${channelId} ${as.name}: ${text}`);
+						return { edit: async () => undefined };
+					},
+				}),
+			},
+			...(surfaces ? { surfaces } : {}),
+		}),
 		studio: { url: () => "https://x/a.png" },
 		runtime: () => ({
 			runTurn: async (request) => {
@@ -289,7 +294,7 @@ describe("agent rooms", () => {
 	test("a room turn's progress reaches the room's surface, and a Discord channel's turn gets none", async () => {
 		const { port } = roomSurface();
 		const shown: string[] = [];
-		const surfaces: TeamTurnsOptions["surfaces"] = {
+		const surfaces: TestSurfaces = {
 			...port,
 			progress: async (channel, event) => {
 				shown.push(`${channel} ${event.type}`);

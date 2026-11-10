@@ -1,8 +1,5 @@
 import {
-	CharacterError,
 	type CharacterInput,
-	type CharacterSpec,
-	resolveCharacter,
 	suggestCharacter,
 } from "../../characters/index.ts";
 import { parseChannelKey } from "../contract/surface.ts";
@@ -13,25 +10,23 @@ import { addressee, type Speaker } from "../identity/speakers.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
 import type { AgentChange } from "../plugin-api/services.ts";
 import { openingTaskText } from "./agent-prompt.ts";
-import { characterOf, overBase } from "./agent-rules.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
-import type { AvatarMode } from "./agent-tools.ts";
 import { createHelper } from "./helper-create.ts";
 import { routesOf } from "./routes.ts";
-import { groupTopic, teamCategory } from "./team-layout.ts";
+import { groupTopic } from "./team-layout.ts";
+import { resolveLook } from "./team-looks.ts";
 import type { TeamContext } from "./team-options.ts";
-
-/** Said when an avatar is to be redrawn on a host without an image provider. */
-const NO_IMAGE_PROVIDER =
-	"No image provider is configured, so avatars cannot be redrawn; the current picture stays. A plugin fills the images slot to draw them.";
+import { type PlaceWish, TeamPlaceWrites } from "./team-place-writes.ts";
 
 /** Creating and changing agents, their avatars, and groups. */
 export class TeamEditing {
 	readonly #ctx: TeamContext;
+	readonly #places: TeamPlaceWrites;
 
 	constructor(ctx: TeamContext) {
 		this.#ctx = ctx;
+		this.#places = new TeamPlaceWrites(ctx);
 	}
 
 	/**
@@ -124,16 +119,6 @@ export class TeamEditing {
 
 	#helperChain: Promise<void> = Promise.resolve();
 
-	/** Closes the thread of a temp knight whose row was never written, logging a failure. */
-	async #closeOrphan(threadId?: string): Promise<void> {
-		const { channels, logger } = this.#ctx.options;
-		await channels
-			?.closeThread?.(threadId ?? "")
-			.catch((err: unknown) =>
-				logger.warn({ err }, "orphan thread not closed"),
-			);
-	}
-
 	/** The agent tool: a knight makes a temp knight for one task; see `createHelper`. */
 	createHelper(
 		caller: AgentTurnScope,
@@ -220,7 +205,7 @@ export class TeamEditing {
 			openIn?: string | undefined;
 			/** Makes the agent a temp knight of this knight, which settles on the parent's model. */
 			parent?: Agent | undefined;
-			/** The conversation a temp knight is made from: made on Discord, it lives in a thread of the parent's channel, made elsewhere in its rooms alone. */
+			/** The conversation a temp knight is made from: it lives in a thread of the parent's place on that surface, and in its rooms alone where no thread is made. */
 			origin?: string | undefined;
 			preset?: string | undefined;
 		},
@@ -241,8 +226,7 @@ export class TeamEditing {
 			thinking?: string | undefined;
 		} = {},
 	): Promise<{ agent: Agent; text: string }> {
-		const { store, studio, channels, queue, skills, places, logger } =
-			this.#ctx.options;
+		const { store, studio, queue, skills, places, logger } = this.#ctx.options;
 		this.#refuseSkillsOff(input.skills);
 		const {
 			category,
@@ -254,7 +238,6 @@ export class TeamEditing {
 			...fields
 		} = input;
 		const modes = longRunning ? this.#longRunning(who.speaker) : undefined;
-		const categoryName = teamCategory(category, "Agents");
 		store.checkNewName(input.name);
 		skills?.checkRegistered(carried);
 		// An unusable model or thinking fails the create first; a temp knight runs its parent's unless told otherwise.
@@ -268,39 +251,40 @@ export class TeamEditing {
 			settings.thinking === undefined && who.parent
 				? who.parent.thinking
 				: thinkingSetting(settings.thinking);
-		// The picture comes before the row and the channel: a render failure fails the create.
+		// The picture comes before the row and the place: a render failure fails the create.
 		const taken = store
 			.agents()
 			.flatMap((other) =>
 				other.status === "active" && other.character ? [other.character] : [],
 			);
 		const suggested = suggestCharacter(input, taken);
-		const character = this.#resolve(wanted ?? {}, suggested);
+		const character = resolveLook(wanted ?? {}, suggested);
 		const avatarHash = await studio.render(character);
-		// Without Discord channels the agent lives in its rooms, which exist as soon as it does.
-		const onDiscord = who.origin?.startsWith("discord:") !== false;
-		const channelId = who.parent
-			? onDiscord && who.parent.channelId && channels?.createThread
-				? await channels.createThread(who.parent.channelId, input.displayName)
-				: undefined
-			: await channels?.createChannel(
-					input.name,
-					input.displayName,
-					categoryName,
-				);
+		// Without stored places the agent lives in its rooms, which exist as soon as it does.
+		const wish: PlaceWish = {
+			kind: "agent",
+			name: input.name,
+			displayName: input.displayName,
+			topic: input.displayName,
+			...(category === undefined ? {} : { hints: { category } }),
+		};
+		const made = await this.#places.make(
+			wish,
+			who.parent ? { parent: who.parent, origin: who.origin } : undefined,
+		);
 		let agent: Agent;
 		try {
 			agent = await store.createAgent({
 				...fields,
 				character,
 				avatarHash,
-				...(channelId ? { channelId } : {}),
 				...(who.parent ? { parent: who.parent.name } : {}),
 				...(who.parent && who.origin ? { origin: who.origin } : {}),
 				...(who.parent && who.preset ? { preset: who.preset } : {}),
 			});
+			await this.#places.record(wish, made);
 		} catch (error) {
-			await this.#closeOrphan(channelId);
+			if (who.parent) await this.#places.discard(wish, made);
 			throw error;
 		}
 		try {
@@ -325,7 +309,8 @@ export class TeamEditing {
 			for (const key of places.keysOf(agent.name))
 				await modes.set(key, { longRunning: true }, who.speaker);
 		const avatar = `its picture is the ${character.class} look${modes ? "; long-running mode is on" : ""}`;
-		const where = channelId ? ` in <#${channelId}>` : "";
+		const where =
+			made.length > 0 ? ` in ${this.#places.mentions(wish, made)}` : "";
 		if (!task)
 			return {
 				agent,
@@ -371,83 +356,6 @@ export class TeamEditing {
 		};
 	}
 
-	/** The agent tool: changes a look, then says what the owner sees. */
-	async avatar(name: string, look: CharacterInput): Promise<string> {
-		const agent = await this.dress(name, look);
-		return `"${agent.displayName}" now looks like a ${characterOf(agent).class}; the new picture shows from its next message.`;
-	}
-
-	/**
-	 * Changes an agent's look. The input is resolved over the agent's current character; a new
-	 * class keeps the agent's colors unless the input names a palette or colors. The picture is
-	 * rendered before anything is stored, and the character and picture are stored together.
-	 */
-	async dress(name: string, input: CharacterInput): Promise<Agent> {
-		const { store, studio, logger } = this.#ctx.options;
-		const agent = store.activeAgent(name);
-		const base = characterOf(agent);
-		const character = this.#resolve(input, base);
-		let avatarHash: string;
-		try {
-			avatarHash = await studio.render(character);
-		} catch (error) {
-			throw new AgentError(
-				`The picture could not be rendered: ${error instanceof Error ? error.message : String(error)}. The previous look stays.`,
-			);
-		}
-		const dressed = await store.updateAgent(name, { character, avatarHash });
-		logger.info({ agent: name, class: character.class }, "agent dressed");
-		this.#ctx.changed();
-		return dressed;
-	}
-
-	/** @deprecated Use `dress`; removed in 1.0. Draws and stores a new picture. */
-	async redrawAvatar(
-		name: string,
-		mode: AvatarMode,
-		text?: string,
-	): Promise<Agent> {
-		const { store, studio, logger } = this.#ctx.options;
-		const agent = store.activeAgent(name);
-		if (studio.canDraw === false) throw new AgentError(NO_IMAGE_PROVIDER);
-		if (mode !== "redraw" && !text?.trim())
-			throw new AgentError(
-				mode === "edit"
-					? "Give the edit instruction as text."
-					: "Give the new avatar prompt as text.",
-			);
-		const avatarPrompt =
-			mode === "new_prompt" ? (text as string) : agent.avatarPrompt;
-		if (mode === "new_prompt") await store.updateAgent(name, { avatarPrompt });
-		let hash: string;
-		try {
-			hash =
-				mode === "edit"
-					? await studio.edit(agent.avatarHash, text as string)
-					: await studio.draw(avatarPrompt);
-		} catch (error) {
-			logger.warn({ agent: name, mode, err: error }, "avatar drawing failed");
-			throw new AgentError(
-				`The avatar could not be drawn: ${error instanceof Error ? error.message : String(error)}. The previous picture stays.`,
-			);
-		}
-		logger.info({ agent: name, mode }, "avatar redrawn");
-		return store.updateAgent(name, { avatarHash: hash });
-	}
-
-	/**
-	 * An input over a base look (see overBase); a bad field is an AgentError that names it.
-	 */
-	#resolve(input: CharacterInput, base: CharacterSpec): CharacterSpec {
-		try {
-			return resolveCharacter(overBase(input, base), base);
-		} catch (error) {
-			if (error instanceof CharacterError)
-				throw new AgentError(`The look is not usable: ${error.message}.`);
-			throw error;
-		}
-	}
-
 	async createGroup(input: {
 		name: string;
 		displayName: string;
@@ -455,25 +363,27 @@ export class TeamEditing {
 		host?: string;
 		category?: string;
 	}): Promise<string> {
-		const { store, channels, logger } = this.#ctx.options;
+		const { store, logger } = this.#ctx.options;
 		const { category, ...fields } = input;
-		const parent = teamCategory(category, "Groups");
 		const host =
 			input.host ??
 			(input.members.includes("coordinator")
 				? "coordinator"
 				: (input.members[0] ?? ""));
 		store.checkNewGroup(input.name, input.members, host, input.displayName);
-		const topic = groupTopic({ ...fields, host, status: "active" }, store);
-		const channelId = await channels?.createChannel(input.name, topic, parent);
-		const group = await store.createGroup({
-			...fields,
-			host,
-			...(channelId ? { channelId } : {}),
-		});
+		const wish: PlaceWish = {
+			kind: "group",
+			name: input.name,
+			displayName: input.displayName,
+			topic: groupTopic({ ...fields, host, status: "active" }, store),
+			...(category === undefined ? {} : { hints: { category } }),
+		};
+		const made = await this.#places.make(wish);
+		const group = await store.createGroup({ ...fields, host });
+		await this.#places.record(wish, made);
 		logger.info({ group: group.name, members: group.members }, "group created");
 		this.#ctx.changed();
-		return `Created the group "${group.displayName}"${channelId ? ` in <#${channelId}>` : ""} with ${group.members.join(", ")}; host ${group.host}.`;
+		return `Created the group "${group.displayName}"${made.length > 0 ? ` in ${this.#places.mentions(wish, made)}` : ""} with ${group.members.join(", ")}; host ${group.host}.`;
 	}
 
 	async updateGroup(

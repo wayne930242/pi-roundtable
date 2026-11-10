@@ -1,3 +1,4 @@
+import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
@@ -55,13 +56,13 @@ export function messageTarget(
 	const rooms = ctx.places.rooms();
 	// A surface whose places are stored: the agent has one there or none.
 	if (
-		wanted === "discord" ||
+		wanted === LEGACY_CHANNEL_SURFACE ||
 		(!rooms.includes(wanted) && ctx.places.surfaces().includes(wanted))
 	) {
 		const place = routes.placeOn(target.name, wanted);
 		if (!place)
 			throw new AgentError(
-				`${target.name} has no ${wanted === "discord" ? "Discord channel" : `place on ${wanted}`}; its conversations: ${has}.`,
+				`${target.name} has no ${wanted === LEGACY_CHANNEL_SURFACE ? "Discord channel" : `place on ${wanted}`}; its conversations: ${has}.`,
 			);
 		return place;
 	}

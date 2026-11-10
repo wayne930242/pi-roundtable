@@ -95,17 +95,21 @@ describeDb("a channel type that makes places of its own", () => {
 
 	let pager: FakePager;
 	beforeEach(() => {
-		pager = new FakePager();
+		// Its own pages are `made-<n>`: the tests bind the `pg-<n>` ids by hand.
+		pager = new FakePager("made");
 		fx.stored.push(pager.provider);
 	});
 
 	/** The pager made `id` for the agent or group: a row of the place table, which the team reads. */
 	const bind = async (kind: "agent" | "group", name: string, id: string) => {
+		pager.adopt(id, name);
 		const sql = new SQL(testDatabaseUrl);
 		try {
 			await sql`
 				INSERT INTO agent_places (team_id, kind, name, surface, external_id)
-				VALUES (${TEST_GUILD}, ${kind}, ${name}, 'pager', ${id})`;
+				VALUES (${TEST_GUILD}, ${kind}, ${name}, 'pager', ${id})
+				ON CONFLICT (team_id, kind, name, surface)
+				DO UPDATE SET external_id = EXCLUDED.external_id`;
 		} finally {
 			await sql.close();
 		}
@@ -230,7 +234,9 @@ describeDb("a channel type that makes places of its own", () => {
 		expect(fx.runtime.turns.map((t) => t.agent?.session)).toEqual([
 			PAGE("pg-1"),
 		]);
-		expect(fx.surfaces.texts(PAGE("pg-1"))).toEqual(["infra: infra ok"]);
+		expect(pager.seen(PAGE("pg-1"))).toEqual([
+			{ author: "Infra", text: "infra ok" },
+		]);
 		await fx.team.startFresh(PAGE("pg-1"));
 		expect(fx.runtime.fresh).toContain(PAGE("pg-1"));
 	});

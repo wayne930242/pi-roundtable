@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError, ScheduleError } from "../domain/errors.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
@@ -14,7 +15,7 @@ import {
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
 import { messageTarget } from "./message-target.ts";
-import { agentRoomKey, discordKey, groupRoomKey } from "./team-keys.ts";
+import { agentRoomKey, groupRoomKey } from "./team-keys.ts";
 import { TeamPlaces } from "./team-places.ts";
 
 const room = (name: string) => agentRoomKey("app", name);

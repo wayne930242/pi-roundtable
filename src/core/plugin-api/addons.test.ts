@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { SQL } from "bun";
-import type { DiscordAgentTeam } from "../agents/agent-team.ts";
+import type { AgentServerTeam } from "../agents/agent-team.ts";
 import { AgentError } from "../domain/errors.ts";
 import { PluginError } from "../kernel/errors.ts";
 import { describeDb, testDatabaseUrl } from "../testing/database.ts";
@@ -68,7 +68,7 @@ function reader(seen: Record<string, unknown>): RoundtablePlugin {
 
 		// SAFETY: the concrete team has the methods the agent tools call; no port publishes them.
 		const team = host.context.services.get(AGENTS)
-			.team as unknown as DiscordAgentTeam;
+			.team as unknown as AgentServerTeam;
 		expect(team.skillsOf("scout")).toEqual([]);
 		const request = {
 			name: "newcomer",

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey, TurnResult } from "../domain/conversation.ts";
 import type { AgentTurnScope, TurnRequest } from "../domain/ports.ts";
@@ -10,7 +11,7 @@ import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import { Routes } from "./routes.ts";
-import { agentRoomKey, discordKey } from "./team-keys.ts";
+import { agentRoomKey } from "./team-keys.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 const agent = (name: string, channelId: string): Agent => ({
@@ -48,14 +49,24 @@ function setup(
 	} as unknown as PgAgentStore;
 	const turns: TurnRequest[] = [];
 	const posted: string[] = [];
+	const surfaces = {
+		sendReply: async (channel: ChannelKey) => void posted.push(channel),
+		of: () => undefined,
+		interim: () => undefined,
+	};
 	const places = testPlaces({
 		store,
 		rows: () => legacyRows(AGENTS),
 		rooms: () => ["app"],
+		channels: {
+			post: async (channelId) => void posted.push(`discord:${channelId}`),
+			interim: () => ({ post: async () => ({ edit: async () => undefined }) }),
+		},
+		surfaces,
 	});
 	const team: TeamTurns = new TeamTurns({
 		owner: OWNER,
-		entryChannelId: "4000",
+		entryChannel: discordKey("4000"),
 		store,
 		places,
 		routes: new Routes({
@@ -64,15 +75,7 @@ function setup(
 			places,
 			latest: (name) => conversations.latest(name),
 		}),
-		channels: {
-			post: async (channelId) => void posted.push(`discord:${channelId}`),
-			interim: () => ({ post: async () => ({ edit: async () => undefined }) }),
-		},
-		surfaces: {
-			sendReply: async (channel) => void posted.push(channel),
-			of: () => undefined,
-			interim: () => undefined,
-		},
+		surfaces,
 		studio: { url: () => "https://x/a.png" },
 		runtime: () => ({
 			runTurn: async (request) => {

@@ -16,7 +16,7 @@ import type { Logger } from "../kernel/log.ts";
 import type { EventSink } from "../plugin-api/plugin.ts";
 import type { AvatarStudio } from "../plugin-api/services.ts";
 import type { ToolTiers } from "../runtime/tool-tiers.ts";
-import type { AgentChannels, AgentTurnRunner } from "./agent-ports.ts";
+import type { AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
 import type { RelevanceScorer } from "./group-round.ts";
 import type { HelperWork } from "./helper-work.ts";
@@ -35,12 +35,12 @@ export interface Chain {
 }
 
 export interface TeamTurnsOptions {
-	/** The agent server's entry channel, where the coordinator lives; absent on a host without Discord. */
-	entryChannelId?: string;
+	/** The agent server's entry channel, where the coordinator lives; absent on a host without one. */
+	entryChannel?: ChannelKey;
 	/**
-	 * The coordinator's name on a host without Discord, where there is no entry channel to find it
-	 * by; a function is asked each time, for a name that is only known once the plugins linked.
-	 * Ignored when `entryChannelId` is set.
+	 * The coordinator's name on a host without an entry channel to find it by; a function is asked
+	 * each time, for a name that is only known once the plugins linked. Ignored when `entryChannel`
+	 * is set.
 	 */
 	coordinator?: string | (() => string | undefined);
 	/** Who the agents work for, as their prompts and group history name them. */
@@ -48,18 +48,13 @@ export interface TeamTurnsOptions {
 	store: PgAgentStore;
 	/** Where the agents and groups are: their keys, and who owns a key, through the host's place providers. */
 	places: TeamPlaces;
-	/** The Discord channels the agents post in; absent on a host without Discord, where every reply goes through a room's surface. */
-	channels?: Pick<AgentChannels, "post" | "interim">;
 	/**
-	 * The surfaces that host agent rooms. A reply in a room goes through `sendReply` with the
-	 * agent as author, and its interim posts through `interim`, never through the Discord
-	 * channels; without it no key but Discord's is the team's. `of` tells whether the room's
-	 * surface carries reply files. Which surfaces host rooms is `places`'s to say.
+	 * What the team asks of the chat surfaces beyond their places: `of` tells how a place's surface
+	 * cuts text and whether it carries reply files, `progress` and `groupRound` show a turn's
+	 * state in a room. Replies and interim posts go through the place providers, which post through
+	 * the surfaces themselves.
 	 */
-	surfaces?: Pick<
-		SurfacePort,
-		"sendReply" | "interim" | "of" | "lang" | "progress" | "groupRound"
-	>;
+	surfaces?: Pick<SurfacePort, "of" | "lang" | "progress" | "groupRound">;
 	studio: Pick<AvatarStudio, "url">;
 	/**
 	 * The host's routing table, which says where work no person started lands. Without one the team

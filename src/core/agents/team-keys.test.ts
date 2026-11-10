@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { discordIdOf, discordKey } from "../contract/discord-key.ts";
 import type { PlaceProvider } from "../contract/places.ts";
 import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { StoredPlace } from "./agent-places.ts";
@@ -6,8 +7,6 @@ import type { Agent, AgentGroup } from "./agent-store.ts";
 import {
 	agentRoomKey,
 	coordinatorOf,
-	discordIdOf,
-	discordKey,
 	groupRoomKey,
 	roomOf,
 } from "./team-keys.ts";
@@ -228,8 +227,6 @@ test("roomOf reads only keys of a surface that hosts rooms, in the exact shape",
 	expect(roomOf("app:agent.a.b", ["app"])).toBeUndefined();
 	expect(roomOf("app:agent.coder:x", ["app"])).toBeUndefined();
 	expect(roomOf("app:agent.coder", [])).toBeUndefined();
-	// Discord never hosts rooms, whatever a surface list says.
-	expect(roomOf("discord:agent.coder", ["discord"])).toBeUndefined();
 });
 
 test("an agent or group owns its room only on a room surface, and only while active", () => {
@@ -279,10 +276,12 @@ test("a room is its own conversation: session, home and group seats are keyed by
 
 test("the coordinator is the entry channel's agent with Discord, else the configured one", () => {
 	const host = places();
-	expect(coordinatorOf(store, host, { entryChannelId: "1234567890" })).toBe(
-		AGENT,
-	);
-	expect(coordinatorOf(store, host, { entryChannelId: "777" })).toBeUndefined();
+	expect(
+		coordinatorOf(store, host, { entryChannel: discordKey("1234567890") }),
+	).toBe(AGENT);
+	expect(
+		coordinatorOf(store, host, { entryChannel: discordKey("777") }),
+	).toBeUndefined();
 	expect(coordinatorOf(store, host, { coordinator: "roomer" })).toBe(ROOMER);
 	expect(
 		coordinatorOf(store, host, { coordinator: () => "old" }),
