@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-10
+
+- Release in lockstep with pi-roundtable 0.46.0; no package-specific behavior changes.
+
 ## [0.45.2] - 2026-11-10
 
 - Release in lockstep with pi-roundtable 0.45.2 (chat home: one accent badge for every agent picture, pins drag again); no package-specific behavior changes.

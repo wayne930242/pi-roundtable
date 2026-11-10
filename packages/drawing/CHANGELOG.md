@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-10
+
+### Fixed
+
+- `toolText` no longer accepts a name `Object.prototype` has (`toString`, `constructor`) as a tool, a misspelled `draw_cards` argument stops the start even when the host has no decks, and `DEFAULT_DRAWING_TOOL_TEXT` is frozen at every depth, so writing into it throws instead of changing the wording of every later `drawing()` in the process; a spread of it still composes.
+
 ## [0.45.2] - 2026-11-10
 
 - Release in lockstep with pi-roundtable 0.45.2 (chat home: one accent badge for every agent picture, pins drag again); no package-specific behavior changes.

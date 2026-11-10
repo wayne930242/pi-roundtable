@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-10
+
+### Added
+
+- The chat home's knights move by part. A pin and a room row turn the head and sweep the held item with what the agent does: a glance now and then at rest, a ponder while thinking, a nod with the item's sweep while working, a cocked head and a raised item while a card waits, a nod and a flourish when a turn is done, a shake and a dropped item on an error, and a dozing head when it is sleepy; a new message perks the head up and hops the item. Rows at rest stay still inside and only breathe, a group's members each move their parts with the group's state, and reduced motion stops all of it.
+- The accent badge's disc and ring stay still now: only the figure breathes, pops and squashes on them. A figure no longer sways as a whole while its agent works, and a pin you hold to move is no longer squashed.
+- `pi-roundtable/characters` groups the head's parts (`head`, `hat`, `eyes-brows`, `mouth`, `fx`, `acc`) in one `<g class="hd" data-part="headset">`, and the hair behind the head carries class `hd` too, so a stylesheet can turn the head as one piece; the pixels of a figure do not change. `PIVOTS.neck` (`50px 76px`) is the pivot to turn it about, and `PIVOTS` is exported.
+- The pins in the phone home's dock, with no room open, are drawn at 80 px as designed (they were 56 px by mistake), and the dock gives each one the room.
+
+### Changed
+
+- On a phone or tablet, the room drawer of a host with the chat home is laid out like the home: the folder tabs (open on the tab the home last had), the home's rows with the preview, time and unread counts, other folders' unread rooms, the pinned rooms in a dock at the bottom, and a bar with Home, the search and the add menu. The open room's dispatch threads head the list, so another thread of the room is one swipe and one tap away. A swipe left over a row closes the drawer and never turns Yolo on. The "Waiting for you" section and dropping a room into a folder are gone from this drawer; the room header's waiting button and the hold menu do both. Hosts that keep the rooms page and desktop widths keep today's drawer.
+- The chat home's folder tabs scroll sideways on a phone again instead of wrapping onto a second line.
+
 ## [0.45.2] - 2026-11-10
 
 ### Changed

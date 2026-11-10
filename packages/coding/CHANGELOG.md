@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-10
+
+### Fixed
+
+- `DEFAULT_TOOL_TEXT` is frozen at every depth, so writing into it throws instead of changing the wording of every later `coding()` in the process; a spread of it, as the README shows, still composes.
+
 ## [0.45.2] - 2026-11-10
 
 - Release in lockstep with pi-roundtable 0.45.2 (chat home: one accent badge for every agent picture, pins drag again); no package-specific behavior changes.
