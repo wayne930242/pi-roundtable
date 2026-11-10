@@ -97,8 +97,8 @@ const HiddenRoom = memo(function HiddenRoom(
 });
 
 /**
- * The hidden rooms and the archived knights and groups, where the chat home's one collapsed row
- * leads: a hidden room is shown again here, an archived one is restored or, behind its menu, deleted
+ * The hidden rooms and the archived knights and groups, which the features grid
+ * opens: a hidden room is shown again here, an archived one is restored or, behind its menu, deleted
  * for good. Dispatch threads whose room is gone are listed here too.
  */
 export default function HiddenPage() {

@@ -322,8 +322,6 @@ export const ZH_TW_APP: Readonly<Record<string, string>> = {
 	"{count} threads": "{count} 串",
 	"No cards are waiting.": "沒有待回答的卡片。",
 	"All features": "所有功能",
-	"Hidden {hidden} · Archived {archived}": "已隱藏 {hidden}・已封存 {archived}",
-	"Unread messages": "有未讀訊息",
 	"Other unread": "其他未讀",
 	All: "全部",
 	Unhide: "取消隱藏",

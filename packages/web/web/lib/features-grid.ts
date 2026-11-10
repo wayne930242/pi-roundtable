@@ -134,12 +134,10 @@ export function featureGroups(input: FeatureInput): TileGroup[] {
 								kind: "go",
 								pane: "settings",
 							}),
-							own("profile", t("Profile"), PANE_ICONS.profile, {
-								kind: "go",
-								pane: "profile",
-							}),
 						]
 					: []),
+				// The profile is a pane a host opts into: without it the route does not open.
+				...pane("profile"),
 				own(
 					"theme",
 					input.dark ? t("Switch to light") : t("Switch to dark"),

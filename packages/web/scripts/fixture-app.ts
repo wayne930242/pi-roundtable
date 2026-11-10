@@ -19,6 +19,7 @@
 //   FIXTURE_AGENTS                how many agents the host has, 3 to 12 (default 3)
 //   FIXTURE_COUNCIL               how many members the group "crew", the council on the round table, has, 2 to 8
 //                                 (default 2): the scripted scout, archivist and guide, then the extra agents
+//   FIXTURE_PROFILE               `1` adds the profile pane to the owner's panes, which an owners-only host does not serve by default
 //   FIXTURE_TIER                  `member` (with FIXTURE_HOST=1) admits every request as a member of the host (admission
 //                                 access, the panes rooms and table), who lists only the "Support thread" room of the inbox
 //
@@ -267,6 +268,9 @@ host = await testHost({
 						"notes",
 						"skills",
 						"connectors",
+						...(process.env.FIXTURE_PROFILE === "1"
+							? ["profile" as const]
+							: []),
 					],
 			...(process.env.LOCALE
 				? { presentation: { locale: process.env.LOCALE } }

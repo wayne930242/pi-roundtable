@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import {
 	chipsOf,
-	hiddenDot,
 	listFor,
 	pinBadge,
 	pinSizeOf,
@@ -98,12 +97,6 @@ test("a waiting card outranks unread, unread outranks the working dot, and nothi
 	expect(pinBadge(0, 5, true)).toEqual({ kind: "unread", count: 5 });
 	expect(pinBadge(0, 0, true)).toEqual({ kind: "typing" });
 	expect(pinBadge(0, 0, false)).toBeUndefined();
-});
-
-test("the collapsed row lights a dot when a hidden room has something unread", () => {
-	expect(hiddenDot([A, B], { [B]: 2 })).toBe(true);
-	expect(hiddenDot([A, B], { [C]: 2 })).toBe(false);
-	expect(hiddenDot([], { [A]: 1 })).toBe(false);
 });
 
 test("pins are 80 px in the phone home's dock, and 56 px in a column or beside an open room", () => {

@@ -42,6 +42,9 @@ export const CHATS_HOME_CSS = `
 
 .chats-me {
 	display: grid;
+	padding: 0;
+	border: 0;
+	cursor: pointer;
 	flex: none;
 	place-items: center;
 	width: var(--touch);
@@ -246,20 +249,6 @@ a.pin[aria-current="page"] {
 	background: var(--surface-3);
 	color: var(--muted);
 	font-weight: var(--weight-medium);
-}
-
-.hidden-row {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	min-height: var(--touch);
-	padding: 0 var(--space-2);
-	color: var(--muted);
-	text-decoration: none;
-}
-
-.hidden-row:hover {
-	color: var(--text);
 }
 
 /* ── The page of hidden and archived rooms ────────────────────────────────────────────────────── */

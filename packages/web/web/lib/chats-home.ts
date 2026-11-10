@@ -169,9 +169,3 @@ export function pinBadge(
 	if (unread > 0) return { kind: "unread", count: unread };
 	return typing ? { kind: "typing" } : undefined;
 }
-
-/** Whether a hidden room has something unread, which lights the dot of the row that holds them. */
-export const hiddenDot = (
-	hidden: readonly string[],
-	unread: Readonly<Record<string, number>>,
-): boolean => hidden.some((key) => (unread[key] ?? 0) > 0);
