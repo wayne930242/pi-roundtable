@@ -208,9 +208,10 @@ export async function setUpModules(
 				void record.posted.push({ channel, text: reply.chunks.join("") }),
 		},
 	]);
-	// SAFETY: setup and the preflight read only the logger, the conversations' background, targets and owners, the surfaces, the direct channels, and the services.
+	// SAFETY: setup and the preflight read only the logger, the conversations' background, targets and owners, the surfaces, the direct channels, and the services, and the queue's drain flags.
 	const context = {
 		logger: silentLogger(),
+		queue: { closed: false, draining: false },
 		conversations: {
 			target: (name: string) =>
 				options.ownerTarget !== false && name === PERSONAL_TARGET.name

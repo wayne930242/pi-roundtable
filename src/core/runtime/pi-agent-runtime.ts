@@ -386,7 +386,7 @@ export class PiAgentRuntime implements AgentRuntime {
 	): Promise<string> {
 		const { dataDir } = this.#options;
 		const { signal } = task;
-		if (this.#options.stopping?.())
+		if (this.#options.stopping?.() || this.#options.draining?.())
 			throw new AgentRunError(new HostStoppingError().message);
 		// A task works at the tier of the turn that started it; without one there is no tier to take.
 		const turn = this.#turns.get(scope.turn);

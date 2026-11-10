@@ -103,4 +103,29 @@ describe("ChannelQueue", () => {
 		await running;
 		expect(await report).toBe("report");
 	});
+
+	test("draining reads true through finishing, which only masks closed, and a queue task the report's own task starts is refused", async () => {
+		const queue = new ChannelQueue();
+		expect(queue.draining).toBe(false);
+		queue.close();
+		const seen: boolean[] = [];
+		const nested = await queue.finishing(() =>
+			queue.run("discord:1", async () => {
+				seen.push(queue.closed, queue.draining);
+				// The report's own turn may spawn work, but the shutdown refuses a queue task of it.
+				return queue
+					.run("discord:2", async () => "spawned")
+					.catch((error: unknown) => error);
+			}),
+		);
+		expect(seen).toEqual([false, true]);
+		expect(nested).toBeInstanceOf(HostStoppingError);
+		// Before the close the same nesting runs, as ever.
+		const open = new ChannelQueue();
+		expect(
+			await open.finishing(() =>
+				open.run("discord:1", () => open.run("discord:2", async () => "ran")),
+			),
+		).toBe("ran");
+	});
 });

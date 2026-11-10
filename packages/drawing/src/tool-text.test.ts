@@ -4,7 +4,10 @@ import { testPlugin } from "pi-roundtable/testing";
 import { drawing } from "./plugin.ts";
 import { RecordingSurface } from "./testing/fake-surface.ts";
 import { writeTestDecks } from "./testing/test-deck.ts";
-import { DEFAULT_DRAWING_TOOL_TEXT } from "./tool-text.ts";
+import {
+	DEFAULT_DRAWING_TOOL_TEXT,
+	DRAW_CARDS_ARGUMENTS,
+} from "./tool-text.ts";
 
 let deckDir = "";
 beforeAll(() => {
@@ -43,6 +46,14 @@ async function open(options: Parameters<typeof drawing>[0] = {}) {
 		} as never);
 	}
 	return { harness, tools: found };
+}
+/** Every argument path a schema asks for, dotted, the way `at` walks them. */
+function paths(node: Schema, prefix = ""): string[] {
+	const inner = node.items ?? node;
+	return Object.entries(inner.properties ?? {}).flatMap(([name, child]) => {
+		const path = prefix ? `${prefix}.${name}` : name;
+		return [path, ...paths(child, path)];
+	});
 }
 /** The schema at an argument path; arrays are transparent, as in the text keys. */
 function at(root: Schema, path: string): Schema | undefined {
@@ -129,5 +140,66 @@ describe("drawing tool text", () => {
 				toolText: { relationship_map: { parameters: { nodez: "x" } } },
 			}),
 		).rejects.toThrow('toolText.relationship_map has no argument "nodez"');
+	});
+
+	test("a name Object.prototype has is no tool", async () => {
+		for (const name of ["toString", "constructor", "hasOwnProperty"])
+			await expect(
+				open({ toolText: { [name]: { description: "x" } } as never }),
+			).rejects.toThrow(`toolText has no tool "${name}"`);
+	});
+
+	test("an argument typo of draw_cards stops the start when the host has no decks too", async () => {
+		await expect(
+			open({
+				deckDir: undefined,
+				toolText: { draw_cards: { parameters: { decck: "x" } } },
+			}),
+		).rejects.toThrow('toolText.draw_cards has no argument "decck"');
+		// A real argument is fine without decks, and the check is the same one the built tool makes.
+		const { harness, tools } = await open({
+			deckDir: undefined,
+			toolText: { draw_cards: { parameters: { "spread.label": "x" } } },
+		});
+		expect(tools.draw_cards).toBeUndefined();
+		await harness.stop();
+	});
+
+	test("the static list of draw_cards arguments is the one the built tool asks for", async () => {
+		const { harness, tools } = await open();
+		const asked = new Set(DRAW_CARDS_ARGUMENTS);
+		const built = paths(tools.draw_cards?.parameters ?? {});
+		expect(built.filter((path) => !asked.has(path))).toEqual([]);
+		const all = Object.fromEntries(DRAW_CARDS_ARGUMENTS.map((p) => [p, "x"]));
+		const full = await open({ toolText: { draw_cards: { parameters: all } } });
+		for (const path of DRAW_CARDS_ARGUMENTS)
+			expect(
+				at(full.tools.draw_cards?.parameters ?? {}, path)?.description,
+			).toBe("x");
+		await full.harness.stop();
+		await harness.stop();
+	});
+
+	test("the defaults cannot be written into, at any depth", () => {
+		expect(Object.isFrozen(DEFAULT_DRAWING_TOOL_TEXT)).toBe(true);
+		for (const text of Object.values(DEFAULT_DRAWING_TOOL_TEXT)) {
+			expect(Object.isFrozen(text)).toBe(true);
+			expect(Object.isFrozen(text.parameters)).toBe(true);
+		}
+		expect(() => {
+			(
+				DEFAULT_DRAWING_TOOL_TEXT.sigil_generate.parameters as Record<
+					string,
+					string
+				>
+			).background = "x";
+		}).toThrow();
+		// A host's spread of one tool's text still composes.
+		const own = {
+			...DEFAULT_DRAWING_TOOL_TEXT.sigil_generate,
+			parameters: { ...DEFAULT_DRAWING_TOOL_TEXT.sigil_generate.parameters },
+		};
+		own.parameters.background = "Light.";
+		expect(own.parameters.background).toBe("Light.");
 	});
 });

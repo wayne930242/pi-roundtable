@@ -117,6 +117,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 			sessions,
 			toolTiers,
 			directChannels,
+			queue,
 		}) => {
 			const schedules = services.get(SCHEDULES);
 			// Absent when a plugin list leaves the prechecks plugin out: then none can be attached.
@@ -171,6 +172,7 @@ export function modulesPlugin(options: ModulesOptions): RoundtablePlugin {
 				targets: (name) => conversations.target(name),
 				deliver: (job, outcome) => background.runDelegated(job, outcome),
 				...(threads ? { threads } : {}),
+				draining: () => queue.draining ?? queue.closed,
 				logger,
 			});
 			services.provide(BACKGROUND_TURNS, background);

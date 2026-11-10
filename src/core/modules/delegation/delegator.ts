@@ -3,6 +3,7 @@ import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
 import type { Tier } from "../../identity/speakers.ts";
+import { HostStoppingError } from "../../kernel/errors.ts";
 import type { Logger } from "../../kernel/log.ts";
 import { timeZone } from "../../kernel/time.ts";
 import type { Delegator } from "../../plugin-api/services.ts";
@@ -49,6 +50,8 @@ export interface DelegatorOptions {
 	threads?: Pick<DispatchThreads, "open">;
 	logger: Logger;
 	timeoutMs?: number;
+	/** True while the host's shutdown drain runs; a job started then is refused, as any new work. */
+	draining?: () => boolean;
 }
 
 const MAX_TASK_CHARS = 4_000;
@@ -73,6 +76,8 @@ export class DefaultDelegator implements Delegator {
 	start(
 		request: Omit<DelegationJob, "id" | "startedAt" | "thread">,
 	): DelegationJob {
+		if (this.#options.draining?.())
+			throw new DelegationError(new HostStoppingError().message);
 		const title = request.title.trim();
 		const task = request.task.trim();
 		if (!title || !task)
