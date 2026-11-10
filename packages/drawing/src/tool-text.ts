@@ -17,7 +17,39 @@ export interface DrawingToolText {
 	parameters?: Record<string, string>;
 }
 
+/** The shipped wording of every drawing tool; frozen at every depth. */
+export type DrawingToolTexts = Readonly<
+	Record<
+		DrawingToolName,
+		Readonly<{
+			description: string;
+			parameters: Readonly<Record<string, string>>;
+		}>
+	>
+>;
+
 const BACKGROUND = "Default dark.";
+
+/** Freezes the value and every object inside it. */
+function deepFreeze<T extends object>(value: T): T {
+	for (const child of Object.values(value))
+		if (child && typeof child === "object") deepFreeze(child);
+	return Object.freeze(value);
+}
+
+/** Every argument path `draw_cards` words, known without building the tool. */
+export const DRAW_CARDS_ARGUMENTS: readonly string[] = [
+	"deck",
+	"count",
+	"group",
+	"exclude",
+	"allow_reversed",
+	"spread",
+	"spread.row",
+	"spread.col",
+	"spread.label",
+	"question",
+];
 
 /**
  * The wording of each drawing tool as the package ships it: the description, and the argument
@@ -27,9 +59,7 @@ const BACKGROUND = "Default dark.";
  *
  * `draw_cards` lists the host's decks after its description when the host sets none.
  */
-export const DEFAULT_DRAWING_TOOL_TEXT: Readonly<
-	Record<DrawingToolName, Required<DrawingToolText>>
-> = {
+export const DEFAULT_DRAWING_TOOL_TEXT: DrawingToolTexts = deepFreeze({
 	relationship_map: {
 		description:
 			"Draw a hand-drawn relationship map of characters (pc, npc) and factions, with typed relationships between them, and attach it to your reply as an image.",
@@ -84,7 +114,7 @@ export const DEFAULT_DRAWING_TOOL_TEXT: Readonly<
 			question: "The question, shown on the picture.",
 		},
 	},
-};
+});
 
 /** One tool's resolved wording; the tool asks for each argument it describes. */
 export interface ToolWording {
@@ -95,6 +125,24 @@ export interface ToolWording {
 	about(path: string): { description?: string };
 	/** Fails when the host worded an argument the tool never asked for, such as a misspelled name. */
 	check(): void;
+}
+
+const unknownArgument = (tool: DrawingToolName, path: string) =>
+	new PluginError(
+		`plugin drawing: toolText.${tool} has no argument "${path}".`,
+	);
+
+/**
+ * Fails on an argument the host worded for a tool that is not built, against the list of paths it
+ * would ask for; the built tool checks its own through `ToolWording.check`.
+ */
+export function checkUnbuiltArguments(
+	tool: DrawingToolName,
+	text: DrawingToolText | undefined,
+	paths: readonly string[],
+): void {
+	for (const path of Object.keys(text?.parameters ?? {}))
+		if (!paths.includes(path)) throw unknownArgument(tool, path);
 }
 
 export function toolWording(
@@ -113,10 +161,7 @@ export function toolWording(
 		},
 		check: () => {
 			for (const path of Object.keys(text?.parameters ?? {}))
-				if (!asked.has(path))
-					throw new PluginError(
-						`plugin drawing: toolText.${tool} has no argument "${path}".`,
-					);
+				if (!asked.has(path)) throw unknownArgument(tool, path);
 		},
 	};
 }
@@ -126,6 +171,6 @@ export function checkToolNames(
 	text: Partial<Record<string, DrawingToolText>>,
 ): void {
 	for (const name of Object.keys(text))
-		if (!(name in DEFAULT_DRAWING_TOOL_TEXT))
+		if (!Object.hasOwn(DEFAULT_DRAWING_TOOL_TEXT, name))
 			throw new PluginError(`plugin drawing: toolText has no tool "${name}".`);
 }
