@@ -271,11 +271,11 @@ describeDb("the room list's layout over a real host", () => {
 				pinned: true,
 			},
 		);
-		// Home stays at the top.
-		expect(pinned.status).toBe(400);
+		// Home can be pinned by hand.
+		expect(pinned.status).toBe(200);
 		const listed = (await (await rest(app, "rooms")).json()) as RoomsView;
 		expect(listed.folders).toEqual([{ id, name: "Work", rooms: [SCOUT] }]);
-		expect(listed.pins).toEqual([]);
+		expect(listed.pins).toEqual([GUIDE]);
 
 		const muted = await write(`folders/${id}/mute`, "PUT", {
 			muted: true,

@@ -3,11 +3,11 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 /** How long the pop of a new message lasts; the style's `fig-pop` runs as long. */
 export const POP_MS = 600;
 
-/** A key's own phase in seconds, so figures that rest side by side do not breathe in step. */
+/** A key's own phase in seconds, in hundredths so two neighbours rarely share one: figures that rest side by side neither breathe nor blink in step. */
 export function phaseOf(key: string): string {
 	let hash = 0;
 	for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-	return `-${((hash % 30) / 10).toFixed(1)}s`;
+	return `-${((hash % 300) / 100).toFixed(2)}s`;
 }
 
 /**

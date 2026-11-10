@@ -77,7 +77,7 @@ function setup(presentation?: ConsolePresentation) {
 		surface: {} as never,
 		rooms: {
 			resolve: async (key: string) => known.get(key),
-			placeable: () => new Set([SCOUT, BUILD, TEAM]),
+			placeable: () => new Set([HOME, SCOUT, BUILD, TEAM]),
 			homeKey: () => HOME,
 			list: async () => [],
 		} as never,
@@ -308,7 +308,7 @@ describe("the room list's layout", () => {
 		expect(changes).toBe(0);
 	});
 
-	test("an unknown room is 404; Home and a thread are 400; an unknown folder is 404", async () => {
+	test("an unknown room is 404; Home in a folder and a thread are 400; an unknown folder is 404", async () => {
 		const server = setup();
 		const work = await folder(server, "Work");
 		const unknown = await call(
@@ -328,16 +328,16 @@ describe("the room list's layout", () => {
 
 		for (const action of ["pin", "folder"] as const) {
 			const body = action === "pin" ? { pinned: true } : { folder: work };
-			const home = await call(
-				server,
-				"PUT",
-				`rooms/${encoded(HOME)}/${action}`,
-				{
-					body,
-				},
-			);
-			expect(home.status).toBe(400);
-			expect(await errorOf(home)).toBe("Home stays at the top.");
+			if (action === "folder") {
+				const home = await call(
+					server,
+					"PUT",
+					`rooms/${encoded(HOME)}/folder`,
+					{ body },
+				);
+				expect(home.status).toBe(400);
+				expect(await errorOf(home)).toBe("Home stays at the top.");
+			}
 			const thread = await call(
 				server,
 				"PUT",
@@ -435,10 +435,30 @@ describe("the room list's layout", () => {
 		expect(store.stored.hidden).toEqual([]);
 	});
 
+	test("Home can be pinned and unpinned, in the owners' order, and stays out of a folder", async () => {
+		const server = setup();
+		const scout = await call(server, "PUT", `rooms/${encoded(SCOUT)}/pin`, {
+			body: { pinned: true },
+		});
+		expect(scout.status).toBe(200);
+		const pin = (pinned: boolean, before?: string) =>
+			call(server, "PUT", `rooms/${encoded(HOME)}/pin`, {
+				body: before === undefined ? { pinned } : { pinned, before },
+			});
+		const pinned = await pin(true);
+		expect(pinned.status).toBe(200);
+		expect(((await pinned.json()) as LayoutView).pins).toEqual([SCOUT, HOME]);
+		expect(store.stored.pins).toEqual([SCOUT, HOME]);
+		expect((await pin(true, SCOUT)).status).toBe(200);
+		expect(store.stored.pins).toEqual([HOME, SCOUT]);
+		expect((await pin(false)).status).toBe(200);
+		expect(store.stored.pins).toEqual([SCOUT]);
+	});
+
 	test("under a host that words the console in zh-TW a refusal reaches the API's client in that wording, and in English without one", async () => {
 		const pin = (server: ReturnType<typeof setup>) =>
-			call(server, "PUT", `rooms/${encoded(HOME)}/pin`, {
-				body: { pinned: true },
+			call(server, "PUT", `rooms/${encoded(HOME)}/folder`, {
+				body: { folder: null },
 			});
 		const english = await pin(setup());
 		expect(await errorOf(english)).toBe("Home stays at the top.");

@@ -1,7 +1,12 @@
+import type { AvatarState, Expression } from "pi-roundtable/characters";
 import type { RoomView } from "../../src/api-types.ts";
 import { movesIn, useCharacters, useRoomState } from "../lib/characters.ts";
 import { phaseOf } from "../lib/figure-motion.ts";
 import { CharacterStack, PageCharacter } from "./character.tsx";
+
+/** An idle agent rests with its eyes closed, so a home full of idle figures does not blink in unison; every other state keeps the kit's expression. */
+const expressionOf = (state: AvatarState): Expression | undefined =>
+	state === "idle" ? "resting" : undefined;
 
 /**
  * A room's picture on the chat home, whose style moves the parts of a figure: a `pin` moves them at
@@ -45,6 +50,7 @@ function MovingGroup(props: { view: RoomView; size: number; always: boolean }) {
 						name={member.name}
 						size={props.size}
 						state={state}
+						expr={expressionOf(state)}
 						live={live}
 					/>
 				</span>
@@ -61,6 +67,7 @@ function MovingAgent(props: { view: RoomView; size: number; always: boolean }) {
 			name={props.view.name}
 			size={props.size}
 			state={state}
+			expr={expressionOf(state)}
 			live={props.always || movesIn(state)}
 		/>
 	);

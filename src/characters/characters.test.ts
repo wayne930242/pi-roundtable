@@ -21,9 +21,9 @@ import { HATS } from "./parts-hats.ts";
 import { OUTFITS } from "./parts-outfits.ts";
 import { PROP_PIVOTS, PROPS } from "./parts-props.ts";
 
-test("the catalog lists the lab's 24 classes, 13 expressions and 7 states", () => {
+test("the catalog lists the lab's 24 classes, 14 expressions and 7 states", () => {
 	expect(CLASS_IDS).toHaveLength(24);
-	expect(EXPRESSIONS).toHaveLength(13);
+	expect(EXPRESSIONS).toHaveLength(14);
 	expect(AVATAR_STATES).toHaveLength(7);
 	expect(CATALOG.outfits).toHaveLength(15);
 	expect(CATALOG.hats).toHaveLength(24);
@@ -243,7 +243,7 @@ test("one head group turns the head parts about the neck, and the hair behind it
 	expect(PIVOTS.neck).toBe("50px 76px");
 });
 
-test("all 24 classes in all 13 expressions and both frames compose safely within 8 KB", () => {
+test("all 24 classes in all 14 expressions and both frames compose safely within 8 KB", () => {
 	for (const id of CLASS_IDS) {
 		const spec = resolveCharacter({ class: id });
 		for (const expr of EXPRESSIONS)
