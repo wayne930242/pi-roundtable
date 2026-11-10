@@ -4,6 +4,7 @@ import {
 	hiddenDot,
 	listFor,
 	pinBadge,
+	pinSizeOf,
 	pinsOf,
 } from "./lib/chats-home.ts";
 import type { Sections } from "./lib/sections.ts";
@@ -103,4 +104,11 @@ test("the collapsed row lights a dot when a hidden room has something unread", (
 	expect(hiddenDot([A, B], { [B]: 2 })).toBe(true);
 	expect(hiddenDot([A, B], { [C]: 2 })).toBe(false);
 	expect(hiddenDot([], { [A]: 1 })).toBe(false);
+});
+
+test("pins are 80 px in the phone home's dock, and 56 px in a column or beside an open room", () => {
+	expect(pinSizeOf({ column: false, active: undefined })).toBe(80);
+	expect(pinSizeOf({ column: true, active: undefined })).toBe(56);
+	expect(pinSizeOf({ column: false, active: A })).toBe(56);
+	expect(pinSizeOf({ column: true, active: A })).toBe(56);
 });

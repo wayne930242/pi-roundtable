@@ -12,6 +12,7 @@ import {
 	folderOf,
 	hiddenDot,
 	listFor,
+	pinSizeOf,
 	pinsOf,
 } from "../lib/chats-home.ts";
 import { installChatsHomeStyle } from "../lib/chats-home-style.ts";
@@ -136,9 +137,7 @@ export default function ChatsHome(props: ChatsHomeProps) {
 							key={key}
 							{...data}
 							active={key === props.active}
-							size={
-								dock || props.column || props.active !== undefined ? 56 : 80
-							}
+							size={pinSizeOf(props)}
 							unread={unread[key] ?? 0}
 						/>
 					);

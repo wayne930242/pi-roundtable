@@ -152,6 +152,14 @@ export type PinBadge =
 	| { kind: "waiting" | "unread"; count: number }
 	| { kind: "typing" };
 
+/** A pin is drawn large only in the phone home's dock, with no room open; a column or an open room keeps it small. */
+export function pinSizeOf(where: {
+	column?: boolean;
+	active?: string | undefined;
+}): 80 | 56 {
+	return where.column || where.active !== undefined ? 56 : 80;
+}
+
 export function pinBadge(
 	waiting: number,
 	unread: number,

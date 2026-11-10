@@ -7,3 +7,5 @@ The chat home's knights move by part. A pin and a room row turn the head and swe
 The accent badge's disc and ring stay still now: only the figure breathes, pops and squashes on them. A figure no longer sways as a whole while its agent works, and a pin you hold to move is no longer squashed.
 
 `pi-roundtable/characters` groups the head's parts (`head`, `hat`, `eyes-brows`, `mouth`, `fx`, `acc`) in one `<g class="hd" data-part="headset">`, and the hair behind the head carries class `hd` too, so a stylesheet can turn the head as one piece; the pixels of a figure do not change. `PIVOTS.neck` (`50px 76px`) is the pivot to turn it about, and `PIVOTS` is exported.
+
+The pins in the phone home's dock, with no room open, are drawn at 80 px as designed (they were 56 px by mistake), and the dock gives each one the room.
