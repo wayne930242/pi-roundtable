@@ -10,6 +10,7 @@ import {
 	CLASS_IDS,
 	composeSvg,
 	EXPRESSIONS,
+	PIVOTS,
 	parseCharacter,
 	readCharacter,
 	resolveCharacter,
@@ -181,6 +182,65 @@ test("readCharacter reads stored rows leniently and never throws", () => {
 		skin: [],
 	});
 	expect(result).toEqual(resolveCharacter({ class: "monk" }));
+});
+
+/** The classes of the groups directly inside `g.ch`, and of the groups directly inside each of them. */
+function figureGroups(svg: string): { top: string[]; inside: string[][] } {
+	const top: string[] = [];
+	const inside: string[][] = [];
+	let depth = 0;
+	let at = -1;
+	const figure = svg.slice(
+		svg.indexOf(`<g class="ch">`),
+		svg.indexOf(`<g class="state"`),
+	);
+	for (const match of figure.matchAll(
+		/<g\b(?: class="([^"]*)")?[^>]*>|<\/g>/g,
+	)) {
+		const tag = match[0];
+		const name = match[1];
+		if (tag === "</g>") {
+			depth--;
+			continue;
+		}
+		depth++;
+		// Depth 1 is `g.ch`, depth 2 its parts, depth 3 what a part holds.
+		if (name === "ch") continue;
+		if (depth === 2) {
+			top.push(name ?? "");
+			inside.push([]);
+			at++;
+		} else if (depth === 3) inside[at]?.push(name ?? "");
+	}
+	return { top, inside };
+}
+
+test("one head group turns the head parts about the neck, and the hair behind it with it, for every class and hat", () => {
+	const order = ["head", "hat", "eyes-brows", "mouth", "fx", "acc"];
+	for (const id of CLASS_IDS)
+		for (const hat of CATALOG.hats) {
+			const spec = resolveCharacter({ hat }, resolveCharacter({ class: id }));
+			const svg = composeSvg(spec, { bare: true, uid: "q9" });
+			const { top, inside } = figureGroups(svg);
+			const where = `${id} in a ${hat}`;
+			// The head group sits between the body and the held item, and only the hair behind joins it.
+			expect(
+				top.filter((name) => name !== "back hd"),
+				where,
+			).toEqual(["body", "hd", "prop"]);
+			if (top.includes("back hd")) expect(top[0], where).toBe("back hd");
+			const parts = inside[top.indexOf("hd")] ?? [];
+			expect(parts, where).toEqual(
+				order.filter((name) => parts.includes(name)),
+			);
+			for (const required of ["head", "eyes-brows", "mouth"])
+				expect(parts, where).toContain(required);
+			// Nothing of the head is left outside the group.
+			for (const name of order) expect(top, where).not.toContain(name);
+			expect(svg.match(/class="hd"/g), where).toHaveLength(1);
+		}
+	// The neck: under the head's chin (it ends at y 77) and above the torso's top (71).
+	expect(PIVOTS.neck).toBe("50px 76px");
 });
 
 test("all 24 classes in all 13 expressions and both frames compose safely within 8 KB", () => {

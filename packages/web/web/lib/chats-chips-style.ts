@@ -130,6 +130,6 @@ button.chip[aria-pressed="true"] .chip-count {
 
 .pin-dock .pin-item {
 	flex: none;
-	width: 4.5rem;
+	width: 5rem;
 }
 `;
