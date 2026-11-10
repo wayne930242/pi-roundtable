@@ -115,7 +115,8 @@ describeDb("temp knights (Discord)", () => {
 				session: discordKey(helper?.channelId ?? ""),
 				home: discordKey(helper?.channelId ?? ""),
 			};
-			script.tools = ["schedule_create"];
+			script.tools = ["schedule_create", "place_arrange"];
+			script.withheld = ["place_arrange"];
 			const own = fx.team.selection(asHelper).tools;
 			const parent = fx.team.selection(caller).tools;
 			for (const tool of [
@@ -125,7 +126,7 @@ describeDb("temp knights (Discord)", () => {
 				"group_create",
 				"group_update",
 				"archive",
-				"channel_arrange",
+				"place_arrange",
 				"schedule_create",
 			]) {
 				expect(parent).toContain(tool);

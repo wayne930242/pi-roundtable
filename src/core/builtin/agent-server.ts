@@ -78,7 +78,6 @@ const AGENT_TIERS: Readonly<Record<string, Tier>> = {
 	agent_list: "member",
 	agent_get: "member",
 	message_agent: "member",
-	channel_read: "member",
 	// A knight may make temp knights for whoever is talking to it; the limits hold the cost.
 	helper_create: "member",
 	helper_end: "member",
@@ -174,11 +173,8 @@ export function agentServerPlugin(
 			const connection = discord?.connection;
 			const { logger, providers, surfaces } = context;
 			// The team's Discord channels, in the agent guild; a bot without one serves only the plugins.
-			const channels =
-				connection && options.guildId
-					? connection.agentChannels(options.guildId)
-					: undefined;
-			if (!channels) hostsRooms = () => surfaces.roomSurfaces().length > 0;
+			const inGuild = connection !== undefined && options.guildId !== undefined;
+			if (!inGuild) hostsRooms = () => surfaces.roomSurfaces().length > 0;
 			else servesDiscord = () => context.places.of("discord") !== undefined;
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
@@ -263,6 +259,8 @@ export function agentServerPlugin(
 				promptSections: () => context.sessions().prompt,
 				agentTools: context.env.agentTools,
 				pluginTools: () => context.sessions().agentTools,
+				pluginWithheldFromHelpers: () =>
+					context.sessions().agentToolsWithheldFromHelpers ?? [],
 				pluginSelection: () => context.sessions().agentSelection(),
 				events: context.events,
 				owner: options.owner,
@@ -270,7 +268,6 @@ export function agentServerPlugin(
 				shellUser: options.shellUser,
 				...(options.scratchDir ? { scratchDir: options.scratchDir } : {}),
 				store,
-				...(channels ? { channels } : {}),
 				studio,
 				...(options.refreshAvatars ? { refreshAvatars: true } : {}),
 				runtime: () => running,

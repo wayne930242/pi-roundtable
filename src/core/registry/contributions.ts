@@ -409,6 +409,9 @@ export function linkSessions(registry: Registry): LinkedSessions {
 		personaMemory: (kind) => personas.get(kind)?.memory ?? "speaker",
 		requiredTools: [...new Set(registry.requiredTools)],
 		agentTools: registry.tools.flatMap((t) => (t.agent ? [t.name] : [])),
+		agentToolsWithheldFromHelpers: registry.tools.flatMap((t) =>
+			t.agent && t.withheldFromHelpers ? [t.name] : [],
+		),
 		agentSelection: () => mergeSelections(registry.agentSelections),
 		chatCommands: registry.chatCommandSources,
 	};

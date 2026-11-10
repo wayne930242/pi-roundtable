@@ -94,10 +94,10 @@ class FakeSurfaces {
 	}
 }
 
-export { FakeChannels } from "./agent-team-fake-channels.ts";
+export { FakeChannels } from "../testing/fake-agent-channels.ts";
 export { FakeRuntime } from "./agent-team-fake-runtime.ts";
 
-import { FakeChannels } from "./agent-team-fake-channels.ts";
+import { FakeChannels } from "../testing/fake-agent-channels.ts";
 
 import { FakeRuntime } from "./agent-team-fake-runtime.ts";
 
@@ -140,6 +140,7 @@ export const script: {
 	prompt: PromptSection[];
 	/** The tools plugins defined for agents. */
 	tools: string[];
+	withheld: string[];
 	/** The prompt every agent's starts with; read before each turn, so a test may change it. */
 	shared: string;
 	/** The one a speaker other than the owner gets instead; empty falls back to `shared`. */
@@ -148,6 +149,7 @@ export const script: {
 	scores: undefined,
 	prompt: [],
 	tools: [],
+	withheld: [],
 	shared: "Shared rules.",
 	guest: "",
 };
@@ -275,6 +277,9 @@ export function useTeamFixture(
 										fails: (id) => channels.failing.has(id),
 									},
 									onRemoved: (listener) => removedListeners.push(listener),
+									nameOf: (id) =>
+										store.agentByChannel(id)?.name ??
+										store.groupByChannel(id)?.name,
 								}),
 							]),
 					...stored,
@@ -287,6 +292,7 @@ export function useTeamFixture(
 		script.scores = undefined;
 		script.prompt = [];
 		script.tools = [];
+		script.withheld = [];
 		script.shared = "Shared rules.";
 		script.guest = "";
 		queue = channelQueue();
@@ -304,7 +310,7 @@ export function useTeamFixture(
 				teamId: local ? "local" : "1",
 				...(local
 					? { coordinator: "coordinator" }
-					: { entryChannel: discordKey(ENTRY), channels }),
+					: { entryChannel: discordKey(ENTRY) }),
 				seeds: () => seeds(local ? undefined : ENTRY),
 				store,
 				surfaces,
@@ -329,6 +335,7 @@ export function useTeamFixture(
 				},
 				promptSections: () => script.prompt,
 				pluginTools: () => script.tools,
+				pluginWithheldFromHelpers: () => script.withheld,
 				models: {
 					defaults: {
 						model: "claude-bridge/claude-opus-5-5",

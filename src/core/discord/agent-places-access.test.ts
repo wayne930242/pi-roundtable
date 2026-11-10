@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AgentChannels } from "../agents/agent-ports.ts";
+import type { AgentChannels } from "../contract/agent-channels.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { discordPlaces } from "./agent-places.ts";
 import { fakeDiscordClient } from "./place-fake-client.ts";

@@ -12,6 +12,7 @@ import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { discordPlaceProvider } from "../discord/agent-places.ts";
+import { discordAgentTools } from "../discord/agent-tools.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -33,7 +34,7 @@ import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { HoldDescription } from "../plugin-api/holds.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
-import { IDENTITY } from "../plugin-api/services.ts";
+import { AGENTS, IDENTITY } from "../plugin-api/services.ts";
 import { toolTurn } from "../plugin-api/tool-turn.ts";
 import { CompactionTiers } from "../runtime/compaction-tiers.ts";
 import { privateCompaction } from "../runtime/extensions/private-memory.ts";
@@ -238,6 +239,15 @@ export function standInDiscord(
 								logger: silentLogger(),
 							}),
 						]
+					: [],
+				// The tools of the agent guild's channels, as the built-in plugin contributes them with one.
+				tools: agentGuild
+					? discordAgentTools({
+							// SAFETY: a test host does not run the tools; nothing asks the channels.
+							channels: connection.agentChannels(agentGuild) as never,
+							directory: () => services.find(AGENTS)?.directory,
+							logger: silentLogger(),
+						})
 					: [],
 			};
 		},

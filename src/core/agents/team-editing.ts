@@ -8,16 +8,32 @@ import type { AgentTurnScope } from "../domain/ports.ts";
 import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { addressee, type Speaker } from "../identity/speakers.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
-import type { AgentChange } from "../plugin-api/services.ts";
+import type { AgentChange, NewAgent } from "../plugin-api/services.ts";
 import { openingTaskText } from "./agent-prompt.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
 import { createHelper } from "./helper-create.ts";
 import { routesOf } from "./routes.ts";
-import { groupTopic } from "./team-layout.ts";
 import { resolveLook } from "./team-looks.ts";
 import type { TeamContext } from "./team-options.ts";
 import { type PlaceWish, TeamPlaceWrites } from "./team-place-writes.ts";
+import { groupTopic } from "./team-text.ts";
+
+/**
+ * What the creating tools and the team's callers give a provider's own arguments: `hints`, with
+ * the string fields left over from the known ones, which are the arguments a provider added before
+ * `hints` existed (the deprecated `NewAgent.category`). Undefined when there are none.
+ */
+function providerHints(
+	extras: object,
+	hints: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> | undefined {
+	const legacy = Object.entries(extras).filter(
+		(entry): entry is [string, string] => typeof entry[1] === "string",
+	);
+	const all = { ...Object.fromEntries(legacy), ...hints };
+	return Object.keys(all).length > 0 ? all : undefined;
+}
 
 /** Creating and changing agents, their avatars, and groups. */
 export class TeamEditing {
@@ -91,7 +107,8 @@ export class TeamEditing {
 			/** Fields of its look; any left out come from the look its role suggests. */
 			character?: CharacterInput;
 			task: string;
-			category?: string;
+			/** The values of the arguments the surfaces' place providers add to the creation tool. */
+			hints?: Readonly<Record<string, string>>;
 			skills?: string[];
 			/** Turn long-running mode on for its conversations; the speaker must be an owner. */
 			longRunning?: boolean;
@@ -145,27 +162,34 @@ export class TeamEditing {
 	 * refused, since the opening task runs as `speaker`): the checks, picture, channel and opening
 	 * task of `create`, and the owner's model and thinking. Without a task it waits in its room.
 	 */
-	async createFor(
-		speaker: Speaker,
-		input: {
-			name: string;
-			displayName: string;
-			prompt: string;
-			character?: CharacterInput;
-			task?: string;
-			openIn?: string;
-			category?: string;
-			skills?: string[];
-			model?: string;
-			thinking?: string;
-		},
-	): Promise<Agent> {
+	async createFor(speaker: Speaker, input: NewAgent): Promise<Agent> {
 		if (speaker.tier !== "owner")
 			throw new AgentError("Only an owner may create an agent here.");
-		const { model, thinking, task, openIn, ...rest } = input;
+		const {
+			model,
+			thinking,
+			task,
+			openIn,
+			hints,
+			name,
+			displayName,
+			prompt,
+			character,
+			skills,
+			...extras
+		} = input;
+		const given = providerHints(extras, hints);
 		const made = await this.#create(
 			{ speaker, by: speaker.name, creator: undefined, openIn },
-			{ ...rest, ...(task ? { task } : {}) },
+			{
+				name,
+				displayName,
+				prompt,
+				...(character ? { character } : {}),
+				...(skills ? { skills } : {}),
+				...(task ? { task } : {}),
+				...(given ? { hints: given } : {}),
+			},
 			{ model, thinking },
 		);
 		return made.agent;
@@ -217,7 +241,7 @@ export class TeamEditing {
 			avatarPrompt?: string;
 			character?: CharacterInput;
 			task?: string;
-			category?: string;
+			hints?: Readonly<Record<string, string>>;
 			skills?: string[];
 			longRunning?: boolean;
 		},
@@ -229,7 +253,7 @@ export class TeamEditing {
 		const { store, studio, queue, skills, places, logger } = this.#ctx.options;
 		this.#refuseSkillsOff(input.skills);
 		const {
-			category,
+			hints,
 			skills: carried = [],
 			character: wanted,
 			avatarPrompt: _ignored,
@@ -266,7 +290,7 @@ export class TeamEditing {
 			name: input.name,
 			displayName: input.displayName,
 			topic: input.displayName,
-			...(category === undefined ? {} : { hints: { category } }),
+			...(hints ? { hints } : {}),
 		};
 		const made = await this.#places.make(
 			wish,
@@ -361,10 +385,24 @@ export class TeamEditing {
 		displayName: string;
 		members: string[];
 		host?: string;
-		category?: string;
+		hints?: Readonly<Record<string, string>>;
 	}): Promise<string> {
 		const { store, logger } = this.#ctx.options;
-		const { category, ...fields } = input;
+		const {
+			name,
+			displayName,
+			members,
+			host: named,
+			hints: given,
+			...extras
+		} = input;
+		const hints = providerHints(extras, given);
+		const fields = {
+			name,
+			displayName,
+			members,
+			...(named ? { host: named } : {}),
+		};
 		const host =
 			input.host ??
 			(input.members.includes("coordinator")
@@ -376,7 +414,7 @@ export class TeamEditing {
 			name: input.name,
 			displayName: input.displayName,
 			topic: groupTopic({ ...fields, host, status: "active" }, store),
-			...(category === undefined ? {} : { hints: { category } }),
+			...(hints ? { hints } : {}),
 		};
 		const made = await this.#places.make(wish);
 		const group = await store.createGroup({ ...fields, host });

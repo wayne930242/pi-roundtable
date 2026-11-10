@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ChannelType, Client, GatewayIntentBits } from "discord.js";
-import type { AgentChannels } from "../agents/agent-ports.ts";
+import type { AgentChannels } from "../contract/agent-channels.ts";
 import { channelKey } from "../contract/surface.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { DiscordEmulator } from "../testing/discord-api-emulator.ts";

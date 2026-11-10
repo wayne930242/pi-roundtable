@@ -1,12 +1,12 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { CharacterInput } from "../../characters/index.ts";
+import type { ToolArgument } from "../contract/places.ts";
 import { AgentError } from "../domain/errors.ts";
 import { THINKING_LEVELS } from "../domain/models.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
-import { assistantName, messages } from "../i18n/index.ts";
+import { assistantName } from "../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../identity/owner-identity.ts";
-import { timeZone } from "../kernel/time.ts";
 import {
 	optionalString,
 	requiredString,
@@ -55,14 +55,13 @@ export const AGENT_TOOLS = [
 	"group_create",
 	"group_update",
 	"archive",
-	"channel_arrange",
 	"room_arrange",
-	"channel_read",
 ] as const;
 
 /**
  * The tools a temp knight's turns do not get: making knights, temp knights or groups, archiving,
- * arranging channels and rooms, and scheduling, which would leave work behind with no one to end it.
+ * arranging rooms, and scheduling, which would leave work behind with no one to end it. Tools a
+ * plugin adds, such as a surface's arranging of its places, say so with `withheldFromHelpers`.
  */
 export const WITHHELD_FROM_HELPERS: readonly string[] = [
 	"agent_create",
@@ -70,7 +69,6 @@ export const WITHHELD_FROM_HELPERS: readonly string[] = [
 	"group_create",
 	"group_update",
 	"archive",
-	"channel_arrange",
 	"room_arrange",
 	"schedule_create",
 ];
@@ -105,7 +103,8 @@ export interface AgentOps {
 			/** Fields of its look; any left out come from the look its role suggests. */
 			character?: CharacterInput;
 			task: string;
-			category?: string;
+			/** The values of the arguments the surfaces' place providers add to the tool, by name. */
+			hints?: Readonly<Record<string, string>>;
 			skills?: string[];
 			/** Turn long-running mode on for its conversations; an owner's turn only. */
 			longRunning?: boolean;
@@ -150,25 +149,16 @@ export interface AgentOps {
 		displayName: string;
 		members: string[];
 		host?: string;
-		category?: string;
+		/** The values of the arguments the surfaces' place providers add to the tool, by name. */
+		hints?: Readonly<Record<string, string>>;
 	}): Promise<string>;
 	updateGroup(
 		name: string,
 		change: { displayName?: string; members?: string[]; host?: string },
 	): Promise<string>;
 	archive(caller: AgentTurnScope, name: string): Promise<string>;
-	arrange(entries: { category: string; names: string[] }[]): Promise<string>;
-	read(
-		channel: string,
-		around: string | undefined,
-		limit: number | undefined,
-	): Promise<string>;
 }
 
-const category = (kind: "Agents" | "Groups") =>
-	Type.String({
-		description: `Discord only: the category its channel opens under, ${kind} (the default) or ${kind}-<suffix>, such as ${kind}-work; made when missing. Keep to the categories agent_list shows unless a new one fits better. The app's room groups follow group.`,
-	});
 const MEMBERS = Type.Array(Type.String(), {
 	minItems: MIN_GROUP_MEMBERS,
 	maxItems: MAX_GROUP_MEMBERS,
@@ -183,18 +173,35 @@ export interface AgentToolOptions {
 	skills: boolean;
 	/** The app's room groups; without them `group` and room_arrange are refused. */
 	rooms?: RoomOps;
-	/** Whether the team has Discord channels; without them no `category`, channel_arrange or channel_read. */
-	channels: boolean;
+	/**
+	 * The arguments the surfaces' place providers add to the creation tools (`createArguments`),
+	 * merged in after the tool's own and left out where no provider adds any.
+	 */
+	arguments?: {
+		agent?: Readonly<Record<string, ToolArgument>>;
+		group?: Readonly<Record<string, ToolArgument>>;
+	};
 }
 
-/** The tools that work on the team's Discord channels, left out of a team without them. */
-const CHANNEL_TOOLS: readonly string[] = ["channel_arrange", "channel_read"];
+/** The values the model gave the provider-added arguments, by name; those it left out are absent. */
+function hintsOf(
+	input: Record<string, unknown>,
+	added: Readonly<Record<string, ToolArgument>> | undefined,
+): { hints?: Readonly<Record<string, string>> } {
+	const hints = Object.fromEntries(
+		Object.keys(added ?? {}).flatMap((name) => {
+			const value = optionalString(input, name);
+			return value ? [[name, value] as const] : [];
+		}),
+	);
+	return Object.keys(hints).length > 0 ? { hints } : {};
+}
 
 function toolDefs(
 	ops: AgentOps,
 	scope: AgentTurnScope,
 	owner: OwnerIdentity,
-	{ skills: skillsOn, rooms, channels }: AgentToolOptions,
+	{ skills: skillsOn, rooms, arguments: added }: AgentToolOptions,
 ): AgentToolDef[] {
 	const o = ownerWords(owner);
 	const defs: AgentToolDef[] = [
@@ -278,7 +285,7 @@ function toolDefs(
 					maxLength: 4000,
 					description: "Its opening task, self-contained.",
 				}),
-				...(channels ? { category: Type.Optional(category("Agents")) } : {}),
+				...added?.agent,
 				group: Type.Optional(ROOM_GROUP),
 				long_running: Type.Optional(
 					Type.Boolean({
@@ -297,7 +304,6 @@ function toolDefs(
 					: {}),
 			}),
 			run: (i) => {
-				const category = optionalString(i, "category");
 				const skills = stringList(i, "skills");
 				const look = lookOf(i);
 				const longRunning = i.long_running === true;
@@ -309,7 +315,7 @@ function toolDefs(
 						prompt: requiredString(i, "prompt"),
 						...(Object.keys(look).length > 0 ? { character: look } : {}),
 						task: requiredString(i, "task"),
-						...(category ? { category } : {}),
+						...hintsOf(i, added?.agent),
 						...(skills && skills.length > 0 ? { skills } : {}),
 						...(longRunning ? { longRunning } : {}),
 					}),
@@ -344,12 +350,11 @@ function toolDefs(
 				display_name: DISPLAY,
 				members: MEMBERS,
 				host: Type.Optional(NAME),
-				...(channels ? { category: Type.Optional(category("Groups")) } : {}),
+				...added?.group,
 				group: Type.Optional(ROOM_GROUP),
 			}),
 			run: (i) => {
 				const host = optionalString(i, "host");
-				const category = optionalString(i, "category");
 				const name = requiredString(i, "name");
 				return placedAfter(rooms, name, optionalString(i, "group"), () =>
 					ops.createGroup({
@@ -357,7 +362,7 @@ function toolDefs(
 						displayName: requiredString(i, "display_name"),
 						members: stringList(i, "members") ?? [],
 						...(host ? { host } : {}),
-						...(category ? { category } : {}),
+						...hintsOf(i, added?.group),
 					}),
 				);
 			},
@@ -394,63 +399,7 @@ function toolDefs(
 			}),
 			run: (i) => ops.archive(scope, requiredString(i, "name")),
 		},
-		{
-			name: "channel_arrange",
-			label: "Arrange channels",
-			description: `Sort agent and group channels into categories and order them, when ${o.name} asks. Agents go under Agents or Agents-<suffix>, groups under Groups or Groups-<suffix>; missing categories are made. The listed categories come first in the server in list order, then every other category as it was; in each listed category the listed channels come first in order, then its other channels as they were. Agents and Groups categories left empty are deleted. Any wrong entry refuses the whole call and nothing moves. Read the current layout with agent_list first.`,
-			parameters: Type.Object({
-				categories: Type.Array(
-					Type.Object({
-						category: Type.String({
-							description:
-								"Agents, Groups, or either with -<suffix>, the suffix 1 to 32 characters in any language.",
-						}),
-						channels: Type.Array(Type.String(), {
-							minItems: 1,
-							description:
-								"Agent or group names (from agent_list), in the order they should appear.",
-						}),
-					}),
-					{ minItems: 1, description: "Categories in server order." },
-				),
-			}),
-			run: (i) => {
-				const entries = Array.isArray(i.categories) ? i.categories : [];
-				return ops.arrange(
-					entries.map((entry: Record<string, unknown>) => ({
-						category: requiredString(entry, "category"),
-						names: stringList(entry, "channels") ?? [],
-					})),
-				);
-			},
-		},
 		...roomToolDefs(rooms, o.name),
-		{
-			name: "channel_read",
-			label: "Read channel",
-			description: `Read messages of a text channel or thread of the agent server, oldest first, each with its id, ${messages().zoneTime(timeZone())}, author, text, and attachment names. Use it for the surroundings of a message ${o.name} forwarded to you: pass the source channel and the message id from the forwarded link. Read-only.`,
-			parameters: Type.Object({
-				channel: Type.String({
-					description: "The channel as <#id> or its id.",
-				}),
-				around: Type.Optional(
-					Type.String({
-						pattern: "^\\d+$",
-						description:
-							"A message id: read the messages around it instead of the latest.",
-					}),
-				),
-				limit: Type.Optional(
-					Type.Integer({ minimum: 1, maximum: 50, description: "Default 20." }),
-				),
-			}),
-			run: (i) =>
-				ops.read(
-					requiredString(i, "channel"),
-					optionalString(i, "around"),
-					typeof i.limit === "number" ? i.limit : undefined,
-				),
-		},
 	];
 	// In a group, members hand off by mentioning each other where everyone can see it.
 	if (!scope.group)
@@ -486,8 +435,5 @@ export function agentToolsExtension(
 	owner: OwnerIdentity,
 	options: AgentToolOptions,
 ): ExtensionFactory {
-	const defs = toolDefs(ops, scope, owner, options).filter(
-		(def) => options.channels || !CHANNEL_TOOLS.includes(def.name),
-	);
-	return textToolsExtension(defs, AgentError);
+	return textToolsExtension(toolDefs(ops, scope, owner, options), AgentError);
 }

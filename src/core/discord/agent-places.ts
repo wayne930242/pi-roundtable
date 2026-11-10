@@ -1,12 +1,16 @@
 import { type Client, DiscordAPIError } from "discord.js";
 import { Type } from "typebox";
-import type { AgentChannels } from "../agents/agent-ports.ts";
-import { categoryKind, teamCategory } from "../agents/team-layout.ts";
+import type { AgentChannels } from "../contract/agent-channels.ts";
 import type { PlaceCheck, PlaceProvider } from "../contract/places.ts";
 import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import { AgentError } from "../domain/errors.ts";
 import { PluginError } from "../kernel/errors.ts";
 import type { Logger } from "../kernel/log.ts";
+import {
+	categoryKind,
+	categoryLayoutText,
+	teamCategory,
+} from "./agent-layout.ts";
 import type { DiscordConnection } from "./connection.ts";
 
 const SURFACE = "discord";
@@ -185,17 +189,8 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			agent: { category: category("Agents") },
 			group: { category: category("Groups") },
 		},
-		layoutText: async () => {
-			const layout = await channels.layout();
-			const lines = layout.flatMap((c) => {
-				if (!categoryKind(c.name)) return [];
-				const shown = c.channelIds.map(
-					(id) => options.nameOf?.(id) ?? mention(id),
-				);
-				return [`- ${c.name}: ${shown.join(", ") || "empty"}`];
-			});
-			return `Categories, in server order:\n${lines.join("\n") || "none"}`;
-		},
+		layoutText: async () =>
+			categoryLayoutText(await channels.layout(), (id) => options.nameOf?.(id)),
 	};
 }
 

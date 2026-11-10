@@ -8,7 +8,10 @@ import {
 	Partials,
 	type REST,
 } from "discord.js";
-import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
+import type {
+	AgentChannels,
+	DashboardBoard,
+} from "../contract/agent-channels.ts";
 import type {
 	ChannelContext,
 	ChannelContextOptions,
@@ -173,10 +176,15 @@ export class DiscordSurface
 	}
 
 	/** The agent team's places in the agent guild: its channels and threads, as a place provider. */
-	agentPlaces(guildId: string): PlaceProvider {
+	agentPlaces(
+		guildId: string,
+		/** The agent or group whose channel it is, for the category listing; absent = a mention. */
+		nameOf?: (channelId: string) => string | undefined,
+	): PlaceProvider {
 		return discordPlaces({
 			client: this.#client,
 			guild: guildId,
+			...(nameOf ? { nameOf } : {}),
 			channels: this.agentChannels(guildId),
 			onRemoved: (listener) => this.onChannelDeleted(listener),
 			logger: this.#options.logger,

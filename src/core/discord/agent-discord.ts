@@ -23,7 +23,7 @@ import type {
 	CategoryLayout,
 	ChannelMessage,
 	DashboardBoard,
-} from "../agents/agent-ports.ts";
+} from "../contract/agent-channels.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 import { messages } from "../i18n/index.ts";

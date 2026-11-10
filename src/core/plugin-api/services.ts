@@ -223,7 +223,10 @@ export interface NewAgent {
 	 * without it, or for a surface with no rooms, where `agent_create` runs it: the agent's Discord channel, else its first room.
 	 */
 	openIn?: string;
+	/** @deprecated Discord's category for its channel; give it as `hints.category`. Removed in 1.0. */
 	category?: string;
+	/** The values of the arguments the surfaces' place providers add to `agent_create` (`createArguments`), by name, such as Discord's `category`. */
+	hints?: Readonly<Record<string, string>>;
 	/** Skills it carries; refused when the skills addon is off. */
 	skills?: string[];
 	model?: string;
@@ -324,7 +327,10 @@ export interface AgentTeam extends HelperTeam {
 		displayName: string;
 		members: string[];
 		host?: string;
+		/** @deprecated Discord's category for its channel; give it as `hints.category`. Removed in 1.0. */
 		category?: string;
+		/** The values of the arguments the surfaces' place providers add to `group_create`, by name, such as Discord's `category`. */
+		hints?: Readonly<Record<string, string>>;
 	}): Promise<string>;
 	/** Changes a group's display name, members (all of them) or host. */
 	updateGroup(

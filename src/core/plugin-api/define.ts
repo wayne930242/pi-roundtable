@@ -110,6 +110,12 @@ export interface ToolSpec<Schema extends TObject> {
 	/** Whether agents carry the tool in their turns; default true. */
 	agent?: boolean;
 	/**
+	 * Whether a temp knight's turns leave the tool out, as they leave out making agents and
+	 * groups, archiving and scheduling: work a knight started would have no one to end it. Default
+	 * false.
+	 */
+	withheldFromHelpers?: boolean;
+	/**
 	 * A short description of what the call would do when it must wait for approval; undefined lets it
 	 * run. It may answer later, after looking something up as the turn's speaker, such as a name to
 	 * show instead of an id: `turn` is the turn `run` would get, and its `signal` aborts when the
@@ -160,6 +166,8 @@ export interface ToolContribution {
 	readonly name: string;
 	readonly minTier: Tier;
 	readonly agent: boolean;
+	/** Whether a temp knight's turns leave the tool out. */
+	readonly withheldFromHelpers?: boolean;
 	/** The extension that registers the tool in a session. */
 	readonly session: SessionTool;
 	/** The hold rule for the tool's `hold`, when it has one. */
@@ -231,6 +239,7 @@ export function defineTool<Schema extends TObject>(
 		name,
 		minTier: spec.minTier,
 		agent: spec.agent ?? true,
+		withheldFromHelpers: spec.withheldFromHelpers ?? false,
 		session,
 	};
 	if (!hold && !approvers) return contribution;

@@ -6,6 +6,7 @@ import type {
 	ChannelContextOptions,
 } from "../contract/channel-context.ts";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
+import { discordAgentTools, ownerNameOf } from "../discord/agent-tools.ts";
 import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
@@ -25,7 +26,7 @@ import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
-import { IDENTITY, THREADS } from "../plugin-api/services.ts";
+import { AGENTS, IDENTITY, THREADS } from "../plugin-api/services.ts";
 import { PeerBots } from "../routing/peer-bots.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 
@@ -186,6 +187,12 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				...(options.memberEvents ? { memberEvents: true } : {}),
 			});
 			surface = connected;
+			// The agent server's agents and groups, read when a tool runs or a layout is listed: after startup.
+			const agentDirectory = () => services.find(AGENTS)?.directory;
+			const agentNameOf = (channelId: string) => {
+				const directory = agentDirectory();
+				return directory ? ownerNameOf(directory)(channelId) : undefined;
+			};
 			// Joins come only with the Server Members intent, which `memberEvents` asks for.
 			if (options.memberEvents)
 				connected.onMemberJoined((event) => events.memberJoined?.(event));
@@ -243,9 +250,16 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.
 				surfaces: [connected],
-				// The agent team's channels and threads, when there is an agent guild for them.
+				// The agent team's channels and threads, when there is an agent guild for them, and the tools of those channels.
 				places: options.agentGuild
-					? [connected.agentPlaces(options.agentGuild)]
+					? [connected.agentPlaces(options.agentGuild, agentNameOf)]
+					: [],
+				tools: options.agentGuild
+					? discordAgentTools({
+							channels: connected.agentChannels(options.agentGuild),
+							directory: agentDirectory,
+							logger,
+						})
 					: [],
 				// A person's Discord direct messages, through a Discord identity of theirs.
 				directChannels: [

@@ -1,6 +1,6 @@
 import type { StoredPlace } from "../agents/agent-places.ts";
-import type { AgentChannels } from "../agents/agent-ports.ts";
 import { type StoredPlaces, TeamPlaces } from "../agents/team-places.ts";
+import type { AgentChannels } from "../contract/agent-channels.ts";
 import type { PlacePort, PlaceProvider } from "../contract/places.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { discordPlaces } from "../discord/agent-places.ts";
@@ -67,6 +67,8 @@ export interface TestDiscord {
 	server?: Omit<FakeServer, "guild">;
 	/** Where the provider registers the listener of a deleted channel. */
 	onRemoved?: (listener: (channelId: string) => void) => void;
+	/** The agent or group whose channel it is, for the category listing; absent = a mention. */
+	nameOf?: (channelId: string) => string | undefined;
 }
 
 /**
@@ -85,6 +87,7 @@ export function discordTestPlaces(
 		guild,
 		channels: over.channels ?? (undefined as never),
 		onRemoved: over.onRemoved ?? (() => undefined),
+		...(over.nameOf ? { nameOf: over.nameOf } : {}),
 		logger: silentLogger(),
 	});
 }

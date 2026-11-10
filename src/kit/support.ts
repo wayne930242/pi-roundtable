@@ -1,17 +1,21 @@
 // Supporting data types for the service and helper contracts.
 
 export type {
-	AgentCategory,
-	AgentChannels,
 	AgentModels,
-	AgentPost,
 	AgentTurnRunner,
-	CategoryLayout,
-	ChannelMessage,
-	DashboardBoard,
 } from "../core/agents/agent-ports.ts";
 export type { Backlog, GroupMessage } from "../core/agents/agent-rules.ts";
 export type { AgentOps } from "../core/agents/agent-tools.ts";
+// Deprecated here, removed from `pi-roundtable/kit` in 1.0: Discord's agent guild internals,
+// which `pi-roundtable/discord` exports too.
+export type {
+	AgentCategory,
+	AgentChannels,
+	AgentPost,
+	CategoryLayout,
+	ChannelMessage,
+	DashboardBoard,
+} from "../core/contract/agent-channels.ts";
 export type {
 	EffortPolicy,
 	EffortRequest,
