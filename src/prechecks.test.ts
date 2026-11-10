@@ -92,8 +92,14 @@ describeDb("the scheduler plugin with a precheck", () => {
 				} satisfies Partial<BackgroundTurns>),
 			],
 		});
+		const status = async () => (await store.get(schedule.id))?.lastStatus;
 		try {
-			for (let i = 0; i < 100 && posted.length === 0; i += 1)
+			// The run posts the note and then records its status; the status is the later of the two.
+			for (
+				let i = 0;
+				i < 100 && !(await status())?.startsWith("skipped");
+				i += 1
+			)
 				await Bun.sleep(20);
 		} finally {
 			await plugin.stop();
