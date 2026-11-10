@@ -37,7 +37,7 @@ const FolderList = lazy(() =>
 	})),
 );
 
-/** A row the owners can lift: Home stays at the top; every other row can be dropped in a pinned list, a folder or the rest. */
+/** A row the owners can lift: Home is pinned from its menu, not dragged; every other row can be dropped in a pinned list, a folder or the rest. */
 const RoomRow = memo(function RoomRow(
 	props: Omit<RowData, "key"> & {
 		active: boolean;

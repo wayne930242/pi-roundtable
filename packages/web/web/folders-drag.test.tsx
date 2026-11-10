@@ -47,7 +47,7 @@ const RoomMenuFor = (props: { room: string; onClose?: () => void }) => (
 
 const menuLabels = () => all(".menu-text strong").map((one) => one.textContent);
 
-test("a room's own menu pins it and opens Move to folder…, and Home's has neither", async () => {
+test("a room's own menu pins it and opens Move to folder…, and Home's has Pin but no Move to folder…", async () => {
 	load({ pins: [BUILD] });
 	await page.render(<RoomMenuFor room={SCOUT} />);
 	expect(menuLabels()).toContain("Pin");
@@ -78,9 +78,13 @@ test("a room's own menu pins it and opens Move to folder…, and Home's has neit
 	await settle(80);
 	expect(dialog("Move to folder…")).toBeDefined();
 	await page.act(() => clearFolderDialog());
-	// Home cannot be pinned or filed.
+	// Home can be pinned but not filed.
 	await page.render(<RoomMenuFor room={HOME} />);
-	expect(menuLabels()).not.toContain("Pin");
+	expect(menuLabels()).toContain("Pin");
+	expect(menuLabels()).not.toContain("Move to folder…");
+	load({ pins: [HOME] });
+	await page.render(<RoomMenuFor room={HOME} />);
+	expect(menuLabels()).toContain("Unpin");
 	expect(menuLabels()).not.toContain("Move to folder…");
 });
 

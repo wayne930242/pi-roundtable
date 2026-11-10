@@ -74,7 +74,7 @@ export function roomMenu(
 	const view = room?.view;
 	if (!view || view.kind === "thread") return undefined;
 	const mode = room.mode;
-	// Home stays at the top; every other room can be pinned or put in a folder. A temp knight follows its knight's place.
+	// Home can be pinned but not filed or hidden; every other room can be pinned or put in a folder. A temp knight follows its knight's place.
 	const items: MenuItem[] = [];
 	// A swipe to the right on the row does the same; this is the way to it that every reader is told of.
 	if (Object.keys(unreadIn([key])).length > 0)
@@ -86,7 +86,7 @@ export function roomMenu(
 				void actions().then((one) => one.markAllRead([key]));
 			},
 		});
-	if (!view.home && !view.helper) items.push(...placementItems(key, leave));
+	if (!view.helper) items.push(...placementItems(key, leave));
 	if (view.kind === "agent") {
 		const name = view.name;
 		items.push(

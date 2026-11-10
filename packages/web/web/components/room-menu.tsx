@@ -47,11 +47,13 @@ export function RoomMenu(props: {
 	const [busy, setBusy] = useState(false);
 	// A host can leave the two switches out.
 	const switches = useConfig().app?.modes !== false;
-	// Home stays at the top; every other room can be pinned or put in a folder.
-	const placeable = useSelector(
-		(state) => state.rooms[props.room]?.view?.home === false,
+	// Home can be pinned but not put in a folder; every other room can be either.
+	const home = useSelector(
+		(state) => state.rooms[props.room]?.view?.home,
 		props.room,
 	);
+	const placeable = home !== undefined;
+	const filable = home === false;
 	const pinned = useSelector(
 		(state) => state.pins.includes(props.room),
 		props.room,
@@ -291,28 +293,30 @@ export function RoomMenu(props: {
 								</span>
 							</button>
 						</li>
-						<li>
-							<button
-								type="button"
-								className="menu-item menu-link"
-								aria-haspopup="dialog"
-								onClick={() => {
-									props.onClose();
-									askFolderDialog({ kind: "move", room: props.room });
-								}}
-							>
-								<span className="menu-icon">
-									<Icon name="folder" />
-								</span>
-								<span className="menu-text">
-									<strong>{t("Move to folder…")}</strong>
-									<span className="meta">
-										{t("Put this room in a folder, or take it out.")}
+						{filable ? (
+							<li>
+								<button
+									type="button"
+									className="menu-item menu-link"
+									aria-haspopup="dialog"
+									onClick={() => {
+										props.onClose();
+										askFolderDialog({ kind: "move", room: props.room });
+									}}
+								>
+									<span className="menu-icon">
+										<Icon name="folder" />
 									</span>
-								</span>
-								<Icon name="chevron" size={16} />
-							</button>
-						</li>
+									<span className="menu-text">
+										<strong>{t("Move to folder…")}</strong>
+										<span className="meta">
+											{t("Put this room in a folder, or take it out.")}
+										</span>
+									</span>
+									<Icon name="chevron" size={16} />
+								</button>
+							</li>
+						) : null}
 					</>
 				)}
 				{props.readOnly ? null : (
