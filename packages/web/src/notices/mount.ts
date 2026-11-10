@@ -14,6 +14,7 @@ import { builtInSteps } from "../onboarding/steps.ts";
 import { OnboardingWaivers } from "../onboarding/waivers.ts";
 import type { ResolvedOptions } from "../options.ts";
 import { linksArea, peopleArea, profileArea } from "../profile/api.ts";
+import type { PersonCharacters } from "../profile/characters.ts";
 import { LinkService } from "../profile/links.ts";
 import { DeviceRoutes, PushApi } from "../push/api.ts";
 import { PushDispatch } from "../push/dispatch.ts";
@@ -61,6 +62,8 @@ export interface NoticesMountOptions {
 	identity: IdentityService;
 	/** Present on every host that has the identity plugin; the profile page needs it. */
 	profiles?: PersonProfiles;
+	/** The knights people made for themselves. */
+	characters: PersonCharacters;
 	subscriptions: PushSubscriptions;
 	policy: EndpointPolicy;
 	mount: string;
@@ -202,6 +205,7 @@ export function mountNotices(options: NoticesMountOptions): NoticesMount {
 	registry.onArea(
 		peopleArea({
 			profiles: options.profiles ?? { picture: async () => undefined },
+			characters: options.characters,
 			gate: options.gate,
 		}),
 	);
@@ -211,6 +215,7 @@ export function mountNotices(options: NoticesMountOptions): NoticesMount {
 				profiles: options.profiles,
 				identity,
 				sessionLabel: "Sign-in account",
+				characters: options.characters,
 			}),
 		);
 	registry.onFrame("ack", ackFrame(notices));

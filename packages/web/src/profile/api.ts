@@ -3,11 +3,13 @@ import {
 	type IdentityService,
 	type PersonProfiles,
 } from "pi-roundtable";
-import type { ProfileView } from "../api-types.ts";
+import { CharacterError, type CharacterInput } from "pi-roundtable/characters";
+import type { CharacterRefusal, ProfileView } from "../api-types.ts";
 import type { Gate } from "../gate.ts";
 import { ConsoleHttpError as HttpError, json } from "../http.ts";
 import { readLimited } from "../request-body.ts";
 import type { RouteArea, Viewer } from "../web-app.ts";
+import type { PersonCharacters } from "./characters.ts";
 import { LinkRefused, type LinkService } from "./links.ts";
 
 const MAX_BODY_BYTES = 4 * 1024;
@@ -34,6 +36,12 @@ function answer(error: unknown): Response {
 		return json({ error: error.message }, error.status);
 	if (error instanceof IdentityError)
 		return json({ error: error.message }, 400);
+	// The creator places a refusal on the field it names.
+	if (error instanceof CharacterError)
+		return json(
+			{ error: error.message, field: error.field } satisfies CharacterRefusal,
+			400,
+		);
 	throw error;
 }
 
@@ -45,15 +53,21 @@ export interface ProfileAreaOptions {
 	 * sign-in reports its name to `PROFILES.observed`, so it can name the person without a fetch.
 	 */
 	sessionLabel: string;
+	/** The knights people made for themselves. */
+	characters: Pick<PersonCharacters, "of" | "dress" | "remove">;
 }
 
-/** `GET api/profile` and `PUT api/profile/source`: how the person is shown and which account names them. */
+/**
+ * `GET api/profile`, `PUT api/profile/source` and `PUT` or `DELETE api/profile/character`: how the
+ * person is shown, which account names them, and the knight they made for themselves.
+ */
 export function profileArea(options: ProfileAreaOptions): RouteArea {
 	const view = async (viewer: Viewer, sessionProvider: string | undefined) => {
 		const { profiles, identity } = options;
-		const [display, linked] = await Promise.all([
+		const [display, linked, character] = await Promise.all([
 			profiles.of(viewer.principalId),
 			identity.identities(viewer.principalId),
+			options.characters.of(viewer.principalId),
 		]);
 		const linkedProviders = new Set(linked.map((link) => link.provider));
 		const sources: ProfileView["sources"] = profiles
@@ -70,6 +84,7 @@ export function profileArea(options: ProfileAreaOptions): RouteArea {
 			name: display.name,
 			...(display.source ? { source: display.source } : {}),
 			picture: display.picture,
+			...(character ? { character } : {}),
 			principal: viewer.principalId,
 			tier: viewer.tier,
 			sources,
@@ -95,6 +110,16 @@ export function profileArea(options: ProfileAreaOptions): RouteArea {
 					await options.profiles.choose(viewer.principalId, chosen);
 					return json(await view(viewer, provider || undefined));
 				}
+				if (parts.length === 1 && parts[0] === "character") {
+					if (request.method === "PUT") {
+						const { character } = await bodyOf(request);
+						// The check is `resolveCharacter`'s: a body without a character is refused as one that is not an object.
+						await options.characters.dress(viewer, character as CharacterInput);
+					} else if (request.method === "DELETE")
+						await options.characters.remove(viewer.principalId);
+					else throw new HttpError(405, "Method not allowed.");
+					return json(await view(viewer, provider || undefined));
+				}
 				throw new HttpError(404, "There is no such API.");
 			} catch (error) {
 				return answer(error);
@@ -103,12 +128,17 @@ export function profileArea(options: ProfileAreaOptions): RouteArea {
 	};
 }
 
+/** How long a page may keep another person's knight: it changes rarely, and the page asks once per person anyway. */
+const CHARACTER_CACHE = "private, max-age=300";
+
 /**
- * `GET api/people/<principal>/picture`: the person's picture through the picture proxy. Anyone past
- * the gate may fetch another person's picture; a person still at the gate only their own.
+ * `GET api/people/<principal>/picture` and `…/character`: the person's picture through the picture
+ * proxy, and the knight they made for themselves. Anyone past the gate may fetch another person's;
+ * a person still at the gate only their own.
  */
 export function peopleArea(options: {
 	profiles: Pick<PersonProfiles, "picture">;
+	characters: Pick<PersonCharacters, "of">;
 	gate: Pick<Gate, "required">;
 }): RouteArea {
 	return {
@@ -116,7 +146,11 @@ export function peopleArea(options: {
 		async handle(request, parts, { viewer }) {
 			try {
 				const [id, what] = parts;
-				if (id === undefined || what !== "picture" || parts.length !== 2)
+				if (
+					id === undefined ||
+					(what !== "picture" && what !== "character") ||
+					parts.length !== 2
+				)
 					throw new HttpError(404, "There is no such API.");
 				if (request.method !== "GET" && request.method !== "HEAD")
 					throw new HttpError(405, "Method not allowed.");
@@ -125,6 +159,14 @@ export function peopleArea(options: {
 					(await options.gate.required(viewer)).length > 0
 				)
 					throw new HttpError(403, "Finish setting up first.");
+				if (what === "character") {
+					const character = await options.characters.of(id);
+					if (!character) throw new HttpError(404, "There is no character.");
+					return Response.json(
+						{ character },
+						{ headers: { "cache-control": CHARACTER_CACHE } },
+					);
+				}
 				const picture = await options.profiles.picture(id);
 				if (!picture) throw new HttpError(404, "There is no picture.");
 				return picture;
