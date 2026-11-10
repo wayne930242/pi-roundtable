@@ -58,6 +58,38 @@ describeDb("a stored channel of another server at start", () => {
 	});
 });
 
+describeDb(
+	"restoring an owner whose archived channel is another server's",
+	() => {
+		useTeamFixture();
+
+		test("the channel is not moved there: the agent gets a new one in the agent guild", async () => {
+			await fx.team.archive(undefined, "doctor");
+			const old = fx.store.agent("doctor")?.channelId ?? "";
+			fx.channels.foreign.add(old);
+			const made = fx.channels.created.length;
+			await fx.team.restore("doctor");
+			const doctor = fx.store.agent("doctor");
+			expect(doctor?.status).toBe("active");
+			expect(doctor?.channelId).toBeDefined();
+			expect(doctor?.channelId).not.toBe(old);
+			expect(fx.channels.created.length).toBe(made + 1);
+			// The old channel stays in the other server's Archive, not moved into its Agents.
+			expect(fx.channels.categoryOf(old)).toBe("Archive");
+			expect(fx.channels.categoryOf(doctor?.channelId ?? "")).toBe("Agents");
+		});
+
+		test("a channel of the agent guild is brought back as before", async () => {
+			await fx.team.archive(undefined, "doctor");
+			const same = fx.store.agent("doctor")?.channelId ?? "";
+			const made = fx.channels.created.length;
+			await fx.team.restore("doctor");
+			expect(fx.store.agent("doctor")?.channelId).toBe(same);
+			expect(fx.channels.created.length).toBe(made);
+		});
+	},
+);
+
 describeDb("a stored channel that cannot be checked at start", () => {
 	useTeamFixture();
 
