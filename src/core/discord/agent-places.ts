@@ -58,12 +58,14 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 					if (!(error instanceof DiscordAPIError)) throw error;
 					if (error.code === UNKNOWN_CHANNEL) return "gone" as const;
 					// Missing Access says nothing of whose guild the channel is in, so the agent guild's own
-					// list does: an id it does not hold is another server's (the bot left it), and one it
-					// holds is a hidden channel of its own, which stays a failure.
+					// list does, which Discord gives whatever the overwrites: an id it does not hold is
+					// another server's (the bot left it), and one it holds is a hidden channel of its own,
+					// which stays a failure.
 					if (error.code === MISSING_ACCESS) {
-						const layout = await channels.layout();
-						if (!layout.some((c) => c.channelIds.includes(id)))
-							return "foreign" as const;
+						const held = await (
+							await asked.guilds.fetch(guild)
+						).channels.fetch();
+						if (!held.has(id)) return "foreign" as const;
 					}
 					throw error;
 				});

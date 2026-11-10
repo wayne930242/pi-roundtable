@@ -15,10 +15,10 @@ function provider(denied: string[]) {
 		gone: () => false,
 		foreign: () => false,
 		denied: (id) => denied.includes(id),
+		listed: () => [LISTED],
 	});
-	const channels = {
-		layout: async () => [{ name: "Agents", channelIds: [LISTED] }],
-	} as unknown as AgentChannels;
+	// SAFETY: `check` asks the client, not the channels.
+	const channels = {} as AgentChannels;
 	return discordPlaces({
 		client,
 		guild: GUILD,

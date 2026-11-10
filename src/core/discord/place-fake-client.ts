@@ -10,6 +10,8 @@ export interface FakeServer {
 	foreign(id: string): boolean;
 	/** Whether the server answers Missing Access (50001) for the channel, as for one of a server the bot left. */
 	denied?(id: string): boolean;
+	/** The ids of the agent guild's channels, as its list gives them; absent = none. */
+	listed?(): readonly string[];
 	/** Whether the request fails with an error that says nothing of the channel. */
 	fails?(id: string): boolean;
 }
@@ -44,6 +46,14 @@ export function fakeDiscordClient(server: FakeServer): Client {
 			guildId: server.foreign(id) ? "999999999999999999" : server.guild,
 		};
 	};
-	// SAFETY: the provider reads nothing of the client but `channels.fetch`.
-	return { channels: { fetch } } as unknown as Client;
+	// SAFETY: the provider reads nothing of the client but `channels.fetch` and the agent guild's channel list.
+	const guilds = {
+		fetch: async () => ({
+			channels: {
+				fetch: async () =>
+					new Map((server.listed?.() ?? []).map((id) => [id, {}])),
+			},
+		}),
+	};
+	return { channels: { fetch }, guilds } as unknown as Client;
 }

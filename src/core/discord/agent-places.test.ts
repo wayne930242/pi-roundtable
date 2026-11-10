@@ -283,6 +283,17 @@ test("check does not call a channel the bot cannot see foreign or gone: Missing 
 	}
 });
 
+test("check calls a channel of a server the bot left foreign, though Discord answers Missing Access", async () => {
+	const w = await world();
+	try {
+		w.emulator.addChannel("900000000000000051", ELSEWHERE, { name: "left" });
+		w.emulator.hideChannel("900000000000000051");
+		expect(await w.provider.check?.("900000000000000051")).toBe("foreign");
+	} finally {
+		await w.close();
+	}
+});
+
 test("check does not call a place gone on an error that says nothing of it", async () => {
 	const w = await world();
 	try {
