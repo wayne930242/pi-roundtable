@@ -7,6 +7,7 @@ import {
 	F1,
 	F2,
 	foldersPage,
+	HOME,
 	headings,
 	List,
 	labels,
@@ -48,6 +49,24 @@ test("the folder menu renames, mutes, steps and deletes; the ends have no step",
 		"Move up",
 		"Delete folder",
 	]);
+});
+
+test("Home's row menu offers Pin, then Unpin and the steps once pinned; it never offers a folder or Hide", async () => {
+	load();
+	await show(<List />);
+	await rightClick(rowOf("guide"));
+	expect(labels()).toContain("Pin");
+	expect(labels()).not.toContain("Move to folder…");
+	expect(labels()).not.toContain("Hide");
+	await page.act(() => closeMenu());
+	load({ pins: [SCOUT, HOME, BUILD] });
+	await show(<List />);
+	await rightClick(rowOf("guide"));
+	expect(labels()).toContain("Unpin");
+	expect(labels()).toContain("Move up");
+	expect(labels()).toContain("Move down");
+	expect(labels()).not.toContain("Move to folder…");
+	expect(labels()).not.toContain("Hide");
 });
 
 test("muting a whole folder asks the server once and shows the bells at once; unmuting reverses it", async () => {
@@ -216,11 +235,11 @@ test("a row's menu pins and unpins it, and the list follows the server's answer"
 	}
 });
 
-test("Home has no pin and no folder in its menu; a pinned room can step up and down", async () => {
+test("Home has no folder in its menu; a pinned room can step up and down", async () => {
 	load({ pins: [SCOUT, BUILD, TEAM] });
 	await show(<List />);
 	await rightClick(rowOf("guide"));
-	expect(labels()).not.toContain("Pin");
+	expect(labels().slice(0, 1)).toEqual(["Pin"]);
 	expect(labels()).not.toContain("Move to folder…");
 	await page.act(() => closeMenu());
 	await rightClick(rowOf("scout"));

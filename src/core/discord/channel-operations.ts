@@ -350,6 +350,8 @@ export function parseChannelTool(
 		const after = parsed.afterDate && Date.parse(String(parsed.afterDate));
 		const before = parsed.beforeDate && Date.parse(String(parsed.beforeDate));
 		for (const date of [after, before]) {
+			if (Number.isNaN(date))
+				throw new ChannelToolError("INVALID_CHANNEL_ARGUMENTS");
 			if (typeof date === "number" && date < DISCORD_EPOCH)
 				throw new ChannelToolError("INVALID_CHANNEL_DATE_RANGE");
 		}

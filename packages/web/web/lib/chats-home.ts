@@ -1,5 +1,5 @@
 // What the chat home shows, as plain functions of the arrangement (`sections`): the pins, the folder
-// chips, the one list a chip filters (Home leads all of it), and the badge a pin carries. Nothing here touches the
+// chips, the one list a chip filters (Home leads all of it unless pinned), and the badge a pin carries. Nothing here touches the
 // page or the clock, so a test needs no browser.
 
 import type { Sections } from "./sections.ts";
@@ -14,7 +14,7 @@ export interface Chip {
 	rooms: readonly string[];
 }
 
-/** The pinned rooms in the owners' order; Home is not a pin, it leads the list of all. */
+/** The pinned rooms in the owners' order; Home is one only while the owners have it pinned, else it leads the list of all. */
 export const pinsOf = (arrangement: Pick<Sections, "pinned">) => [
 	...arrangement.pinned,
 ];

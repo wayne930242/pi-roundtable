@@ -49,8 +49,27 @@ export interface PlaceSpec extends PlaceRef {
 /** What `check` finds of a stored place at start. */
 export type PlaceCheck = "ok" | "gone" | "foreign";
 
-/** An argument a provider adds to a creation tool: a Typebox schema, with its description in the schema. */
+/**
+ * An argument a provider adds to a creation tool: a Typebox schema, with its description in the
+ * schema. Only a string value the model gives reaches `ensure` (as `hints`), so give a string schema.
+ */
 export type ToolArgument = TSchema;
+
+/** The arguments `agent_create` and `group_create` take of their own, which no provider's `createArguments` may reuse. */
+export const CREATION_TOOL_ARGUMENTS = {
+	agent: [
+		"name",
+		"display_name",
+		"prompt",
+		"class",
+		"color",
+		"task",
+		"group",
+		"long_running",
+		"skills",
+	],
+	group: ["name", "display_name", "members", "host", "group"],
+} as const;
 
 /**
  * What a chat surface holds of the team's places: where an agent or group is spoken to on it.

@@ -436,13 +436,13 @@
 		},
 		"kit": {
 			"AUTO_THINKING": "src/core/domain/models.d.ts#AUTO_THINKING",
-			"AgentCategory": "src/core/contract/agent-channels.d.ts#AgentCategory",
+			"AgentCategory": "src/kit/support.d.ts#AgentCategory",
 			"AgentChannelLookup": "src/core/modules/schedules/schedules.d.ts#AgentChannelLookup",
-			"AgentChannels": "src/core/contract/agent-channels.d.ts#AgentChannels",
+			"AgentChannels": "src/kit/support.d.ts#AgentChannels",
 			"AgentError": "src/core/domain/errors.d.ts#AgentError",
 			"AgentModels": "src/core/agents/agent-ports.d.ts#AgentModels",
 			"AgentOps": "src/core/plugin-api/agent-ops.d.ts#AgentOps",
-			"AgentPost": "src/core/contract/agent-channels.d.ts#AgentPost",
+			"AgentPost": "src/kit/support.d.ts#AgentPost",
 			"AgentTurnRunner": "src/core/agents/agent-ports.d.ts#AgentTurnRunner",
 			"AssistantLike": "src/core/shared/session-messages.d.ts#AssistantLike",
 			"Backlog": "src/core/agents/agent-rules.d.ts#Backlog",
@@ -451,8 +451,8 @@
 			"CODEX_IMAGE_MODEL": "src/core/images/codex-image.d.ts#CODEX_IMAGE_MODEL",
 			"COMPACT_HEADROOM_TOKENS": "src/core/runtime/compaction-tiers.d.ts#COMPACT_HEADROOM_TOKENS",
 			"CardLimits": "src/core/runtime/extensions/approval-card.d.ts#CardLimits",
-			"CategoryLayout": "src/core/contract/agent-channels.d.ts#CategoryLayout",
-			"ChannelMessage": "src/core/contract/agent-channels.d.ts#ChannelMessage",
+			"CategoryLayout": "src/kit/support.d.ts#CategoryLayout",
+			"ChannelMessage": "src/kit/support.d.ts#ChannelMessage",
 			"ChannelQueue": "src/core/routing/channel-queue.d.ts#ChannelQueue",
 			"ChannelSupport": "src/core/domain/block-support.d.ts#ChannelSupport",
 			"ChoiceAnswer": "src/core/contract/providers.d.ts#ChoiceAnswer",
@@ -468,7 +468,7 @@
 			"DEFAULT_SHELL_PASS": "src/core/shared/child-env.d.ts#DEFAULT_SHELL_PASS",
 			"DELEGATE_TOOL": "src/core/shared/delegate-tool.d.ts#DELEGATE_TOOL",
 			"DELEGATE_TOOL_SPEC": "src/core/shared/delegate-tool.d.ts#DELEGATE_TOOL_SPEC",
-			"DashboardBoard": "src/core/contract/agent-channels.d.ts#DashboardBoard",
+			"DashboardBoard": "src/kit/support.d.ts#DashboardBoard",
 			"DelegationWorker": "src/core/modules/delegation/delegator.d.ts#DelegationWorker",
 			"DispatchThread": "src/core/threads/dispatch-threads.d.ts#DispatchThread",
 			"DispatchThreads": "src/core/threads/dispatch-threads.d.ts#DispatchThreads",
@@ -757,7 +757,7 @@
 		"src/characters/catalog.d.ts#CLASS_IDS": "declare const CLASS_IDS: readonly [\"wizard\", \"knight\", \"scholar\", \"smith\", \"ranger\", \"bard\", \"alchemist\", \"healer\", \"steward\", \"navigator\", \"seer\", \"scribe\", \"engineer\", \"druid\", \"innkeeper\", \"sentinel\", \"envoy\", \"rogue\", \"monk\", \"falconer\", \"shipwright\", \"jester\", \"paladin\", \"archivist\"];",
 		"src/characters/catalog.d.ts#ClassId": "type ClassId = (typeof CLASS_IDS)[number];",
 		"src/characters/catalog.d.ts#Expression": "type Expression = (typeof EXPRESSIONS)[number];",
-		"src/characters/catalog.d.ts#EXPRESSIONS": "declare const EXPRESSIONS: readonly [\"neutral\", \"happy\", \"thinking\", \"concerned\", \"apologetic\", \"surprised\", \"proud\", \"amused\", \"curious\", \"sympathetic\", \"playful\", \"determined\", \"sleepy\"];",
+		"src/characters/catalog.d.ts#EXPRESSIONS": "declare const EXPRESSIONS: readonly [\"neutral\", \"happy\", \"thinking\", \"concerned\", \"apologetic\", \"surprised\", \"proud\", \"amused\", \"curious\", \"sympathetic\", \"playful\", \"determined\", \"sleepy\", \"resting\"];",
 		"src/characters/catalog.d.ts#HairId": "type HairId = \"none\" | \"short\" | \"bob\" | \"long\" | \"bun\" | \"curly\" | \"ponytail\" | \"braid\";",
 		"src/characters/catalog.d.ts#HatId": "type HatId = \"none\" | \"wizard\" | \"helm\" | \"mortar\" | \"goggcap\" | \"hood\" | \"beret\" | \"goggles\" | \"coif\" | \"tallcap\" | \"tricorn\" | \"turban\" | \"softcap\" | \"hardhat\" | \"wreath\" | \"toque\" | \"kettle\" | \"cavalier\" | \"cowl\" | \"headband\" | \"fcap\" | \"sailor\" | \"jester\" | \"winghelm\";",
 		"src/characters/catalog.d.ts#OutfitId": "type OutfitId = \"robe\" | \"scholar\" | \"armor\" | \"plate\" | \"apron\" | \"chef\" | \"cloak\" | \"tunic\" | \"coat\" | \"overalls\" | \"vest\" | \"habit\" | \"surplice\" | \"motley\" | \"sailor\";",
@@ -947,7 +947,7 @@
 		"src/core/discord/agent-commands.d.ts#AgentPanelMessage": "interface AgentPanelMessage {\n    components: ContainerBuilder[];\n    flags: MessageFlags.IsComponentsV2;\n    allowedMentions: {\n        parse: never[];\n    };\n    files: AttachmentBuilder[];\n}",
 		"src/core/discord/agent-guild.d.ts#discordAgentGuild": "declare function discordAgentGuild(context: Pick<PluginContext, \"services\" | \"logger\" | \"dashboard\">, options: DiscordAgentGuildOptions): DiscordAgentGuild;",
 		"src/core/discord/agent-guild.d.ts#DiscordAgentGuild": "type DiscordAgentGuild = Required<Pick<Contribution, \"places\" | \"tools\" | \"services\" | \"events\">>;",
-		"src/core/discord/agent-guild.d.ts#DiscordAgentGuildOptions": "interface DiscordAgentGuildOptions {\n    \n    guild: string;\n    \n    connection: Pick<DiscordConnection, \"agentChannels\" | \"agentDashboard\" | \"onChannelDeleted\">;\n    \n    client?: Client;\n    \n    entryChannel?: string;\n}",
+		"src/core/discord/agent-guild.d.ts#DiscordAgentGuildOptions": "interface DiscordAgentGuildOptions {\n    \n    guild: string;\n    \n    connection: Pick<DiscordConnection, \"agentChannels\" | \"agentDashboard\" | \"onChannelDeleted\">;\n    \n    client?: Client;\n    \n    entryChannel?: string;\n    \n    own?: Pick<Contribution, \"services\" | \"events\">;\n}",
 		"src/core/discord/agent-panel.d.ts#agentPanel": "declare function agentPanel(options: AgentPanelOptions): AgentPanel;",
 		"src/core/discord/agent-panel.d.ts#AgentPanel": "interface AgentPanel {\n    \n    open(channelId: string): AgentPanelMessage;\n    \n    handles(interaction: Interaction): Promise<boolean>;\n}",
 		"src/core/discord/agent-panel.d.ts#AgentPanelOptions": "interface AgentPanelOptions {\n    \n    guard: CommandGuard;\n    \n    agents: AgentServer;\n    \n    skills?: Pick<SkillRegistry, \"carried\">;\n}",
@@ -1490,6 +1490,12 @@
 		"src/kit/jev.d.ts#JevSkipReason": "type JevSkipReason = FallbackKind | \"previous_summary_too_large\";",
 		"src/kit/oidc.d.ts#oidcIdentity": "declare function oidcIdentity(issuer: string, subject: string): string;",
 		"src/kit/oidc.d.ts#oidcProvider": "declare function oidcProvider(issuer: string): string;",
+		"src/kit/support.d.ts#AgentCategory": "type AgentCategory = AgentChannelTypes.AgentCategory;",
+		"src/kit/support.d.ts#AgentChannels": "type AgentChannels = AgentChannelTypes.AgentChannels;",
+		"src/kit/support.d.ts#AgentPost": "type AgentPost = AgentChannelTypes.AgentPost;",
+		"src/kit/support.d.ts#CategoryLayout": "type CategoryLayout = AgentChannelTypes.CategoryLayout;",
+		"src/kit/support.d.ts#ChannelMessage": "type ChannelMessage = AgentChannelTypes.ChannelMessage;",
+		"src/kit/support.d.ts#DashboardBoard": "type DashboardBoard = AgentChannelTypes.DashboardBoard;",
 		"src/testing.d.ts#testPlugin": "declare function testPlugin(plugin: RoundtablePlugin, options?: TestPluginOptions): Promise<TestPluginResult>;"
 	},
 	"leaks": [
@@ -1512,6 +1518,96 @@
 				"main:defineRoundtable via src/core/config/config.d.ts#RoundtableConfig",
 				"testing:TestHostOptions via src/core/config/config.d.ts#RoundtableConfig",
 				"testing:testHost via src/core/config/config.d.ts#RoundtableConfig"
+			]
+		},
+		{
+			"id": "src/core/contract/agent-channels.d.ts#AgentCategory",
+			"references": [
+				"discord:DISCORD via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordAgentGuildOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordConnection via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordPlaceProviderOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordServices via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordAgentGuild via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordPlaceProvider via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:TestHostOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:fakeDiscord via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:testHost via src/core/contract/agent-channels.d.ts#AgentChannels"
+			]
+		},
+		{
+			"id": "src/core/contract/agent-channels.d.ts#AgentChannels",
+			"references": [
+				"discord:DISCORD via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordAgentGuildOptions via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordConnection via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordPlaceProviderOptions via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordServices via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:discordAgentGuild via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:discordPlaceProvider via src/core/discord/connection.d.ts#DiscordConnection",
+				"testing:TestHostOptions via src/core/discord/connection.d.ts#DiscordConnection",
+				"testing:fakeDiscord via src/core/discord/connection.d.ts#DiscordConnection",
+				"testing:testHost via src/core/discord/connection.d.ts#DiscordConnection"
+			]
+		},
+		{
+			"id": "src/core/contract/agent-channels.d.ts#AgentPost",
+			"references": [
+				"discord:DISCORD via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordAgentGuildOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordConnection via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordPlaceProviderOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordServices via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordAgentGuild via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordPlaceProvider via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:TestHostOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:fakeDiscord via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:testHost via src/core/contract/agent-channels.d.ts#AgentChannels"
+			]
+		},
+		{
+			"id": "src/core/contract/agent-channels.d.ts#CategoryLayout",
+			"references": [
+				"discord:DISCORD via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordAgentGuildOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordConnection via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordPlaceProviderOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordServices via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordAgentGuild via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordPlaceProvider via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:TestHostOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:fakeDiscord via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:testHost via src/core/contract/agent-channels.d.ts#AgentChannels"
+			]
+		},
+		{
+			"id": "src/core/contract/agent-channels.d.ts#ChannelMessage",
+			"references": [
+				"discord:DISCORD via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordAgentGuildOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordConnection via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordPlaceProviderOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:DiscordServices via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordAgentGuild via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"discord:discordPlaceProvider via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:TestHostOptions via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:fakeDiscord via src/core/contract/agent-channels.d.ts#AgentChannels",
+				"testing:testHost via src/core/contract/agent-channels.d.ts#AgentChannels"
+			]
+		},
+		{
+			"id": "src/core/contract/agent-channels.d.ts#DashboardBoard",
+			"references": [
+				"discord:DISCORD via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordAgentGuildOptions via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordConnection via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordPlaceProviderOptions via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:DiscordServices via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:discordAgentGuild via src/core/discord/connection.d.ts#DiscordConnection",
+				"discord:discordPlaceProvider via src/core/discord/connection.d.ts#DiscordConnection",
+				"testing:TestHostOptions via src/core/discord/connection.d.ts#DiscordConnection",
+				"testing:fakeDiscord via src/core/discord/connection.d.ts#DiscordConnection",
+				"testing:testHost via src/core/discord/connection.d.ts#DiscordConnection"
 			]
 		},
 		{

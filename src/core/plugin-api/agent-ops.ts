@@ -11,10 +11,6 @@ import type { AgentTurnScope } from "../domain/ports.ts";
  */
 export type FormerChannelOps = Pick<AgentOps, "arrange" | "read">;
 
-/** What `AgentOps.arrange` and `AgentOps.read` refuse with when the team has no Discord channels. */
-export const NO_CHANNELS =
-	"This host has no Discord channels: the agents live in rooms of a chat surface, so there is nothing to arrange or read here.";
-
 /**
  * What the agent tools do; the agent team implements it. Each returns text for the model.
  * `arrange`, `read`, and the `category` of `create` and `createGroup` are what 0.45 had: the

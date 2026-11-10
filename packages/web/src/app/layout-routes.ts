@@ -189,7 +189,8 @@ export class LayoutRoutes {
 		return this.#guard(async () => {
 			const owner = await this.#options.owner(admission);
 			if (room.kind === "thread") throw bad("A thread stays under its room.");
-			if (room.key === this.#options.home()) {
+			// Home can be pinned by hand; it is neither hidden nor put in a folder.
+			if (room.key === this.#options.home() && action !== "pin") {
 				if (action === "hidden") throw bad("Home cannot be hidden.");
 				throw bad("Home stays at the top.");
 			}

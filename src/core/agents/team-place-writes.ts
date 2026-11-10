@@ -73,12 +73,14 @@ export class TeamPlaceWrites {
 	/**
 	 * Makes the owner's place on one surface, or brings back the one it has there; for a temp
 	 * knight, under its parent's place on that surface. None when the surface makes no places or the
-	 * parent has none there. Nothing is recorded.
+	 * parent has none there. `stored.forget` leaves the place it has stored out, as one that is not
+	 * the surface's own. Nothing is recorded.
 	 */
 	async makeOn(
 		surface: string,
 		wish: PlaceWish,
 		parent?: Agent,
+		stored: { forget: boolean } = { forget: false },
 	): Promise<MadePlace | undefined> {
 		const { places } = this.#ctx.options;
 		const provider = places.providerOf(surface);
@@ -93,7 +95,7 @@ export class TeamPlaceWrites {
 			spec.parent = above;
 		}
 		const existing = places.idOf(wish, provider.surface);
-		if (existing !== undefined) spec.existing = existing;
+		if (existing !== undefined && !stored.forget) spec.existing = existing;
 		return { surface, id: await provider.ensure(spec) };
 	}
 
@@ -106,8 +108,10 @@ export class TeamPlaceWrites {
 
 	/**
 	 * Brings an owner's archived places back, each under its own id (a place deleted meanwhile is
-	 * made again), and makes one for an agent that had none on a surface that makes them; a group
-	 * is given none it never had. Recorded by the caller.
+	 * made again, and so is one the provider finds foreign: another space's, such as a channel of a
+	 * server the team left, which is left where it is), and makes one for an agent that had none on
+	 * a surface that makes them; a group is given none it never had. A place that cannot be checked
+	 * is taken as it is. Recorded by the caller.
 	 */
 	async bringBack(wish: PlaceWish): Promise<MadePlace[]> {
 		const { places } = this.#ctx.options;
@@ -118,10 +122,28 @@ export class TeamPlaceWrites {
 				places.idOf(wish, provider.surface) === undefined
 			)
 				continue;
-			const place = await this.makeOn(provider.surface, wish);
+			const place = await this.makeOn(provider.surface, wish, undefined, {
+				forget: await this.#foreign(provider, wish),
+			});
 			if (place) made.push(place);
 		}
 		return made;
+	}
+
+	/** Whether the provider finds the place the owner has stored on its surface to be another space's. */
+	async #foreign(provider: PlaceProvider, wish: PlaceRef): Promise<boolean> {
+		const { places, logger } = this.#ctx.options;
+		const id = places.idOf(wish, provider.surface);
+		if (id === undefined || !provider.check) return false;
+		try {
+			return (await provider.check(id)) === "foreign";
+		} catch (error) {
+			logger.warn(
+				{ name: wish.name, surface: provider.surface, err: error },
+				"archived place not checked; taken as it is",
+			);
+			return false;
+		}
 	}
 
 	/**

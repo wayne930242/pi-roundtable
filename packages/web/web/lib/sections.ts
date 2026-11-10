@@ -1,5 +1,5 @@
-// How the room list is arranged: Home, then the pinned rooms in the owners' order, then the owners'
-// folders in theirs, then everything else by latest activity; the rooms the owners hid are kept apart. A pure function of the room list and the
+// How the room list is arranged: Home (unless the owners pinned it), then the pinned rooms in the owners'
+// order, then the owners' folders in theirs, then everything else by latest activity; the rooms the owners hid are kept apart. A pure function of the room list and the
 // shared layout, so the rooms page and the switcher drawer agree and a test needs no browser.
 
 import type { FolderView, RoomView } from "../../src/api-types.ts";
@@ -19,7 +19,7 @@ export interface FolderSection {
 }
 
 export interface Sections {
-	/** The coordinator's room, or none. */
+	/** The coordinator's room, or none; empty while the owners have it pinned, when it is in `pinned`. */
 	home: string[];
 	pinned: string[];
 	folders: FolderSection[];
@@ -62,26 +62,29 @@ export function sections(
 	const listed = new Set(
 		[...views].filter(([, view]) => view.kind !== "thread").map(([key]) => key),
 	);
-	const isRoom = (key: string) => {
+	/** A room that exists and is no thread or temp knight; Home is one only when the pins ask for it. */
+	const placeable = (key: string, withHome: boolean) => {
 		const view = views.get(key);
 		return (
 			view !== undefined &&
 			view.kind !== "thread" &&
-			!view.home &&
+			(withHome || !view.home) &&
 			!nestedHelper(view, listed)
 		);
 	};
+	const isRoom = (key: string) => placeable(key, false);
 	// A hidden room leaves the home's lists and keeps its pin and folder, which return when it is shown.
 	const hidden = (state.hidden ?? []).filter(isRoom);
 	const taken = new Set<string>(hidden);
-	/** Keeps the first mention of each room that exists and is not Home or a thread. */
-	const claim = (keys: readonly string[]): string[] =>
+	/** Keeps the first mention of each room that exists and is not a thread; Home only where `withHome`. */
+	const claim = (keys: readonly string[], withHome = false): string[] =>
 		keys.filter((key) => {
-			if (!isRoom(key) || taken.has(key)) return false;
+			if (!placeable(key, withHome) || taken.has(key)) return false;
 			taken.add(key);
 			return true;
 		});
-	const pinned = claim(state.pins);
+	// Home can be pinned by hand, not put in a folder or hidden.
+	const pinned = claim(state.pins, true);
 	const folders = state.folders.map((folder) => ({
 		id: folder.id,
 		name: folder.name,
@@ -103,8 +106,10 @@ export function sections(
 				threads[parent] = into;
 			}
 			(view.closed ? into.closed : into.open).push(key);
-		} else if (view.home) home.push(key);
-		else if (!taken.has(key)) loose.push({ key, index, at: at(key) });
+		} else if (!taken.has(key)) {
+			if (view.home) home.push(key);
+			else loose.push({ key, index, at: at(key) });
+		}
 	}
 	loose.sort((a, b) => (a.at === b.at ? a.index - b.index : b.at - a.at));
 	const rest = loose.map((room) => room.key);

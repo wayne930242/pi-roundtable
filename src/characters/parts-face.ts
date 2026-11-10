@@ -157,6 +157,16 @@ const EXPRESSION_ROWS: Record<Expression, ExpressionRow> = {
 		mouth: "yawn",
 		fx: [],
 	},
+	// A calm face at rest, eyes shut and no yawn: the chat home draws an idle agent so, where
+	// `sleepy` is the dozing one.
+	resting: {
+		eye: "closed",
+		look: [0, 0],
+		bl: [0, 0],
+		br: [0, 0],
+		mouth: "smileS",
+		fx: [],
+	},
 };
 
 const f1 = (n: number): number => +n.toFixed(2);

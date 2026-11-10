@@ -15,7 +15,7 @@
         "pi-jev-compaction": "1.0.0",
         "pi-mcp-adapter": "5.3.0",
         "pino": "10.4.0",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
         "unpdf": "1.8.1",
       },
       "devDependencies": {
@@ -34,7 +34,7 @@
       "version": "0.46.0",
       "dependencies": {
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
@@ -51,7 +51,7 @@
       "version": "0.46.0",
       "dependencies": {
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
@@ -72,7 +72,7 @@
         "canvas": "3.2.3",
         "d3-force": "3.0.0",
         "roughjs": "4.6.6",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
@@ -93,7 +93,7 @@
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "@types/bun": "1.4.3",
         "pi-roundtable": "0.46.0",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -106,7 +106,7 @@
       "dependencies": {
         "@modelcontextprotocol/sdk": "1.32.1",
         "discord.js": "14.27.0",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
@@ -127,7 +127,7 @@
         "@types/bun": "1.4.3",
         "discord.js": "14.27.0",
         "pi-roundtable": "0.46.0",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -146,7 +146,7 @@
       "dependencies": {
         "jose": "6.2.12",
         "pi-better-show": "0.5.0",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
@@ -197,7 +197,7 @@
         "@earendil-works/pi-coding-agent": ">=1.0.0 <2",
         "@types/bun": "1.4.3",
         "pi-roundtable": "0.46.0",
-        "typebox": "1.3.37",
+        "typebox": "1.4.6",
         "typescript": "7.0.2",
       },
       "peerDependencies": {
@@ -1419,7 +1419,7 @@
 
     "type-is": ["type-is@2.1.0", "", { "dependencies": { "content-type": "^2.0.0", "media-typer": "^1.1.0", "mime-types": "^3.0.0" } }, "sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA=="],
 
-    "typebox": ["typebox@1.3.37", "", {}, "sha512-k+Qogwk7lztlItGvFf5v4GZPPStFAFehAyOKYeuqIHzi3dfTFqPOTx38JG09hmpcK6TQgctrTD06U/0CTTpM1g=="],
+    "typebox": ["typebox@1.4.6", "", {}, "sha512-Yh8Mi4hzD7gqcuv9ZIk6HK1KVJKubTlfxaNxkrYK35HCvxoCjCuWVr8cBjQ/ChfA7yliPteJEBWHGFVGWDuF5Q=="],
 
     "typed-array-buffer": ["typed-array-buffer@1.0.3", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "is-typed-array": "^1.1.14" } }, "sha512-nAYYwfY3qnzX30IkA6AQZjVbtK6duGontcQm1WSG1MD94YLqK0515GNApXkoxKOWMusVssAHWLh9SeaoefYFGw=="],
 

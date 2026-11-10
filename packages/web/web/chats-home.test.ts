@@ -34,9 +34,15 @@ const times: Record<string, number> = { [A]: 40, [B]: 30, [C]: 20 };
 const at = (key: string) => times[key] ?? Number.NEGATIVE_INFINITY;
 const order = [HOME, A, B, C, D];
 
-test("the pins are the pinned rooms in their order; Home is not one of them", () => {
+test("the pins are the pinned rooms in their order; Home is one only when it was pinned", () => {
 	expect(pinsOf(arrangement())).toEqual([D]);
 	expect(pinsOf(arrangement({ pinned: [] }))).toEqual([]);
+});
+
+test("a pinned Home is a pin and is not at the head of all; unpinned it leads", () => {
+	const pinned = arrangement({ home: [], pinned: [D, HOME] });
+	expect(pinsOf(pinned)).toEqual([D, HOME]);
+	expect(listFor(pinned, "all", at, order)).toEqual([A, B, C]);
 });
 
 test("there are no chips without a folder; with folders: all, each folder, and others only when rooms are in none", () => {

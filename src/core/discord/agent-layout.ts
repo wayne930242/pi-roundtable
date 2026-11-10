@@ -2,7 +2,10 @@ import type { CategoryLayout } from "../contract/agent-channels.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
 
-type TeamStore = Pick<AgentDirectory, "agent" | "group">;
+type TeamStore = Pick<AgentDirectory, "agent" | "group"> & {
+	/** The Discord channel of an agent or group; undefined when it has none. */
+	channelOf(name: string): string | undefined;
+};
 
 /** The two kinds of team category (spec behavior 56). */
 export type CategoryKind = "Agents" | "Groups";
@@ -75,8 +78,9 @@ export function resolveArrangement(
 			if (target.status !== "active")
 				throw new AgentError(`"${name}" is archived.`);
 			teamCategory(category, agent ? "Agents" : "Groups");
-			if (!target.channelId) throw new AgentError(`${name} has no channel.`);
-			return target.channelId;
+			const channelId = store.channelOf(name);
+			if (!channelId) throw new AgentError(`${name} has no channel.`);
+			return channelId;
 		});
 		return { category, channelIds };
 	});
