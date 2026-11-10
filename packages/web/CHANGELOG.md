@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-11-10
+
+### Changed
+
+- The chat home no longer pins Home (the coordinator's room) in the dock or on top: it is the first row of the All list, whatever spoke last, and its unread shows among the other unread under a folder tab. The pins are only the rooms the owner pinned.
+
+### Fixed
+
+- A group's stacked figures no longer draw over the chat home's bottom bar as the list scrolls under it.
+
 ## [0.45.0] - 2026-11-10
 
 ### Added

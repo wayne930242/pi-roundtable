@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-11-10
+
+- Release in lockstep with pi-roundtable 0.45.1 (chat home: Home leads the list, group figures under the bar); no package-specific behavior changes.
+
 ## [0.45.0] - 2026-11-10
 
 - Release in lockstep with pi-roundtable 0.45.0 (Places reads, chat-first home, other-comments note); no package-specific behavior changes.
