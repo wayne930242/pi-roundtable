@@ -20,6 +20,10 @@
 //   FIXTURE_COUNCIL               how many members the group "crew", the council on the round table, has, 2 to 8
 //                                 (default 2): the scripted scout, archivist and guide, then the extra agents
 //   FIXTURE_PROFILE               `1` adds the profile pane to the owner's panes, which an owners-only host does not serve by default
+//   FIXTURE_ARCHIVED              how many knights to archive at start (default 0), each with a last message 1 to 90 days old,
+//                                 for the hidden and archived page's bulk actions
+//   FIXTURE_WORKSPACES            how many stored workspace conversations to seed (default 0), 0 to 60 days idle, for the overview's rows;
+//                                 deleting one removes its session directory
 //   FIXTURE_TIER                  `member` (with FIXTURE_HOST=1) admits every request as a member of the host (admission
 //                                 access, the panes rooms and table), who lists only the "Support thread" room of the inbox
 //
@@ -36,12 +40,13 @@
 //   curl 'http://127.0.0.1:4181/say?room=app:agent.guide&text=approve'
 // `GET /control/mode?room=...&yolo=1&long=1` sets a room's modes. `GET /control/write?path=src/main.ts&text=...`
 // writes a file in the agents' workspace the way a partner would, to try the files pane's conflict check. The page is at http://127.0.0.1:PORT/console/.
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SQL } from "bun";
 import { buildPage } from "./build-page.ts";
+import { seedArchive, seedWorkspaces } from "./fixture-bulk.ts";
 import { fixtureConnectorFeatures } from "./fixture-connectors.ts";
 import { SAMPLE } from "./fixture-samples.ts";
 
@@ -290,7 +295,13 @@ host = await testHost({
 						}),
 				cleanup: {
 					startFresh: async () => "archived",
-					deleteConversation: async () => "deleted",
+					deleteConversation: async (key: string) => {
+						rmSync(join(dataDir, "sessions", key.replace(":", "_")), {
+							recursive: true,
+							force: true,
+						});
+						return "deleted";
+					},
 				},
 				...fixtureConnectorFeatures(),
 			}),
@@ -409,6 +420,14 @@ async function setMode(
 	);
 	if (!response.ok) throw new Error(`mode: ${response.status}`);
 }
+
+// Stored workspaces and archived knights for the bulk pages (FIXTURE_WORKSPACES, FIXTURE_ARCHIVED).
+seedWorkspaces(dataDir, Number(process.env.FIXTURE_WORKSPACES ?? 0));
+await seedArchive(
+	origin,
+	url.toString(),
+	Number(process.env.FIXTURE_ARCHIVED ?? 0),
+);
 
 // History to look at: a short talk in the home room and the scout's.
 await say("app:agent.guide", "Hello! What can you do for me?");

@@ -177,7 +177,6 @@ export const ZH_TW_KNIGHTS: Readonly<Record<string, string>> = {
 		"騎士與群組的狀態；重新開始會封存對話並保留記憶。",
 	"Bot server": "Bot 伺服器",
 	Context: "上下文",
-	"Conversation {size} · Archives {count}": "對話 {size} · 封存 {count} 筆",
 	"Conversations opened through remote MCP; after deletion the session ID cannot be resumed.":
 		"透過遠端 MCP 開啟的對話；刪除後無法再用該工作階段 ID 接續。",
 	"Direct messages and channels where you mention a knight. Start over archives; delete removes every archive permanently.":
@@ -190,8 +189,6 @@ export const ZH_TW_KNIGHTS: Readonly<Record<string, string>> = {
 	Model: "模型",
 	"My workspaces": "我的工作區",
 	"No knights.": "沒有騎士。",
-	"No live conversation · Archives {count}":
-		"沒有進行中的對話 · 封存 {count} 筆",
 	"No outside AI client conversations.": "沒有外部 AI 用戶端的對話。",
 	"No party channels.": "沒有派對頻道。",
 	"No workspaces.": "沒有工作區。",

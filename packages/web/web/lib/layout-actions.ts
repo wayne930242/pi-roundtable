@@ -73,10 +73,11 @@ export const pinRoom = (
 	);
 
 /** Hides a room from the home, or shows it again; it keeps its pin and folder. */
-export const hideRoom = (room: string, hidden: boolean) =>
+export const hideRoom = (room: string, hidden: boolean, fail?: Fail) =>
 	apply(
 		(layout) => setHidden(layout, room, hidden),
 		() => layoutApi.hideRoom(room, hidden),
+		fail,
 	);
 
 /** Puts a room in a folder before another room of it (`null` = last), or in none. */

@@ -1,26 +1,129 @@
-import { useState } from "react";
-import type {
-	AgentView,
-	ConversationView,
-	GroupView,
-	PartyView,
-} from "../../src/api-types.ts";
-import { Cleanup } from "../components/cleanup.tsx";
-import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
-import { api } from "../lib/api.ts";
-import { useConfig } from "../lib/config.ts";
+import { type ReactNode, useId, useState } from "react";
+import type { ConversationView } from "../../src/api-types.ts";
+import { DeleteForGood } from "../components/delete-confirm.tsx";
 import {
-	ago,
-	channelTitle,
-	discordUrl,
-	kilo,
-	size,
-	when,
-} from "../lib/format.ts";
+	AgentRow,
+	GroupCard,
+	PartyRow,
+} from "../components/overview-cards.tsx";
+import { FoldToggle } from "../components/section-fold.tsx";
+import {
+	type BarAction,
+	IdleChips,
+	SelectAll,
+	SelectBar,
+} from "../components/select-bar.tsx";
+import { Empty, Failure, Loading } from "../components/states.tsx";
+import { StoredRow, storedTitle } from "../components/stored-row.tsx";
+import { api } from "../lib/api.ts";
+import { useBatch } from "../lib/batch.ts";
+import { useConfig } from "../lib/config.ts";
+import { useCollapsed } from "../lib/folds.ts";
+import { size } from "../lib/format.ts";
 import { useLive } from "../lib/live.ts";
-import { translate as t, wording } from "../lib/messages.ts";
-import { hrefFor } from "../lib/router.ts";
+import { plural, translate as t } from "../lib/messages.ts";
+import {
+	deleteConversationsBatch,
+	startOverBatch,
+} from "../lib/overview-batch.ts";
+import {
+	type Idle,
+	idleCounts,
+	idleRows,
+	useSelecting,
+} from "../lib/selection.ts";
 import { useFetched } from "../lib/use-fetched.ts";
+
+// Kept as `section:` folds, which a pruning of the room list's folders leaves alone. The workspaces start
+// open and the id says when they are folded; the others start folded, so their id says when they are open.
+const BOT = "section:overview-bot-open";
+const WORK = "section:overview-workspaces";
+const OUTSIDE = "section:overview-outside-open";
+const PARTY = "section:overview-party-open";
+
+export { GroupCard };
+
+/** A section of the overview whose heading folds it; the fold is kept on this device. */
+function Fold(props: {
+	id: string;
+	/** The section starts folded, and its id is in the device's folds while it is open. */
+	startFolded?: boolean;
+	title: string;
+	/** What the section holds, said beside the heading whether it is open or folded. */
+	summary: string;
+	/** Beside the summary: "Select all in section" while the page is selecting. */
+	action?: ReactNode;
+	children: ReactNode;
+}) {
+	const kept = useCollapsed().has(props.id);
+	const folded = props.startFolded ? !kept : kept;
+	const bodyId = useId();
+	return (
+		<section className="stack">
+			<div className="fold-head">
+				<h2>
+					<FoldToggle
+						id={props.id}
+						name={props.title}
+						open={!folded}
+						controls={bodyId}
+					/>
+				</h2>
+				<span className="meta">{props.summary}</span>
+				{props.action}
+			</div>
+			<div id={bodyId} className="stack fold-body" hidden={folded}>
+				{props.children}
+			</div>
+		</section>
+	);
+}
+
+/** The list of one kind of stored conversation, with its age filter and the way to choose rows while the page selects. */
+function Stored(props: {
+	section: string;
+	rows: readonly (ConversationView & { schedules?: number })[];
+	idle: Idle;
+	onIdle(idle: Idle): void;
+	empty: string;
+	pick: ReturnType<typeof useSelecting>;
+	now: number;
+	refresh(): void;
+}) {
+	const { pick, section } = props;
+	if (props.rows.length === 0) return <Empty>{props.empty}</Empty>;
+	const shown = pick.on
+		? idleRows(props.rows, (one) => one.lastActive, props.now, props.idle)
+		: props.rows;
+	return (
+		<>
+			{pick.on ? (
+				<IdleChips
+					counts={idleCounts(props.rows, (one) => one.lastActive, props.now)}
+					value={props.idle}
+					onChange={props.onIdle}
+				/>
+			) : null}
+			<ul className="stored-list">
+				{shown.map((c) => (
+					<StoredRow
+						key={c.key}
+						conversation={c}
+						{...(c.schedules === undefined ? {} : { schedules: c.schedules })}
+						now={props.now}
+						refresh={props.refresh}
+						pick={{
+							selecting: pick.on,
+							chosen: pick.has(section, c.key),
+							toggle: () => pick.toggle(section, c.key),
+							hold: () => pick.enter({ section, key: c.key }),
+						}}
+					/>
+				))}
+			</ul>
+		</>
+	);
+}
 
 export function OverviewPage() {
 	const config = useConfig();
@@ -31,12 +134,100 @@ export function OverviewPage() {
 		() => api.overview(),
 		`overview:${revision}`,
 	);
+	const pick = useSelecting();
+	const batch = useBatch(pick.clear);
+	const [idles, setIdles] = useState<Record<string, Idle>>({});
+	const [asking, setAsking] = useState(false);
 	if (!view) return error ? <Failure message={error} /> : <Loading />;
+
+	const workspaces = view.workspaces ?? [];
+	const outside = view.outside ?? [];
+	const party = view.party ?? [];
+	const stored = [
+		{ section: "workspaces", rows: workspaces },
+		{ section: "outside", rows: outside },
+	];
+	const idleOf = (section: string): Idle => idles[section] ?? 0;
+	const shownIn = (section: string, rows: readonly ConversationView[]) =>
+		pick.on
+			? idleRows(rows, (one) => one.lastActive, now, idleOf(section))
+			: rows;
+	const chosen = stored
+		.filter((one) => one.section === pick.section)
+		.flatMap((one) => one.rows.filter((row) => pick.keys.has(row.key)));
+	const nameOf = (c: ConversationView) => storedTitle(c).title;
+	const allIn = (section: string, rows: readonly ConversationView[]) => {
+		const keys = shownIn(section, rows).map((one) => one.key);
+		return {
+			selecting: pick.on,
+			empty: keys.length === 0,
+			allChosen:
+				pick.section === section &&
+				keys.length > 0 &&
+				keys.every((key) => pick.keys.has(key)),
+			onAll: () => pick.all(section, keys),
+		};
+	};
+	const leave = () => {
+		pick.leave();
+		setIdles({});
+	};
+	const section = (id: string, rows: readonly ConversationView[]) => ({
+		section: id,
+		rows,
+		idle: idleOf(id),
+		onIdle: (next: Idle) => {
+			setIdles((now) => ({ ...now, [id]: next }));
+			if (pick.section === id) pick.clear();
+		},
+		pick,
+		now,
+		refresh,
+	});
+	const actions: BarAction[] = pick.section
+		? [
+				{
+					id: "start-over",
+					label: t("Start over"),
+					onPress: () =>
+						void batch.start(startOverBatch(chosen, nameOf, refresh)),
+				},
+				{
+					id: "delete",
+					label: t("Delete for good"),
+					tone: "danger",
+					onPress: () => setAsking(true),
+				},
+			]
+		: [];
+	const busyBots =
+		view.agents.filter((a) => a.workingIn || a.waiting > 0).length +
+		view.groups.filter((g) => g.busy > 0).length;
 	return (
 		<>
 			{error ? <Failure message={error} /> : null}
-			<section className="stack">
-				<h2>{t("Bot server")}</h2>
+			{config.cleanup && workspaces.length + outside.length > 0 ? (
+				<div className="actions">
+					<button
+						type="button"
+						className="secondary compact"
+						aria-pressed={pick.on}
+						onClick={pick.on ? leave : () => pick.enter()}
+					>
+						{pick.on ? t("Done") : t("Select")}
+					</button>
+				</div>
+			) : null}
+			<Fold
+				id={BOT}
+				startFolded
+				title={t("Bot server")}
+				summary={[
+					plural(view.agents.length, "{count} knight", "{count} knights"),
+					plural(view.groups.length, "{count} group", "{count} groups"),
+					busyBots > 0 ? t("{count} busy", { count: busyBots }) : t("all idle"),
+				].join(" · ")}
+			>
 				<p className="hint">
 					{t(
 						"Knight and group status; starting over archives the conversation and preserves memory.",
@@ -66,350 +257,84 @@ export function OverviewPage() {
 						refresh={refresh}
 					/>
 				))}
-			</section>
-			<section className="stack">
-				<h2>{t("My workspaces")}</h2>
+			</Fold>
+			<Fold
+				id={WORK}
+				title={t("My workspaces")}
+				summary={String(workspaces.length)}
+				action={<SelectAll {...allIn("workspaces", workspaces)} />}
+			>
 				<p className="hint">
 					{t(
 						"Direct messages and channels where you mention a knight. Start over archives; delete removes every archive permanently.",
 					)}
 				</p>
-				{view.workspaces?.length ? (
-					view.workspaces.map((c) => (
-						<StoredRow
-							key={c.key}
-							conversation={c}
-							schedules={c.schedules}
-							now={now}
-							refresh={refresh}
-						/>
-					))
-				) : (
-					<Empty>{t("No workspaces.")}</Empty>
-				)}
-			</section>
-			<section className="stack">
-				<h2>{t("Outside AI client conversations")}</h2>
+				<Stored
+					{...section("workspaces", workspaces)}
+					empty={t("No workspaces.")}
+				/>
+			</Fold>
+			<Fold
+				id={OUTSIDE}
+				startFolded
+				title={t("Outside AI client conversations")}
+				summary={String(outside.length)}
+				action={<SelectAll {...allIn("outside", outside)} />}
+			>
 				<p className="hint">
 					{t(
 						"Conversations opened through remote MCP; after deletion the session ID cannot be resumed.",
 					)}
 				</p>
-				{view.outside?.length ? (
-					view.outside.map((c) => (
-						<StoredRow
-							key={c.key}
-							conversation={c}
-							now={now}
-							refresh={refresh}
-						/>
-					))
-				) : (
-					<Empty>{t("No outside AI client conversations.")}</Empty>
-				)}
-			</section>
-			<section className="stack">
-				<h2>{t("Party channels")}</h2>
+				<Stored
+					{...section("outside", outside)}
+					empty={t("No outside AI client conversations.")}
+				/>
+			</Fold>
+			<Fold
+				id={PARTY}
+				startFolded
+				title={t("Party channels")}
+				summary={String(party.length)}
+			>
 				<p className="hint">
 					{t(
 						"Starting over stops the container and archives role conversations; each speaker's memory is preserved.",
 					)}
 				</p>
-				{view.party?.length ? (
-					view.party.map((party) => (
-						<PartyRow
-							key={party.key}
-							party={party}
-							now={now}
-							refresh={refresh}
-						/>
+				{party.length ? (
+					party.map((p) => (
+						<PartyRow key={p.key} party={p} now={now} refresh={refresh} />
 					))
 				) : (
 					<Empty>{t("No party channels.")}</Empty>
 				)}
-			</section>
+			</Fold>
+			{pick.on ? (
+				<SelectBar
+					count={pick.keys.size}
+					actions={actions}
+					running={batch.running}
+					outcome={batch.outcome}
+					onDismiss={batch.dismiss}
+				/>
+			) : null}
+			<DeleteForGood
+				open={asking}
+				names={chosen.map(nameOf)}
+				notes={[
+					t(
+						"The live conversation and all archives will be permanently deleted. Memory and schedules are preserved.",
+					),
+					t("Live conversations hold {size} in all.", {
+						size: size(chosen.reduce((sum, one) => sum + one.liveBytes, 0)),
+					}),
+				]}
+				onClose={() => setAsking(false)}
+				onConfirm={async () => {
+					void batch.start(deleteConversationsBatch(chosen, nameOf, refresh));
+				}}
+			/>
 		</>
-	);
-}
-
-function Busy({ busy }: { busy: number }) {
-	return (
-		<Badge tone={busy ? "busy" : "plain"}>
-			{busy === 0
-				? t("idle")
-				: busy === 1
-					? t("Working")
-					: t("Working, {count} waiting", { count: busy - 1 })}
-		</Badge>
-	);
-}
-
-/** A group's card. A group of a team without Discord has no channel, so it links none and offers no cleanup. */
-export function GroupCard(props: {
-	group: GroupView;
-	guildId: string;
-	now: number;
-	timeZone: string;
-	refresh(): void;
-}) {
-	const { group, now, timeZone } = props;
-	return (
-		<article className="card">
-			<div className="card-head">
-				{group.channelId ? (
-					<a
-						href={discordUrl(group.channelId, props.guildId)}
-						target="_blank"
-						rel="noreferrer"
-					>
-						{group.displayName}
-					</a>
-				) : (
-					<strong>{group.displayName}</strong>
-				)}
-				<Badge>{t("Group")}</Badge>
-				<Busy busy={group.busy} />
-			</div>
-			<p>
-				{t("Members: {members} | Host: {host}", {
-					members: group.members.join(", "),
-					host: group.host,
-				})}
-			</p>
-			<p className="hint">
-				{t("Last active")} {ago(group.lastActive, now, timeZone)}
-			</p>
-			{group.room || group.channelId ? (
-				<Cleanup
-					channel={group.room ?? `discord:${group.channelId}`}
-					title={group.displayName}
-					busy={group.busy > 0}
-					refresh={props.refresh}
-				/>
-			) : null}
-		</article>
-	);
-}
-
-function AgentRow(props: {
-	agent: AgentView;
-	groups: GroupView[];
-	agents: AgentView[];
-	guildId: string;
-	now: number;
-	refresh(): void;
-}) {
-	const { agent } = props;
-	const { timeZone, panes } = useConfig();
-	const group = props.groups.find((g) => g.channelId === agent.workingIn);
-	const other = props.agents.find((a) => a.channelId === agent.workingIn);
-	const where = !agent.workingIn
-		? undefined
-		: agent.workingIn === agent.channelId
-			? t("Working in own channel")
-			: group
-				? t("Working in group {name}", { name: group.displayName })
-				: other
-					? t("Replying in {name}'s channel", { name: other.displayName })
-					: t("Replying in another channel");
-	return (
-		<article className="card">
-			<div className="card-head">
-				<strong>
-					{agent.channelId ? (
-						<a
-							href={discordUrl(agent.channelId, props.guildId)}
-							target="_blank"
-							rel="noreferrer"
-						>
-							{agent.displayName}
-						</a>
-					) : (
-						agent.displayName
-					)}
-				</strong>
-				<Badge>agent</Badge>
-				{agent.workingIn ? (
-					<Busy busy={1 + agent.waiting} />
-				) : agent.waiting > 0 ? (
-					<Badge tone="busy">
-						{t("{count} waiting", { count: agent.waiting })}
-					</Badge>
-				) : (
-					<Badge>{t("idle")}</Badge>
-				)}
-			</div>
-			{where ? <p>{where}</p> : null}
-			<dl className="facts">
-				<div>
-					<dt>{t("Model")}</dt>
-					<dd>
-						{agent.model} · thinking {agent.thinking}
-					</dd>
-				</div>
-				<div>
-					<dt>{t("Context")}</dt>
-					<dd>
-						{agent.context
-							? agent.context.tokens === null
-								? t("Just compacted (limit {limit})", {
-										limit: kilo(agent.context.contextWindow),
-									})
-								: `${kilo(agent.context.tokens)} / ${kilo(agent.context.contextWindow)} (${Math.round((agent.context.tokens / agent.context.contextWindow) * 100)}%)`
-							: "—"}
-					</dd>
-				</div>
-				<div>
-					<dt>{t("Schedules")}</dt>
-					<dd>{agent.schedules}</dd>
-				</div>
-				<div>
-					<dt>{t("Last active")}</dt>
-					<dd>{ago(agent.lastActive, props.now, timeZone)}</dd>
-				</div>
-			</dl>
-			{agent.room || agent.channelId ? (
-				<Cleanup
-					channel={agent.room ?? `discord:${agent.channelId}`}
-					title={agent.displayName}
-					busy={!!agent.workingIn || agent.waiting > 0}
-					refresh={props.refresh}
-				/>
-			) : null}
-			{agent.channelId && panes.includes("conversations") ? (
-				<a href={hrefFor("conversations", `discord:${agent.channelId}`)}>
-					{t("transcript")}
-				</a>
-			) : null}
-		</article>
-	);
-}
-
-function StoredRow({
-	conversation: c,
-	schedules,
-	now,
-	refresh,
-}: {
-	conversation: ConversationView;
-	schedules?: number;
-	now: number;
-	refresh(): void;
-}) {
-	const { timeZone, panes } = useConfig();
-	const { title, detail } =
-		c.kind === "outside"
-			? { title: c.firstMessage || t("(No messages)"), detail: c.id }
-			: channelTitle(c.channel, c.id);
-	return (
-		<article className="card">
-			<div className="card-head">
-				<strong>
-					{c.channel && c.channel.kind !== "gone" ? (
-						<a
-							href={discordUrl(
-								c.id,
-								c.channel.kind === "guild" ? c.channel.guildId : undefined,
-							)}
-							target="_blank"
-							rel="noreferrer"
-						>
-							{title}
-						</a>
-					) : (
-						title
-					)}
-				</strong>
-				<Busy busy={c.busy} />
-			</div>
-			{detail ? <p className="hint">{detail}</p> : null}
-			<p>
-				{c.liveBytes > 0
-					? t("Conversation {size} · Archives {count}", {
-							size: size(c.liveBytes),
-							count: c.archives,
-						})
-					: t("No live conversation · Archives {count}", { count: c.archives })}
-			</p>
-			{c.startedAt ? (
-				<p>
-					{t("Started")} {when(c.startedAt, timeZone)}
-				</p>
-			) : null}
-			<p className="hint">
-				{schedules !== undefined ? `${t("Schedules")} ${schedules} · ` : ""}
-				{t("Last active")} {ago(c.lastActive, now, timeZone)}
-			</p>
-			<Cleanup
-				channel={c.key}
-				title={title}
-				busy={c.busy > 0}
-				deletable
-				refresh={refresh}
-			/>
-			{panes.includes("conversations") ? (
-				<a href={hrefFor("conversations", c.key)}>{t("transcript")}</a>
-			) : null}
-		</article>
-	);
-}
-
-function PartyRow({
-	party: p,
-	now,
-	refresh,
-}: {
-	party: PartyView;
-	now: number;
-	refresh(): void;
-}) {
-	const { timeZone } = useConfig();
-	const { title, detail } = channelTitle(p.channel, p.channelId);
-	const labels = {
-		running: wording("Container running"),
-		stopped: wording("Container stopped"),
-		missing: wording("No container yet"),
-		unknown: wording("Container status unknown"),
-	};
-	return (
-		<article className="card">
-			<div className="card-head">
-				<strong>
-					{p.channel.kind !== "gone" ? (
-						<a
-							href={discordUrl(
-								p.channelId,
-								p.channel.kind === "guild" ? p.channel.guildId : undefined,
-							)}
-							target="_blank"
-							rel="noreferrer"
-						>
-							{title}
-						</a>
-					) : (
-						title
-					)}
-				</strong>
-				<Badge>{p.profile}</Badge>
-				<Badge>{t(labels[p.container])}</Badge>
-				<Busy busy={p.busy} />
-			</div>
-			{detail ? <p className="hint">{detail}</p> : null}
-			<p>
-				{t("Enabled by {name} at {time}", {
-					name: p.enabledBy,
-					time: when(p.enabledAt, timeZone),
-				})}
-			</p>
-			<p className="hint">
-				{t("Last active")} {ago(p.lastActive, now, timeZone)}
-			</p>
-			<Cleanup
-				channel={p.key}
-				title={title}
-				busy={p.busy > 0}
-				refresh={refresh}
-			/>
-		</article>
 	);
 }
