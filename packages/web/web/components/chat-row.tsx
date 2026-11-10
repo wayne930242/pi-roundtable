@@ -51,7 +51,7 @@ export const ChatRow = memo(function ChatRow(
 				style={{ ...accent, ...phase }}
 			>
 				{/* A group's stacked figures are 1.45 wide, so they are drawn smaller to keep the names in one column. */}
-				<RoomPicture view={view} size={view.kind === "group" ? 36 : 52} bare />
+				<RoomPicture view={view} size={view.kind === "group" ? 36 : 52} />
 				<span className="room-row-main">
 					<span className="room-row-top">
 						<strong>{view.displayName}</strong>

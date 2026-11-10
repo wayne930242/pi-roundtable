@@ -32,7 +32,7 @@ const HiddenRoom = memo(function HiddenRoom(
 	return (
 		<li className="hidden-room" style={accent}>
 			<a className="hidden-room-link" href={hrefFor("room", view.key)}>
-				<RoomPicture view={view} size={44} bare />
+				<RoomPicture view={view} size={44} />
 				<span className="room-row-main">
 					<span className="room-row-top">
 						<strong>{view.displayName}</strong>

@@ -2,15 +2,17 @@ import { memo } from "react";
 import { useAccentStyle } from "../lib/characters.ts";
 import { pinBadge } from "../lib/chats-home.ts";
 import { useFigureMotion } from "../lib/figure-motion.ts";
-import { useMenuPress } from "../lib/menu-press.ts";
+import { pinLifting } from "../lib/layout.ts";
 import { roomMenuOf } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
+import { useRowPress } from "../lib/row-press.ts";
 import type { RowData } from "../pages/rooms.tsx";
 import { RoomPicture } from "./room-picture.tsx";
 
 /**
- * A pinned room as a big figure with its name under it. The corner shows one thing: the cards
+ * A pinned room as a big figure with its name under it; a hold, or a mouse drag, lifts it to move
+ * among the other pins. The corner shows one thing: the cards
  * waiting there, else the unread messages, else a dot while its agent works.
  */
 export const PinTile = memo(function PinTile(
@@ -22,7 +24,7 @@ export const PinTile = memo(function PinTile(
 	},
 ) {
 	const { view } = props;
-	const press = useMenuPress(() => roomMenuOf(view.key));
+	const press = useRowPress(() => roomMenuOf(view.key), pinLifting(view.key));
 	const accent = useAccentStyle(view.character);
 	const { style: phase, ...motion } = useFigureMotion(
 		view.key,
@@ -31,7 +33,7 @@ export const PinTile = memo(function PinTile(
 	);
 	const badge = pinBadge(props.waiting, props.unread, props.typing);
 	return (
-		<li className="pin-item">
+		<li className="pin-item" data-pin-item="" data-key={view.key}>
 			<a
 				className="pin"
 				{...press}
@@ -42,7 +44,7 @@ export const PinTile = memo(function PinTile(
 				style={{ ...accent, ...phase }}
 			>
 				<span className="pin-picture">
-					<RoomPicture view={view} size={props.size} bare />
+					<RoomPicture view={view} size={props.size} />
 					{badge && badge.kind !== "typing" ? (
 						<span
 							className="pin-count"

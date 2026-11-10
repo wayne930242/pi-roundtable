@@ -23,6 +23,11 @@ export interface CharacterProps {
 	frame?: "disc" | "shield" | undefined;
 	/** The figure alone: no frame, no background and no clip, so it stands free on the page. */
 	bare?: boolean | undefined;
+	/**
+	 * The figure standing free on a disc of the agent's accent with a ring of it, drawn by the
+	 * stylesheet: the page's own way to show an agent, so the accent tells agents apart.
+	 */
+	badge?: boolean | undefined;
 	state?: AvatarState | undefined;
 	expr?: Expression | undefined;
 	/** Pixels, set through the style so the page's CSP stays as it is. */
@@ -101,7 +106,8 @@ export const Character = memo(function Character(props: CharacterProps) {
 	const uid = uidOf(useId());
 	const kit = useKit();
 	const skins = useSkins();
-	const { spec, look, frame, bare, state, expr, name, label } = props;
+	const { spec, look, frame, state, expr, name, label, badge } = props;
+	const bare = props.bare || badge;
 	// The kit loads as a chunk of its own; until it has, the host stands empty at its size.
 	const svg = useMemo(
 		() =>
@@ -115,35 +121,47 @@ export const Character = memo(function Character(props: CharacterProps) {
 				: "",
 		[kit, spec, look, frame, bare, state, expr, name, label, uid, skins],
 	);
+	// The accent reads at 3:1 on the look's surface, so a dark palette such as sable is lifted on a dark page.
+	const accent = useMemo(() => {
+		if (!kit || !badge) return undefined;
+		const shown = spec?.colors?.primary
+			? spec
+			: suggestionFor(kit, { name: name ?? label ?? "agent" });
+		return kit.accentOf(shown, look);
+	}, [kit, badge, spec, look, name, label]);
 	const size = props.size;
+	const style = {
+		...(size ? { width: size, height: size } : {}),
+		...(accent ? { ["--av-accent" as string]: accent } : {}),
+	};
 	return (
 		<span
 			className={props.live === false ? "av-host static" : "av-host"}
 			data-state={state ?? "idle"}
 			{...(bare ? { "data-bare": "" } : {})}
+			{...(badge ? { "data-badge": "" } : {})}
 			{...(label
 				? { role: "img", "aria-label": label }
 				: { "aria-hidden": true as const })}
-			{...(size ? { style: { width: size, height: size } } : {})}
+			{...(size || accent ? { style } : {})}
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: composeSvg output from a parsed spec, the only injection in the app
 			dangerouslySetInnerHTML={{ __html: svg }}
 		/>
 	);
 });
 
-/** A character that takes the page's look and scheme, so a caller need not. */
+/** A character as the page shows it everywhere: the page's look and scheme, on its accent badge. */
 export const PageCharacter = memo(function PageCharacter(
-	props: Omit<CharacterProps, "look" | "frame">,
+	props: Omit<CharacterProps, "look" | "frame" | "bare" | "badge">,
 ) {
-	const { look, frame } = useCharacterStyle();
-	return <Character {...props} look={look} frame={frame} />;
+	const { look } = useCharacterStyle();
+	return <Character {...props} look={look} badge />;
 });
 
 /** Up to three members' characters overlapping, for a group; static. */
 export const CharacterStack = memo(function CharacterStack(props: {
 	members: readonly { name: string; spec: CharacterSpec | undefined }[];
 	size: number;
-	bare?: boolean;
 }) {
 	const shown = props.members.slice(0, 3);
 	return (
@@ -169,7 +187,6 @@ export const CharacterStack = memo(function CharacterStack(props: {
 						name={member.name}
 						size={props.size}
 						live={false}
-						bare={props.bare}
 					/>
 				</span>
 			))}

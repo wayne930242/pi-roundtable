@@ -59,8 +59,8 @@ export const ZH_TW_SETTINGS: Readonly<Record<string, string>> = {
 	Modern: "現代",
 	"Plain and neutral, with round avatars.": "簡潔中性，搭配圓形頭像。",
 	Camelot: "卡美洛",
-	"Parchment by day, night castle by night, gold rules, shield avatars and wax seals.":
-		"白天是羊皮紙，夜晚是夜間城堡，搭配金色分隔線、盾形頭像與蠟封印章。",
+	"Parchment by day, night castle by night, gold rules and wax seals.":
+		"白天是羊皮紙，夜晚是夜間城堡，搭配金色分隔線與蠟封印章。",
 
 	// 技能、圓桌與對話記錄
 	"All knights": "所有騎士",

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { openPage, releaseDom, type TestPage } from "./dom.ts";
-import { characterLookOf, frameOf, initLook, setLook } from "./lib/look.ts";
+import { characterLookOf, initLook, setLook } from "./lib/look.ts";
 import { setTheme } from "./lib/theme.ts";
 
 let page: TestPage;
@@ -36,11 +36,9 @@ test("a device's own pick wins over the host's, and picking nothing goes back to
 	expect(attribute()).toBe("camelot");
 });
 
-test("the character look is the page look with the scheme, and Camelot draws the shield frame", () => {
+test("the character look is the page look with the scheme", () => {
 	expect(characterLookOf("modern", "light")).toBe("modern-light");
 	expect(characterLookOf("camelot", "dark")).toBe("camelot-dark");
-	expect(frameOf("camelot")).toBe("shield");
-	expect(frameOf("modern")).toBe("disc");
 });
 
 test("changing the look or the scheme repaints the toolbar colour tags", async () => {

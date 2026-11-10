@@ -61,7 +61,7 @@ test("the pins are the pinned rooms in order, each with its name under it; Home 
 	expect(rows.slice(1).sort()).toEqual(["news", "team"]);
 });
 
-test("a figure stands free: no frame, no background, one element each, in the pins and in the rows", async () => {
+test("a figure stands free on its accent badge: no drawn frame or clip, the accent on the host, in the pins and in the rows", async () => {
 	seed();
 	loadChats({ pins: [SCOUT] });
 	await show(<Home />);
@@ -70,6 +70,10 @@ test("a figure stands free: no frame, no background, one element each, in the pi
 	expect(figures.length).toBeGreaterThan(3);
 	for (const figure of figures) {
 		expect(figure.hasAttribute("data-bare")).toBe(true);
+		expect(figure.hasAttribute("data-badge")).toBe(true);
+		expect(
+			(figure as HTMLElement).style.getPropertyValue("--av-accent"),
+		).toMatch(/^#[0-9a-f]{6}$/);
 		expect(figure.querySelector(".ring")).toBeNull();
 		expect(figure.querySelector("clipPath")).toBeNull();
 	}
