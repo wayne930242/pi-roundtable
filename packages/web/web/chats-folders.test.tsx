@@ -122,12 +122,20 @@ test("a pin dragged onto another moves before it, and the click after the drop d
 	});
 	try {
 		const scout = all("a.pin")[1] as HTMLElement;
-		await page.act(() => press(scout, "pointerdown", 140, 1));
-		await page.act(() => press(scout, "pointermove", 120, 1));
+		await page.act(() => {
+			press(scout, "pointerdown", 140, 1);
+		});
+		await page.act(() => {
+			press(scout, "pointermove", 120, 1);
+		});
 		await until(() => scout.closest("[data-lifted]") !== null);
-		await page.act(() => press(scout, "pointermove", 40, 1));
+		await page.act(() => {
+			press(scout, "pointermove", 40, 1);
+		});
 		await new Promise((resolve) => setTimeout(resolve, 40));
-		await page.act(() => press(scout, "pointerup", 40));
+		await page.act(() => {
+			press(scout, "pointerup", 40);
+		});
 		await until(() => pin.mock.calls.length > 0);
 		expect(pin).toHaveBeenCalledWith(SCOUT, true, BUILD);
 		// The answer lands before the next test loads its own layout.
