@@ -40,7 +40,7 @@ export const CHATS_HOME_CSS = `
 	margin-left: auto;
 }
 
-.chats-me {
+button.chats-me {
 	display: grid;
 	padding: 0;
 	border: 0;
@@ -54,6 +54,12 @@ export const CHATS_HOME_CSS = `
 	color: var(--accent-ink);
 	font-weight: var(--weight-bold);
 	text-decoration: none;
+}
+
+button.chats-me:hover:not(:disabled) {
+	background: var(--accent-soft);
+	border-color: transparent;
+	color: var(--accent-ink);
 }
 
 button.chats-waiting {
