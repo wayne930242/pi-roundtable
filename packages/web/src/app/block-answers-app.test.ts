@@ -6,6 +6,7 @@ import type {
 	RoomMessage,
 	ServerFrame,
 } from "../api-types.ts";
+import { until } from "../testing/app-fixture.ts";
 import {
 	activity,
 	type Booted,
@@ -129,9 +130,11 @@ describeDb("an interactive block answered over a real host", () => {
 			room: SCOUT,
 			message: { kind: "owner", author: "Ada", text: 'User picked "SQLite".' },
 		});
-		// The turn the answer started read exactly that text, as the owner's.
-		const turn = app.seen.find((request) =>
-			request.text.includes('User picked "SQLite".'),
+		// The turn the answer started read exactly that text, as the owner's; it starts after the message is accepted.
+		const turn = await until(async () =>
+			app.seen.find((request) =>
+				request.text.includes('User picked "SQLite".'),
+			),
 		);
 		expect(turn?.channel).toBe(SCOUT);
 		expect(turn?.speaker).toMatchObject({ tier: "owner" });

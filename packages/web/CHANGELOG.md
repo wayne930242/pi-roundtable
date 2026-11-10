@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.2] - 2026-11-10
+
+### Changed
+
+- Every agent picture in the app is one accent badge: the figure stands free on a soft disc of the agent's accent, ringed in it, in the chat list, the pins, the side list, a room's header, the messages and everywhere else. The accent is lifted to 3:1 on the page, so a dark palette such as sable stays visible at night.
+- The Camelot look no longer draws the gold disc or the heraldic shield around a figure on the page; `useCharacterStyle()` loses `frame` and `frameOf` is gone. `RoomPicture` and `CharacterStack` lose `bare`, and `PageCharacter` no longer takes `bare`; `Character` gains `badge`.
+
+### Fixed
+
+- A pin on the chat home moves among the pins again: a hold (or a mouse drag) lifts it, the other pins make room across the grid or along the phone's dock, and letting go over a place puts it there; letting go in place still opens its menu.
+
 ## [0.45.1] - 2026-11-10
 
 ### Changed
