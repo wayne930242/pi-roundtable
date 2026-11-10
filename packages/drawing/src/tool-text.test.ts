@@ -47,6 +47,14 @@ async function open(options: Parameters<typeof drawing>[0] = {}) {
 	}
 	return { harness, tools: found };
 }
+/** Every argument path a schema asks for, dotted, the way `at` walks them. */
+function paths(node: Schema, prefix = ""): string[] {
+	const inner = node.items ?? node;
+	return Object.entries(inner.properties ?? {}).flatMap(([name, child]) => {
+		const path = prefix ? `${prefix}.${name}` : name;
+		return [path, ...paths(child, path)];
+	});
+}
 /** The schema at an argument path; arrays are transparent, as in the text keys. */
 function at(root: Schema, path: string): Schema | undefined {
 	let node: Schema | undefined = root;
@@ -160,10 +168,8 @@ describe("drawing tool text", () => {
 	test("the static list of draw_cards arguments is the one the built tool asks for", async () => {
 		const { harness, tools } = await open();
 		const asked = new Set(DRAW_CARDS_ARGUMENTS);
-		const properties = Object.keys(
-			tools.draw_cards?.parameters.properties ?? {},
-		);
-		for (const name of properties) expect(asked.has(name)).toBe(true);
+		const built = paths(tools.draw_cards?.parameters ?? {});
+		expect(built.filter((path) => !asked.has(path))).toEqual([]);
 		const all = Object.fromEntries(DRAW_CARDS_ARGUMENTS.map((p) => [p, "x"]));
 		const full = await open({ toolText: { draw_cards: { parameters: all } } });
 		for (const path of DRAW_CARDS_ARGUMENTS)

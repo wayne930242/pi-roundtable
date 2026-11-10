@@ -2,7 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFauxCore, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import {
+	createFauxCore,
+	fauxAssistantMessage,
+	fauxText,
+	fauxToolCall,
+} from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { INTERACTIVE_KINDS } from "pi-better-show";
 import { Type } from "typebox";
@@ -15,7 +20,7 @@ import type {
 import type { IdentityService } from "../identity/identity-service.ts";
 import type { Principal } from "../identity/principal-store.ts";
 import type { Speaker } from "../identity/speakers.ts";
-import { PluginError } from "../kernel/errors.ts";
+import { HostStoppingError, PluginError } from "../kernel/errors.ts";
 import { type Logger, silentLogger } from "../kernel/log.ts";
 import type {
 	LinkedSessions,
@@ -29,6 +34,8 @@ import {
 } from "../registry/contributions.ts";
 import { resolveProviders } from "../registry/providers.ts";
 import { ServiceRegistry } from "../registry/services.ts";
+import { ChannelQueue } from "../routing/channel-queue.ts";
+import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { recordingLogger } from "../testing/recording-logger.ts";
 import { PiAgentRuntime } from "./pi-agent-runtime.ts";
 import {
@@ -80,6 +87,7 @@ async function setUp(
 	filling: RoundtablePlugin[] = [],
 	logger: Logger = silentLogger(),
 	surfaces: Record<string, unknown> = { prompts: () => undefined },
+	queue: unknown = {},
 ) {
 	const plugins = [...filling, plugin];
 	const services = new ServiceRegistry([...plugins]);
@@ -91,7 +99,7 @@ async function setUp(
 			if (!linked) throw new Error("not linked");
 			return linked;
 		},
-		queue: {},
+		queue,
 		toolTiers: toolTiers(),
 		events: {},
 		conversations: {},
@@ -481,6 +489,141 @@ describe("the runtime plugin's preflight of claude-bridge with memory", () => {
 			const plugin = runtimePlugin(options(extra), async () => heldActions);
 			await setUp(plugin, [identity(tiers), echo]);
 			await plugin.preflight?.();
+		}
+	});
+});
+
+describe("the runtime plugin's drain wiring", () => {
+	test("a task a report turn starts is refused while the host drains, though the report itself runs", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "runtime-plugin-drain-"));
+		dirs.push(dir);
+		const core = createFauxCore({
+			provider: "faux",
+			models: [{ id: "faux-1" }],
+		});
+		core.appendResponses([
+			fauxAssistantMessage([fauxToolCall("probe_task", {})], {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage([fauxText("Done.")]),
+		]);
+		const modelRuntime = await ModelRuntime.create({
+			authPath: join(dir, "auth.json"),
+			modelsPath: null,
+			allowModelNetwork: false,
+			refreshOnCreate: false,
+		});
+		modelRuntime.registerProvider("faux", {
+			api: core.api,
+			apiKey: "test",
+			baseUrl: "http://faux.invalid",
+			streamSimple: core.streamSimple,
+			models: [
+				{
+					id: "faux-1",
+					name: "Faux",
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 100_000,
+					maxTokens: 1_000,
+				},
+			],
+		});
+		const refused: string[] = [];
+		const tools: RoundtablePlugin = {
+			name: "probe",
+			setup: () => ({
+				personas: [{ kind: "owner", prompt: () => "You are the persona." }],
+				sessionTools: [
+					{
+						name: "probe",
+						phase: "tools",
+						snapshot: () => ({
+							revision: 0,
+							factory: (session) => (pi) =>
+								pi.registerTool({
+									name: "probe_task",
+									label: "probe_task",
+									description: "Run a task beside this conversation.",
+									parameters: Type.Object({}),
+									execute: async () => {
+										await session
+											.runTask({
+												selection: { tools: [], groups: [] },
+												text: "a task",
+												timeoutMs: 10_000,
+												exclude: [],
+											})
+											.catch((error: unknown) => {
+												refused.push(
+													error instanceof Error
+														? error.message
+														: String(error),
+												);
+											});
+										return {
+											content: [{ type: "text", text: "tried" }],
+											details: undefined,
+										};
+									},
+								}),
+						}),
+					},
+					{
+						name: "compactor",
+						phase: "tools",
+						snapshot: () => ({
+							revision: 0,
+							factory: () => (pi) =>
+								pi.registerTool({
+									name: "compact_session",
+									label: "compact_session",
+									description: "Compact the session.",
+									parameters: Type.Object({}),
+									execute: async () => {
+										throw new Error("not scripted");
+									},
+								}),
+						}),
+					},
+				],
+			}),
+		};
+		const queue = new ChannelQueue();
+		const plugin = runtimePlugin(
+			options({
+				model: { provider: "faux", id: "faux-1" },
+				modelRuntime,
+				thinking: "off",
+			}),
+			async () => heldActions,
+		);
+		const { services } = await setUp(
+			plugin,
+			[tools],
+			silentLogger(),
+			{ prompts: () => undefined },
+			queue,
+		);
+		const runtime = services.get(RUNTIME);
+		try {
+			queue.close();
+			const result = await queue.finishing(() =>
+				queue.run("probe:room", () =>
+					runtime.runTurn({
+						channel: "probe:room",
+						kind: "owner",
+						text: "report",
+						speaker: OWNER_SPEAKER,
+						selection: { id: "probe", tools: ["probe_task"], groups: [] },
+					}),
+				),
+			);
+			expect(result).toMatchObject({ ok: true, text: "Done." });
+			expect(refused).toEqual([new HostStoppingError().message]);
+		} finally {
+			runtime.dispose?.();
 		}
 	});
 });

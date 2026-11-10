@@ -66,10 +66,10 @@ export class ChannelQueue {
 
 	/**
 	 * Runs `task` as the delivery of work the shutdown drain waits for, such as the report of a
-	 * task that was running when the host began to stop. A queue task started inside it, and
-	 * everything that task awaits, is admitted although the queue is closed, until the drain ends;
-	 * a queue task that task starts in turn is refused, as is anything else the shutdown refuses
-	 * (`draining`). Outside a shutdown it changes nothing.
+	 * task that was running when the host began to stop. A queue task started inside it runs
+	 * although the queue is closed, with `closed` reading false, until the drain ends; a queue
+	 * task that task starts in turn is refused, as is anything else the shutdown refuses
+	 * (`draining`, which stays true there). Outside a shutdown it changes nothing.
 	 */
 	finishing<T>(task: () => Promise<T>): Promise<T> {
 		return this.#finishing.run(0, task);
