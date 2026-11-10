@@ -2260,11 +2260,8 @@ pre.diff {
 
 .action-popover-heading {
 	padding: var(--space-2) var(--space-2) var(--space-1);
-	border-bottom: 1px solid var(--border);
-	margin-bottom: var(--space-1);
 	color: var(--muted);
 	font-size: var(--text-xs);
-	overflow-wrap: anywhere;
 }
 
 .action-popover .menu-item {

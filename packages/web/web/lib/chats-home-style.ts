@@ -58,7 +58,6 @@ button.chats-me {
 
 button.chats-me:hover:not(:disabled) {
 	background: var(--accent-soft);
-	border-color: transparent;
 	color: var(--accent-ink);
 }
 
