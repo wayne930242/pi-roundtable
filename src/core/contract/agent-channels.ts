@@ -3,8 +3,6 @@ import type { InterimPosts } from "../domain/interim.ts";
 
 /**
  * One agent's message in a channel, posted under its name and avatar.
- *
- * @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then.
  */
 export interface AgentPost {
 	name: string;
@@ -22,15 +20,11 @@ export interface AgentPost {
 /**
  * A category's name. Agents live under `Agents` or `Agents-<suffix>`, groups under `Groups` or
  * `Groups-<suffix>`, and archived ones, kept with their history, under `Archive`.
- *
- * @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then.
  */
 export type AgentCategory = string;
 
 /**
  * A category of the agent server and its channels, in server order.
- *
- * @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then.
  */
 export interface CategoryLayout {
 	/** Absent for a category still to be made. */
@@ -41,8 +35,6 @@ export interface CategoryLayout {
 
 /**
  * A message of the agent server as `channel_read` returns it.
- *
- * @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then.
  */
 export interface ChannelMessage {
 	id: string;
@@ -55,8 +47,6 @@ export interface ChannelMessage {
 /**
  * The agent guild's channels. Discord's place provider drives them to make, keep and post in the
  * places of agents and groups, and Discord's tools list, arrange and read categories.
- *
- * @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then.
  */
 export interface AgentChannels {
 	post(channelId: string, post: AgentPost): Promise<void>;
@@ -109,8 +99,6 @@ export interface AgentChannels {
 
 /**
  * The dashboard channel's one pinned message, made when missing and edited in place.
- *
- * @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then.
  */
 export interface DashboardBoard {
 	show(sections: string[]): Promise<void>;

@@ -281,9 +281,7 @@ export function useTeamFixture(
 										fails: (id) => channels.failing.has(id),
 									},
 									onRemoved: (listener) => removedListeners.push(listener),
-									nameOf: (id) =>
-										store.agentByChannel(id)?.name ??
-										store.groupByChannel(id)?.name,
+									nameOf: (id) => store.placeOwner(discordKey(id))?.name,
 								}),
 							]),
 					...stored,

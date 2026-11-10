@@ -56,6 +56,25 @@ const server = {
 } as unknown as Pick<AgentServer, "team" | "directory">;
 const directory = discordTeamReads(server);
 
+/** A server written before places were providers: only the deprecated lookups and the rows' channel ids. */
+const legacyServer = {
+	team: {},
+	directory: {
+		agent: (name: string) => agents.find((a) => a.name === name),
+		group: (name: string) => groups.find((g) => g.name === name),
+		agentByChannel: (id: string) => agents.find((a) => a.channelId === id),
+		groupByChannel: (id: string) => groups.find((g) => g.channelId === id),
+	},
+} as unknown as Pick<AgentServer, "team" | "directory">;
+
+test("a server without places is read through the deprecated lookups and the rows' channel ids", () => {
+	const reads = discordTeamReads(legacyServer);
+	expect(reads.ownerOf("11")).toBe("infra");
+	expect(reads.ownerOf("12")).toBe("pair");
+	expect(reads.ownerOf("99")).toBeUndefined();
+	expect(reads.channelOf("doctor")).toBe("13");
+});
+
 let channels: FakeChannels;
 beforeEach(() => {
 	channels = new FakeChannels();

@@ -94,17 +94,23 @@ export function discordAgentGuild(
 		],
 		tools: discordAgentTools({ channels, directory, logger }),
 		services: [...(dashboard.services ?? []), ...(options.own?.services ?? [])],
-		events: mergedEvents(dashboard.events ?? {}, options.own?.events ?? {}),
+		events: mergedEvents(
+			dashboard.events ?? {},
+			options.own?.events ?? {},
+			logger,
+		),
 	};
 }
 
 /**
  * Handlers of both sets under one event name each: those of an event both hear run in order, each
- * even when one before it throws, and the first error is the one raised.
+ * even when one before it throws. The first error is the one raised, as the bus logs it; the later
+ * ones are logged here, or they would be lost.
  */
 function mergedEvents(
 	first: EventHandlers,
 	second: EventHandlers,
+	logger: Pick<PluginContext["logger"], "error">,
 ): EventHandlers {
 	const merged: Record<string, (...args: unknown[]) => Promise<void>> = {};
 	const names = new Set([...Object.keys(first), ...Object.keys(second)]);
@@ -123,6 +129,11 @@ function mergedEvents(
 				} catch (error) {
 					failures.push(error);
 				}
+			for (const error of failures.slice(1))
+				logger.error(
+					{ err: error, event: name },
+					"a later handler of the event failed",
+				);
 			if (failures.length > 0) throw failures[0];
 		};
 	}

@@ -72,4 +72,29 @@ describeDb("agent server: places across a team move", () => {
 			{ team_id: "pager-home", name: "infra", external_id: "pg-1" },
 		]);
 	});
+
+	test("a host without a Discord guild keeps the team's own places of a placeSpaces surface across boots", async () => {
+		sql = await migratedPool();
+		await sql.unsafe("DELETE FROM agent_places");
+		const boot = async () =>
+			migrate(
+				sql,
+				agentServerPlugin({
+					coordinator: "guide",
+					teamId: "pager-home",
+					formerTeamIds: ["book-1"],
+					placeSpaces: [{ surface: "pager", space: "book-1" }],
+				} as unknown as AgentServerOptions).migrations ?? [],
+			);
+		await boot();
+		await sql`INSERT INTO agent_places (team_id, kind, name, surface, external_id)
+			VALUES ('book-1', 'agent', 'infra', 'pager', 'pg-1')`;
+		await boot();
+		await boot();
+		const rows =
+			await sql`SELECT team_id, name, external_id FROM agent_places WHERE surface = 'pager'`;
+		expect([...rows]).toEqual([
+			{ team_id: "pager-home", name: "infra", external_id: "pg-1" },
+		]);
+	});
 });

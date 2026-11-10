@@ -66,3 +66,68 @@ test("an error from a handler of the replacement's is raised, as the host would 
 		}),
 	).rejects.toThrow("mine failed");
 });
+
+const failingTeam = {
+	team: {
+		status: () => [],
+		onChange: () => {
+			throw new Error("dashboard failed");
+		},
+	},
+};
+const ready = {
+	plugin: AGENT_SERVER_PLUGIN,
+	service: AGENT_TEAM_SERVICE,
+	outcome: "ready",
+} as const;
+
+test("the replacement's handler runs after a dashboard handler that throws, and the dashboard's error is the one raised", async () => {
+	const heard: string[] = [];
+	const guild = discordAgentGuild(
+		{
+			...context,
+			services: { find: () => failingTeam },
+		} as never,
+		{
+			guild: "8",
+			connection,
+			own: { events: { serviceStarted: () => void heard.push("own") } },
+		},
+	);
+	await expect(guild.events.serviceStarted?.(ready)).rejects.toThrow(
+		"dashboard failed",
+	);
+	expect(heard).toEqual(["own"]);
+});
+
+test("when both handlers of an event throw, the first error is raised and the second is logged", async () => {
+	const logged: unknown[] = [];
+	const guild = discordAgentGuild(
+		{
+			...context,
+			logger: {
+				...silentLogger(),
+				error: (...args: unknown[]) => logged.push(args),
+			},
+			services: { find: () => failingTeam },
+		} as never,
+		{
+			guild: "8",
+			connection,
+			own: {
+				events: {
+					serviceStarted: () => {
+						throw new Error("mine failed");
+					},
+				},
+			},
+		},
+	);
+	await expect(guild.events.serviceStarted?.(ready)).rejects.toThrow(
+		"dashboard failed",
+	);
+	expect(logged).toHaveLength(1);
+	expect(
+		((logged[0] as [{ err: Error }])[0] as { err: Error }).err.message,
+	).toBe("mine failed");
+});

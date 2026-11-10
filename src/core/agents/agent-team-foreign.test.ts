@@ -79,6 +79,17 @@ describeDb(
 			expect(fx.channels.categoryOf(doctor?.channelId ?? "")).toBe("Agents");
 		});
 
+		test("a place the provider cannot check is taken as it is: the same channel is brought back", async () => {
+			await fx.team.archive(undefined, "doctor");
+			const same = fx.store.agent("doctor")?.channelId ?? "";
+			fx.channels.failing.add(same);
+			const made = fx.channels.created.length;
+			await fx.team.restore("doctor");
+			expect(fx.store.agent("doctor")?.status).toBe("active");
+			expect(fx.store.agent("doctor")?.channelId).toBe(same);
+			expect(fx.channels.created.length).toBe(made);
+		});
+
 		test("a channel of the agent guild is brought back as before", async () => {
 			await fx.team.archive(undefined, "doctor");
 			const same = fx.store.agent("doctor")?.channelId ?? "";
