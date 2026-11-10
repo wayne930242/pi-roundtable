@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-11
+
+### Changed
+
+- `typebox` is pinned at 1.4.6 (was 1.3.37), here and in the projects `roundtable init` generates, which carry the same pin.
+
 ## [0.46.0] - 2026-11-10
 
 ### Fixed

@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-11
+
+### Added
+
+- Hidden and archived: a Select button (or holding a row) chooses several rows of one section and handles them together. Hidden rooms are unhidden, dispatch threads dismissed, archived knights and groups restored or deleted for good, each with an Undo notice where the action can be undone. A knight is chosen with its temp knights; the delete question names the items (eight, then "and N more"), says how many temp knights go with them, and carries the count on its button. Chips filter a long section by 7 or 30 days without activity before "Select all in section". A run shows its progress, goes on after a refusal, and then names each row the server refused with its reason. Archived rows now show the knight's own picture and when it was last active; `GET api/archive` entries carry `lastActive`.
+- Overview: stored workspaces and outside AI client conversations are short rows (name; last active, size and archives; a badge while a turn runs) with Start over, Delete and Transcript in the row's ⋯ menu, instead of cards about 225 px tall. Each section folds, says what it holds beside its heading, and keeps its fold on the device; the knights, outside conversations and party channels start folded. Select (or holding a row) chooses workspaces or outside conversations, with the same 7 and 30 day chips, and starts them over or deletes them for good after a question that names them and their total size.
+- A person can design their own knight on the profile page, with the creator the knights use ("Your knight": Design my knight, Change look, Remove). The chat home's own picture, the person's own messages (beside the first of each group, at the right), their notes, the "seen by" faces and the profile's account head draw it, and so does everyone else past the gate. A person without a knight keeps their account picture, then their initials. The profile shows the card on hosts that serve the rooms pane.
+- New routes: `PUT` and `DELETE api/profile/character`, and `GET api/people/<principal>/character` (another person's only past the gate, like their picture). `GET api/profile` and the socket's `ready` frame carry the person's own knight as `character`. The knights are kept in a new table, `web_person_characters`.
+
+### Changed
+
+- On the chat home an idle agent rests with its eyes closed instead of blinking, so a list of idle figures no longer blinks all at the same moment. The kit adds a `resting` expression (a calm closed-eyed face; `STATE_EXPRESSION` is unchanged), `characters.css` never blinks it, and every other figure's blink is now offset by its `--phase`, so neighbours blink at different moments. The chat home's per-figure phase has a finer step, so two rooms rarely share one.
+- `typebox` is pinned at 1.4.6 (was 1.3.37), here and in the projects `roundtable init` generates, which carry the same pin.
+- Home (the coordinator's room) can be pinned by hand: its room menu offers Pin and Unpin (and Move up and down once pinned), still no folder or Hide. A pinned Home sits among the pins in the owner's order, in the dock, the pins row and the room drawer; unpinned it stays the first row of the All list.
+
+### Fixed
+
+- The person's picture on the chat home now opens a menu (their name, Profile, Settings, light or dark, Log out) instead of a link that did nothing on hosts that do not serve the profile pane. The Profile entry and the Profile tile of the features grid show only where the host serves the profile pane.
+- The chat home no longer has the collapsed "Hidden · Archived" row; the features grid's "Hidden and archived" tile is the way to that page.
+
 ## [0.46.0] - 2026-11-10
 
 ### Added

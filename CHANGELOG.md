@@ -5,6 +5,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-11
+
+### Added
+
+- pi-roundtable-web: Hidden and archived: a Select button (or holding a row) chooses several rows of one section and handles them together. Hidden rooms are unhidden, dispatch threads dismissed, archived knights and groups restored or deleted for good, each with an Undo notice where the action can be undone. A knight is chosen with its temp knights; the delete question names the items (eight, then "and N more"), says how many temp knights go with them, and carries the count on its button. Chips filter a long section by 7 or 30 days without activity before "Select all in section". A run shows its progress, goes on after a refusal, and then names each row the server refused with its reason. Archived rows now show the knight's own picture and when it was last active; `GET api/archive` entries carry `lastActive`.
+- pi-roundtable-web: Overview: stored workspaces and outside AI client conversations are short rows (name; last active, size and archives; a badge while a turn runs) with Start over, Delete and Transcript in the row's ⋯ menu, instead of cards about 225 px tall. Each section folds, says what it holds beside its heading, and keeps its fold on the device; the knights, outside conversations and party channels start folded. Select (or holding a row) chooses workspaces or outside conversations, with the same 7 and 30 day chips, and starts them over or deletes them for good after a question that names them and their total size.
+- pi-roundtable-web: A person can design their own knight on the profile page, with the creator the knights use ("Your knight": Design my knight, Change look, Remove). The chat home's own picture, the person's own messages (beside the first of each group, at the right), their notes, the "seen by" faces and the profile's account head draw it, and so does everyone else past the gate. A person without a knight keeps their account picture, then their initials. The profile shows the card on hosts that serve the rooms pane.
+- pi-roundtable-web: New routes: `PUT` and `DELETE api/profile/character`, and `GET api/people/<principal>/character` (another person's only past the gate, like their picture). `GET api/profile` and the socket's `ready` frame carry the person's own knight as `character`. The knights are kept in a new table, `web_person_characters`.
+
+### Changed
+
+- On the chat home an idle agent rests with its eyes closed instead of blinking, so a list of idle figures no longer blinks all at the same moment. The kit adds a `resting` expression (a calm closed-eyed face; `STATE_EXPRESSION` is unchanged), `characters.css` never blinks it, and every other figure's blink is now offset by its `--phase`, so neighbours blink at different moments. The chat home's per-figure phase has a finer step, so two rooms rarely share one.
+- `typebox` is pinned at 1.4.6 (was 1.3.37), here and in the projects `roundtable init` generates, which carry the same pin.
+- pi-roundtable-web: Home (the coordinator's room) can be pinned by hand: its room menu offers Pin and Unpin (and Move up and down once pinned), still no folder or Hide. A pinned Home sits among the pins in the owner's order, in the dock, the pins row and the room drawer; unpinned it stays the first row of the All list.
+
+### Fixed
+
+- pi-roundtable-web: The person's picture on the chat home now opens a menu (their name, Profile, Settings, light or dark, Log out) instead of a link that did nothing on hosts that do not serve the profile pane. The Profile entry and the Profile tile of the features grid show only where the host serves the profile pane.
+- pi-roundtable-web: The chat home no longer has the collapsed "Hidden · Archived" row; the features grid's "Hidden and archived" tile is the way to that page.
+- A place provider's `createArguments` for `agent_create` or `group_create` may no longer reuse an argument the tool takes itself (`name`, `task`, `group`, ...) or one another provider adds: the boot stops with a `PluginError` naming both plugins, where the later one used to replace the earlier's schema silently. Only a string the model gives reaches `ensure` as `hints`, so give a string schema.
+- A team whose stored places of a surface other than Discord belong to another space (`placeSpaces`) drops the places moved in from a former team id of another space, as Discord's channels were already, instead of keeping them.
+- Restoring an archived agent or group whose stored place the provider finds `foreign` (a Discord channel of a server the team left, while the bot is still in it) makes a new place in the agent guild instead of moving the old channel inside the other server.
+- `discordAgentGuild` takes `own: { services, events }`, the services and event handlers the replacing plugin makes itself, and returns them merged with the dashboard's: spreading the result used to replace them. A handler of an event both hear (`serviceStarted`) runs after the dashboard's, and still runs when that one throws.
+- Discord's tools and dashboard find an agent's or group's channel and the owner of a channel through the places (`placeOwner`, `placesOf` and the status views' `places`), (an archived owner's channel that stays in an `Agents` or `Groups` category is named by its owner now, not shown as `<#id>`), not through the deprecated `agentByChannel`, `groupByChannel` and `channelId`, which they read only for an agent server written before places were providers. The agent server's refusal for `discord.entryChannel` without `discord.guild` has one text in the configuration check and in the Discord plugin.
+- `AgentChannels`, `AgentPost`, `AgentCategory`, `CategoryLayout`, `ChannelMessage` and `DashboardBoard` carry `@deprecated` in their declarations, saying that `pi-roundtable/kit` stops exporting them in 1.0 and `pi-roundtable/discord` exports them then.
+
 ## [0.46.0] - 2026-11-10
 
 ### Added
