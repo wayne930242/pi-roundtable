@@ -1,4 +1,7 @@
-import type { PlaceProvider } from "../contract/places.ts";
+import {
+	CREATION_TOOL_ARGUMENTS,
+	type PlaceProvider,
+} from "../contract/places.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { PluginError } from "../kernel/errors.ts";
 
@@ -8,6 +11,11 @@ import { PluginError } from "../kernel/errors.ts";
  */
 export class PlaceClaims {
 	readonly #owners = new Map<string, string>();
+	/** The plugin that added each creation-tool argument, by tool. */
+	readonly #arguments = {
+		agent: new Map<string, string>(),
+		group: new Map<string, string>(),
+	};
 
 	claim(plugin: string, provider: PlaceProvider): void {
 		const { surface } = provider;
@@ -29,7 +37,29 @@ export class PlaceClaims {
 			throw new PluginError(
 				`plugin ${plugin}: surface ${surface} already has the place provider of plugin ${other}. Keep one provider per surface.`,
 			);
+		this.#claimArguments(plugin, provider);
 		this.#owners.set(surface, plugin);
+	}
+
+	/** Refuses an argument a provider adds to a creation tool that the tool takes itself or another provider adds. */
+	#claimArguments(plugin: string, provider: PlaceProvider): void {
+		for (const tool of ["agent", "group"] as const) {
+			const added = this.#arguments[tool];
+			const own: readonly string[] = CREATION_TOOL_ARGUMENTS[tool];
+			for (const name of Object.keys(provider.createArguments?.[tool] ?? {})) {
+				const where = `plugin ${plugin}: the place provider of surface ${provider.surface} adds the argument ${name} to ${tool}_create`;
+				if (own.includes(name))
+					throw new PluginError(
+						`${where}, which the tool takes itself. Name it otherwise.`,
+					);
+				const other = added.get(name);
+				if (other !== undefined)
+					throw new PluginError(
+						`${where}, which the place provider of plugin ${other} adds already. Name it otherwise.`,
+					);
+				added.set(name, plugin);
+			}
+		}
 	}
 
 	/** Refuses a provider whose surface no plugin registered, once every plugin is set up. */

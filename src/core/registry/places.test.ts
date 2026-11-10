@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Type } from "typebox";
 import type { PlacePort } from "../contract/places.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NotLinkedError, PluginError } from "../kernel/errors.ts";
@@ -82,4 +83,40 @@ test("a provider needs a surface name, a storage and the three members every pro
 	await expect(bad({ ...pager, post: undefined })).rejects.toThrow(
 		"needs post()",
 	);
+});
+
+test("the arguments a provider adds to the creation tools may not reuse the tools' own, nor another provider's", async () => {
+	const argument = Type.Optional(Type.String());
+	const pager = new FakePager().provider;
+	const adding = (
+		surface: string,
+		createArguments: NonNullable<typeof pager.createArguments>,
+	) => ({
+		name: `adds-${surface}`,
+		setup: () => ({
+			surfaces: [plain(surface)],
+			places: [{ ...pager, surface, createArguments }],
+		}),
+	});
+	await expect(
+		collect([adding("pager", { agent: { task: argument } })]),
+	).rejects.toThrow(
+		"plugin adds-pager: the place provider of surface pager adds the argument task to agent_create, which the tool takes itself",
+	);
+	await expect(
+		collect([adding("pager", { group: { members: argument } })]),
+	).rejects.toThrow("adds the argument members to group_create");
+	await expect(
+		collect([
+			adding("one", { agent: { hue: argument } }),
+			adding("two", { agent: { hue: argument } }),
+		]),
+	).rejects.toThrow(
+		"plugin adds-two: the place provider of surface two adds the argument hue to agent_create, which the place provider of plugin adds-one adds already",
+	);
+	const fine = await collect([
+		adding("one", { agent: { hue: argument }, group: { hue: argument } }),
+		adding("two", { agent: { tone: argument } }),
+	]);
+	expect(fine.places).toHaveLength(2);
 });

@@ -1,7 +1,9 @@
 import type { IntercomCard } from "../domain/conversation.ts";
 import type { InterimPosts } from "../domain/interim.ts";
 
-/** One agent's message in a channel, posted under its name and avatar. */
+/**
+ * One agent's message in a channel, posted under its name and avatar.
+ */
 export interface AgentPost {
 	name: string;
 	avatarUrl: string;
@@ -21,7 +23,9 @@ export interface AgentPost {
  */
 export type AgentCategory = string;
 
-/** A category of the agent server and its channels, in server order. */
+/**
+ * A category of the agent server and its channels, in server order.
+ */
 export interface CategoryLayout {
 	/** Absent for a category still to be made. */
 	id?: string;
@@ -29,7 +33,9 @@ export interface CategoryLayout {
 	channelIds: string[];
 }
 
-/** A message of the agent server as `channel_read` returns it. */
+/**
+ * A message of the agent server as `channel_read` returns it.
+ */
 export interface ChannelMessage {
 	id: string;
 	author: string;
@@ -91,7 +97,9 @@ export interface AgentChannels {
 	): Promise<ChannelMessage[]>;
 }
 
-/** The dashboard channel's one pinned message, made when missing and edited in place. */
+/**
+ * The dashboard channel's one pinned message, made when missing and edited in place.
+ */
 export interface DashboardBoard {
 	show(sections: string[]): Promise<void>;
 }

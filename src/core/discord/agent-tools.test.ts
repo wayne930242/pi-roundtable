@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SessionContext } from "../domain/sessions.ts";
 import { silentLogger } from "../kernel/log.ts";
-import type { AgentDirectory } from "../plugin-api/services.ts";
+import type { AgentServer } from "../plugin-api/services.ts";
 import { FakeChannels } from "../testing/fake-agent-channels.ts";
-import { discordAgentTools } from "./agent-tools.ts";
+import { discordAgentTools, discordTeamReads } from "./agent-tools.ts";
 
 type Registered = {
 	name: string;
@@ -19,12 +19,61 @@ const agents = [
 	{ name: "doctor", channelId: "13", status: "active" },
 ];
 const groups = [{ name: "pair", channelId: "12", status: "active" }];
-const directory = {
-	agent: (name: string) => agents.find((a) => a.name === name),
-	group: (name: string) => groups.find((g) => g.name === name),
-	agentByChannel: (id: string) => agents.find((a) => a.channelId === id),
-	groupByChannel: (id: string) => groups.find((g) => g.channelId === id),
-} as unknown as AgentDirectory;
+/**
+ * A server whose agents and groups are found by their places: the deprecated lookups by channel
+ * and the rows' `channelId` are gone from what the tools may read.
+ */
+const server = {
+	team: {
+		placesOf: (name: string) => {
+			const owner = [...agents, ...groups].find((o) => o.name === name);
+			return owner
+				? [{ surface: "discord", key: `discord:${owner.channelId}` }]
+				: [];
+		},
+	},
+	directory: {
+		agent: (name: string) => agents.find((a) => a.name === name),
+		group: (name: string) => groups.find((g) => g.name === name),
+		placeOwner: (key: string) => {
+			const found = [...agents, ...groups].find(
+				(o) => `discord:${o.channelId}` === key,
+			);
+			return (
+				found && {
+					kind: agents.includes(found as never) ? "agent" : "group",
+					name: found.name,
+				}
+			);
+		},
+		agentByChannel: () => {
+			throw new Error("agentByChannel is deprecated");
+		},
+		groupByChannel: () => {
+			throw new Error("groupByChannel is deprecated");
+		},
+	},
+} as unknown as Pick<AgentServer, "team" | "directory">;
+const directory = discordTeamReads(server);
+
+/** A server written before places were providers: only the deprecated lookups and the rows' channel ids. */
+const legacyServer = {
+	team: {},
+	directory: {
+		agent: (name: string) => agents.find((a) => a.name === name),
+		group: (name: string) => groups.find((g) => g.name === name),
+		agentByChannel: (id: string) => agents.find((a) => a.channelId === id),
+		groupByChannel: (id: string) => groups.find((g) => g.channelId === id),
+	},
+} as unknown as Pick<AgentServer, "team" | "directory">;
+
+test("a server without places is read through the deprecated lookups and the rows' channel ids", () => {
+	const reads = discordTeamReads(legacyServer);
+	expect(reads.ownerOf("11")).toBe("infra");
+	expect(reads.ownerOf("12")).toBe("pair");
+	expect(reads.ownerOf("99")).toBeUndefined();
+	expect(reads.channelOf("doctor")).toBe("13");
+});
 
 let channels: FakeChannels;
 beforeEach(() => {

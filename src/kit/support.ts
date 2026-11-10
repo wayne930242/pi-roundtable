@@ -5,16 +5,30 @@ export type {
 	AgentTurnRunner,
 } from "../core/agents/agent-ports.ts";
 export type { Backlog, GroupMessage } from "../core/agents/agent-rules.ts";
-// Deprecated here, removed from `pi-roundtable/kit` in 1.0: Discord's agent guild internals,
-// which `pi-roundtable/discord` exports too.
-export type {
-	AgentCategory,
-	AgentChannels,
-	AgentPost,
-	CategoryLayout,
-	ChannelMessage,
-	DashboardBoard,
-} from "../core/contract/agent-channels.ts";
+
+// Deprecated here, removed from `pi-roundtable/kit` in 1.0: Discord's agent guild internals, which
+// `pi-roundtable/discord` exports then (an entry holds a name once until 1.0). The aliases carry
+// the tag, so the same types stay unmarked where `pi-roundtable/discord` hands them out.
+import type * as AgentChannelTypes from "../core/contract/agent-channels.ts";
+
+/** @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then. */
+export type AgentCategory = AgentChannelTypes.AgentCategory;
+
+/** @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then. */
+export type AgentChannels = AgentChannelTypes.AgentChannels;
+
+/** @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then. */
+export type AgentPost = AgentChannelTypes.AgentPost;
+
+/** @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then. */
+export type CategoryLayout = AgentChannelTypes.CategoryLayout;
+
+/** @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then. */
+export type ChannelMessage = AgentChannelTypes.ChannelMessage;
+
+/** @deprecated Since 0.46 a Discord internal: its export from `pi-roundtable/kit` goes away in 1.0, and `pi-roundtable/discord` exports it then. */
+export type DashboardBoard = AgentChannelTypes.DashboardBoard;
+
 export type {
 	EffortPolicy,
 	EffortRequest,

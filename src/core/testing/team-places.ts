@@ -5,7 +5,7 @@ import type { PlacePort, PlaceProvider } from "../contract/places.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { discordPlaces } from "../discord/agent-places.ts";
 import {
-	type DiscordAgentToolsOptions,
+	type DiscordTeamReads,
 	discordChannelOps,
 } from "../discord/agent-tools.ts";
 import {
@@ -100,9 +100,7 @@ export function discordTestPlaces(
 /** Discord's side of the team's deprecated `arrange` and `read`, as a host hands it with a guild. */
 export function discordTestChannelOps(
 	channels: AgentChannels,
-	directory: DiscordAgentToolsOptions["directory"] extends () => infer D
-		? NonNullable<D>
-		: never,
+	directory: DiscordTeamReads,
 ): FormerChannelOps {
 	return discordChannelOps({
 		channels,
