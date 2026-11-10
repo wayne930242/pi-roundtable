@@ -82,6 +82,11 @@ test("the page builds with relative URLs only, and every file it names is in the
  * and all of their styles are lazy chunks.
  * The 20 bytes after that are the 0.45.0 branches (team reads through places, the chat home, the
  * other-comments note) compressing together (2 over).
+ * The 94 bytes after that are a person's own knight, measured against master 086f62c (176,612 to
+ * 176,706; 6 over on 88 of headroom): the room store keeps the knight `ready` carries and takes a
+ * save, an own message row and the row of a message not taken yet reach the lazy picture, and an
+ * own row is laid out from the right (5 bytes of the stylesheet). The picture, the fetch of another
+ * person's knight, the profile's card and the creator are lazy chunks.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -103,7 +108,8 @@ const FIRST_LOAD_BASELINE =
 	153 +
 	150 +
 	800 +
-	20;
+	20 +
+	94;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 // 16.5 KB since every page figure wears its accent badge (its accent worked out per figure, the disc and
 // ring in the stylesheet): about 0.19 KB gzipped, on 0.01 KB of headroom.

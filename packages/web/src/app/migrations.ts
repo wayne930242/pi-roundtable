@@ -2,6 +2,7 @@ import type { Migration } from "pi-roundtable";
 import { HostCardLog } from "../host/cards.ts";
 import { RoomReads } from "../host/reads.ts";
 import { NOTICE_MIGRATIONS } from "../notices/mount.ts";
+import { PersonCharacters } from "../profile/characters.ts";
 import { PushMutes } from "../push/mutes.ts";
 import { PushSubscriptions } from "../push/subscriptions.ts";
 import { CardLog } from "./card-log.ts";
@@ -32,5 +33,6 @@ export const APP_MIGRATIONS: readonly Migration[] = [
 	PushMutes.migration,
 	RoomLayout.migration,
 	RoomLayout.hiddenMigration,
+	PersonCharacters.migration,
 	...NOTICE_MIGRATIONS,
 ];

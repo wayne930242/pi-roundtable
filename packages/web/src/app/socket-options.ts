@@ -1,4 +1,5 @@
 import type { ConversationPort, Logger } from "pi-roundtable";
+import type { CharacterSpec } from "pi-roundtable/characters";
 import type { Authenticator } from "../auth/authenticator.ts";
 import type { Gate } from "../gate.ts";
 import type { Viewer, WebAppRegistry } from "../web-app.ts";
@@ -46,6 +47,8 @@ export interface SocketRouteOptions {
 	 * not: the pieces of the app send what is per person there, such as the notices and the badge.
 	 */
 	opened?(connection: AppSocket): Promise<void>;
+	/** The knight a person made for themselves, sent with `ready`; absent in a route built without one. */
+	characterOf?(principalId: string): Promise<CharacterSpec | undefined>;
 	conversations: Pick<ConversationPort, "stop" | "cancelQueued" | "editQueued">;
 	logger: Logger;
 	/**

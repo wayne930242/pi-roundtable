@@ -149,16 +149,18 @@ export class SocketRoute {
 	 * addressed to the socket reach it, so nothing overtakes `ready`.
 	 */
 	async #begin(connection: AppSocket): Promise<void> {
-		const { sockets, uploads } = this.#options;
+		const { sockets, uploads, characterOf } = this.#options;
 		const who = await this.#state(connection, { announce: false });
 		if (!who) return;
 		const owed = connection.gated ? await this.#steps(connection) : [];
+		const character = await characterOf?.(connection.principal.id);
 		sockets.deliver(
 			{
 				type: "ready",
 				protocol: APP_PROTOCOL_VERSION,
 				principal: connection.principal.id,
 				name: connection.principal.name,
+				...(character ? { character } : {}),
 				uploads: {
 					perMessage: MAX_MESSAGE_FILES,
 					maxBytes: uploads.maxBytes,

@@ -12,6 +12,7 @@ import { HostCardLog } from "../host/cards.ts";
 import { HostApp } from "../host/host-app.ts";
 import { RoomReads } from "../host/reads.ts";
 import { mountNotices, type NoticesMount } from "../notices/mount.ts";
+import { PersonCharacters } from "../profile/characters.ts";
 import type { PushApi } from "../push/api.ts";
 import { webPushChannel } from "../push/channel.ts";
 import { EndpointPolicy } from "../push/endpoint.ts";
@@ -108,6 +109,7 @@ export class OwnerApp {
 			threads,
 			channelKey(options.surface, "thread."),
 		);
+		const characters = new PersonCharacters(options.database);
 		const mounted = mountNotices({
 			database: options.database,
 			logger,
@@ -116,6 +118,7 @@ export class OwnerApp {
 			sockets,
 			identity,
 			...(options.extras.profiles ? { profiles: options.extras.profiles } : {}),
+			characters,
 			subscriptions,
 			policy,
 			mount: options.mount,
@@ -295,6 +298,12 @@ export class OwnerApp {
 			gate: options.gate,
 			audienceOf,
 			opened: (connection) => mounted.opened(connection),
+			// A knight that cannot be read must not keep the socket from opening.
+			characterOf: (principalId) =>
+				characters.of(principalId).catch((error: unknown) => {
+					logger.warn({ err: error }, "a person's knight was not read");
+					return undefined;
+				}),
 			conversations: options.conversations,
 			logger,
 		});

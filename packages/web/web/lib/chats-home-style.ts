@@ -61,6 +61,12 @@ button.chats-me:hover:not(:disabled) {
 	color: var(--accent-ink);
 }
 
+/* The person's picture or knight fills the button; the soft disc is only for the icon that stands in before it. */
+button.chats-me:has(.hpic),
+button.chats-me:has(.hpic):hover:not(:disabled) {
+	background: none;
+}
+
 button.chats-waiting {
 	min-height: var(--touch);
 	padding: 0 var(--space-4);

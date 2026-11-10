@@ -1,3 +1,4 @@
+import type { CharacterSpec } from "pi-roundtable/characters";
 import type { ActivityPhase, GateStepView } from "./api-common-types.ts";
 import type {
 	BlockAnswerBody,
@@ -108,6 +109,8 @@ export type ServerFrame =
 			protocol: typeof APP_PROTOCOL_VERSION;
 			principal: string;
 			name: string;
+			/** The knight the person made for themselves, when they made one. */
+			character?: CharacterSpec;
 			/** The most files one message carries and the most bytes of one. */
 			uploads: { perMessage: number; maxBytes: number };
 			/** The required steps the person still owes, when there are any: the socket then carries only the gate and their notices. */

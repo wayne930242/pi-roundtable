@@ -1,24 +1,5 @@
 /** The styles of a host room's messages: pictures, marks, bubbles, notices and the read line. */
 export const HOST_MESSAGE_CSS = `
-.hpic {
-	flex: none;
-	display: inline-grid;
-	place-items: center;
-	overflow: hidden;
-	border-radius: var(--radius-full);
-	background: var(--surface-3);
-	color: #fff;
-	font-weight: var(--weight-bold);
-	line-height: 1;
-	user-select: none;
-}
-
-.hpic > img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
 .unread-mark {
 	display: inline-flex;
 	align-items: center;

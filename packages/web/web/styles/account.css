@@ -48,25 +48,6 @@
 	align-items: center;
 	gap: var(--space-3);
 }
-.who-picture {
-	width: 3.5rem;
-	height: 3.5rem;
-	border-radius: var(--radius-full);
-	object-fit: cover;
-	background: var(--surface-2);
-}
-.who-initial {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 3.5rem;
-	height: 3.5rem;
-	border-radius: var(--radius-full);
-	background: var(--accent-soft);
-	color: var(--accent);
-	font-size: 1.4rem;
-	font-weight: var(--weight-bold);
-}
 .link-code {
 	display: block;
 	width: fit-content;

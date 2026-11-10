@@ -34,7 +34,11 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 			return {
 				...state,
 				connection: "open",
-				principal: { id: action.principal, name: action.name },
+				principal: {
+					id: action.principal,
+					name: action.name,
+					character: action.character,
+				},
 				limits: action.uploads,
 				connects: state.connects + 1,
 				gate: action.gate ?? [],
@@ -44,6 +48,14 @@ export function reduce(state: RoomsState, action: Action): RoomsState {
 				),
 			};
 		}
+		case "knight":
+			return {
+				...state,
+				principal: state.principal && {
+					...state.principal,
+					character: action.character,
+				},
+			};
 		case "accepted":
 			return onMessage(state, action.room, action.message, action.id);
 		case "refused": {

@@ -1,3 +1,4 @@
+import type { CharacterSpec } from "pi-roundtable/characters";
 import type { AppTier, GateStepView } from "./api-common-types.ts";
 import type { PrincipalName } from "./console-types.ts";
 import type { PictureRef } from "./message-types.ts";
@@ -112,6 +113,8 @@ export interface ProfileView {
 	source?: string;
 	/** A picture is served at `api/people/<principal>/picture`. */
 	picture: boolean;
+	/** The knight the person made for themselves; the app shows it in place of the picture. */
+	character?: CharacterSpec;
 	principal: string;
 	tier?: AppTier;
 	/** The accounts the person linked that can name them; the page shows these as the choice. */

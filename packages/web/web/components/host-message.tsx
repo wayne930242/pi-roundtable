@@ -55,13 +55,11 @@ export const HostMessageRow = memo(function HostMessageRow(props: {
 			data-unread={props.unread || undefined}
 			data-highlight={props.highlighted || undefined}
 		>
-			{mine ? null : (
-				<span className="message-avatar">
-					{props.header ? (
-						<HostPicture picture={message.picture} name={message.author} />
-					) : null}
-				</span>
-			)}
+			<span className="message-avatar">
+				{props.header ? (
+					<HostPicture picture={message.picture} name={message.author} />
+				) : null}
+			</span>
 			<div className="message-main">
 				{props.header ? (
 					<div className="message-meta">

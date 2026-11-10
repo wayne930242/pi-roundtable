@@ -35,18 +35,16 @@ const NoteRow = memo(function NoteRow(props: {
 			data-header
 			data-enter={props.enter || undefined}
 		>
-			{mine ? null : (
-				<span className="message-avatar">
-					<HostPicture
-						picture={
-							message.principalId === undefined
-								? undefined
-								: { principal: message.principalId }
-						}
-						name={message.author}
-					/>
-				</span>
-			)}
+			<span className="message-avatar">
+				<HostPicture
+					picture={
+						message.principalId === undefined
+							? undefined
+							: { principal: message.principalId }
+					}
+					name={message.author}
+				/>
+			</span>
 			<div className="message-main">
 				<div className="message-meta">
 					<strong>{message.author}</strong>
