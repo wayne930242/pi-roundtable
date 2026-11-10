@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { TeamStatus } from "../agents/agent-team.ts";
+import {
+	AGENT_SERVER_PLUGIN,
+	AGENT_TEAM_SERVICE,
+} from "../builtin/agent-server-ids.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { AgentDashboard, dashboardSections } from "./agent-dashboard.ts";
-import type { TeamStatus } from "./agent-team.ts";
+import { agentDashboardContribution } from "./agent-dashboard-service.ts";
 
 const NOW = new Date("2026-09-27T06:30:00Z");
 const TRACES = "https://example.com/traces/";
@@ -116,5 +121,52 @@ describe("AgentDashboard", () => {
 		await Bun.sleep(50);
 		expect(shown).toHaveLength(1);
 		dashboard.stop();
+	});
+});
+
+describe("the Discord plugin's dashboard", () => {
+	function contributed(team: boolean) {
+		const shown: string[][] = [];
+		const listeners: (() => void)[] = [];
+		const part = agentDashboardContribution({
+			board: { show: async (sections) => void shown.push(sections) },
+			agents: () =>
+				team
+					? {
+							status: async () => status,
+							onChange: (listener: () => void) => void listeners.push(listener),
+						}
+					: undefined,
+			lines: () => LINES,
+			logger: silentLogger(),
+		});
+		const ready = (
+			plugin: string,
+			service: string,
+			outcome: "ready" | "failed",
+		) => part.events?.serviceStarted?.({ plugin, service, outcome });
+		return { part, shown, listeners, ready };
+	}
+
+	test("shows the team once the agent server's team service is ready, and refreshes when the team changes", async () => {
+		const { part, shown, listeners, ready } = contributed(true);
+		await ready("other", AGENT_TEAM_SERVICE, "ready");
+		await ready(AGENT_SERVER_PLUGIN, AGENT_TEAM_SERVICE, "failed");
+		await Bun.sleep(20);
+		expect(shown).toHaveLength(0);
+		await ready(AGENT_SERVER_PLUGIN, AGENT_TEAM_SERVICE, "ready");
+		await Bun.sleep(20);
+		expect(shown).toHaveLength(1);
+		expect(shown[0]?.[1]).toContain("**Infra** <#11>");
+		expect(listeners).toHaveLength(1);
+		await part.services?.[0]?.stop?.();
+	});
+
+	test("a host without an agent server shows nothing", async () => {
+		const { part, shown, ready } = contributed(false);
+		await ready(AGENT_SERVER_PLUGIN, AGENT_TEAM_SERVICE, "ready");
+		await Bun.sleep(20);
+		expect(shown).toHaveLength(0);
+		await part.services?.[0]?.stop?.();
 	});
 });
