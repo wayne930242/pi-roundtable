@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { describeDb } from "../testing/database.ts";
@@ -10,7 +11,7 @@ import {
 	stops,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import { discordKey, groupRoomKey } from "./team-keys.ts";
+import { groupRoomKey } from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {

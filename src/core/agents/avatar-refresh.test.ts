@@ -257,6 +257,8 @@ async function startTeam(refreshAvatars: boolean | undefined) {
 					return hashOf(spec);
 				},
 			},
+			// No stored provider: the agents live in rooms.
+			places: { stored: () => [] },
 			seeds: () => [],
 			logger: silentLogger(),
 			...(refreshAvatars === undefined ? {} : { refreshAvatars }),

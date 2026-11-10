@@ -429,10 +429,10 @@ export interface QueuePort {
 	run<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T>;
 	/**
 	 * Runs `task` as the delivery of work the shutdown drain waits for, such as a coding worker's
-	 * report: a queue task it starts, and what that task awaits, is admitted although the host is
-	 * shutting down, `closed` reads false there, and the drain waits for it as for any task. It
-	 * ends when the drain does; after that the task is refused as any other. Absent on a host that
-	 * predates it: call `task` directly then.
+	 * report: the queue task it starts runs although the host is shutting down, `closed` reads
+	 * false there, and the drain waits for it as for any task. A queue task that task starts in
+	 * turn is refused, and `draining` stays true. It ends when the drain does; after that the task
+	 * is refused as any other. Absent on a host that predates it: call `task` directly then.
 	 */
 	finishing?<T>(task: () => Promise<T>): Promise<T>;
 	/** Tasks of the channel running or waiting. */
@@ -444,6 +444,12 @@ export interface QueuePort {
 	 * HostStoppingError, and a plugin that starts work on its own, such as a timer, starts none.
 	 */
 	readonly closed: boolean;
+	/**
+	 * Whether the host is shutting down, even inside `finishing`, which masks only `closed`: work
+	 * that a delivery's own turn spawns, such as a transient task, starts none. Absent on a host
+	 * that predates it: read `closed` then.
+	 */
+	readonly draining?: boolean;
 	/** Called whenever a channel's count of running and waiting tasks changes. */
 	onChange(listener: (channel: ChannelKey) => void): void;
 }

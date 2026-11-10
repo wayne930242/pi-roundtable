@@ -1,6 +1,24 @@
-import type { CodingToolText, RepoToolName } from "./coding-options.ts";
+import type { RepoToolName } from "./coding-options.ts";
+
+/** The shipped wording of every repository tool; frozen at every depth. */
+export type RepoToolTexts = Readonly<
+	Record<
+		RepoToolName,
+		Readonly<{
+			description: string;
+			parameters: Readonly<Record<string, string>>;
+		}>
+	>
+>;
 
 const REPO = "A managed repository, owner/repo.";
+
+/** Freezes the value and every object inside it. */
+function deepFreeze<T extends object>(value: T): T {
+	for (const child of Object.values(value))
+		if (child && typeof child === "object") deepFreeze(child);
+	return Object.freeze(value);
+}
 
 /**
  * The wording of each repository tool as the package ships it: the description, and the argument
@@ -9,9 +27,7 @@ const REPO = "A managed repository, owner/repo.";
  * `{ repo_task: { description: `${DEFAULT_TOOL_TEXT.repo_task.description} Extra.` } }`, and
  * compares against this to see what a new package version changed.
  */
-export const DEFAULT_TOOL_TEXT: Readonly<
-	Record<RepoToolName, Required<CodingToolText>>
-> = {
+export const DEFAULT_TOOL_TEXT: RepoToolTexts = deepFreeze({
 	repo_list: {
 		description:
 			"List managed clones, branch, upstream counts, dirty files, last commit, summary, CI hints and linked skills. Fetch first only when requested.",
@@ -51,4 +67,4 @@ export const DEFAULT_TOOL_TEXT: Readonly<
 			reason: "Why, for its report.",
 		},
 	},
-};
+});

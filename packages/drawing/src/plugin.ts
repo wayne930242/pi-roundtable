@@ -8,6 +8,8 @@ import { type Deck, DeckError, loadDecks } from "./cards/deck.ts";
 import type { Random } from "./random.ts";
 import {
 	checkToolNames,
+	checkUnbuiltArguments,
+	DRAW_CARDS_ARGUMENTS,
 	type DrawingToolName,
 	type DrawingToolText,
 	type ToolWording,
@@ -145,6 +147,13 @@ export function drawing(options: DrawingOptions = {}) {
 					: []),
 			];
 			for (const wording of worded) wording.check();
+			// A tool that is not built still has its arguments checked, so a typo stops the start now, not once decks exist.
+			if (decks.length === 0)
+				checkUnbuiltArguments(
+					"draw_cards",
+					options.toolText?.draw_cards,
+					DRAW_CARDS_ARGUMENTS,
+				);
 			return { tools };
 		},
 	});

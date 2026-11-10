@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
@@ -20,7 +21,7 @@ import {
 	turnsOf,
 	writeTo,
 } from "./helper-test-kit.ts";
-import { agentRoomKey, discordKey } from "./team-keys.ts";
+import { agentRoomKey } from "./team-keys.ts";
 import { teamSelection } from "./team-selection.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
@@ -435,7 +436,7 @@ describeDb("temp knights (Discord)", () => {
 		test("the owner deleting a temp knight's thread archives it, like a deleted channel", async () => {
 			await make(1);
 			const channel = fx.store.agent("coordinator-1")?.channelId ?? "";
-			await fx.team.channelDeleted(channel);
+			await fx.team.placeRemoved(discordKey(channel));
 			expect(fx.store.agent("coordinator-1")?.status).toBe("archived");
 		});
 	});

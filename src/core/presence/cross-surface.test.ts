@@ -5,11 +5,12 @@ import { join } from "node:path";
 import { AgentConversations } from "../agents/agent-conversations.ts";
 import type { StoredOutboxEntry } from "../agents/agent-outbox.ts";
 import type { Agent, PgAgentStore } from "../agents/agent-store.ts";
-import { agentRoomKey, discordKey } from "../agents/team-keys.ts";
+import { agentRoomKey } from "../agents/team-keys.ts";
 import { TeamTurns } from "../agents/team-turns.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
-import type { ChannelKey } from "../domain/conversation.ts";
+import type { ChannelKey, OutboundReply } from "../domain/conversation.ts";
 import { DelegationError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { SessionContext } from "../domain/sessions.ts";
@@ -185,32 +186,34 @@ function team(
 			claim: async (id: number) => !claimed.has(id) && Boolean(claimed.add(id)),
 		},
 	} as unknown as PgAgentStore;
+	const surfaces = {
+		sendReply: async (channel: ChannelKey, reply: OutboundReply) =>
+			void received[surfaceOfKey(channel)].push(
+				`reply ${channel}: ${reply.chunks.join("")}`,
+			),
+		of: () => undefined,
+		interim: () => undefined,
+	};
 	const turns: TeamTurns = new TeamTurns({
 		owner: OWNER,
-		entryChannelId: "4000",
+		entryChannel: discordKey("4000"),
 		store,
 		places: testPlaces({
 			store,
 			rows: () => legacyRows(AGENTS),
 			rooms: () => ["app"],
+			channels: {
+				post: async (channelId, post) =>
+					void received.discord.push(
+						`post discord:${channelId}: ${post.chunks?.join("") ?? ""}`,
+					),
+				interim: () => ({
+					post: async () => ({ edit: async () => undefined }),
+				}),
+			},
+			surfaces,
 		}),
-		channels: {
-			post: async (channelId, post) =>
-				void received.discord.push(
-					`post discord:${channelId}: ${post.chunks?.join("") ?? ""}`,
-				),
-			interim: () => ({
-				post: async () => ({ edit: async () => undefined }),
-			}),
-		},
-		surfaces: {
-			sendReply: async (channel, reply) =>
-				void received[surfaceOfKey(channel)].push(
-					`reply ${channel}: ${reply.chunks.join("")}`,
-				),
-			of: () => undefined,
-			interim: () => undefined,
-		},
+		surfaces,
 		studio: { url: () => "https://x/a.png" },
 		runtime: () => ({
 			runTurn: async (request) => {

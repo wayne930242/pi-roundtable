@@ -1,4 +1,4 @@
-import type { DiscordAgentTeam } from "../agents/agent-team.ts";
+import type { AgentServerTeam } from "../agents/agent-team.ts";
 import { groupRoomKey } from "../agents/team-keys.ts";
 import { openPool } from "../db/migrations.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
@@ -81,8 +81,8 @@ export async function captureWebGroupSeat(
 ): Promise<CapturedPrompt> {
 	const { context } = host;
 	const { directory } = context.services.get(AGENTS);
-	// SAFETY: the host's team is the agent server's DiscordAgentTeam; its port lacks answerGroup.
-	const team = context.services.get(AGENTS).team as unknown as DiscordAgentTeam;
+	// SAFETY: the host's team is the agent server's AgentServerTeam; its port lacks answerGroup.
+	const team = context.services.get(AGENTS).team as unknown as AgentServerTeam;
 	// The seeds are made after the host starts.
 	for (let tries = 0; tries < 200; tries++) {
 		if (directory.agent("archivist")?.status === "active") break;

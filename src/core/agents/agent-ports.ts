@@ -52,7 +52,11 @@ export interface ChannelMessage {
 	attachments: string[];
 }
 
-/** The agent server's channels as the agent team needs them. */
+/**
+ * The agent server's channels. Discord's place provider drives them to make, keep and post in the
+ * places of agents and groups; the team itself reads only `layout`, `arrange` and `read`, for the
+ * tools that list, arrange and read categories, until those are contributed by Discord's plugin.
+ */
 export interface AgentChannels {
 	post(channelId: string, post: AgentPost): Promise<void>;
 	/**
@@ -71,8 +75,8 @@ export interface AgentChannels {
 	): Promise<string>;
 	/**
 	 * Opens a thread under a channel to be a temp knight's place, with no start message; returns its
-	 * id. Posts to that id speak through the parent channel's webhook into the thread. Absent: a
-	 * temp knight lives in rooms only.
+	 * id. Posts to that id speak through the parent channel's webhook into the thread. Absent: Discord
+	 * makes no place for a temp knight, and making one from a Discord conversation fails.
 	 */
 	createThread?(parentChannelId: string, name: string): Promise<string>;
 	/** Archives and locks a temp knight's thread (locked only when permitted); its history stays. */

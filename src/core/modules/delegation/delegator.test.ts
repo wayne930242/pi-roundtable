@@ -3,6 +3,7 @@ import type { BackgroundTarget } from "../../contract/channels.ts";
 import type { ChannelKey } from "../../domain/conversation.ts";
 import { DelegationError } from "../../domain/errors.ts";
 import { messages } from "../../i18n/index.ts";
+import { HostStoppingError } from "../../kernel/errors.ts";
 import { silentLogger } from "../../kernel/log.ts";
 import { fakeThreads } from "../../testing/thread-host.ts";
 import {
@@ -34,6 +35,7 @@ const TARGETS: readonly BackgroundTarget[] = [
 function setup(
 	run: (task: string, signal: AbortSignal) => Promise<string>,
 	timeoutMs?: number,
+	draining?: () => boolean,
 ) {
 	const reports: [DelegationJob, DelegationOutcome][] = [];
 	const { host, threads } = fakeThreads();
@@ -49,6 +51,7 @@ function setup(
 		threads,
 		logger: silentLogger(),
 		...(timeoutMs ? { timeoutMs } : {}),
+		...(draining ? { draining } : {}),
 	});
 	return { delegator, reports, host, archived };
 }
@@ -62,6 +65,27 @@ const request = (channel: ChannelKey = "discord:1") => ({
 });
 
 describe("DefaultDelegator", () => {
+	test("starts nothing while the host drains, and again once it does not", async () => {
+		let draining = true;
+		let ran = 0;
+		const { delegator } = setup(
+			async () => {
+				ran += 1;
+				return "done";
+			},
+			undefined,
+			() => draining,
+		);
+		expect(() => delegator.start(request())).toThrow(
+			new DelegationError(new HostStoppingError().message),
+		);
+		expect(delegator.runningChannels()).toEqual([]);
+		draining = false;
+		delegator.start(request());
+		await delegator.idle();
+		expect(ran).toBe(1);
+	});
+
 	test("a target's maxRunningPerPrincipal holds a person to so many running jobs across their channels", async () => {
 		const { promise: gate, resolve: release } = Promise.withResolvers<void>();
 		const { delegator } = setup(async () => {

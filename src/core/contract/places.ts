@@ -40,7 +40,7 @@ export interface PlaceSpec extends PlaceRef {
 	topic: string;
 	/** A temp knight's parent's place id on this surface: the place is made under it (a Discord thread). */
 	parent?: string;
-	/** The stored id of an archived or checked place, to bring back instead of making a new one. */
+	/** The stored id of an archived place, or of an active group's at start, to bring back and put where it belongs instead of making a new one. */
 	existing?: string;
 	/** The values of this provider's `createArguments` the creating tool was given, such as `category`. */
 	hints?: Readonly<Record<string, string>>;
@@ -73,7 +73,13 @@ export interface PlaceProvider {
 	interim?(key: ChannelKey, author: PlaceAuthor): InterimPosts | undefined;
 	/** Stored: makes the place, or brings `existing` back (out of an archive, a closed thread reopened); resolves to its id. Absent = places are bound, never made. */
 	ensure?(spec: PlaceSpec): Promise<string>;
-	/** Stored: the owner was archived; the place is kept with its history where nobody answers. Resolves to a line for the archive tool's answer, or undefined. */
+	/**
+	 * Stored: the owner was archived; the place is kept with its history where nobody answers.
+	 * Resolves to the rest of the archive tool's answer after `Archived "<name>"`, which starts with
+	 * its own separator: `; its channel <#id> is kept under Archive.`, or `, but its channel <#id>
+	 * could not be moved (...)` for a place that could not be kept; undefined for none. Rejects only
+	 * for a failure the answer cannot describe; the owner is archived all the same.
+	 */
 	remove?(
 		id: string,
 		spec: PlaceSpec & { helper: boolean },

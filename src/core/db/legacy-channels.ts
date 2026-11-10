@@ -1,4 +1,6 @@
 import type { SQL } from "bun";
+import { parseChannelKey } from "../contract/surface.ts";
+import type { ChannelKey } from "../domain/conversation.ts";
 
 /**
  * The surface whose places `agents.channel_id` and `agent_groups.channel_id` hold: those columns
@@ -7,6 +9,35 @@ import type { SQL } from "bun";
  * this surface together, and every boot makes the rows equal the columns again.
  */
 export const LEGACY_CHANNEL_SURFACE = "discord";
+
+/** The id a legacy column holds for a key of the legacy surface; undefined for a key of any other surface. */
+export function legacyChannelIdOf(key: ChannelKey): string | undefined {
+	const { surface, id } = parseChannelKey(key);
+	return surface === LEGACY_CHANNEL_SURFACE ? id : undefined;
+}
+
+/**
+ * Sets the legacy `channel_id` of one agent or group of a team, or clears it with null; the other
+ * columns stay. Returns the row it wrote, as the store reads it, or none for a name the team does
+ * not have.
+ */
+export function setLegacyChannel(
+	sql: SQL,
+	kind: (typeof LEGACY_CHANNEL_TABLES)[keyof typeof LEGACY_CHANNEL_TABLES],
+	teamId: string,
+	name: string,
+	channelId: string | null,
+): Promise<unknown[]> {
+	return kind === "agent"
+		? sql`
+			UPDATE agents SET channel_id = ${channelId}, updated_at = now()
+			WHERE guild_id = ${teamId} AND name = ${name}
+			RETURNING *`
+		: sql`
+			UPDATE agent_groups SET channel_id = ${channelId}
+			WHERE guild_id = ${teamId} AND name = ${name}
+			RETURNING *`;
+}
 
 /** The tables whose `channel_id` column is a legacy channel, and the kind of place owner each row is. */
 export const LEGACY_CHANNEL_TABLES = {

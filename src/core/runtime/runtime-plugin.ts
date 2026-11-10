@@ -228,6 +228,7 @@ export function runtimePlugin(
 							? { images: providers.images }
 							: {}),
 						stopping: () => context.queue.closed,
+						draining: () => context.queue.draining ?? context.queue.closed,
 						get agents() {
 							return agents();
 						},

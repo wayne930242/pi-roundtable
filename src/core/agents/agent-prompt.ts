@@ -1,4 +1,5 @@
 import { parseChannelKey, type SurfacePort } from "../contract/surface.ts";
+import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
 import { type OwnerIdentity, ownerWords } from "../identity/owner-identity.ts";
@@ -201,7 +202,8 @@ export function placeOf(
 ): { surface: { label: string; key: string; others: readonly string[] } } {
 	const prefix = parseChannelKey(home).surface;
 	const label = (name: string) =>
-		surfaces?.of(`${name}:`)?.label ?? (name === "discord" ? "Discord" : name);
+		surfaces?.of(`${name}:`)?.label ??
+		(name === LEGACY_CHANNEL_SURFACE ? "Discord" : name);
 	const names = holders.filter(
 		(n, i, all) => n !== prefix && all.indexOf(n) === i,
 	);

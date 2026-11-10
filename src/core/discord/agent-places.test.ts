@@ -145,6 +145,40 @@ test("an agent's channel opens under Agents, a group's under Groups, and a hint 
 	}
 });
 
+test("ensure with existing leaves a channel under a category of its kind and moves one that is elsewhere", async () => {
+	const w = await world();
+	try {
+		const spec = {
+			kind: "group" as const,
+			name: "table",
+			displayName: "Table",
+			topic: "Knight and Scribe",
+		};
+		const id = (await w.provider.ensure?.({
+			...spec,
+			hints: { category: "Groups-work" },
+		})) as string;
+		const parent = () =>
+			w.emulator.state.channels.get(
+				w.emulator.state.channels.get(id)?.parentId ?? "",
+			)?.name;
+		expect(await w.provider.ensure?.({ ...spec, existing: id })).toBe(id);
+		expect(parent()).toBe("Groups-work");
+		// Out of its kind's categories, it goes under the plain one; a named category is honoured.
+		await w.channels.placeIn(id, "Agents-work");
+		expect(await w.provider.ensure?.({ ...spec, existing: id })).toBe(id);
+		expect(parent()).toBe("Groups");
+		await w.provider.ensure?.({
+			...spec,
+			existing: id,
+			hints: { category: "Groups-late" },
+		});
+		expect(parent()).toBe("Groups-late");
+	} finally {
+		await w.close();
+	}
+});
+
 test("remove moves the channel to Archive and takes its webhook; ensure with existing puts it back", async () => {
 	const w = await world();
 	try {
@@ -165,7 +199,7 @@ test("remove moves the channel to Archive and takes its webhook; ensure with exi
 			w.emulator.state.channels.get(
 				w.emulator.state.channels.get(id)?.parentId ?? "",
 			)?.name;
-		expect(line).toBe(`its channel <#${id}> is kept under Archive.`);
+		expect(line).toBe(`; its channel <#${id}> is kept under Archive.`);
 		expect(parent()).toBe("Archive");
 		expect(w.emulator.state.webhooks.size).toBe(0);
 		expect(await w.provider.ensure?.({ ...spec, existing: id })).toBe(id);
@@ -244,6 +278,17 @@ test("check does not call a channel the bot cannot see foreign or gone: Missing 
 		await expect(w.provider.check?.("900000000000000050")).rejects.toThrow(
 			"Missing Access",
 		);
+	} finally {
+		await w.close();
+	}
+});
+
+test("check calls a channel of a server the bot left foreign, though Discord answers Missing Access", async () => {
+	const w = await world();
+	try {
+		w.emulator.addChannel("900000000000000051", ELSEWHERE, { name: "left" });
+		w.emulator.hideChannel("900000000000000051");
+		expect(await w.provider.check?.("900000000000000051")).toBe("foreign");
 	} finally {
 		await w.close();
 	}
@@ -330,14 +375,14 @@ test("a webhook that cannot be removed does not stop the archive, and a channel 
 		};
 		const id = (await w.provider.ensure?.(spec)) as string;
 		expect(await w.provider.remove?.(id, { ...spec, helper: false })).toBe(
-			`its channel <#${id}> is kept under Archive.`,
+			`; its channel <#${id}> is kept under Archive.`,
 		);
 		const line = await failing.provider.remove?.("123", {
 			...spec,
 			helper: false,
 		});
 		expect(line).toBe(
-			"its channel <#123> could not be moved to Archive (Missing Permissions); it stays silent where it is.",
+			", but its channel <#123> could not be moved to Archive (Missing Permissions); it stays silent where it is.",
 		);
 		expect(lines.map((l) => `${l.level}: ${l.message}`)).toEqual([
 			"warn: archived channel's webhook not removed",

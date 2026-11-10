@@ -30,6 +30,7 @@ import {
 	resolveArrangement,
 } from "./team-layout.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";
+import { TeamLooks } from "./team-looks.ts";
 import type { AgentTeamOptions, TeamContext } from "./team-options.ts";
 import { teamSystemPrompt } from "./team-prompt.ts";
 import { TeamRooms } from "./team-rooms.ts";
@@ -51,13 +52,14 @@ export type { AgentStatus, GroupStatus, TeamStatus } from "./team-status.ts";
  * This team creates, changes, arranges, and archives agents and groups; its TeamTurns runs
  * their turns, group rounds, and messages between agents.
  */
-export class DiscordAgentTeam implements AgentOps, AgentTeam {
+export class AgentServerTeam implements AgentOps, AgentTeam {
 	readonly #options: AgentTeamOptions;
 	readonly #turns: TeamTurns;
 	readonly #listeners: (() => void)[] = [];
 	readonly #context: TeamContext;
 	readonly #lifecycle: TeamLifecycle;
 	readonly #editing: TeamEditing;
+	readonly #looks: TeamLooks;
 
 	constructor(options: AgentTeamOptions) {
 		// One routing table for the team's turns and its editing.
@@ -80,6 +82,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		};
 		this.#lifecycle = new TeamLifecycle(this.#context);
 		this.#editing = new TeamEditing(this.#context);
+		this.#looks = new TeamLooks(this.#context);
 	}
 
 	get teamId(): string {
@@ -89,11 +92,6 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 	/** @deprecated The team's id, which is not always a guild; read `teamId`. Removed in 1.0. */
 	get guildId(): string {
 		return this.#options.teamId;
-	}
-
-	/** @deprecated The Discord guild is the Discord place provider's `space`; removed in 1.0. */
-	get discordGuild(): string | undefined {
-		return this.#options.discordGuild;
 	}
 
 	/** Called when a turn starts or ends and when an agent or group changes. */
@@ -123,7 +121,7 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/**
 	 * Every key an agent or group is addressed by: its place on each provider's surface, in the
-	 * order "auto" routing prefers (its Discord channel first when it has one); empty for an unknown name.
+	 * order "auto" routing prefers (a stored place first when it has one); empty for an unknown name.
 	 */
 	roomsOf(name: string): ChannelKey[] {
 		return this.#options.places.keysOf(name);
@@ -233,12 +231,12 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 		return this.#lifecycle.startFresh(channel);
 	}
 
-	/** A deleted channel archives the agent or group that owned it. */
-	channelDeleted(channelId: string): Promise<void> {
-		return this.#lifecycle.channelDeleted(channelId);
+	/** A place deleted on its surface archives the agent or group that owned it. */
+	placeRemoved(key: ChannelKey): Promise<void> {
+		return this.#lifecycle.placeRemoved(key);
 	}
 
-	/** Archives an agent or group like a deleted channel, keeping its channel under Archive. */
+	/** Archives an agent or group like a deleted place, keeping its places where nothing answers. */
 	archive(caller: AgentTurnScope | undefined, name: string): Promise<string> {
 		return this.#lifecycle.archive(caller, name);
 	}
@@ -469,17 +467,17 @@ export class DiscordAgentTeam implements AgentOps, AgentTeam {
 
 	/** Changes an agent's look; see `AgentTeam.dress`. */
 	dress(name: string, input: CharacterInput): Promise<Agent> {
-		return this.#editing.dress(name, input);
+		return this.#looks.dress(name, input);
 	}
 
 	/** The agent tool that changes a look; see `AgentTeam.dress`. */
 	avatar(name: string, look: CharacterInput): Promise<string> {
-		return this.#editing.avatar(name, look);
+		return this.#looks.avatar(name, look);
 	}
 
 	/** @deprecated Use `dress`; removed in 1.0. Draws and stores a new picture. */
 	redrawAvatar(name: string, mode: AvatarMode, text?: string): Promise<Agent> {
-		return this.#editing.redrawAvatar(name, mode, text);
+		return this.#looks.redrawAvatar(name, mode, text);
 	}
 
 	createGroup(

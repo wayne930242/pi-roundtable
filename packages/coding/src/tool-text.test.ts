@@ -236,3 +236,22 @@ test("the change report hook receives the default post and result", async () => 
 	expect(result).toBe(seen?.result ?? "missing");
 	expect(posts).toEqual([`${seen?.post}\nPost tail`]);
 });
+
+test("the defaults cannot be written into, at any depth, and a host's spread of them still composes", () => {
+	expect(Object.isFrozen(DEFAULT_TOOL_TEXT)).toBe(true);
+	for (const text of Object.values(DEFAULT_TOOL_TEXT)) {
+		expect(Object.isFrozen(text)).toBe(true);
+		expect(Object.isFrozen(text.parameters)).toBe(true);
+	}
+	expect(() => {
+		(DEFAULT_TOOL_TEXT.repo_task.parameters as Record<string, string>).repo =
+			"x";
+	}).toThrow();
+	const own = {
+		...DEFAULT_TOOL_TEXT.repo_task,
+		parameters: { ...DEFAULT_TOOL_TEXT.repo_task.parameters },
+	};
+	own.parameters.repo = "Mine.";
+	expect(own.parameters.repo).toBe("Mine.");
+	expect(DEFAULT_TOOL_TEXT.repo_task.parameters.repo).not.toBe("Mine.");
+});

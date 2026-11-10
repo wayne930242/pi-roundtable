@@ -138,6 +138,12 @@ export interface PiAgentRuntimeOptions {
 	/** Whether the host is shutting down: a turn or a task is then refused before it starts. */
 	stopping?: () => boolean;
 	/**
+	 * Whether the host is shutting down, even inside the delivery of a report the drain waits for,
+	 * where `stopping` reads false so that the report's own turn can run: a task that turn spawns
+	 * is refused when this reads true. Default: never.
+	 */
+	draining?: () => boolean;
+	/**
 	 * Whether a turn given a place for interim posts shows the text it writes before its final
 	 * answer as it goes; default "on". "off" posts only the final reply.
 	 */

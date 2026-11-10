@@ -13,12 +13,10 @@ import type { TeamTurns, TeamTurnsOptions } from "./team-turns.ts";
 export interface AgentTeamOptions
 	extends Omit<TeamTurnsOptions, "selection" | "changed"> {
 	/**
-	 * The team's id: the Discord guild, or `LOCAL_TEAM_ID` on a host without Discord. It scopes the
-	 * rows the team keeps.
+	 * The team's id: the agent guild of the host, or `LOCAL_TEAM_ID` on a host without one. It
+	 * scopes the rows the team keeps.
 	 */
 	teamId: string;
-	/** The Discord guild the team's channels live in, which is not the team's id when the host sets one; absent without Discord channels. */
-	discordGuild?: string | undefined;
 	/** The first team, read and inserted once on start; an agent already stored is never overwritten. */
 	seeds: () => readonly AgentSeed[];
 	/** Sections the plugins add to every agent turn's system prompt, read before each run. */
@@ -28,10 +26,11 @@ export interface AgentTeamOptions
 	/** The tools plugins defined for agents, read before each agent turn. */
 	pluginTools?: () => readonly string[];
 	/**
-	 * The Discord channels the agents live in; absent on a host without Discord. Then no channel is
-	 * made, arranged or read, and the agents live in the rooms of the surfaces that host them.
+	 * The channels of the surface that arranges its places in categories, which the tools that list,
+	 * arrange and read them use; absent on a host without one. The team makes, keeps and posts in
+	 * its places through the place providers, never through these.
 	 */
-	channels?: AgentChannels;
+	channels?: Pick<AgentChannels, "layout" | "arrange" | "read">;
 	/**
 	 * Agents are composed characters, rendered by `render`. `canDraw: false` marks a host without
 	 * an image provider, which is not told about generate_image; a studio that leaves it out has one.
@@ -85,7 +84,7 @@ export interface TeamContext {
 	changed(): void;
 	/** The model and thinking setting of an agent's next run. */
 	modelOf(name: string): { model: string; thinking: ThinkingSetting };
-	/** Writes a group's members and host into its channel topic, without waiting on Discord. */
+	/** Writes a group's members and host into the topic of its places, without waiting on the surface. */
 	retitle(group: AgentGroup): void;
 	/** Archives temp knights, closing their threads; says which were archived. */
 	archiveHelpers(names: readonly string[]): Promise<string[]>;

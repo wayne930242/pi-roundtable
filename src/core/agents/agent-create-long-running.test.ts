@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope, ChannelKey } from "../domain/sessions.ts";
 import type { Speaker } from "../identity/speakers.ts";
@@ -7,7 +8,7 @@ import { TEST_OWNER } from "../testing/owner.ts";
 import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { Agent } from "./agent-store.ts";
 import { TeamEditing } from "./team-editing.ts";
-import { agentRoomKey, discordKey } from "./team-keys.ts";
+import { agentRoomKey } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
 
 const SCOPE: AgentTurnScope = {
@@ -44,6 +45,14 @@ function editing(speaker: Speaker, modes: boolean) {
 			rows.set(input.name, input);
 			return input;
 		},
+		setPlace: async (
+			_kind: string,
+			name: string,
+			_surface: string,
+			id: string,
+		) => {
+			rows.set(name, { ...(rows.get(name) as Agent), channelId: id });
+		},
 	};
 	const ctx = {
 		options: {
@@ -52,10 +61,10 @@ function editing(speaker: Speaker, modes: boolean) {
 				store,
 				rows: () => legacyRows([...rows.values()]),
 				rooms: () => ["app"],
+				channels: { createChannel: async (name: string) => `ch-${name}` },
 			}),
 			studio: { render: async () => "r".repeat(64), url: () => "x" },
 			logger: { info: () => undefined, warn: () => undefined },
-			channels: { createChannel: async (name: string) => `ch-${name}` },
 			skills: undefined,
 			queue: {
 				run: async (_key: string, task: () => Promise<unknown>) => task(),

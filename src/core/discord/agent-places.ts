@@ -14,6 +14,9 @@ const SURFACE = "discord";
 /** Discord's error code for a channel that does not exist. */
 const UNKNOWN_CHANNEL = 10003;
 
+/** Discord's error code for a channel the bot may not see: one of a server it left, or a hidden one. */
+const MISSING_ACCESS = 50001;
+
 export interface DiscordPlacesOptions {
 	/** The discord.js client that can ask Discord whether a stored channel still exists; without one the provider has no `check`, and a stored channel is taken as it is. */
 	client?: Client;
@@ -51,17 +54,22 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			// Fetched fresh: a cached channel says nothing of one deleted since.
 			const found = await asked.channels
 				.fetch(id, { force: true })
-				.catch((error: unknown) => {
-					// Only Discord's own "unknown" says gone. Missing Access (50001) says nothing of whose
-					// guild the channel is in: a hidden channel of the agent guild answers it too, so it throws.
-					if (
-						error instanceof DiscordAPIError &&
-						error.code === UNKNOWN_CHANNEL
-					)
-						return "gone" as const;
+				.catch(async (error: unknown) => {
+					if (!(error instanceof DiscordAPIError)) throw error;
+					if (error.code === UNKNOWN_CHANNEL) return "gone" as const;
+					// Missing Access says nothing of whose guild the channel is in, so the agent guild's own
+					// list does, which Discord gives whatever the overwrites: an id it does not hold is
+					// another server's (the bot left it), and one it holds is a hidden channel of its own,
+					// which stays a failure.
+					if (error.code === MISSING_ACCESS) {
+						const held = await (
+							await asked.guilds.fetch(guild)
+						).channels.fetch();
+						if (!held.has(id)) return "foreign" as const;
+					}
 					throw error;
 				});
-			if (found === "gone") return found;
+			if (found === "gone" || found === "foreign") return found;
 			// A channel discord.js cannot build is none of the agent guild's; only Discord's own "unknown" says gone.
 			if (found === null) return "foreign";
 			return !found.isDMBased() && found.guildId === guild ? "ok" : "foreign";
@@ -113,14 +121,20 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 					throw new AgentError("this Discord connection makes no threads");
 				return channels.createThread(spec.parent, spec.displayName);
 			}
-			const under = teamCategory(
-				spec.hints?.category,
-				spec.kind === "agent" ? "Agents" : "Groups",
-			);
+			const kind = spec.kind === "agent" ? "Agents" : "Groups";
+			const under = teamCategory(spec.hints?.category, kind);
 			if (
 				spec.existing !== undefined &&
 				(await channels.exists(spec.existing))
 			) {
+				// A channel already under a category of its kind (`Groups-Work`) stays there unless a category is asked for.
+				if (spec.hints?.category === undefined) {
+					const { existing } = spec;
+					const home = (await channels.layout()).find((c) =>
+						c.channelIds.includes(existing),
+					);
+					if (home && categoryKind(home.name) === kind) return existing;
+				}
 				await channels.placeIn(spec.existing, under);
 				return spec.existing;
 			}
@@ -154,9 +168,9 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 					{ name: spec.name, err: error },
 					"archived channel not moved",
 				);
-				return `its channel ${mention(id)} could not be moved to Archive (${error instanceof Error ? error.message : String(error)}); it stays silent where it is.`;
+				return `, but its channel ${mention(id)} could not be moved to Archive (${error instanceof Error ? error.message : String(error)}); it stays silent where it is.`;
 			}
-			return `its channel ${mention(id)} is kept under Archive.`;
+			return `; its channel ${mention(id)} is kept under Archive.`;
 		},
 		...(client ? { check: checkWith(client) } : {}),
 		describe: (id, topic) => channels.setTopic(id, topic),
