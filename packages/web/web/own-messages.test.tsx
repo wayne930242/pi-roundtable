@@ -111,7 +111,10 @@ test("in a room two owners read, another owner's message is theirs, with their n
 		);
 		const bob = row(2);
 		expect(bob?.hasAttribute("data-mine")).toBe(true);
-		expect(bob?.querySelector(".message-avatar")).toBeNull();
+		// Bob's own row carries Bob's picture too: his knight when he made one, his account picture here.
+		expect(bob?.querySelector(".message-avatar img")?.getAttribute("src")).toBe(
+			"api/people/bob/picture",
+		);
 	} finally {
 		history.mockRestore();
 	}
@@ -160,8 +163,12 @@ test("a room one owner reads draws every owner message as the owner's, as it alw
 		for (const id of [1, 2]) {
 			const one = row(id);
 			expect(one?.getAttribute("data-mine")).toBe("true");
-			expect(one?.querySelector(".message-avatar")).toBeNull();
 		}
+		// The first of the group carries the owner's picture; the next keeps the slot empty.
+		expect(
+			row(1)?.querySelector(".message-avatar img")?.getAttribute("src"),
+		).toBe("api/people/ada/picture");
+		expect(row(2)?.querySelector(".message-avatar")?.childElementCount).toBe(0);
 	} finally {
 		history.mockRestore();
 	}

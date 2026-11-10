@@ -5,25 +5,16 @@ import { useConfig } from "../lib/config.ts";
 import { openMeMenu } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 import { openCards } from "../lib/tab-count.ts";
+import { PersonPicture } from "./host-picture.tsx";
 import { Icon } from "./icons.tsx";
 
-/** The letters a person's picture carries: the first of up to two words of their name. */
-export function initialsOf(name: string | undefined): string {
-	const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
-	return words
-		.slice(0, 2)
-		.map((word) => Array.from(word)[0] ?? "")
-		.join("")
-		.toUpperCase();
-}
-
 /**
- * The chat home's top row: the person's own picture (the menu of their account), the cards waiting on them, the
+ * The chat home's top row: the person's own picture (their knight when they made one; the menu of their account), the cards waiting on them, the
  * notice bell where the app admits more than its owners, and the "+" of the add menu.
  */
 export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
 	const config = useConfig();
-	const name = useSelector((state) => state.principal?.name);
+	const me = useSelector((state) => state.principal);
 	const waiting = useSelector(openCards);
 	const label = waiting
 		? plural(waiting, "{count} card waiting", "{count} cards waiting")
@@ -35,14 +26,18 @@ export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
 				className="chats-me"
 				aria-label={t("Me")}
 				aria-haspopup="menu"
-				title={name}
+				title={me?.name}
 				onClick={(event) =>
 					openMeMenu(event.currentTarget, {
 						profile: config.panes.includes("profile"),
 					})
 				}
 			>
-				{initialsOf(name) || <Icon name="profile" size={18} />}
+				{me ? (
+					<PersonPicture principal={me.id} name={me.name} size={44} />
+				) : (
+					<Icon name="profile" size={18} />
+				)}
 			</button>
 			{waiting ? (
 				<button
