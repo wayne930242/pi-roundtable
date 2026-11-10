@@ -20,11 +20,10 @@ import {
 } from "./core/testing/tool-set.ts";
 import {
 	DISCORD,
-	type DiscordAgentGuild,
 	type DiscordServices,
 	discordAgentGuild,
 } from "./discord/index.ts";
-import { AGENTS, type PluginContext, type RoundtablePlugin } from "./index.ts";
+import { AGENTS, type RoundtablePlugin } from "./index.ts";
 import type { AgentOps } from "./kit/index.ts";
 import { partial } from "./testing.ts";
 
@@ -44,21 +43,6 @@ interface OwnDiscord {
 	channelContext?: DiscordServices["channelContext"];
 	/** What the `#dashboard` message was last given. */
 	shown?: string[][];
-	/** What the replacement contributes for the agent guild; by default Discord's whole side of it. */
-	agentGuild?: typeof agentGuildOf;
-}
-
-/** Discord's side of the agent guild, as the docs tell a replacement to contribute it. */
-function agentGuildOf(
-	context: PluginContext,
-	given: OwnDiscord,
-	connection: DiscordServices["connection"],
-): Partial<DiscordAgentGuild> {
-	return discordAgentGuild(context, {
-		guild: given.guild,
-		connection,
-		entryChannel: given.entryChannel,
-	});
 }
 
 function ownDiscord(given: OwnDiscord): RoundtablePlugin {
@@ -110,7 +94,12 @@ function ownDiscord(given: OwnDiscord): RoundtablePlugin {
 						deliver: async () => undefined,
 					},
 				],
-				...(given.agentGuild ?? agentGuildOf)(context, given, connection),
+				// Discord's side of the agent guild, as the docs tell a replacement to contribute it.
+				...discordAgentGuild(context, {
+					guild: given.guild,
+					connection,
+					entryChannel: given.entryChannel,
+				}),
 			};
 		},
 	};
@@ -221,24 +210,5 @@ async function eventually(what: () => boolean | Promise<boolean>) {
 					[scenario]: expected[scenario],
 				});
 		}, 60_000);
-
-		test("one that contributes nothing for the agent guild is refused at startup, by the guild's id and the helper to spread", async () => {
-			await expect(
-				testHost({
-					discord: false,
-					config: withGuild,
-					plugins: [
-						ownDiscord({
-							guild: GUILD,
-							entryChannel: ENTRY,
-							channels: new FakeChannels(),
-							agentGuild: () => ({}),
-						}),
-					],
-				}),
-			).rejects.toThrow(
-				`the agent guild ${GUILD} has Discord channels for the agents, but no plugin contributes the place provider of the "discord" surface, so the team cannot read them. A plugin that replaces DISCORD must contribute Discord's side of the agent guild, the place provider with its tools and dashboard: spread discordAgentGuild(context, { guild, connection }) from pi-roundtable/discord into what its setup returns.`,
-			);
-		});
 	},
 );

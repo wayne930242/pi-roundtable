@@ -336,13 +336,15 @@ function hasWebAccess(): boolean {
 			roundtable = undefined;
 		});
 
-		test("refuses to start when a replacement DISCORD leaves the agent guild without a place provider, naming the one to contribute", async () => {
+		test("refuses to start when a replacement DISCORD leaves the agent guild without a place provider, naming the guild and the helper to spread", async () => {
 			const { options, plugins } = await defineRoundtable(
 				{ ...config, plugins: [quietDiscord(undefined, false), quietRuntime] },
 				{ logger: silentLogger() },
 			);
 			roundtable = new Roundtable(options, plugins);
-			await expect(roundtable.run()).rejects.toThrow("discordPlaceProvider");
+			await expect(roundtable.run()).rejects.toThrow(
+				`the agent guild ${config.discord.guild} has Discord channels for the agents, but no plugin contributes the place provider of the "discord" surface, so the team cannot read them. A plugin that replaces DISCORD must contribute Discord's side of the agent guild, the place provider with its tools and dashboard: spread discordAgentGuild(context, { guild, connection }) from pi-roundtable/discord into what its setup returns.`,
+			);
 			roundtable = undefined;
 		});
 
