@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TeamStatus } from "../agents/agent-team.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import { silentLogger } from "../kernel/log.ts";
 import {
 	AGENT_SERVER_PLUGIN,
@@ -73,6 +74,37 @@ describe("dashboardSections", () => {
 		expect(groups).toContain("Members: Coordinator, Infra | Host: Coordinator");
 		expect(groups).toContain("🟠 1 in progress");
 		expect(groups).toContain("-# Last active 09-26 06:03");
+	});
+
+	test("names an agent's and a group's Discord channel from their places, not from the deprecated channelId", () => {
+		const placed: TeamStatus = {
+			agents: [
+				{
+					...status.agents[0],
+					channelId: "stale",
+					places: [
+						{ surface: "pager", key: "pager:pg-1" },
+						{ surface: "discord", key: discordKey("21") },
+					],
+				},
+				{
+					...status.agents[1],
+					places: [{ surface: "pager", key: "pager:pg-2" }],
+				},
+			] as TeamStatus["agents"],
+			groups: [
+				{
+					...status.groups[0],
+					channelId: "stale",
+					places: [{ surface: "discord", key: discordKey("22") }],
+				},
+			] as TeamStatus["groups"],
+		};
+		const [, agents, groups] = dashboardSections(placed, LINES, NOW);
+		expect(agents).toContain("**Infra** <#21>");
+		expect(agents).toContain("**Bot Doctor**\n");
+		expect(agents).not.toContain("stale");
+		expect(groups).toContain("**Ops group** <#22>");
 	});
 
 	test("stays within Discord's text limit, saying how many were left out", () => {

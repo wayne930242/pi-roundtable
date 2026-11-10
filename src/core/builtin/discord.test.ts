@@ -3,6 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Interaction, REST } from "discord.js";
+import {
+	checkAgentGuild,
+	ENTRY_CHANNEL_WITHOUT_GUILD,
+} from "../config/agent-team.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { PlaceProvider } from "../contract/places.ts";
 import type { ChatSurface } from "../contract/surface.ts";
@@ -411,7 +415,21 @@ test("an entry channel needs the agent guild, in the words the configuration giv
 		dataDir: "/tmp",
 		rootCommand: "roundtable",
 	};
-	expect(() => discordPlugin({ ...options, entryChannel: "9" })).toThrow(
+	const refusal = (build: () => unknown) => {
+		try {
+			build();
+		} catch (error) {
+			return error instanceof Error ? error.message : String(error);
+		}
+	};
+	// The plugin and the configuration check refuse in one text, not two that can drift.
+	expect(refusal(() => discordPlugin({ ...options, entryChannel: "9" }))).toBe(
+		ENTRY_CHANNEL_WITHOUT_GUILD,
+	);
+	expect(
+		refusal(() => checkAgentGuild({ discord: { entryChannel: "9" } }, true)),
+	).toBe(ENTRY_CHANNEL_WITHOUT_GUILD);
+	expect(ENTRY_CHANNEL_WITHOUT_GUILD).toStartWith(
 		"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out",
 	);
 	expect(() =>

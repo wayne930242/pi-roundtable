@@ -5,6 +5,7 @@ import type {
 	TeamStatus,
 } from "../agents/agent-team.ts";
 import type { DashboardBoard } from "../contract/agent-channels.ts";
+import { discordIdOf } from "../contract/discord-key.ts";
 import { thinkingLabel } from "../domain/models.ts";
 import { messages } from "../i18n/index.ts";
 import type { Logger } from "../kernel/log.ts";
@@ -16,6 +17,22 @@ const DASHBOARD_MIN_INTERVAL_MS = 10_000;
 const DASHBOARD_REFRESH_MS = 5 * 60_000;
 /** Components V2 allows 4000 characters of text per message. */
 const TEXT_BUDGET = 3_800;
+
+/**
+ * The Discord channel a status names, from its places; the deprecated `channelId` answers only for
+ * a status written before places were providers, which has none.
+ */
+function discordChannelOf(status: {
+	places?: AgentStatus["places"];
+	channelId?: string;
+}): string | undefined {
+	if (!status.places) return status.channelId;
+	for (const place of status.places) {
+		const id = discordIdOf(place.key);
+		if (id !== undefined) return id;
+	}
+	return undefined;
+}
 
 /** Configured local time, with the month and day when it is not today's. */
 function when(at: Date, now: Date): string {
@@ -50,7 +67,8 @@ function agentBlock(
 	now: Date,
 	helpers: readonly AgentStatus[],
 ): string {
-	const channel = agent.channelId ? ` <#${agent.channelId}>` : "";
+	const channelId = discordChannelOf(agent);
+	const channel = channelId ? ` <#${channelId}>` : "";
 	const text = messages();
 	const last = agent.lastActive
 		? text.dashLastActive(when(agent.lastActive, now))
@@ -74,12 +92,13 @@ function agentBlock(
 
 function groupBlock(group: GroupStatus, now: Date): string {
 	const text = messages();
+	const channelId = discordChannelOf(group);
 	const state = group.busy > 0 ? text.dashGroupBusy(group.busy) : text.dashIdle;
 	const last = group.lastActive
 		? text.dashLastActive(when(group.lastActive, now))
 		: text.dashNotActive;
 	return [
-		`**${group.displayName}**${group.channelId ? ` <#${group.channelId}>` : ""}`,
+		`**${group.displayName}**${channelId ? ` <#${channelId}>` : ""}`,
 		text.dashGroupMembers(group.members, group.host),
 		state,
 		`-# ${last}`,

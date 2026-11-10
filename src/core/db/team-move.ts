@@ -20,7 +20,7 @@ export interface TeamMoveOptions {
 	 * The surfaces whose stored places name something of the space the team lived in, such as the
 	 * channels of a Discord guild. A place row moved from a former id other than `keep` is dropped, as
 	 * the legacy channel ids are cleared, so start makes new places; without `keep` every moved row
-	 * is dropped. With `clearChannels` the team's own rows of these surfaces go too.
+	 * is dropped. With `clearChannels` the team's own rows of the surfaces without `keep` go too.
 	 */
 	places?: readonly { surface: string; keep?: string }[];
 }
@@ -75,7 +75,7 @@ export function moveTeam(options: TeamMoveOptions): Migration {
 						);
 					if (table === PLACES_TABLE)
 						for (const { surface, keep } of options.places ?? []) {
-							if (options.clearChannels)
+							if (options.clearChannels && keep === undefined)
 								await tx.unsafe(
 									`DELETE FROM "${table}" WHERE ${scope} = $1 AND surface = $2`,
 									[options.to, surface],

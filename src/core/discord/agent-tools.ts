@@ -3,6 +3,7 @@ import type {
 	AgentChannels,
 	ChannelMessage,
 } from "../contract/agent-channels.ts";
+import { discordIdOf, discordKey } from "../contract/discord-key.ts";
 import { AgentError } from "../domain/errors.ts";
 import { messages } from "../i18n/index.ts";
 import { ownerWords } from "../identity/owner-identity.ts";
@@ -15,7 +16,7 @@ import {
 	type ToolContribution,
 	ToolRefusal,
 } from "../plugin-api/define.ts";
-import type { AgentDirectory } from "../plugin-api/services.ts";
+import type { AgentDirectory, AgentServer } from "../plugin-api/services.ts";
 import {
 	categoryLayoutText,
 	planArrangement,
@@ -44,24 +45,50 @@ export function channelIdFromRef(channel: string): string {
 	return id;
 }
 
-/** The agent or group a channel belongs to, by its name, for the category listing. */
-export function ownerNameOf(
-	directory: Pick<AgentDirectory, "agentByChannel" | "groupByChannel">,
-): (channelId: string) => string | undefined {
-	return (id) =>
-		directory.agentByChannel(id)?.name ?? directory.groupByChannel(id)?.name;
+/**
+ * What the Discord tools read of the team: the agents and groups by name, and which one a Discord
+ * channel is the place of, either way.
+ */
+export interface DiscordTeamReads
+	extends Pick<AgentDirectory, "agent" | "group"> {
+	/** The name of the agent or group whose place the Discord channel is, whatever its status. */
+	ownerOf(channelId: string): string | undefined;
+	/** The Discord channel of an agent or group; undefined when it has none. */
+	channelOf(name: string): string | undefined;
+}
+
+/**
+ * The tools' reads over what the agent server builds. They go through the places: `placeOwner`
+ * and `placesOf`, and the deprecated Discord-only members (`agentByChannel`, `channelId`) only for
+ * a server written before places were providers, which has neither.
+ */
+export function discordTeamReads(
+	server: Pick<AgentServer, "team" | "directory">,
+): DiscordTeamReads {
+	const { team, directory } = server;
+	return {
+		agent: (name) => directory.agent(name),
+		group: (name) => directory.group(name),
+		ownerOf: (id) =>
+			directory.placeOwner
+				? directory.placeOwner(discordKey(id))?.name
+				: (directory.agentByChannel(id)?.name ??
+					directory.groupByChannel(id)?.name),
+		channelOf: (name) =>
+			team.placesOf
+				? team
+						.placesOf(name)
+						.map((place) => discordIdOf(place.key))
+						.find((id) => id !== undefined)
+				: (directory.agent(name) ?? directory.group(name))?.channelId,
+	};
 }
 
 export interface DiscordAgentToolsOptions {
 	/** The agent guild's channels, which the tools list, arrange and read. */
 	channels: Pick<AgentChannels, "layout" | "arrange" | "read">;
 	/** The team's agents and groups, read when a tool runs; undefined on a host whose agent server is off. */
-	directory: () =>
-		| Pick<
-				AgentDirectory,
-				"agent" | "group" | "agentByChannel" | "groupByChannel"
-		  >
-		| undefined;
+	directory: () => DiscordTeamReads | undefined;
 	logger: Logger;
 }
 
@@ -127,7 +154,7 @@ export function discordChannelOps(
 				remove.length > 0
 					? ` ${remove.length} empty team categories were deleted.`
 					: "";
-			return `Arranged the channels.${removed}\n\n${categoryLayoutText(await channels.layout(), ownerNameOf(team))}`;
+			return `Arranged the channels.${removed}\n\n${categoryLayoutText(await channels.layout(), team.ownerOf)}`;
 		},
 		read: async (channel, around, limit) => {
 			const id = channelIdFromRef(channel);

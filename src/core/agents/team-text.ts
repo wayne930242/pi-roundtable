@@ -6,6 +6,10 @@ import { characterOf, isHelper } from "./agent-rules.ts";
 import { describeThinking } from "./agent-settings.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 
+/** What `AgentOps.arrange` and `AgentOps.read` refuse with when the team has no Discord channels. */
+export const NO_CHANNELS =
+	"This host has no Discord channels: the agents live in rooms of a chat surface, so there is nothing to arrange or read here.";
+
 /** Every agent and group as agent_list shows them, before the category layout. */
 export function teamListText(store: Pick<AgentDirectory, "agents" | "groups">) {
 	const all = store.agents();
