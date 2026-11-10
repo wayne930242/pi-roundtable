@@ -91,18 +91,39 @@ test("pinned rooms keep the owners' order, then folders in theirs, then the rest
 	expect(partial.rest).toEqual([C, B]);
 });
 
-test("a deleted agent's key, Home, a thread and a repeat are left out of the layout", () => {
+test("a deleted agent's key, a thread and a repeat are left out of the layout, and Home stays out of a folder", () => {
 	const result = sections(
 		input(
 			[...TEAMROOMS, view(T1, { kind: "thread", parent: A, readOnly: true })],
-			[A, "app:agent.deleted", HOME, T1, A],
-			[{ id: "f1", name: "One", rooms: [A, B, "app:agent.deleted"] }],
+			[A, "app:agent.deleted", T1, A],
+			[{ id: "f1", name: "One", rooms: [HOME, A, B, "app:agent.deleted"] }],
 		),
 		at,
 	);
 	expect(result.pinned).toEqual([A]);
 	expect(result.folders[0]?.rooms).toEqual([B]);
 	expect(result.home).toEqual([HOME]);
+});
+
+test("a pinned Home is one of the pins in the owners' order and no longer leads the rest; unpinned it leads as before", () => {
+	const pinnedHome = sections(input(TEAMROOMS, [B, HOME, A]), at);
+	expect(pinnedHome.pinned).toEqual([B, HOME, A]);
+	expect(pinnedHome.home).toEqual([]);
+	expect(pinnedHome.rest).toEqual([C, TEAM]);
+	expect(arranged(pinnedHome)).toBe(true);
+	const plain = sections(input(TEAMROOMS, [B, A]), at);
+	expect(plain.pinned).toEqual([B, A]);
+	expect(plain.home).toEqual([HOME]);
+	// the drawer lists it among the pinned rooms, with no heading of its own
+	expect(
+		drawerGroups(input(TEAMROOMS, [B, HOME]), at, () => false).map((one) => [
+			one.id,
+			one.keys,
+		]),
+	).toEqual([
+		["pinned", [B, HOME]],
+		["rest", [C, A, TEAM]],
+	]);
 });
 
 test("a new room with no place is in the rest, and threads stay under their room wherever it sits", () => {

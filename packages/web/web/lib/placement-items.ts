@@ -19,12 +19,13 @@ const now: Leave = (go) => go();
 const edit = (): Promise<typeof import("./layout-actions.ts")> =>
 	import("./layout-actions.ts");
 
-/** Pin or unpin, move to a folder, and a step up or down within the room's list; for a room that is not Home. */
+/** Pin or unpin, move to a folder, and a step up or down within the room's list; Home takes the pin and its steps only. */
 export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 	const place = placeOf(arrangementNow(), key);
 	const pinned = place.kind === "pinned";
+	const home = store.getState().rooms[key]?.view?.home === true;
 	// A hidden room is in none of the home's lists, so its place is not shown; showing it again is its one step.
-	if (chatsHome() && store.getState().hidden.includes(key))
+	if (!home && chatsHome() && store.getState().hidden.includes(key))
 		return [
 			{
 				id: "unhide",
@@ -44,15 +45,16 @@ export function placementItems(key: string, leave: Leave = now): MenuItem[] {
 				void edit().then((one) => one.pinRoom(key, !pinned));
 			},
 		},
-		{
+	];
+	if (!home)
+		items.push({
 			id: "move",
 			label: t("Move to folder…"),
 			icon: "folder",
 			run: () => leave(() => askFolderDialog({ kind: "move", room: key })),
-		},
-	];
+		});
 	// The chat list takes a room off the home without touching its pin or folder.
-	if (chatsHome())
+	if (!home && chatsHome())
 		items.push({
 			id: "hide",
 			label: t("Hide"),
