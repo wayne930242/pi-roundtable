@@ -44,6 +44,8 @@ export const ZH_TW_SETTINGS: Readonly<Record<string, string>> = {
 	"Quiet hours, {start} to {end} ({zone}): no notification for a knight's report or a notice. A card waiting for you still notifies. The server sets the hours.":
 		"勿擾時段 {start} 至 {end}（{zone}）：這段時間內，騎士的回報與通知不會推播；等你處理的卡片仍會推播。時段由伺服器設定。",
 	Remove: "移除",
+	"Signed in as {name}": "登入身分：{name}",
+	Me: "我",
 	"Signed in as {name}.": "目前登入身分：{name}。",
 	"This browser cannot get push notifications. On iPhone and iPad, install the app from Share, Add to Home Screen, and open it from there.":
 		"這個瀏覽器無法接收推播通知。在 iPhone 與 iPad 上，請先透過「分享」→「加入主畫面」安裝應用程式，再從主畫面開啟。",

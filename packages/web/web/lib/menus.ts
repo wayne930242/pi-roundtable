@@ -43,3 +43,10 @@ export const fileMenuOf = (file: RoomFile): Promise<MenuSpec> =>
 /** Opens the "+" menu under a button: a new agent, a new group, and the archive. */
 export const openAddMenu = (button: HTMLElement, leave?: Leave): void =>
 	void items().then((one) => one.openAddMenu(button, leave));
+
+/** Opens the "me" menu under a person's picture. */
+export const openMeMenu = (
+	button: HTMLElement,
+	options: { profile: boolean },
+): void =>
+	void import("./me-menu.ts").then((one) => one.openMeMenu(button, options));

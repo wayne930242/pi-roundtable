@@ -40,8 +40,11 @@ export const CHATS_HOME_CSS = `
 	margin-left: auto;
 }
 
-.chats-me {
+button.chats-me {
 	display: grid;
+	padding: 0;
+	border: 0;
+	cursor: pointer;
 	flex: none;
 	place-items: center;
 	width: var(--touch);
@@ -51,6 +54,11 @@ export const CHATS_HOME_CSS = `
 	color: var(--accent-ink);
 	font-weight: var(--weight-bold);
 	text-decoration: none;
+}
+
+button.chats-me:hover:not(:disabled) {
+	background: var(--accent-soft);
+	color: var(--accent-ink);
 }
 
 button.chats-waiting {
@@ -246,20 +254,6 @@ a.pin[aria-current="page"] {
 	background: var(--surface-3);
 	color: var(--muted);
 	font-weight: var(--weight-medium);
-}
-
-.hidden-row {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-	min-height: var(--touch);
-	padding: 0 var(--space-2);
-	color: var(--muted);
-	text-decoration: none;
-}
-
-.hidden-row:hover {
-	color: var(--text);
 }
 
 /* ── The page of hidden and archived rooms ────────────────────────────────────────────────────── */

@@ -20,7 +20,6 @@ import {
 	page,
 	q,
 	SCOUT,
-	TEAM,
 	until,
 	view,
 } from "./folders-fixture.tsx";
@@ -195,7 +194,7 @@ test("a row has no nested threads: dispatch threads are only a count, and the th
 	).toBe("2 threads");
 });
 
-test("hidden rooms are off the home; the collapsed row counts hidden and archived, lights a dot for unread, and goes to the page", async () => {
+test("hidden rooms are off the home, which has no row or link to the hidden page; the features grid is the way in", async () => {
 	loadChats({ hidden: [QUIET, NEWS] }, [
 		...[GUIDE, SCOUT, NEWS].map((key) =>
 			view(key, key === GUIDE ? { home: true } : {}),
@@ -204,20 +203,13 @@ test("hidden rooms are off the home; the collapsed row counts hidden and archive
 	]);
 	seed(4, { [QUIET]: 1 });
 	await show(<Home />);
-	await until(() => q(".hidden-row") !== null);
-	expect(names(".chat-row strong")).toEqual(["guide", "scout"]);
-	const row = q<HTMLAnchorElement>(".hidden-row");
-	expect(row?.textContent).toBe("Hidden 2 · Archived 4");
-	expect(row?.querySelector(".chip-dot")).not.toBeNull();
-	expect(row?.getAttribute("href")).toBe("#/hidden");
-});
-
-test("the collapsed row is not there when nothing is hidden or archived", async () => {
-	seed(0);
-	loadChats({});
-	await show(<Home />);
 	await new Promise((resolve) => setTimeout(resolve, 60));
+	expect(names(".chat-row strong")).toEqual(["guide", "scout"]);
 	expect(q(".hidden-row")).toBeNull();
+	expect(q('a[href="#/hidden"]')).toBeNull();
+	await page.click(q(".chats-grid"));
+	await until(() => all(".feature-tile").length > 0);
+	expect(names(".feature-label")).toContain("Hidden and archived");
 });
 
 test("the open room's row is marked and the column version has four pins to a row", async () => {
@@ -274,18 +266,6 @@ test("the grid button opens all features, grouped from the config's panes, with 
 	expect(tiles).not.toContain("Webhooks");
 	expect(q(".feature-badge")?.textContent).toBe("1");
 	store.dispatch({ type: "prompt_closed", prompt: "p2", outcome: "approved" });
-	stub.mockRestore();
-});
-
-test("an archived entry count that cannot be read leaves only the hidden count", async () => {
-	const stub = spyOn(
-		await import("./lib/team-api.ts").then((m) => m.teamApi),
-		"archive",
-	).mockRejectedValue(new Error("down"));
-	loadChats({ hidden: [QUIET] }, [view(GUIDE, { home: true }), view(QUIET)]);
-	await show(<Home />);
-	await until(() => q(".hidden-row") !== null);
-	expect(q(".hidden-row")?.textContent).toBe("Hidden 1 · Archived 0");
 	stub.mockRestore();
 });
 

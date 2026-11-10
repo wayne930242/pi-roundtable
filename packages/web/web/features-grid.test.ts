@@ -52,7 +52,7 @@ test("a host with fewer panes shows fewer tiles, and a group with none is left o
 	expect(ids(groups)).toEqual([
 		["organize", ["arrange", "schedules", "waiting", "hidden"]],
 		["work", ["workspace"]],
-		["system", ["settings", "profile", "theme"]],
+		["system", ["settings", "theme"]],
 	]);
 	expect(
 		groups[0]?.tiles.find((tile) => tile.id === "waiting")?.badge,
@@ -92,5 +92,19 @@ test("without the owner app there is no arranging, hiding, settings or profile",
 		["work", ["overview"]],
 		["assistant", ["notes"]],
 		["system", ["theme"]],
+	]);
+});
+
+test("the Profile tile is there only where the host serves the profile pane", () => {
+	const input = { pages: [], hasApp: true, waiting: 0, dark: true };
+	const system = (panes: PaneName[]) =>
+		featureGroups({ ...input, panes })
+			.find((group) => group.id === "system")
+			?.tiles.map((tile) => tile.id);
+	expect(system(["rooms"])).toEqual(["settings", "theme"]);
+	expect(system(["rooms", "profile"])).toEqual([
+		"settings",
+		"profile",
+		"theme",
 	]);
 });

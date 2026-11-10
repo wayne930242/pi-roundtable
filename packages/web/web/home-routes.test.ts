@@ -24,3 +24,8 @@ test("a layout edit on the rooms home keeps no server hidden rooms", async () =>
 	await pinRoom("app:agent.a", true);
 	expect(store.getState().hidden).toEqual([]);
 });
+
+test("the profile route opens only where the host serves the profile pane, owner app or not", () => {
+	expect(knownPane("profile", ["rooms"], true, true)).toBe(false);
+	expect(knownPane("profile", ["rooms", "profile"], true, true)).toBe(true);
+});

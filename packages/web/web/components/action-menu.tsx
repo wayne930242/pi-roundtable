@@ -227,6 +227,11 @@ function PopoverMenu({ menu }: { menu: OpenMenu }) {
 			style={{ left: `${place.x}px`, top: `${place.y}px` }}
 			onKeyDown={onKeyDown}
 		>
+			{menu.heading ? (
+				<div className="action-popover-heading" aria-hidden="true">
+					{menu.heading}
+				</div>
+			) : null}
 			<Items items={menu.items} onChoose={(item) => leave(item.run)} />
 		</div>
 	);

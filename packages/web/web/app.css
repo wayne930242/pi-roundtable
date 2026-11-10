@@ -2258,6 +2258,12 @@ pre.diff {
 	}
 }
 
+.action-popover-heading {
+	padding: var(--space-2) var(--space-2) var(--space-1);
+	color: var(--muted);
+	font-size: var(--text-xs);
+}
+
 .action-popover .menu-item {
 	min-height: 2.5rem;
 	padding: var(--space-1) var(--space-2);

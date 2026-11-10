@@ -2,8 +2,8 @@ import { Suspense } from "react";
 import { NoticeBell } from "../app-pages.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useConfig } from "../lib/config.ts";
+import { openMeMenu } from "../lib/menus.ts";
 import { plural, translate as t } from "../lib/messages.ts";
-import { hrefFor } from "../lib/router.ts";
 import { openCards } from "../lib/tab-count.ts";
 import { Icon } from "./icons.tsx";
 
@@ -18,7 +18,7 @@ export function initialsOf(name: string | undefined): string {
 }
 
 /**
- * The chat home's top row: the person's own picture (their profile), the cards waiting on them, the
+ * The chat home's top row: the person's own picture (the menu of their account), the cards waiting on them, the
  * notice bell where the app admits more than its owners, and the "+" of the add menu.
  */
 export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
@@ -30,14 +30,20 @@ export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
 		: "";
 	return (
 		<header className="chats-top">
-			<a
+			<button
+				type="button"
 				className="chats-me"
-				href={hrefFor("profile")}
-				aria-label={t("Profile")}
+				aria-label={t("Me")}
+				aria-haspopup="menu"
 				title={name}
+				onClick={(event) =>
+					openMeMenu(event.currentTarget, {
+						profile: config.panes.includes("profile"),
+					})
+				}
 			>
 				{initialsOf(name) || <Icon name="profile" size={18} />}
-			</a>
+			</button>
 			{waiting ? (
 				<button
 					type="button"

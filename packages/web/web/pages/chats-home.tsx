@@ -3,14 +3,12 @@ import { Icon } from "../components/icons.tsx";
 import { PinTile } from "../components/pin-tile.tsx";
 import { useReadSwipe } from "../components/read-swipe.tsx";
 import { Empty } from "../components/states.tsx";
-import { useArchivedCount } from "../lib/archived-count.ts";
 import { lastChip, rememberChip } from "../lib/chat-chip.ts";
 import { useChatsArrangement } from "../lib/chats-arrangement.ts";
 import {
 	chipsOf,
 	elsewhereUnread,
 	folderOf,
-	hiddenDot,
 	listFor,
 	pinSizeOf,
 	pinsOf,
@@ -20,7 +18,6 @@ import { useConfig } from "../lib/config.ts";
 import "../lib/home-icons.ts";
 import { AllFeatures } from "../components/all-features.tsx";
 import { ChatRow } from "../components/chat-row.tsx";
-import HiddenRow from "../components/hidden-row.tsx";
 import { HomeChips } from "../components/home-chips.tsx";
 import { HomeTop } from "../components/home-top.tsx";
 import { useLive } from "../lib/live.ts";
@@ -39,7 +36,7 @@ export interface ChatsHomeProps {
 
 /**
  * The home as a chat list: the pinned rooms as big figures on top, folders as chips that filter one
- * list of the other rooms by latest activity, one row for the hidden rooms and the archive, and at
+ * list of the other rooms by latest activity, and at
  * the bottom the button to everything else and the search.
  */
 export default function ChatsHome(props: ChatsHomeProps) {
@@ -73,7 +70,6 @@ export default function ChatsHome(props: ChatsHomeProps) {
 	const dock = !props.column && props.active === undefined;
 	// Where the list mixes folders, each row says which one it is in.
 	const tagged = chips.length > 0 && chip === "all";
-	const archived = useArchivedCount();
 	const hidden = arrangement.hidden.length;
 	const none = listed && pins.length + listKeys.length === 0 && hidden === 0;
 	const hosted = Boolean(useConfig().kinds?.length);
@@ -167,13 +163,6 @@ export default function ChatsHome(props: ChatsHomeProps) {
 			) : (
 				list
 			)}
-			{hidden + (archived ?? 0) > 0 ? (
-				<HiddenRow
-					hidden={hidden}
-					archived={archived ?? 0}
-					dot={hiddenDot(arrangement.hidden, unread)}
-				/>
-			) : null}
 			<HostKinds active={props.active} />
 			<div className="chats-foot">
 				{dock ? pinsList : null}

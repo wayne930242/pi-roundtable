@@ -19,6 +19,8 @@ export interface MenuItem {
 
 export interface MenuRequest {
 	title: string;
+	/** A line over a popover's items; a sheet shows the title in its own header. */
+	heading?: string;
 	items: readonly MenuItem[];
 	/** Where the press was, in viewport coordinates; a popover opens there. */
 	at: Point;
