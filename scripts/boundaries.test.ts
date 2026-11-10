@@ -13,6 +13,7 @@ import {
 	coreCycles,
 	discordNames,
 	importsOf,
+	surfaceToolNames,
 	type Violation,
 } from "./boundaries.ts";
 
@@ -251,5 +252,35 @@ test("agents, routing, and threads name no Discord surface, key, or guild; comme
 		},
 		"src/core/routing/leaky.ts": { "discord-surface": 1 },
 		"src/core/threads/leaky.ts": { guild: 3 },
+	});
+});
+
+test("the team code names no surface's own tool or creation argument", () => {
+	// Exact: Discord's `channel_arrange`, `channel_read` and `category` are contributed by its builtin.
+	expect(surfaceToolNames(ROOT)).toEqual({});
+});
+
+test("a tool name or a creation argument in team code is found; comments, tests, other directories and longer words are not", () => {
+	const root = tree({
+		"src/core/agents/clean.ts": [
+			"// channel_arrange and category are Discord's: this comment names them freely.",
+			"export const note = 'Move it to a category with the arrange tool';",
+			"export const layout = { categoryLayout: 1 };",
+		].join("\n"),
+		"src/core/agents/leaky.ts": [
+			"export const tools = ['channel_arrange', `x channel_read y`];",
+			"export const input = { category: 'Agents' };",
+			"export const schema = { categories: [] };",
+		].join("\n"),
+		"src/core/agents/leaky.test.ts": "export const category = 'Agents';",
+		"src/core/discord/tools.ts": "export const category = 'Agents';",
+	});
+	expect(surfaceToolNames(root)).toEqual({
+		"src/core/agents/leaky.ts": [
+			"categories",
+			"category",
+			"channel_arrange",
+			"channel_read",
+		],
 	});
 });
