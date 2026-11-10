@@ -12,6 +12,7 @@ import {
 	carried,
 	changes,
 	groups,
+	lastMessages,
 	refusesTheSame,
 	setup,
 	teamHostPerTest,
@@ -314,5 +315,21 @@ describe("GET api/archive", () => {
 		expect((await call(server, "GET", "archive")).status).toBe(403);
 		actAs({ id: "owner", tier: "owner" });
 		expect((await call(server, "POST", "archive")).status).toBe(404);
+	});
+
+	test("carries the time of the last message in each entry's room, and none for a room without one", async () => {
+		lastMessages.set("app:agent.old", "2026-11-01T08:00:00.000Z");
+		const view = (await (
+			await call(setup(), "GET", "archive")
+		).json()) as ArchiveView;
+		expect(view.entries.map((entry) => entry.lastActive)).toEqual([
+			"2026-11-01T08:00:00.000Z",
+			undefined,
+		]);
+		lastMessages.set("app:group.past", "2026-10-02T08:00:00.000Z");
+		const again = (await (
+			await call(setup(), "GET", "archive")
+		).json()) as ArchiveView;
+		expect(again.entries[1]?.lastActive).toBe("2026-10-02T08:00:00.000Z");
 	});
 });

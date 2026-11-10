@@ -79,7 +79,7 @@ export interface TeamApiOptions {
 		  }
 		| undefined;
 	/** What a deleted agent's or group's room leaves behind in the app. */
-	log: Pick<RoomLog, "removeRoom">;
+	log: Pick<RoomLog, "removeRoom" | "lastOf">;
 	cards: Pick<CardLog, "removeRoom">;
 	mutes: Pick<PushMutes, "set">;
 	modes: Pick<ConversationModes, "forget">;
@@ -435,32 +435,41 @@ export class TeamApi {
 
 	async archived(owner: OwnerOf): Promise<Response> {
 		await owner();
-		const { directory, rooms } = this.#options;
+		const { directory, rooms, log, surface } = this.#options;
+		const agents = directory
+			.agents()
+			.filter((one) => one.status === "archived");
+		const teams = directory.groups().filter((one) => one.status === "archived");
+		// One read for every archived room: the time of its last message is when the entry was last active.
+		const last = await log.lastOf([
+			...agents.map((agent) => agentRoomKey(surface, agent.name)),
+			...teams.map((group) => groupRoomKey(surface, group.name)),
+		]);
+		const lastActive = (room: string) => {
+			const at = last.get(room)?.at;
+			return at ? { lastActive: at } : {};
+		};
 		const entries: ArchivedEntry[] = [
-			...directory
-				.agents()
-				.filter((agent) => agent.status === "archived")
-				.map(
-					(agent): ArchivedEntry => ({
-						kind: "agent",
-						name: agent.name,
-						displayName: agent.displayName,
-						avatar: rooms.avatarOf(agent),
-						character: characterOf(agent),
-						...(agent.parent ? { parent: agent.parent } : {}),
-					}),
-				),
-			...directory
-				.groups()
-				.filter((group) => group.status === "archived")
-				.map(
-					(group): ArchivedEntry => ({
-						kind: "group",
-						name: group.name,
-						displayName: group.displayName,
-						members: [...group.members],
-					}),
-				),
+			...agents.map(
+				(agent): ArchivedEntry => ({
+					kind: "agent",
+					name: agent.name,
+					displayName: agent.displayName,
+					avatar: rooms.avatarOf(agent),
+					character: characterOf(agent),
+					...(agent.parent ? { parent: agent.parent } : {}),
+					...lastActive(agentRoomKey(surface, agent.name)),
+				}),
+			),
+			...teams.map(
+				(group): ArchivedEntry => ({
+					kind: "group",
+					name: group.name,
+					displayName: group.displayName,
+					members: [...group.members],
+					...lastActive(groupRoomKey(surface, group.name)),
+				}),
+			),
 		].sort((a, b) => a.name.localeCompare(b.name));
 		return json({ entries } satisfies ArchiveView);
 	}

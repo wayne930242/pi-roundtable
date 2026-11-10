@@ -150,6 +150,8 @@ export interface ArchivedEntry {
 	members?: string[];
 	/** A temp knight's parent, by name; the archive page groups it under that knight. */
 	parent?: string;
+	/** ISO time of the last message in its room, when it has one; the archive page shows it and filters by it. */
+	lastActive?: string;
 }
 
 /** `GET api/archive`. */

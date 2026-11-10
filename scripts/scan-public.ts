@@ -184,6 +184,7 @@ const CJK_FILES = [
 	// The web package's built-in zh-TW catalog, its parts, and its test, which names the terms the catalog must use.
 	"packages/web/src/i18n/zh-tw.ts",
 	"packages/web/src/i18n/zh-tw-app.ts",
+	"packages/web/src/i18n/zh-tw-batch.ts",
 	"packages/web/src/i18n/zh-tw-knights.ts",
 	"packages/web/src/i18n/zh-tw-people.ts",
 	"packages/web/src/i18n/zh-tw-settings.ts",

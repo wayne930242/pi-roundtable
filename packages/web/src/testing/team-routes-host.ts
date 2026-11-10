@@ -35,6 +35,8 @@ export let speakers: Speaker[];
 export let threadsOf: Map<string, string[]>;
 /** Makes the app's cleanup of a deleted room fail, as a database error would. */
 export let cleanupFails: boolean;
+/** The ISO time of the last message in each room that has one, by room key. */
+export let lastMessages: Map<string, string>;
 
 export const CATALOG: SkillView[] = [
 	{
@@ -184,6 +186,13 @@ export function setup(withSkills = true) {
 		surface: { surface: "app" } as never,
 		rooms: { avatarOf: () => "/console/avatars/x.png" } as never,
 		log: {
+			lastOf: async (rooms: readonly string[]) =>
+				new Map(
+					rooms.flatMap((room) => {
+						const at = lastMessages.get(room);
+						return at ? [[room, { at }] as const] : [];
+					}),
+				),
 			removeRoom: async (room: string) => {
 				if (cleanupFails) throw new Error("the database is gone");
 				calls.push(`forget log ${room}`);
@@ -300,6 +309,7 @@ export function teamHostPerTest(): void {
 		changes = 0;
 		speakers = [];
 		cleanupFails = false;
+		lastMessages = new Map();
 		threadsOf = new Map();
 		who = { id: "owner", tier: "owner" };
 		agents = new Map([
