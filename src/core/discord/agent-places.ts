@@ -202,6 +202,8 @@ export interface DiscordPlaceProviderOptions {
 	logger: Logger;
 	/** The discord.js client, so the team can check at start that its stored channels still exist; absent = they are taken as they are. */
 	client?: Client;
+	/** The channel the coordinator lives in (`discord.entryChannel`); absent = the configured `coordinator`. */
+	entryChannel?: string;
 }
 
 /**
@@ -216,6 +218,9 @@ export function discordPlaceProvider(
 	const { guild, connection } = options;
 	return discordPlaces({
 		...(options.client ? { client: options.client } : {}),
+		...(options.entryChannel === undefined
+			? {}
+			: { entryChannel: options.entryChannel }),
 		guild,
 		channels: connection.agentChannels(guild),
 		onRemoved: (listener) => connection.onChannelDeleted(listener),

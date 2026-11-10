@@ -180,11 +180,14 @@ export class DiscordSurface
 		guildId: string,
 		/** The agent or group whose channel it is, for the category listing; absent = a mention. */
 		nameOf?: (channelId: string) => string | undefined,
+		/** The channel the coordinator lives in; absent = the configured `coordinator`. */
+		entryChannel?: string,
 	): PlaceProvider {
 		return discordPlaces({
 			client: this.#client,
 			guild: guildId,
 			...(nameOf ? { nameOf } : {}),
+			...(entryChannel === undefined ? {} : { entryChannel }),
 			channels: this.agentChannels(guildId),
 			onRemoved: (listener) => this.onChannelDeleted(listener),
 			logger: this.#options.logger,

@@ -31,19 +31,28 @@ export function roomOf(
 	return { kind: match[1] as "agent" | "group", name: match[2] as string };
 }
 
+/** The entry channel: the place a provider names for the coordinator, else the team's own option; undefined on a host without one. */
+export function entryChannelOf(
+	places: Pick<TeamPlaces, "entry">,
+	team: { entryChannel?: ChannelKey },
+): ChannelKey | undefined {
+	return team.entryChannel ?? places.entry();
+}
+
 /**
  * The coordinator: the agent whose place is the entry channel, when the host has one; otherwise
  * the agent the configuration names. Undefined while none is active.
  */
 export function coordinatorOf(
 	store: Pick<AgentDirectory, "agent">,
-	places: Pick<TeamPlaces, "agentOf">,
+	places: Pick<TeamPlaces, "agentOf" | "entry">,
 	team: {
 		entryChannel?: ChannelKey;
 		coordinator?: string | (() => string | undefined);
 	},
 ): Agent | undefined {
-	if (team.entryChannel !== undefined) return places.agentOf(team.entryChannel);
+	const entry = entryChannelOf(places, team);
+	if (entry !== undefined) return places.agentOf(entry);
 	const name =
 		typeof team.coordinator === "function"
 			? team.coordinator()

@@ -188,11 +188,15 @@ export function standInDiscord(
 	channelContext: DiscordServices["channelContext"] = async () => undefined,
 	/** The agent guild, which makes the stand-in contribute Discord's place provider over `agentChannels`, as the built-in plugin does with one. */
 	agentGuild?: string,
+	/** The channel the coordinator lives in, as the built-in plugin gives it with an agent guild. */
+	entryChannel?: string,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
 		start: async () => undefined,
 		sendReply: async () => undefined,
+		// What the agents' claim reads through `CHANNEL_CONTEXT`, as the Discord surface answers it.
+		channelContext: (message, options) => channelContext(message, options),
 	};
 	return {
 		name: "test-discord",
@@ -248,6 +252,7 @@ export function standInDiscord(
 					? [
 							discordPlaceProvider({
 								guild: agentGuild,
+								...(entryChannel === undefined ? {} : { entryChannel }),
 								// SAFETY: a stand-in's provider is read for keys; nothing asks the channels.
 								connection: connection as never,
 								logger: silentLogger(),
@@ -331,6 +336,7 @@ export async function testHost(
 							discordOwnerOf(resolved).id,
 							undefined,
 							resolved.discord?.guild,
+							resolved.discord?.entryChannel,
 						),
 					]
 				: []),

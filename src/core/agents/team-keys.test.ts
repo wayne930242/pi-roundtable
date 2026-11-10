@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { discordIdOf, discordKey } from "../contract/discord-key.ts";
 import type { PlaceProvider } from "../contract/places.ts";
-import { legacyRows, testPlaces } from "../testing/team-places.ts";
+import {
+	discordTestPlaces,
+	legacyRows,
+	testPlaces,
+} from "../testing/team-places.ts";
 import type { StoredPlace } from "./agent-places.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import {
@@ -286,4 +290,16 @@ test("the coordinator is the entry channel's agent with Discord, else the config
 	expect(
 		coordinatorOf(store, host, { coordinator: () => "old" }),
 	).toBeUndefined();
+});
+
+test("a provider that names the coordinator's place makes its agent the coordinator, and the configured one is not asked", () => {
+	const host = testPlaces({
+		store,
+		rows: () => legacyRows(AGENTS, GROUPS),
+		discord: false,
+		stored: () => [{ ...discordTestPlaces(), coordinatorPlace: "1234567890" }],
+	});
+	expect(host.entry()).toBe("discord:1234567890");
+	expect(coordinatorOf(store, host, { coordinator: "roomer" })).toBe(AGENT);
+	expect(places().entry()).toBeUndefined();
 });

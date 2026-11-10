@@ -14,9 +14,16 @@ export const LOCAL_TEAM_ID = "local";
 
 export interface AgentServerOptions {
 	/**
-	 * The Discord guild the team's channels live in. Absent on a host without Discord, or whose bot
-	 * has no agent guild: the team has no channels, and its agents live in the rooms of the
-	 * surfaces that host them. Without `teamId` the team is stored under the guild's id.
+	 * The spaces whose stored places the team lives in, by surface, such as a Discord guild: the
+	 * rows moved from a former team id keep their places only in these, and a host with none has
+	 * its agents in the rooms of the surfaces that host them. Each surface's place provider must be
+	 * contributed by a plugin, or the host refuses to start.
+	 */
+	placeSpaces?: readonly { surface: string; space: string }[];
+	/**
+	 * @deprecated The Discord guild the team's channels live in: give it as a `placeSpaces` entry
+	 * of the legacy channel surface, and the Discord plugin the entry channel. Without `teamId` the
+	 * team is stored under it. Removed in 1.0.
 	 */
 	guildId?: string;
 	/**
@@ -30,11 +37,15 @@ export interface AgentServerOptions {
 	 * ids they carried.
 	 */
 	formerTeamIds?: readonly string[];
-	/** The channel the coordinator lives in; set with `guildId`, never with `coordinator`. */
+	/**
+	 * @deprecated The channel the coordinator lives in, a Discord channel of `guildId`: the Discord
+	 * plugin's `entryChannel` gives it through its place provider. Never set with `coordinator`.
+	 * Removed in 1.0.
+	 */
 	entryChannelId?: string;
 	/**
-	 * The coordinator's name on a host without Discord, where no entry channel names it; the first
-	 * seed when absent. Refused with `entryChannelId`.
+	 * The coordinator's name on a host where no place provider names one (Discord's entry channel);
+	 * the first seed when absent. Refused with `entryChannelId`.
 	 */
 	coordinator?: string;
 	owner: OwnerIdentity & { id: string };

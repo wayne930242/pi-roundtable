@@ -154,6 +154,9 @@ function discordAssembly(
 			ownerName: owner.name,
 			rootCommand: discord.rootCommand,
 			...(discord.guild ? { agentGuild: discord.guild } : {}),
+			...(discord.guild && discord.entryChannel
+				? { entryChannel: discord.entryChannel }
+				: {}),
 			dataDir: config.dataDir,
 			...(discord.refusalHint === undefined
 				? {}
@@ -225,13 +228,9 @@ function agentAssembly(
 			teamId,
 			formerTeamIds: config.team.formerIds,
 			// Without the agent guild the team lives in the app's rooms, as on a host without Discord.
+			// With the agent guild the Discord plugin names the coordinator by its entry channel.
 			...(discord?.guild
-				? {
-						guildId: discord.guild,
-						...(discord.entryChannel
-							? { entryChannelId: discord.entryChannel }
-							: {}),
-					}
+				? { placeSpaces: [{ surface: "discord", space: discord.guild }] }
 				: config.coordinator
 					? { coordinator: config.coordinator }
 					: {}),

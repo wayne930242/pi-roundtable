@@ -951,7 +951,7 @@
 		"src/core/discord/agent-panel.d.ts#AgentPanel": "interface AgentPanel {\n    \n    open(channelId: string): AgentPanelMessage;\n    \n    handles(interaction: Interaction): Promise<boolean>;\n}",
 		"src/core/discord/agent-panel.d.ts#AgentPanelOptions": "interface AgentPanelOptions {\n    \n    guard: CommandGuard;\n    \n    agents: AgentServer;\n    \n    skills?: Pick<SkillRegistry, \"carried\">;\n}",
 		"src/core/discord/agent-places.d.ts#discordPlaceProvider": "declare function discordPlaceProvider(options: DiscordPlaceProviderOptions): PlaceProvider;",
-		"src/core/discord/agent-places.d.ts#DiscordPlaceProviderOptions": "interface DiscordPlaceProviderOptions {\n    \n    guild: string;\n    \n    connection: Pick<DiscordConnection, \"agentChannels\" | \"onChannelDeleted\">;\n    logger: Logger;\n    \n    client?: Client;\n}",
+		"src/core/discord/agent-places.d.ts#DiscordPlaceProviderOptions": "interface DiscordPlaceProviderOptions {\n    \n    guild: string;\n    \n    connection: Pick<DiscordConnection, \"agentChannels\" | \"onChannelDeleted\">;\n    logger: Logger;\n    \n    client?: Client;\n    \n    entryChannel?: string;\n}",
 		"src/core/discord/channel-context.d.ts#CHANNEL_CONTEXT_DEFAULTS": "declare const CHANNEL_CONTEXT_DEFAULTS: Readonly<Omit<Required<ChannelContextOptions>, \"attachments\"> & {\n    attachments: Readonly<Required<ChannelContextAttachmentOptions>>;\n}>;",
 		"src/core/discord/channel-executor.d.ts#fetchManagedChannel": "declare function fetchManagedChannel(client: Client, channelId: string): Promise<ManagedChannel>;",
 		"src/core/discord/channel-executor.d.ts#ManagedChannel": "type ManagedChannel = TextChannel | NewsChannel;",

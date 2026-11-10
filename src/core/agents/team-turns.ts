@@ -18,7 +18,7 @@ import { HelperWork } from "./helper-work.ts";
 import { roomProgress } from "./room-progress.ts";
 import { type Routes, routesOf } from "./routes.ts";
 import { mayApprove } from "./team-approval.ts";
-import { coordinatorOf } from "./team-keys.ts";
+import { coordinatorOf, entryChannelOf } from "./team-keys.ts";
 import { TeamPosts } from "./team-posts.ts";
 import {
 	type Chain,
@@ -298,7 +298,8 @@ export class TeamTurns {
 	 * its name: the entry channel, or, without one, its place on the first surface that has one.
 	 */
 	async announce(text: string): Promise<void> {
-		const { store, places, entryChannel } = this.#options;
+		const { store, places } = this.#options;
+		const entryChannel = entryChannelOf(places, this.#options);
 		const coordinator = coordinatorOf(store, places, this.#options);
 		if (!coordinator)
 			throw new AgentError(

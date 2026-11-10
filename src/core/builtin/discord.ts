@@ -26,6 +26,7 @@ import type { DiscordPoster } from "../discord/poster/poster.ts";
 import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
+import { ConfigError } from "../domain/errors.ts";
 import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { AGENTS, IDENTITY, THREADS } from "../plugin-api/services.ts";
 import { PeerBots } from "../routing/peer-bots.ts";
@@ -79,6 +80,11 @@ export interface DiscordOptions {
 	rootCommand: string;
 	/** The agent guild (`discord.guild`): when given, the plugin contributes the place provider of the agent team's channels and threads in it. */
 	agentGuild?: string;
+	/**
+	 * The channel the coordinator lives in (`discord.entryChannel`): the agent in it is the
+	 * coordinator. Needs `agentGuild`; the agent server's `coordinator` names it without one.
+	 */
+	entryChannel?: string;
 	/** Text appended as it is to the refusal a non-owner gets, such as a pointer to the commands anyone may use. */
 	refusalHint?: string;
 	/** The host's channel context settings; `false` turns it off. Default: on, with the defaults. */
@@ -120,6 +126,10 @@ const INTERCOM_KEEP = 300;
  * preflight, so a clash fails before any service starts.
  */
 export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
+	if (options.entryChannel !== undefined && options.agentGuild === undefined)
+		throw new ConfigError(
+			"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out, so the agents live in the app's rooms. Remove entryChannel and name the coordinator with coordinator, or add discord.guild.",
+		);
 	const collection = new CommandCollection();
 	let surface: DiscordSurface | undefined;
 	return {
@@ -262,7 +272,13 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				surfaces: [connected],
 				// The agent team's channels and threads, when there is an agent guild for them, and the tools of those channels.
 				places: options.agentGuild
-					? [connected.agentPlaces(options.agentGuild, agentNameOf)]
+					? [
+							connected.agentPlaces(
+								options.agentGuild,
+								agentNameOf,
+								options.entryChannel,
+							),
+						]
 					: [],
 				tools: options.agentGuild
 					? discordAgentTools({

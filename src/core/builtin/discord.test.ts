@@ -400,3 +400,19 @@ test("DISCORD.poster is made over the surface's own REST queue, usable before th
 		request.mockRestore();
 	}
 });
+
+test("an entry channel needs the agent guild, in the words the configuration gives", () => {
+	const options = {
+		token: "t",
+		ownerId: "1",
+		ownerName: "Ada",
+		dataDir: "/tmp",
+		rootCommand: "roundtable",
+	};
+	expect(() => discordPlugin({ ...options, entryChannel: "9" })).toThrow(
+		"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out",
+	);
+	expect(() =>
+		discordPlugin({ ...options, agentGuild: "8", entryChannel: "9" }),
+	).not.toThrow();
+});
