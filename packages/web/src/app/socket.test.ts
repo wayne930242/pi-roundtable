@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, jest, test } from "bun:test";
 import type { ActorFacts, InboundMessage, RouteSocket } from "pi-roundtable";
 import { partial, silentLogger } from "pi-roundtable/testing";
 import type { ServerFrame } from "../api-types.ts";
@@ -21,10 +21,11 @@ interface Harness {
 	sockets: Sockets;
 	tiers: Map<string, string | undefined>;
 	delivered: InboundMessage[];
-	/** Opens a socket for a principal; `closed` records the code it was closed with. */
+	/** Opens a socket for a principal; `closed` records the code it was closed with. `settle` is what it waits on afterwards, 10 ms unless given. */
 	open(
 		principal: string,
 		facts?: Partial<AppSocket>,
+		settle?: () => Promise<unknown>,
 	): Promise<{
 		socket: RouteSocket<AppSocket>;
 		sent: ServerFrame[];
@@ -114,7 +115,7 @@ function harness(
 		sockets,
 		tiers,
 		delivered,
-		open: async (principal, facts = {}) => {
+		open: async (principal, facts = {}, settle = () => wait(10)) => {
 			const sent: ServerFrame[] = [];
 			const closed: { code?: number | undefined; open: boolean } = {
 				open: true,
@@ -146,7 +147,7 @@ function harness(
 			};
 			wired.open?.(socket);
 			// The socket is admitted again and told `ready` before it receives anything else.
-			await wait(10);
+			await settle();
 			return { socket, sent, closed };
 		},
 	};
@@ -154,13 +155,22 @@ function harness(
 
 const wait = (ms: number) => Bun.sleep(ms);
 
+afterEach(() => jest.useRealTimers());
+
 test("RV-F001: in password mode a socket lives at most the cap, then closes 4401", async () => {
+	// The cap runs on a clock the test moves: a loaded machine cannot make 60 ms pass before the
+	// first check. Fake timers also stop Bun.sleep, so the socket is not given the usual wait.
+	jest.useFakeTimers();
 	const h = harness({ maxLifeMs: 60 });
 	const farOff = new Date(Date.now() + 30 * 86_400_000);
-	const { closed } = await h.open("ada", { expiresAt: farOff });
-	await wait(20);
+	const { closed } = await h.open(
+		"ada",
+		{ expiresAt: farOff },
+		async () => undefined,
+	);
+	jest.advanceTimersByTime(59);
 	expect(closed.open).toBe(true);
-	await wait(120);
+	jest.advanceTimersByTime(1);
 	expect(closed.code).toBe(4401);
 });
 
