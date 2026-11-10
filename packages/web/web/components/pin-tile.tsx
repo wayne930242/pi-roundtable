@@ -42,7 +42,7 @@ export const PinTile = memo(function PinTile(
 				style={{ ...accent, ...phase }}
 			>
 				<span className="pin-picture">
-					<RoomPicture view={view} size={props.size} bare />
+					<RoomPicture view={view} size={props.size} />
 					{badge && badge.kind !== "typing" ? (
 						<span
 							className="pin-count"

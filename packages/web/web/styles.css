@@ -1038,16 +1038,33 @@ button.yolo-action:hover:not(:disabled) {
 	user-select: none;
 }
 
-/* Until the kit has loaded the host is a blank disc at its size. */
-.av-host:empty {
-	border-radius: var(--radius-full);
-	background: var(--surface-3);
-}
-
 .av-host > svg {
 	display: block;
 	width: 100%;
 	height: 100%;
+}
+
+/*
+ * The page's agent badge: the figure stands free on a soft disc of the agent's accent, ringed in
+ * it. The accent is what tells agents apart at a glance; the kit lifts it to 3:1 on the surface.
+ */
+/* Until the kit has loaded, the badge alone holds the place at its size. */
+.av-host[data-badge] {
+	position: relative;
+	isolation: isolate;
+	/* The ring keeps to the figure's scale: a box-shadow takes no percentage, but a container unit. */
+	container-type: size;
+	--av-tone: var(--av-accent, var(--text-muted));
+}
+
+.av-host[data-badge]::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset: 7%;
+	border-radius: var(--radius-full);
+	background: color-mix(in srgb, var(--av-tone) 24%, transparent);
+	box-shadow: inset 0 0 0 max(1.5px, 4.5cqw) var(--av-tone);
 }
 
 /* A character that stands still: no breathing, blinking or sweeping; a state's badge still shows. */

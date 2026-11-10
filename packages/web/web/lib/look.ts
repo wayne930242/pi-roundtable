@@ -62,21 +62,15 @@ export const characterLookOf = (
 	scheme: "light" | "dark",
 ): CharacterLook => `${look}-${scheme}`;
 
-/** The frame a look puts around characters: Camelot's heraldic shield, a disc otherwise. */
-export const frameOf = (look: PageLook): "disc" | "shield" =>
-	look === "camelot" ? "shield" : "disc";
-
 /** What a character needs to draw itself on this page, from the look and the scheme. */
 export function useCharacterStyle(): {
 	look: CharacterLook;
-	frame: "disc" | "shield";
 	scheme: "light" | "dark";
 } {
 	const look = useLook();
 	const { resolved } = useTheme();
 	return {
 		look: characterLookOf(look, resolved),
-		frame: frameOf(look),
 		scheme: resolved,
 	};
 }

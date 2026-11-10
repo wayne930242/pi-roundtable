@@ -165,11 +165,6 @@ a.pin[aria-current="page"] {
 	box-shadow: 0 0 0 3px var(--bg);
 }
 
-/* A figure that stands free: no disc under it while the character kit loads either. */
-.av-host[data-bare]:empty {
-	background: transparent;
-}
-
 /* ── The list: rows with no card around them ──────────────────────────────────────────────────── */
 
 .chat-list {

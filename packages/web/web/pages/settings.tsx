@@ -52,7 +52,7 @@ const LOOKS: { value: PageLook; label: string; hint: string }[] = [
 		value: "camelot",
 		label: wording("Camelot"),
 		hint: wording(
-			"Parchment by day, night castle by night, gold rules, shield avatars and wax seals.",
+			"Parchment by day, night castle by night, gold rules and wax seals.",
 		),
 	},
 ];

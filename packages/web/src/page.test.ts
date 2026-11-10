@@ -105,7 +105,9 @@ const FIRST_LOAD_BASELINE =
 	800 +
 	20;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
-const CHARACTER_BUDGET = 16 * 1024;
+// 16.5 KB since every page figure wears its accent badge (its accent worked out per figure, the disc and
+// ring in the stylesheet): about 0.19 KB gzipped, on 0.01 KB of headroom.
+const CHARACTER_BUDGET = 16.5 * 1024;
 
 test("the characters add at most 16 KB gzipped to what the page loads first, and the kit stays out of it", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "web-console-budget-"));
