@@ -30,17 +30,26 @@ import {
 import { Sheet } from "./sheet.tsx";
 
 /**
- * The creator and re-dress form of an agent's character: a live preview, the 24 classes, the
- * palettes and colors, and the parts. It edits a draft; Save sends it as `PUT …/character`.
+ * The creator and re-dress form of a character, an agent's or a person's own: a live preview, the
+ * 24 classes, the palettes and colors, and the parts. It edits a draft; Save sends it as
+ * `PUT …/character`.
  */
 export function CharacterCreator(props: {
 	name: string;
 	displayName: string;
-	prompt: string;
+	/** The agent's role, which "Suggest from role" reads; a person has none, and is not offered it. */
+	prompt?: string;
 	/** The saved character; for an agent not made yet, the look it would be given. */
 	character: CharacterSpec;
 	/** After a save: the agent's profile, with its new character. */
 	onSaved?(profile: AgentProfileView): void;
+	/**
+	 * Saves the draft in place of the agent's `PUT …/character` (a person's own knight). A refusal
+	 * that names a field is placed on it, as the agent's is.
+	 */
+	save?(look: CharacterInput): Promise<void>;
+	/** `character` is a look nothing has saved yet, so it can be saved as it stands. */
+	fresh?: boolean;
 	/**
 	 * For an agent that does not exist yet: nothing is saved, and the button hands the draft to this
 	 * instead (the look as input, and as the spec it resolves to). `onCancel` leaves without one.
@@ -62,6 +71,7 @@ export function CharacterCreator(props: {
 	const accent = useAccentStyle(draft);
 	const skins = useSkins();
 	const dirty = canon(draft) !== canon(props.character);
+	const { prompt } = props;
 
 	// A new saved character (after Save, or another tab's change) starts a fresh draft.
 	useEffect(() => setDraft(props.character), [props.character]);
@@ -82,8 +92,8 @@ export function CharacterCreator(props: {
 		setSaving(true);
 		setErrors({});
 		try {
-			const profile = await api.setCharacter(props.name, inputOf(draft));
-			props.onSaved?.(profile);
+			if (props.save) await props.save(inputOf(draft));
+			else props.onSaved?.(await api.setCharacter(props.name, inputOf(draft)));
 			toast(t("Saved."));
 		} catch (failure) {
 			const named =
@@ -106,6 +116,7 @@ export function CharacterCreator(props: {
 			// The draft is the saved look again, so the link is no longer held back.
 			setTimeout(() => target.anchor.click(), 0);
 		} else if (target?.kind === "navigate") target.proceed();
+		else props.onCancel?.();
 	};
 
 	const { groups, classGrid, colors, parts, body } = creatorFields({
@@ -125,7 +136,7 @@ export function CharacterCreator(props: {
 			aria-labelledby={titleId}
 			onSubmit={(event) => {
 				event.preventDefault();
-				if ((dirty || props.onPick) && !saving) save();
+				if ((dirty || props.onPick || props.fresh) && !saving) save();
 			}}
 		>
 			<h2 id={titleId} className="visually-hidden">
@@ -196,23 +207,25 @@ export function CharacterCreator(props: {
 					</>
 				)}
 				<div className="actions creator-actions">
-					<button
-						type="button"
-						className="secondary"
-						data-action="suggest"
-						onClick={() => {
-							setErrors({});
-							setDraft(
-								suggestCharacter({
-									name: props.name,
-									displayName: props.displayName,
-									prompt: props.prompt,
-								}),
-							);
-						}}
-					>
-						{t("Suggest from role")}
-					</button>
+					{prompt === undefined ? null : (
+						<button
+							type="button"
+							className="secondary"
+							data-action="suggest"
+							onClick={() => {
+								setErrors({});
+								setDraft(
+									suggestCharacter({
+										name: props.name,
+										displayName: props.displayName,
+										prompt,
+									}),
+								);
+							}}
+						>
+							{t("Suggest from role")}
+						</button>
+					)}
 					<button
 						type="button"
 						className="secondary"
@@ -226,8 +239,9 @@ export function CharacterCreator(props: {
 						className="secondary"
 						data-action="cancel"
 						onClick={() => {
-							if (props.onCancel) props.onCancel();
-							else if (dirty) setLeaving({ kind: "cancel" });
+							// A look still to be picked is not a change to something saved; anything else unsaved asks first.
+							if (dirty && !props.onPick) setLeaving({ kind: "cancel" });
+							else props.onCancel?.();
 						}}
 					>
 						{t("Cancel")}
@@ -235,7 +249,7 @@ export function CharacterCreator(props: {
 					<button
 						type="submit"
 						data-action="save"
-						disabled={(!dirty && !props.onPick) || saving}
+						disabled={(!dirty && !props.onPick && !props.fresh) || saving}
 					>
 						{saving
 							? t("Saving…")

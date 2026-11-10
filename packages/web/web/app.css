@@ -923,8 +923,9 @@ button.room-picture:hover:not(:disabled) {
 	margin-top: var(--space-3);
 }
 
+/* One's own row starts at the right: the picture at the edge, the bubble beside it. */
 .message[data-mine] {
-	justify-content: flex-end;
+	flex-direction: row-reverse;
 }
 
 .message[data-enter],

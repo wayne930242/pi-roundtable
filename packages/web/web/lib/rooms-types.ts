@@ -1,3 +1,4 @@
+import type { CharacterSpec } from "pi-roundtable/characters";
 import type {
 	ActivityPhase,
 	CardAnswer,
@@ -97,7 +98,12 @@ export interface RoomState {
 
 export interface RoomsState {
 	connection: "connecting" | "open" | "reconnecting" | "closed";
-	principal?: { id: string; name: string };
+	/** The person signed in, with the knight they made for themselves when they made one. */
+	principal?: {
+		id: string;
+		name: string;
+		character?: CharacterSpec | undefined;
+	};
 	limits?: { perMessage: number; maxBytes: number };
 	rooms: Record<string, RoomState>;
 	/** The room keys as the server listed them: Home first. */
@@ -174,6 +180,8 @@ export type LocalAction =
 			mode?: "note" | "turn";
 	  }
 	| { type: "pending_dropped"; id: string }
+	/** The person saved or removed their own knight in this tab. */
+	| { type: "knight"; character: CharacterSpec | undefined }
 	| { type: "refusal_dismissed" };
 
 /** An `activity` frame stamped with the page's clock (epoch ms), which the reducer has none of. */

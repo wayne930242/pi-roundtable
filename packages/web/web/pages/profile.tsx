@@ -7,32 +7,29 @@ import type {
 	SessionView,
 } from "../../src/api-types.ts";
 import { Confirm } from "../components/confirm.tsx";
+import { PersonPicture } from "../components/host-picture.tsx";
 import { Icon } from "../components/icons.tsx";
 import { Badge, Failure, Loading } from "../components/states.tsx";
 import { accountApi } from "../lib/account-api.ts";
 import "../lib/account-styles.ts";
 import { api, messageOf } from "../lib/api.ts";
+import { useConfig } from "../lib/config.ts";
 import { translate as t, wording } from "../lib/messages.ts";
 import { LogoutForm } from "./logout.tsx";
+import { KnightCard, KnightCreator, tookProfile } from "./profile-knight.tsx";
 
 /** How often a link that waits on the other service is looked at again. */
 const POLL_MS = 3_000;
 
-/** A person's picture, or their initial when they have none. */
+/** The person as the app shows them: their knight, their account picture, or their initials. */
 function Who({ profile }: { profile: ProfileView }) {
 	return (
 		<div className="who">
-			{profile.picture ? (
-				<img
-					className="who-picture"
-					src={`api/people/${encodeURIComponent(profile.principal)}/picture`}
-					alt=""
-				/>
-			) : (
-				<span className="who-initial" aria-hidden="true">
-					{Array.from(profile.name)[0] ?? "?"}
-				</span>
-			)}
+			<PersonPicture
+				principal={profile.principal}
+				name={profile.name}
+				size={56}
+			/>
 			<div className="stack">
 				<strong>{profile.name}</strong>
 				{profile.tier ? (
@@ -399,11 +396,19 @@ export function ProfilePage() {
 	const [profile, setProfile] = useState<ProfileView>();
 	const [links, setLinks] = useState<LinksView>();
 	const [error, setError] = useState<string>();
+	const [designing, setDesigning] = useState(false);
+	// A host that serves no rooms draws a person nowhere, so it offers no knight.
+	const knights = useConfig().app !== undefined;
+	// The knight the profile carries is the one every picture of the person draws from then on.
+	const took = useCallback(
+		(view: ProfileView) => setProfile(tookProfile(view)),
+		[],
+	);
 	useEffect(() => {
 		api.session().then(setSession, (failure) => setError(messageOf(failure)));
-		accountApi.profile().then(setProfile, () => undefined);
+		accountApi.profile().then(took, () => undefined);
 		accountApi.links().then(setLinks, () => undefined);
-	}, []);
+	}, [took]);
 	const linkChanged = useCallback((view: LinkView) => {
 		setLinks((all) =>
 			all
@@ -419,6 +424,18 @@ export function ProfilePage() {
 	}, []);
 	if (error) return <Failure message={error} />;
 	if (!session) return <Loading />;
+	if (designing && profile)
+		return (
+			<div className="page">
+				<KnightCreator
+					profile={profile}
+					done={(view) => {
+						if (view) setProfile(view);
+						setDesigning(false);
+					}}
+				/>
+			</div>
+		);
 	return (
 		<div className="page">
 			<header className="page-head">
@@ -435,6 +452,13 @@ export function ProfilePage() {
 				)}
 				<LogoutForm auth={session.auth} />
 			</section>
+			{profile && knights ? (
+				<KnightCard
+					profile={profile}
+					changed={setProfile}
+					onDesign={() => setDesigning(true)}
+				/>
+			) : null}
 			{links && links.links.length > 0 ? (
 				<section className="stack">
 					<h2>{t("Your accounts")}</h2>

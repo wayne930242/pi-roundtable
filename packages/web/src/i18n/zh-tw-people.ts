@@ -360,6 +360,15 @@ export const ZH_TW_PEOPLE: Readonly<Record<string, string>> = {
 	"The name and picture of this account are what others see in the app.":
 		"別人在應用程式裡看到的，是這個帳號的名稱與頭像。",
 	Automatic: "自動",
+	"Your knight": "你的騎士",
+	"Your knight stands in for your picture on the home and beside your messages.":
+		"你的騎士會取代頭像，出現在首頁和你的訊息旁。",
+	"Design my knight": "設計我的騎士",
+	"Change look": "更換外觀",
+	"Remove, back to the picture": "移除，改回頭像",
+	"Remove your knight?": "要移除你的騎士嗎？",
+	"Your account picture shows again. You can design a knight again later.":
+		"之後會改回顯示你的帳號頭像，你隨時可以再設計一位騎士。",
 	"Your accounts": "你的帳號",
 	"Put the app on your phone": "把應用程式放到手機上",
 	"On iPhone and iPad, open this page in Safari, tap Share, then Add to Home Screen, and open the app from there.":
@@ -390,6 +399,7 @@ export const ZH_TW_PEOPLE: Readonly<Record<string, string>> = {
 	"Send provider: the account's provider, or null for the default.":
 		"請傳入 provider（帳號的提供者），或 null 使用預設。",
 	"There is no picture.": "沒有頭像。",
+	"There is no character.": "沒有騎士。",
 	"Send request: the id the code came with.":
 		"請傳入 request：驗證碼附帶的代號。",
 	"That step cannot be waived.": "這個步驟不能略過。",

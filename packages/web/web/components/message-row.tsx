@@ -35,7 +35,7 @@ const NoteRow = lazy(() => import("./note-row.tsx"));
 // The line where a conversation started over, and its styles, are read when the first is shown.
 const StartOverLine = lazy(() => import("./start-over-line.tsx"));
 
-// Another owner's picture, and the styles it brings, are read when a room shows one.
+// A person's picture or knight, and the styles it brings, are read when a room shows one.
 const OwnerPicture = lazy(() =>
 	import("./host-picture.tsx").then((m) => ({ default: m.HostPicture })),
 );
@@ -173,6 +173,8 @@ export const MessageRow = memo(function MessageRow(props: {
 	}
 	const mine = isMine(message, me, shared);
 	const owner = message.kind === "owner";
+	// An old message of the viewer's own, stored without its author, is drawn as theirs.
+	const person = message.principalId ?? (mine ? me : undefined);
 	return (
 		<li
 			{...press}
@@ -186,36 +188,32 @@ export const MessageRow = memo(function MessageRow(props: {
 			data-unread={props.unread || undefined}
 			data-delivery={message.delivery}
 		>
-			{mine ? null : (
-				<span
-					className="message-avatar"
-					{...(props.header && agent ? avatarPress : {})}
-				>
-					{props.header ? (
-						message.kind === "integration" ? (
-							<Icon name="connectors" size={32} />
-						) : owner ? (
-							<Suspense fallback={null}>
-								<OwnerPicture
-									picture={
-										message.principalId === undefined
-											? undefined
-											: { principal: message.principalId }
-									}
-									name={message.author}
-								/>
-							</Suspense>
-						) : (
-							<PageCharacter
-								spec={props.character}
-								name={message.agent ?? message.author}
-								size={32}
-								live={false}
+			<span
+				className="message-avatar"
+				{...(props.header && agent ? avatarPress : {})}
+			>
+				{props.header ? (
+					message.kind === "integration" ? (
+						<Icon name="connectors" size={32} />
+					) : owner ? (
+						<Suspense fallback={null}>
+							<OwnerPicture
+								picture={
+									person === undefined ? undefined : { principal: person }
+								}
+								name={message.author}
 							/>
-						)
-					) : null}
-				</span>
-			)}
+						</Suspense>
+					) : (
+						<PageCharacter
+							spec={props.character}
+							name={message.agent ?? message.author}
+							size={32}
+							live={false}
+						/>
+					)
+				) : null}
+			</span>
 			<div className="message-main">
 				{props.header ? (
 					<div className="message-meta">
@@ -283,6 +281,7 @@ export const PendingRow = memo(function PendingRow(props: {
 	const { pending } = props;
 	const connection = useConnection();
 	const offline = useSelector((state) => state.connection !== "open");
+	const me = useSelector((state) => state.principal);
 	const [slow, setSlow] = useState(false);
 	useEffect(() => {
 		if (pending.failed) return;
@@ -297,6 +296,13 @@ export const PendingRow = memo(function PendingRow(props: {
 			data-header="true"
 			data-pending={pending.failed ? "failed" : "sending"}
 		>
+			<span className="message-avatar">
+				{me ? (
+					<Suspense fallback={null}>
+						<OwnerPicture picture={{ principal: me.id }} name={me.name} />
+					</Suspense>
+				) : null}
+			</span>
 			<div className="message-main">
 				<div className="bubble">
 					{pending.text ? <MessageMarkdown source={pending.text} /> : null}

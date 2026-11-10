@@ -1,3 +1,4 @@
+import type { CharacterInput } from "pi-roundtable/characters";
 import type {
 	LinkIssuedView,
 	LinksView,
@@ -37,6 +38,13 @@ export const accountApi = {
 			method: "PUT",
 			body: JSON.stringify({ provider }),
 		}),
+	setCharacter: (character: CharacterInput) =>
+		request<ProfileView>("profile/character", {
+			method: "PUT",
+			body: JSON.stringify({ character }),
+		}),
+	removeCharacter: () =>
+		request<ProfileView>("profile/character", { method: "DELETE" }),
 	links: () => request<LinksView>("links"),
 	issueLink: (provider: string) =>
 		request<LinkIssuedView>(`links/${encodeURIComponent(provider)}/issue`, {
