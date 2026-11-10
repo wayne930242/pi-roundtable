@@ -11,6 +11,9 @@ import { PUBLIC_ENTRIES } from "./public-api.ts";
  *   `pi-roundtable/discord` entry's source.
  * - `package-entry`: a workspace package imports pi-roundtable only through its public entries,
  *   and nothing outside its own directory by a relative path.
+ * - `agent-server-discord`: the agent server's plugin (`src/core/builtin/agent-server*.ts`) imports
+ *   nothing of Discord: not its builtin, its area, its key, or its packages. The Discord plugin
+ *   contributes what the team needs of Discord (D3 of the core refactor plan).
  *
  * And the layers of the core, whose directories name them:
  * - `core-kernel`: `src/core/kernel` imports nothing else of the core, so every layer builds on it.
@@ -23,6 +26,7 @@ export type BoundaryRule =
 	| "discord-package"
 	| "discord-area"
 	| "package-entry"
+	| "agent-server-discord"
 	| "core-kernel"
 	| "core-host";
 
@@ -60,6 +64,14 @@ const DISCORD_AREA = [
 
 /** Where the Discord area's internals live; outside the area, nothing imports them. */
 const DISCORD_INTERNALS = [/^src\/core\/discord\//, /^src\/discord\//];
+
+/** The agent server's plugin and its options, which name no Discord. */
+const AGENT_SERVER = /^src\/core\/builtin\/agent-server(-options)?\.ts$/;
+/** What is Discord's: its builtin and its administration, its area's internals, and its key. */
+const DISCORD_OWN = [
+	/^src\/core\/builtin\/discord(-admin)?\.ts$/,
+	/^src\/core\/contract\/discord-key\.ts$/,
+];
 
 const CORE = "src/core/";
 const KERNEL = "src/core/kernel/";
@@ -166,8 +178,17 @@ function coreViolations(root: string): Violation[] {
 				!matches(file, DISCORD_PACKAGE_USERS)
 			)
 				violations.push({ rule: "discord-package", file, specifier });
+			if (AGENT_SERVER.test(file) && DISCORD_PACKAGES.test(specifier))
+				violations.push({ rule: "agent-server-discord", file, specifier });
 			if (!specifier.startsWith(".")) continue;
 			const target = resolved(root, file, specifier);
+			if (
+				AGENT_SERVER.test(file) &&
+				(matches(`${target}.ts`, DISCORD_OWN) ||
+					matches(target, DISCORD_OWN) ||
+					matches(target, DISCORD_INTERNALS))
+			)
+				violations.push({ rule: "agent-server-discord", file, specifier });
 			if (!matches(file, DISCORD_AREA) && matches(target, DISCORD_INTERNALS))
 				violations.push({ rule: "discord-area", file, specifier });
 			if (

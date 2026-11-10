@@ -284,3 +284,53 @@ test("a tool name or a creation argument in team code is found; comments, tests,
 		],
 	});
 });
+
+test("the agent server's plugin imports nothing of Discord", () => {
+	const root = tree({
+		"src/core/builtin/agent-server.ts": [
+			'import { DISCORD } from "./discord.ts";',
+			'import { discordKey } from "../contract/discord-key.ts";',
+			'import { AgentDashboard } from "../discord/agent-dashboard.ts";',
+			'import { Client } from "discord.js";',
+			'import { channelKey } from "../contract/surface.ts";',
+		].join("\n"),
+		"src/core/builtin/agent-server-options.ts":
+			'import { DiscordOptions } from "./discord.ts";',
+		"src/core/builtin/agent-server.test.ts":
+			'import { DISCORD } from "./discord.ts";',
+		"src/core/builtin/other.ts": 'import { DISCORD } from "./discord.ts";',
+		"src/core/builtin/discord.ts": "export const DISCORD = 1;",
+		"src/core/contract/discord-key.ts": "export const discordKey = 1;",
+		"src/core/contract/surface.ts": "export const channelKey = 1;",
+		"src/core/discord/agent-dashboard.ts": "export const AgentDashboard = 1;",
+	});
+	expect(
+		boundaryViolations(root).filter((v) => v.rule === "agent-server-discord"),
+	).toEqual([
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server-options.ts",
+			specifier: "./discord.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "../contract/discord-key.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "../discord/agent-dashboard.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "./discord.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "discord.js",
+		},
+	]);
+});
