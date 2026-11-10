@@ -5,7 +5,8 @@
 .av .glow{opacity:.28}
 .av .ch,.av .prop,.av .eyes,.av .ov{transform-box:view-box}
 .av .ch{transform-origin:50px 94px}
-.av .eyes{transform-origin:50px 52px;animation:av-blink 5.2s infinite}
+.av .eyes{transform-origin:50px 52px;animation:av-blink 5.2s calc(var(--phase,0s)*1.7) infinite}
+.av[data-expr=resting] .eyes{animation:none}
 .av .o-wait,.av .o-done,.av .o-err{transform-origin:17px 19px}
 .av .o-think{transform-origin:50px 50px}
 .av [data-prop=staff]{transform-origin:73px 82px}

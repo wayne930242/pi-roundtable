@@ -21,7 +21,8 @@ export function characterCss(): string {
 .av .glow{opacity:.28}
 .av .ch,.av .prop,.av .eyes,.av .ov{transform-box:view-box}
 .av .ch{transform-origin:${PIVOTS.character}}
-.av .eyes{transform-origin:${PIVOTS.eyes};animation:av-blink 5.2s infinite}
+.av .eyes{transform-origin:${PIVOTS.eyes};animation:av-blink 5.2s calc(var(--phase,0s)*1.7) infinite}
+.av[data-expr=resting] .eyes{animation:none}
 .av .o-wait,.av .o-done,.av .o-err{transform-origin:${PIVOTS.badge}}
 .av .o-think{transform-origin:${PIVOTS.orbit}}
 ${pivots}
