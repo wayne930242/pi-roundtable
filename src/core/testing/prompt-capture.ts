@@ -7,10 +7,11 @@ import {
 	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { DiscordAgentTeam } from "../agents/agent-team.ts";
+import type { AgentServerTeam } from "../agents/agent-team.ts";
 import { FakeChannels } from "../agents/agent-team-fixture.ts";
-import { discordKey, groupRoomKey } from "../agents/team-keys.ts";
+import { groupRoomKey } from "../agents/team-keys.ts";
 import type { RoundtableConfig } from "../config/config.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import { openPool } from "../db/migrations.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import { commandGuard } from "../discord/owner-command.ts";
@@ -313,7 +314,7 @@ export async function captureHost(
 
 /** Waits until the team has made the seeded agent's channel. */
 async function agentChannel(
-	team: DiscordAgentTeam,
+	team: AgentServerTeam,
 	name: string,
 ): Promise<ChannelKey> {
 	for (let tries = 0; tries < 200; tries++) {
@@ -361,9 +362,9 @@ export async function capturePrompts(
 	try {
 		const { context } = discord;
 		await remember(context);
-		// SAFETY: the Discord host's team is the agent server's DiscordAgentTeam; its port lacks channelOf.
+		// SAFETY: the Discord host's team is the agent server's AgentServerTeam; its port lacks channelOf.
 		const team = context.services.get(AGENTS)
-			.team as unknown as DiscordAgentTeam;
+			.team as unknown as AgentServerTeam;
 		const home = await agentChannel(team, "librarian");
 		out["a agent session"] = await discord.capture(() =>
 			context.queue.run(home, () =>

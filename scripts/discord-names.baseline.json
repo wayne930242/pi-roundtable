@@ -1,15 +1,9 @@
 {
-	"src/core/agents/agent-claim.ts": {
-		"discord-identifier": 2
-	},
 	"src/core/agents/agent-conversations.ts": {
 		"guild": 13
 	},
 	"src/core/agents/agent-outbox.ts": {
 		"guild": 13
-	},
-	"src/core/agents/agent-prompt.ts": {
-		"discord-surface": 1
 	},
 	"src/core/agents/agent-schema.ts": {
 		"guild": 5
@@ -21,45 +15,13 @@
 		"guild": 2
 	},
 	"src/core/agents/agent-team.ts": {
-		"discord-identifier": 3,
-		"guild": 3
+		"guild": 1
 	},
 	"src/core/agents/group-messages.ts": {
 		"guild": 17
 	},
 	"src/core/agents/helper-presets.ts": {
 		"guild": 33
-	},
-	"src/core/agents/message-target.ts": {
-		"discord-surface": 2
-	},
-	"src/core/agents/routes.ts": {
-		"discord-surface": 1
-	},
-	"src/core/agents/team-editing.ts": {
-		"discord-identifier": 2,
-		"discord-surface": 1
-	},
-	"src/core/agents/team-helpers.ts": {
-		"discord-surface": 3,
-		"discord-identifier": 6
-	},
-	"src/core/agents/team-keys.ts": {
-		"discord-identifier": 7,
-		"discord-surface": 1
-	},
-	"src/core/agents/team-options.ts": {
-		"discord-identifier": 1,
-		"guild": 1
-	},
-	"src/core/agents/team-posts.ts": {
-		"discord-identifier": 4
-	},
-	"src/core/agents/team-status.ts": {
-		"discord-identifier": 2
-	},
-	"src/core/agents/team-turns.ts": {
-		"discord-identifier": 2
 	},
 	"src/core/routing/message-text.ts": {
 		"discord-surface": 1

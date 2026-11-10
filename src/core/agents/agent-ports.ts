@@ -52,7 +52,11 @@ export interface ChannelMessage {
 	attachments: string[];
 }
 
-/** The agent server's channels as the agent team needs them. */
+/**
+ * The agent server's channels. Discord's place provider drives them to make, keep and post in the
+ * places of agents and groups; the team itself reads only `layout`, `arrange` and `read`, for the
+ * tools that list, arrange and read categories, until those are contributed by Discord's plugin.
+ */
 export interface AgentChannels {
 	post(channelId: string, post: AgentPost): Promise<void>;
 	/**

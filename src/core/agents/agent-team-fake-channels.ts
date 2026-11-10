@@ -11,6 +11,8 @@ export class FakeChannels implements AgentChannels {
 	posts: { channelId: string; post: AgentPost }[] = [];
 	created: string[] = [];
 	deleted = new Set<string>();
+	/** Channels that are another server's. */
+	foreign = new Set<string>();
 	#next = 2000;
 	async post(channelId: string, post: AgentPost) {
 		this.posts.push({ channelId, post });

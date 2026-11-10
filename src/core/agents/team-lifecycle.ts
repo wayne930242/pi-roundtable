@@ -3,28 +3,34 @@ import {
 	resolveCharacter,
 	suggestCharacter,
 } from "../../characters/index.ts";
+import type { PlaceProvider } from "../contract/places.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { messages } from "../i18n/index.ts";
-import type { AgentChannels } from "./agent-ports.ts";
 import { isHelper, overBase } from "./agent-rules.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { refreshAvatars } from "./avatar-refresh.ts";
 import { TeamHelpers } from "./team-helpers.ts";
 import { coordinatorOf } from "./team-keys.ts";
-import { categoryKind, groupTopic } from "./team-layout.ts";
+import { groupTopic } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
+import { type PlaceWish, TeamPlaceWrites } from "./team-place-writes.ts";
 
 /** The team's startup, fresh starts, and archiving of agents and groups. */
 export class TeamLifecycle {
 	readonly #ctx: TeamContext;
 	readonly #stopped = new AbortController();
+	/** The surfaces whose deleted places the team listens for, so a second start listens once. */
+	readonly #listening = new Set<string>();
+	/** The writes to the places of agents and groups. */
+	readonly #places: TeamPlaceWrites;
 	/** The temp knights: their archive, restore and sweep, which archiving a parent calls. */
 	readonly helpers: TeamHelpers;
 
 	constructor(ctx: TeamContext) {
 		this.#ctx = ctx;
+		this.#places = new TeamPlaceWrites(ctx);
 		this.helpers = new TeamHelpers(ctx, (agent) => this.#archiveAgent(agent));
 	}
 
@@ -37,17 +43,17 @@ export class TeamLifecycle {
 	// ── Startup ────────────────────────────────────────────────────────────
 
 	/**
-	 * Inserts the seed agents, gives every active agent a channel, archives agents and groups
-	 * whose channels were deleted while the assistant was down, and dresses agents without a
-	 * character in the background, then, with `refreshAvatars`, renders every agent's picture
-	 * again. Without Discord channels the agents live in rooms, which need no setup, so
-	 * none is made or checked.
+	 * Inserts the seed agents, gives every active agent a place on each stored provider that makes
+	 * them, archives agents and groups whose places were deleted while the assistant was down, and
+	 * dresses agents without a character in the background, then, with `refreshAvatars`, renders
+	 * every agent's picture again. Rooms exist with the name, so none is made or checked.
 	 */
 	async start(): Promise<void> {
-		const { store, channels, seeds, logger } = this.#ctx.options;
+		const { store, seeds, logger } = this.#ctx.options;
 		const added = await store.seed(seeds());
 		if (added.length > 0) logger.info({ added }, "seed agents added");
-		if (channels) await this.#startChannels(channels);
+		for (const provider of this.#ctx.options.places.stored())
+			await this.#startPlaces(provider);
 		this.#ctx.changed();
 		await this.helpers.reconcile();
 		this.helpers.startSweeper();
@@ -73,42 +79,108 @@ export class TeamLifecycle {
 		});
 	}
 
-	async #startChannels(channels: AgentChannels): Promise<void> {
-		const { store, logger } = this.#ctx.options;
+	/**
+	 * One stored provider's places at start: an active agent that has none gets one (not a temp
+	 * knight, which lives in its rooms until reached), a place the provider finds `gone` archives
+	 * its owner as a deletion would, and a `foreign` one (a channel of a server the team left) is
+	 * dropped and made again, with nobody archived. An active group's place is checked the same
+	 * way, then given its topic again and put where it belongs.
+	 */
+	async #startPlaces(provider: PlaceProvider): Promise<void> {
+		const { store, places } = this.#ctx.options;
+		this.#listen(provider);
 		for (const agent of store.agents()) {
 			if (agent.status !== "active") continue;
-			// A temp knight of a parent without a channel lives in rooms only.
-			if (!agent.channelId && isHelper(agent)) continue;
-			if (!agent.channelId) {
-				const id = await channels.createChannel(
-					agent.name,
-					agent.displayName,
-					"Agents",
-				);
-				await store.updateAgent(agent.name, { channelId: id });
-				logger.info(
-					{ agent: agent.name, channel: id },
-					"agent channel created",
-				);
-			} else if (!(await channels.exists(agent.channelId))) {
-				await this.channelDeleted(agent.channelId);
+			const wish = this.#wish(agent);
+			const id = places.idOf(wish, provider.surface);
+			if (id === undefined) {
+				if (!isHelper(agent)) await this.#make(provider, wish);
+				continue;
+			}
+			const found = (await provider.check?.(id)) ?? "ok";
+			if (found === "gone") await this.#archiveAgent(agent);
+			else if (found === "foreign") {
+				await this.#drop(provider, wish);
+				if (!isHelper(agent)) await this.#make(provider, wish);
 			}
 		}
-		const layout = await channels.layout();
 		for (const group of store.groups()) {
-			// A group of a team that once ran without Discord lives in rooms only.
-			if (group.status !== "active" || !group.channelId) continue;
-			const { channelId } = group;
-			if (!(await channels.exists(channelId))) {
-				await this.channelDeleted(channelId);
+			if (group.status !== "active") continue;
+			const wish = this.#wish(group);
+			const id = places.idOf(wish, provider.surface);
+			if (id === undefined) continue;
+			const found = (await provider.check?.(id)) ?? "ok";
+			if (found === "gone") {
+				await this.#archiveGroup(group);
+				continue;
+			}
+			if (found === "foreign") {
+				await this.#drop(provider, wish);
+				await this.#make(provider, wish);
 				continue;
 			}
 			this.retitle(group);
-			const home = layout.find((c) => c.channelIds.includes(channelId));
-			if (home && categoryKind(home.name) === "Groups") continue;
-			if (await channels.placeIn(channelId, "Groups"))
-				logger.info({ group: group.name }, "group channel moved to Groups");
+			if (!provider.ensure) continue;
+			const kept = await provider.ensure({ ...wish, existing: id });
+			if (kept !== id) await this.#record(provider, wish, kept);
 		}
+	}
+
+	/** Archives the owner of a place the provider reports deleted, once it says so. */
+	#listen(provider: PlaceProvider): void {
+		const { places, queue, logger } = this.#ctx.options;
+		if (!provider.onRemoved || this.#listening.has(provider.surface)) return;
+		this.#listening.add(provider.surface);
+		provider.onRemoved((id) => {
+			if (this.#stopped.signal.aborted) return;
+			const key = places.keyOfId(provider.surface, id);
+			if (key === undefined || !places.ownerKind(key)) return;
+			void queue
+				.run(key, () => this.placeRemoved(key))
+				.catch((error: unknown) =>
+					logger.error({ channel: key, err: error }, "archive failed"),
+				);
+		});
+	}
+
+	/** The owner of a place as a place wish: who it belongs to and the texts it is shown under. */
+	#wish(owner: Agent | AgentGroup): PlaceWish {
+		const { store } = this.#ctx.options;
+		const group = "members" in owner;
+		return {
+			kind: group ? "group" : "agent",
+			name: owner.name,
+			displayName: owner.displayName,
+			topic: group ? groupTopic(owner, store) : owner.displayName,
+		};
+	}
+
+	/** Makes the owner's place on a provider that makes them, and records it. */
+	async #make(provider: PlaceProvider, wish: PlaceWish): Promise<void> {
+		if (!provider.ensure) return;
+		const id = await provider.ensure({ ...wish });
+		await this.#record(provider, wish, id);
+		this.#ctx.options.logger.info(
+			{ [wish.kind]: wish.name, surface: provider.surface, place: id },
+			`${wish.kind} place created`,
+		);
+	}
+
+	#record(provider: PlaceProvider, wish: PlaceWish, id: string): Promise<void> {
+		return this.#places.record(wish, [{ surface: provider.surface, id }]);
+	}
+
+	/** Forgets the owner's place on the provider's surface, which another server's channel is. */
+	async #drop(provider: PlaceProvider, wish: PlaceWish): Promise<void> {
+		await this.#ctx.options.store.clearPlace(
+			wish.kind,
+			wish.name,
+			provider.surface,
+		);
+		this.#ctx.options.logger.warn(
+			{ [wish.kind]: wish.name, surface: provider.surface },
+			`${wish.kind} place is another server's; dropped`,
+		);
 	}
 
 	/**
@@ -175,19 +247,19 @@ export class TeamLifecycle {
 
 	// ── Archive ────────────────────────────────────────────────────────────
 
-	/** A deleted channel archives the agent or group that owned it. */
-	async channelDeleted(channelId: string): Promise<void> {
-		const { store } = this.#ctx.options;
-		const agent = store.agentByChannel(channelId);
+	/** A place deleted on its surface archives the agent or group that owned it. */
+	async placeRemoved(key: ChannelKey): Promise<void> {
+		const { places } = this.#ctx.options;
+		const agent = places.agentOf(key);
 		if (agent) return this.#archiveAgent(agent);
-		const group = store.groupByChannel(channelId);
+		const group = places.groupOf(key);
 		if (group) await this.#archiveGroup(group);
 	}
 
 	/**
-	 * Archives an agent or group like a deleted channel, then keeps its channel under Archive,
-	 * where no one owns it and so nothing answers; an agent or group without a Discord channel
-	 * only stops answering in its rooms. Runs at once, not in the target's queue: the caller may be
+	 * Archives an agent or group like a deleted place, then keeps its places where no one owns them
+	 * and so nothing answers (a channel under Archive, for one); an agent or group without a
+	 * stored place only stops answering in its rooms. Runs at once, not in the target's queue: the caller may be
 	 * a member of the group it archives, and the round stops at its next turn. An owner's call from
 	 * outside any turn has no `caller`, so no agent is protected from archiving itself.
 	 */
@@ -195,7 +267,7 @@ export class TeamLifecycle {
 		caller: AgentTurnScope | undefined,
 		name: string,
 	): Promise<string> {
-		const { store, channels, logger } = this.#ctx.options;
+		const { store } = this.#ctx.options;
 		const agent = store.agent(name);
 		const group = agent ? undefined : store.group(name);
 		const target = agent ?? group;
@@ -213,7 +285,6 @@ export class TeamLifecycle {
 			throw new AgentError("The coordinator cannot be archived.");
 		if (agent && name === caller?.name)
 			throw new AgentError("You cannot archive yourself; ask another agent.");
-		const { channelId } = target;
 		// A temp knight's place is a thread of its parent's channel, closed rather than moved.
 		if (agent && isHelper(agent)) {
 			await this.helpers.archiveOne(agent);
@@ -221,32 +292,17 @@ export class TeamLifecycle {
 		}
 		if (agent) await this.#archiveAgent(agent);
 		else if (group) await this.#archiveGroup(group);
-		if (!channelId || !channels)
-			return `Archived "${target.displayName}"; it no longer answers anywhere.`;
-		try {
-			await channels.removeWebhook(channelId);
-		} catch (error) {
-			logger.warn(
-				{ name, err: error },
-				"archived channel's webhook not removed",
-			);
-		}
-		try {
-			await channels.placeIn(channelId, "Archive");
-		} catch (error) {
-			logger.error({ name, err: error }, "archived channel not moved");
-			return `Archived "${target.displayName}", but its channel <#${channelId}> could not be moved to Archive (${error instanceof Error ? error.message : String(error)}); it stays silent where it is.`;
-		}
-		return `Archived "${target.displayName}"; its channel <#${channelId}> is kept under Archive.`;
+		const kept = await this.#places.keep(this.#wish(target), false);
+		return `Archived "${target.displayName}"${kept || "; it no longer answers anywhere."}`;
 	}
 
 	/**
-	 * Returns an archived agent or group to the active ones: its channel leaves Archive for its
-	 * category (a new channel replaces one deleted meanwhile), and it answers again from its next
+	 * Returns an archived agent or group to the active ones: its places leave the archive for where
+	 * they belong (a new place replaces one deleted meanwhile), and it answers again from its next
 	 * message. An agent does not rejoin the groups it left; a group needs all its members active.
 	 */
 	async restore(name: string): Promise<string> {
-		const { store, channels, logger } = this.#ctx.options;
+		const { store, logger } = this.#ctx.options;
 		const agent = store.agent(name);
 		const group = agent ? undefined : store.group(name);
 		const target = agent ?? group;
@@ -262,25 +318,12 @@ export class TeamLifecycle {
 		}
 		if (group) store.checkRestorableGroup(name);
 		// The store checks again when it restores. A member archived, or a second restore of the
-		// same name, between the two checks leaves the channel moved or made with no owner; it
-		// then waits under its category until the next restore claims it or an owner deletes it.
-		let { channelId } = target;
-		if (channels) {
-			const category = agent ? "Agents" : "Groups";
-			if (channelId && (await channels.exists(channelId)))
-				await channels.placeIn(channelId, category);
-			else if (agent || channelId)
-				channelId = await channels.createChannel(
-					name,
-					agent ? agent.displayName : groupTopic(target as AgentGroup, store),
-					category,
-				);
-		}
-		if (agent) await store.restoreAgent(name, channelId);
-		else {
-			const restored = await store.restoreGroup(name, channelId);
-			this.retitle(restored);
-		}
+		// same name, between the two checks leaves the place moved or made with no owner; it
+		// then waits where it is until the next restore claims it or an owner deletes it.
+		const wish = this.#wish(target);
+		await this.#places.record(wish, await this.#places.bringBack(wish));
+		if (agent) await store.restoreAgent(name);
+		else this.retitle(await store.restoreGroup(name));
 		logger.info({ name, kind: agent ? "agent" : "group" }, "restored");
 		this.#ctx.changed();
 		return `Restored "${target.displayName}"; it answers again.${agent ? " It is in no group until it is added to one." : ""}`;
@@ -290,8 +333,8 @@ export class TeamLifecycle {
 	 * Deletes an archived agent or group for good, its name free again. Its carried skills are
 	 * detached, and the runtime forgets its conversations (an agent's own, its seats in every
 	 * group, a group's members' seats), so nothing is left for a later agent or group of that name;
-	 * a Discord channel it had stays under Archive with its history, since Discord is never asked
-	 * to delete one. An active agent or group is refused: archive it first, and so is an
+	 * a place it had stays kept with its history on its surface, since no provider is asked to
+	 * delete one. An active agent or group is refused: archive it first, and so is an
 	 * agent the host's seeds name, since the next start would seed it again.
 	 */
 	async remove(name: string, cleanup?: () => Promise<void>): Promise<string> {
@@ -371,18 +414,8 @@ export class TeamLifecycle {
 		this.#ctx.changed();
 	}
 
-	/** Writes a group's members and host into its channel topic, without waiting on Discord; a group without a channel has no topic. */
+	/** Writes a group's members and host into the topic of its places, without waiting on the surface; a group without a place has no topic. */
 	retitle(group: AgentGroup): void {
-		const { channels, store, logger } = this.#ctx.options;
-		const { channelId } = group;
-		if (!channels || !channelId) return;
-		channels
-			.setTopic(channelId, groupTopic(group, store))
-			.catch((error: unknown) =>
-				logger.warn(
-					{ group: group.name, err: error },
-					"group topic not updated",
-				),
-			);
+		this.#places.describe(this.#wish(group));
 	}
 }

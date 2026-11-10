@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
@@ -7,7 +8,6 @@ import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { Agent } from "./agent-store.ts";
 import { Routes } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
-import { discordKey } from "./team-keys.ts";
 import type { TeamContext } from "./team-options.ts";
 
 const OWNER: Speaker = {
@@ -44,12 +44,21 @@ function editing(working: string | undefined, routing?: ResolvedRouting) {
 			rows.set(input.name, input);
 			return input;
 		},
+		setPlace: async (
+			_kind: string,
+			name: string,
+			_surface: string,
+			id: string,
+		) => {
+			rows.set(name, { ...(rows.get(name) as Agent), channelId: id });
+		},
 	};
 	const places = testPlaces({
 		// SAFETY: the places read only `agent` and `group` of the store.
 		store: store as never,
 		rows: () => legacyRows([...rows.values()]),
 		rooms: () => ["app"],
+		channels: { createChannel: async (name: string) => `ch-${name}` },
 	});
 	const ctx = {
 		options: {
@@ -58,7 +67,6 @@ function editing(working: string | undefined, routing?: ResolvedRouting) {
 			routes: new Routes({ routing, store, places }),
 			studio: { render: async () => "r".repeat(64), url: () => "x" },
 			logger: { info: () => undefined, warn: () => undefined },
-			channels: { createChannel: async (name: string) => `ch-${name}` },
 			queue: {
 				run: async (_key: string, task: () => Promise<unknown>) => task(),
 			},

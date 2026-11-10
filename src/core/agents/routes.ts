@@ -4,6 +4,7 @@ import type {
 } from "../config/routing.ts";
 import { ROUTE_WORDS } from "../config/routing.ts";
 import { parseChannelKey } from "../contract/surface.ts";
+import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError, ConfigError } from "../domain/errors.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
@@ -304,7 +305,7 @@ export class Routes implements RoutingTable {
 					);
 				if (!holders.includes(surface))
 					throw new ConfigError(
-						`config ${path}: the ${surface} surface holds no agent places, since it hosts no rooms${surface === "discord" ? " here (the agents have no Discord channels)" : ""}. Name one that does: ${holders.join(", ") || "none on this host"}.`,
+						`config ${path}: the ${surface} surface holds no agent places, since it hosts no rooms${surface === LEGACY_CHANNEL_SURFACE ? " here (the agents have no Discord channels)" : ""}. Name one that does: ${holders.join(", ") || "none on this host"}.`,
 					);
 			}
 	}

@@ -61,6 +61,25 @@ export class TeamPlaces {
 		return this.#port?.all() ?? [];
 	}
 
+	/** The stored providers, in contribution order: the surfaces whose places the team keeps rows for. */
+	stored(): readonly PlaceProvider[] {
+		return this.#port?.stored() ?? [];
+	}
+
+	/** The id of the agent's or group's place on a surface, when it has one there. */
+	idOf(ref: PlaceRef, surface: string): string | undefined {
+		return this.#stored.on(ref.kind, ref.name, surface);
+	}
+
+	/** The key of a stored place by its id on a surface, as a provider that reports a deleted place gives only the id. */
+	keyOfId(surface: string, id: string): ChannelKey | undefined {
+		const provider = this.providerOf(surface);
+		// A stored key comes from the id alone; the owner does not enter into it.
+		return provider?.storage === "stored"
+			? provider.key({ kind: "agent", name: id }, id)
+			: undefined;
+	}
+
 	/** The surfaces that hold places, in "auto" order. */
 	surfaces(): readonly string[] {
 		return this.ordered().map((provider) => provider.surface);

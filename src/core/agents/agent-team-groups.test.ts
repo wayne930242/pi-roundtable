@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { describeDb } from "../testing/database.ts";
@@ -14,7 +15,7 @@ import {
 	stops,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import { agentRoomKey, discordKey, groupRoomKey } from "./team-keys.ts";
+import { agentRoomKey, groupRoomKey } from "./team-keys.ts";
 
 // Runs against a real PostgreSQL, only when ROUNDTABLE_TEST_DATABASE_URL is set.
 describeDb("PostgreSQL", () => {
@@ -241,7 +242,7 @@ describeDb("PostgreSQL", () => {
 			});
 			const doctorChannel = fx.store.agent("doctor")?.channelId ?? "";
 			expect(doctorChannel).toBe("2000");
-			await fx.team.channelDeleted(doctorChannel);
+			await fx.team.placeRemoved(discordKey(doctorChannel));
 			expect(fx.store.agent("doctor")?.status).toBe("archived");
 			expect(removedSchedules).toEqual([7]);
 			expect(fx.runtime.fresh).toContain(discordKey(doctorChannel));
@@ -278,7 +279,7 @@ describeDb("PostgreSQL", () => {
 			});
 			const pair = fx.store.group("pair");
 			if (!pair) throw new Error("no pair group");
-			await fx.team.channelDeleted(pair.channelId ?? "");
+			await fx.team.placeRemoved(discordKey(pair.channelId ?? ""));
 			expect(fx.store.group("pair")?.status).toBe("archived");
 			expect(fx.runtime.fresh).toEqual([
 				fx.places.seatKey(pair, "infra"),
@@ -647,16 +648,20 @@ describeDb("PostgreSQL", () => {
 			expect(fx.team.owns(groupRoom)).toBe("group");
 			expect(fx.team.owns(agentRoom("nobody"))).toBeUndefined();
 			expect(fx.team.owns(agentRoomKey("other", "doctor"))).toBeUndefined();
-			await fx.team.channelDeleted(fx.store.agent("doctor")?.channelId ?? "");
+			await fx.team.placeRemoved(
+				discordKey(fx.store.agent("doctor")?.channelId ?? ""),
+			);
 			expect(fx.team.owns(agentRoom("doctor"))).toBeUndefined();
 			// The group stays while it has members left.
 			expect(fx.team.owns(groupRoom)).toBe("group");
-			await fx.team.channelDeleted(group().channelId ?? "");
+			await fx.team.placeRemoved(discordKey(group().channelId ?? ""));
 			expect(fx.team.owns(groupRoom)).toBeUndefined();
 		});
 
 		test("archiving an agent clears the schedules and sessions of every one of its rooms", async () => {
-			await fx.team.channelDeleted(fx.store.agent("doctor")?.channelId ?? "");
+			await fx.team.placeRemoved(
+				discordKey(fx.store.agent("doctor")?.channelId ?? ""),
+			);
 			expect(removedSchedules.toSorted()).toEqual([7, 8]);
 			expect(fx.runtime.fresh).toContain(discordKey("2000"));
 			expect(fx.runtime.fresh).toContain(agentRoom("doctor"));
@@ -666,7 +671,7 @@ describeDb("PostgreSQL", () => {
 		});
 
 		test("archiving a group clears the seats of every one of its conversations", async () => {
-			await fx.team.channelDeleted(group().channelId ?? "");
+			await fx.team.placeRemoved(discordKey(group().channelId ?? ""));
 			expect(fx.store.group("g")?.status).toBe("archived");
 			for (const member of ["coordinator", "infra", "doctor"]) {
 				expect(fx.runtime.fresh).toContain(fx.places.seatKey(group(), member));
@@ -677,7 +682,9 @@ describeDb("PostgreSQL", () => {
 		test("a room's turn is posted nowhere after its agent was archived", async () => {
 			fx.runtime.during = async () => {
 				fx.runtime.during = undefined;
-				await fx.team.channelDeleted(fx.store.agent("doctor")?.channelId ?? "");
+				await fx.team.placeRemoved(
+					discordKey(fx.store.agent("doctor")?.channelId ?? ""),
+				);
 			};
 			await fx.team.answerOwner(
 				agentRoom("doctor"),

@@ -22,7 +22,7 @@ import { answersAuthor } from "../routing/peer-bots.ts";
 import { outcome } from "../routing/settle-turn.ts";
 import { systemTurn } from "../routing/system-turns.ts";
 import { PERSONAL_TARGET } from "../shared/personal-target.ts";
-import type { DiscordAgentTeam } from "./agent-team.ts";
+import type { AgentServerTeam } from "./agent-team.ts";
 
 /**
  * The agent server outranks every other claim on the places it owns, and the other channels of a
@@ -56,7 +56,7 @@ export interface AgentClaimOptions {
 	 */
 	spaceOf?: (channel: ChannelKey) => string | undefined;
 	team: Pick<
-		DiscordAgentTeam,
+		AgentServerTeam,
 		| "owns"
 		| "answerOwner"
 		| "answerGroup"

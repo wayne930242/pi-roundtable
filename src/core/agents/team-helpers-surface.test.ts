@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import { describeDb, openTestStore, TEST_GUILD } from "../testing/database.ts";
@@ -6,7 +7,7 @@ import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { PgAgentStore } from "./agent-store.ts";
 import { fx, settle, useTeamFixture } from "./agent-team-fixture.ts";
 import { inTurn, SCOUT, turnsOf } from "./helper-test-kit.ts";
-import { agentRoomKey, discordKey } from "./team-keys.ts";
+import { agentRoomKey } from "./team-keys.ts";
 
 const ROOM = agentRoomKey("app", "coordinator");
 const inRoom: AgentTurnScope = {

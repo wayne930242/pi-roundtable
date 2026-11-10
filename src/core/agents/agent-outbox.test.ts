@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { IdentityError } from "../domain/errors.ts";
 import { describeDb } from "../testing/database.ts";
@@ -12,7 +13,6 @@ import {
 	settle,
 	useTeamFixture,
 } from "./agent-team-fixture.ts";
-import { discordKey } from "./team-keys.ts";
 
 /** Waits until the outbox holds `count` entries; the write to it is not part of the turn. */
 async function keptCount(count: number): Promise<void> {

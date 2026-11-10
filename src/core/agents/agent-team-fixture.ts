@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SQL } from "bun";
+import { discordKey } from "../contract/discord-key.ts";
 import type { PlaceProvider } from "../contract/places.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
@@ -30,11 +31,10 @@ import { OWNER_SPEAKER, TEST_OWNER } from "../testing/owner.ts";
 import { discordTestPlaces, testPlacePort } from "../testing/team-places.ts";
 import { PgAgentStore as AgentStore } from "./agent-store.ts";
 import {
-	DiscordAgentTeam as AgentTeam,
+	AgentServerTeam as AgentTeam,
 	type AgentTeamOptions,
 } from "./agent-team.ts";
 import { seeds } from "./agent-team-seeds.ts";
-import { discordKey } from "./team-keys.ts";
 import { TeamPlaces } from "./team-places.ts";
 
 export const ENTRY = "1000";
@@ -158,6 +158,8 @@ let skillStore: TestStore<SkillStore>;
 let skills: SkillRegistry;
 let places: TeamPlaces;
 const stored: PlaceProvider[] = [];
+/** The listeners the stand-in Discord was given for a deleted channel; `deleteChannel` calls them, as the server does. */
+const removedListeners: ((channelId: string) => void)[] = [];
 export const removedSchedules: number[] = [];
 export const stops: string[] = [];
 /** The events the team reported, in order, as `turnStarted infra`, `turnEnded infra ok`, or `changed`. */
@@ -254,13 +256,28 @@ export function useTeamFixture(
 		if (local) surfaces.rooms = ["app"];
 		runtime = new FakeRuntime();
 		stored.length = 0;
+		removedListeners.length = 0;
 		// The host's providers: Discord's channels with a guild, a room on each surface that hosts them, and a test's own.
 		places = new TeamPlaces(
 			store,
 			store.places,
 			testPlacePort({
 				rooms: () => surfaces.rooms,
-				stored: () => [...(local ? [] : [discordTestPlaces()]), ...stored],
+				stored: () => [
+					...(local
+						? []
+						: [
+								discordTestPlaces(TEST_GUILD, {
+									channels,
+									server: {
+										gone: (id) => channels.deleted.has(id),
+										foreign: (id) => channels.foreign.has(id),
+									},
+									onRemoved: (listener) => removedListeners.push(listener),
+								}),
+							]),
+					...stored,
+				],
 				// SAFETY: only a derived provider's post reads it, which the team does not use yet.
 				surfaces: surfaces as never,
 			}),
@@ -286,7 +303,7 @@ export function useTeamFixture(
 				teamId: local ? "local" : "1",
 				...(local
 					? { coordinator: "coordinator" }
-					: { entryChannelId: ENTRY, channels }),
+					: { entryChannel: discordKey(ENTRY), channels }),
 				seeds: () => seeds(local ? undefined : ENTRY),
 				store,
 				surfaces,
@@ -356,6 +373,12 @@ export function useTeamFixture(
 		});
 		await settle();
 	}, HOOK_TIMEOUT_MS);
+}
+
+/** The server deletes a channel and tells the listeners the team registered. */
+export function deleteChannel(channelId: string): void {
+	channels.deleted.add(channelId);
+	for (const listener of removedListeners) listener(channelId);
 }
 
 /** Starts the team again over the same database, as a restarted host: a new queue, runtime and team. */

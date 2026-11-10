@@ -14,6 +14,8 @@ export const PAGER = "pager";
 interface Page {
 	name: string;
 	topic: string;
+	/** The page this one was made under, for a temp knight's thread. */
+	parent?: string;
 	archived: boolean;
 	messages: { id: number; author: string; text: string }[];
 }
@@ -28,6 +30,12 @@ export class FakePager {
 	readonly #listeners: ((id: string) => void)[] = [];
 	#next = 1;
 	#message = 1;
+	readonly #prefix: string;
+
+	/** `prefix` starts the ids of the pages it makes (`pg-1`), so a test that binds ids of its own cannot meet them. */
+	constructor(prefix = "pg") {
+		this.#prefix = prefix;
+	}
 
 	readonly provider: PlaceProvider = {
 		surface: PAGER,
@@ -65,10 +73,11 @@ export class FakePager {
 				existing.archived = false;
 				return spec.existing;
 			}
-			const id = `pg-${this.#next++}`;
+			const id = `${this.#prefix}-${this.#next++}`;
 			this.pages.set(id, {
 				name: spec.name,
 				topic: spec.topic,
+				...(spec.parent === undefined ? {} : { parent: spec.parent }),
 				archived: false,
 				messages: [],
 			});
@@ -77,7 +86,7 @@ export class FakePager {
 		remove: async (id) => {
 			const page = this.pages.get(id);
 			if (page) page.archived = true;
-			return `Its page ${id} is kept.`;
+			return `; its page ${id} is kept.`;
 		},
 		check: async (id): Promise<PlaceCheck> => {
 			if (id.startsWith("other-")) return "foreign";
@@ -92,6 +101,11 @@ export class FakePager {
 		},
 		mention: (key) => `page ${parseChannelKey(key).id}`,
 	};
+
+	/** The network already has a page `id` that the team did not make, as a bound place would be. */
+	adopt(id: string, name: string, topic = name): void {
+		this.pages.set(id, { name, topic, archived: false, messages: [] });
+	}
 
 	/** Everything a person reading the page of `key` has seen. */
 	seen(key: ChannelKey): readonly PlaceSeen[] {

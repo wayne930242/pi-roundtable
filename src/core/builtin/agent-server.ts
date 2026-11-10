@@ -4,15 +4,15 @@ import type { SQL } from "bun";
 import { agentClaim } from "../agents/agent-claim.ts";
 import { AgentDashboard } from "../agents/agent-dashboard.ts";
 import { PgAgentStore } from "../agents/agent-store.ts";
-import { DiscordAgentTeam } from "../agents/agent-team.ts";
+import { AgentServerTeam } from "../agents/agent-team.ts";
 import { AGENT_TOOLS } from "../agents/agent-tools.ts";
 import { FileAvatarStudio } from "../agents/avatar-studio.ts";
 import { RelevanceScorer } from "../agents/group-round.ts";
 import { modeOrigins } from "../agents/helper-modes.ts";
 import { Routes } from "../agents/routes.ts";
-import { discordKey } from "../agents/team-keys.ts";
 import { TeamPlaces } from "../agents/team-places.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import { ROOM_LAYOUT } from "../contract/room-layout.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
 import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
@@ -61,7 +61,7 @@ export const AGENT_TEAM_SERVICE = "team";
 
 /** The agent tools and the agent's own prompt, which only agent sessions load. */
 export function agentSessionTools(
-	team: Pick<DiscordAgentTeam, "extension" | "systemPrompt">,
+	team: Pick<AgentServerTeam, "extension" | "systemPrompt">,
 	logger: Logger,
 ): SessionTool[] {
 	return [
@@ -245,13 +245,12 @@ export function agentServerPlugin(
 			});
 			// The surfaces the rules name are registered by the time every plugin has set up.
 			linkRoutes = () => routes.validate({ names: surfaces.names?.() ?? [] });
-			const built: DiscordAgentTeam = new DiscordAgentTeam({
+			const built: AgentServerTeam = new AgentServerTeam({
 				routes,
 				places,
 				teamId,
-				discordGuild: options.guildId,
 				...(options.entryChannelId !== undefined
-					? { entryChannelId: options.entryChannelId }
+					? { entryChannel: discordKey(options.entryChannelId) }
 					: {}),
 				// Without an entry channel the coordinator is the named agent, else the first seed.
 				...(options.entryChannelId === undefined
@@ -309,14 +308,11 @@ export function agentServerPlugin(
 				principals: () => context.services.find(IDENTITY),
 				logger,
 			});
-			connection?.onChannelDeleted((channelId) => {
-				if (!built.owns(discordKey(channelId))) return;
-				void context.queue
-					.run(discordKey(channelId), () => built.channelDeleted(channelId))
-					// pi-lens-ignore: no-unknown-parameters
-					.catch((error: unknown) =>
-						logger.error({ channelId, err: error }, "archive failed"),
-					);
+			// The deprecated `AgentTeam.discordGuild`, the agent guild: kept for plugins that read it
+			// until 1.0, though the team itself knows no guild but through its place providers.
+			Object.defineProperty(built, "discordGuild", {
+				value: options.guildId,
+				enumerable: true,
 			});
 			const agentSessions: AgentSessions = {
 				workDir: options.workDir,

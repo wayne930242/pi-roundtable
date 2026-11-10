@@ -1,8 +1,13 @@
 import type { StoredPlace } from "../agents/agent-places.ts";
+import type { AgentChannels } from "../agents/agent-ports.ts";
 import { type StoredPlaces, TeamPlaces } from "../agents/team-places.ts";
 import type { PlacePort, PlaceProvider } from "../contract/places.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import { discordPlaces } from "../discord/agent-places.ts";
+import {
+	type FakeServer,
+	fakeDiscordClient,
+} from "../discord/place-fake-client.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { derivedPlaces } from "../registry/place-port.ts";
 
@@ -51,14 +56,35 @@ export function legacyRows(
 	];
 }
 
-/** Discord's own provider, with the keys and forms a host gives it, over no channels: for the tests that only read places. */
-export function discordTestPlaces(guild = "900000000000000001"): PlaceProvider {
+/** The guild the stand-in Discord's agent channels live in. */
+export const TEST_AGENT_GUILD = "900000000000000001";
+
+/** What a stand-in Discord's provider asks of the server it stands on. */
+export interface TestDiscord {
+	/** The agent channels the provider makes and moves; absent = a provider that is only read. */
+	channels?: AgentChannels;
+	/** Answers the provider's `check`, as the server does; absent = no `check`. */
+	server?: Omit<FakeServer, "guild">;
+	/** Where the provider registers the listener of a deleted channel. */
+	onRemoved?: (listener: (channelId: string) => void) => void;
+}
+
+/**
+ * Discord's own provider, with the keys and forms a host gives it, over the channels and server a
+ * test hands; without them it only reads places.
+ */
+export function discordTestPlaces(
+	guild = TEST_AGENT_GUILD,
+	over: TestDiscord = {},
+): PlaceProvider {
 	return discordPlaces({
 		// SAFETY: a provider that is only read never asks the client or the channels.
-		client: undefined as never,
+		client: over.server
+			? fakeDiscordClient({ guild, ...over.server })
+			: (undefined as never),
 		guild,
-		channels: undefined as never,
-		onRemoved: () => undefined,
+		channels: over.channels ?? (undefined as never),
+		onRemoved: over.onRemoved ?? (() => undefined),
 		logger: silentLogger(),
 	});
 }
@@ -95,20 +121,40 @@ export function testPlacePort(options: {
 	};
 }
 
-/** The places of a team over fakes: Discord's provider when `discord`, a room on each of `rooms`, and `stored` rows. */
+/**
+ * The places of a team over fakes: Discord's provider when `discord` (over `channels`, which it
+ * posts through), a room on each of `rooms` (posting through `surfaces`), and `stored` rows.
+ */
 export function testPlaces(options: {
 	store: ConstructorParameters<typeof TeamPlaces>[0];
 	rows?: () => readonly StoredPlace[];
 	rooms?: () => readonly string[];
 	discord?: boolean;
+	/** The channels Discord's provider posts through; absent = it only reads places. */
+	channels?: Partial<AgentChannels>;
+	/** What the rooms' derived providers post through; absent = a post fails. */
+	surfaces?: Partial<SurfacePort>;
 	stored?: () => readonly PlaceProvider[];
 }): TeamPlaces {
-	const discord = options.discord === false ? [] : [discordTestPlaces()];
+	const discord =
+		options.discord === false
+			? []
+			: [
+					discordTestPlaces(
+						TEST_AGENT_GUILD,
+						options.channels
+							? { channels: options.channels as AgentChannels }
+							: {},
+					),
+				];
 	return new TeamPlaces(
 		options.store,
 		storedFrom(options.rows ?? (() => [])),
 		testPlacePort({
 			...(options.rooms ? { rooms: options.rooms } : {}),
+			...(options.surfaces
+				? { surfaces: options.surfaces as SurfacePort }
+				: {}),
 			stored: () => [...discord, ...(options.stored?.() ?? [])],
 		}),
 	);

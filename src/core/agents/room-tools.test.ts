@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { discordKey } from "../contract/discord-key.ts";
 import type {
 	RoomGroupsView,
 	RoomLayoutService,
@@ -8,7 +9,6 @@ import type { AgentTurnScope } from "../domain/sessions.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { type AgentOps, agentToolsExtension } from "./agent-tools.ts";
-import { discordKey } from "./team-keys.ts";
 import { NO_ROOM_GROUPS, TeamRooms } from "./team-rooms.ts";
 
 const SCOPE: AgentTurnScope = {

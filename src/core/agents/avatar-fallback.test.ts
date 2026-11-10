@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import pino from "pino";
 import { resolveCharacter } from "../../characters/index.ts";
+import { discordKey } from "../contract/discord-key.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import { silentLogger } from "../kernel/log.ts";
@@ -9,11 +10,11 @@ import { TEST_OWNER } from "../testing/owner.ts";
 import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent } from "./agent-store.ts";
-import { type AgentTeamOptions, DiscordAgentTeam } from "./agent-team.ts";
+import { AgentServerTeam, type AgentTeamOptions } from "./agent-team.ts";
 import { type AgentOps, agentToolsExtension } from "./agent-tools.ts";
 import { TeamEditing } from "./team-editing.ts";
-import { discordKey } from "./team-keys.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";
+import { TeamLooks } from "./team-looks.ts";
 import type { TeamContext } from "./team-options.ts";
 
 const SCOPE: AgentTurnScope = {
@@ -57,7 +58,6 @@ function memoryStore(initial: Agent[]) {
 			displayName: string;
 			prompt: string;
 			avatarPrompt?: string;
-			channelId: string;
 		}) => {
 			const created = agent(input.name, {
 				...input,
@@ -77,6 +77,14 @@ function memoryStore(initial: Agent[]) {
 			if (current.character) return false;
 			rows.set(name, { ...current, character, avatarHash });
 			return true;
+		},
+		setPlace: async (
+			_kind: string,
+			name: string,
+			_surface: string,
+			id: string,
+		) => {
+			rows.set(name, { ...(rows.get(name) as Agent), channelId: id });
 		},
 		updateAgent: async (name: string, change: Partial<Agent>) => {
 			const updated = { ...(rows.get(name) as Agent), ...change };
@@ -146,19 +154,19 @@ function context(
 				store,
 				rows: () => legacyRows(store.agents()),
 				rooms: () => [],
+				channels: {
+					exists: async () => true,
+					layout: async () => [],
+					placeIn: async () => false,
+					createChannel: async (name: string) => {
+						created.push(name);
+						return `ch-${name}`;
+					},
+				},
 			}),
 			studio,
 			logger,
 			seeds: () => [],
-			channels: {
-				exists: async () => true,
-				layout: async () => [],
-				placeIn: async () => false,
-				createChannel: async (name: string) => {
-					created.push(name);
-					return `ch-${name}`;
-				},
-			},
 			skills: { checkRegistered: () => undefined, attach: async () => [] },
 			queue: { run: async () => undefined },
 			owner: TEST_OWNER,
@@ -221,7 +229,7 @@ describe("agent_create and avatars", () => {
 		const drawn = context("draws", [
 			agent("scout", { avatarHash: "a".repeat(64) }),
 		]);
-		const editing = new TeamEditing(drawn.ctx);
+		const editing = new TeamLooks(drawn.ctx);
 		await editing.redrawAvatar("scout", "redraw");
 		await editing.redrawAvatar("scout", "edit", "add a hat");
 		await editing.redrawAvatar("scout", "new_prompt", "A fox.");
@@ -231,11 +239,11 @@ describe("agent_create and avatars", () => {
 		);
 		expect(drawn.store.agent("scout")?.avatarHash).toBe("d".repeat(64));
 		const none = context("none", [agent("scout")]);
-		const refusal = new TeamEditing(none.ctx).redrawAvatar("scout", "redraw");
+		const refusal = new TeamLooks(none.ctx).redrawAvatar("scout", "redraw");
 		expect(refusal).rejects.toThrow("No image provider is configured");
 		expect(refusal).rejects.toBeInstanceOf(AgentError);
 		await refusal.catch(() => undefined);
-		expect("redrawAvatar" in DiscordAgentTeam.prototype).toBe(true);
+		expect("redrawAvatar" in AgentServerTeam.prototype).toBe(true);
 	});
 
 	test("the deprecation is stated in the source, the changelog and the plugin guide", async () => {
@@ -260,7 +268,7 @@ describe("agent_create and avatars", () => {
 			const { ctx, store, studio } = context(kind, [
 				agent("scout", { character: worn }),
 			]);
-			await new TeamEditing(ctx).dress("scout", { hat: "beret" });
+			await new TeamLooks(ctx).dress("scout", { hat: "beret" });
 			expect(store.agent("scout")?.character).toEqual({
 				...worn,
 				hat: "beret",
@@ -334,9 +342,9 @@ describe("the agent tools, with and without an image provider", () => {
 				character: resolveCharacter({ class: "bard", palette: "rose" }),
 			}),
 		]);
-		return new DiscordAgentTeam({
+		return new AgentServerTeam({
 			teamId: "1",
-			entryChannelId: "ch-coordinator",
+			entryChannel: discordKey("ch-coordinator"),
 			owner: TEST_OWNER,
 			shellUser: "bot",
 			workDir: "/work",

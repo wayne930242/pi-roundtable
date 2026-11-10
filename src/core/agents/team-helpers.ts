@@ -6,15 +6,21 @@ import { answersTo, helperSurface, isHelper } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
 import type { HelpersEnded } from "./helper-ops.ts";
 import type { TeamContext } from "./team-options.ts";
+import {
+	type MadePlace,
+	type PlaceWish,
+	TeamPlaceWrites,
+} from "./team-place-writes.ts";
 
 /** How often the host looks for finished temp knights past their keep. */
 const SWEEP_EVERY_MS = 3_600_000;
 
 /**
  * The team's temp knights after they are made: which a knight has, which are finished, and their
- * archive, restore, and sweep. A temp knight made on Discord lives in a thread of its parent's
- * channel; one made in the web app gets that thread only once someone reaches for it on Discord.
- * Archiving one closes its thread, when it has one; an archived one keeps its history.
+ * archive, restore, and sweep. A temp knight made on a surface with stored places lives in a thread
+ * of its parent's place there; one made in a room gets that thread only once someone reaches for
+ * it on that surface. Archiving one closes its thread, when it has one; an archived one keeps its
+ * history.
  */
 export class TeamHelpers {
 	readonly #ctx: TeamContext;
@@ -22,11 +28,13 @@ export class TeamHelpers {
 	readonly #archiveAgent: (agent: Agent) => Promise<void>;
 	readonly #ended: ((event: HelpersEnded) => void)[] = [];
 	#sweeper: ReturnType<typeof setInterval> | undefined;
-	/** The threads being made for web-born temp knights, by name, so two reaches make one. */
+	/** The threads being made for temp knights born in a room, by name and surface, so two reaches make one. */
 	readonly #placing = new Map<string, Promise<void>>();
+	readonly #places: TeamPlaceWrites;
 
 	constructor(ctx: TeamContext, archiveAgent: (agent: Agent) => Promise<void>) {
 		this.#ctx = ctx;
+		this.#places = new TeamPlaceWrites(ctx);
 		this.#archiveAgent = archiveAgent;
 	}
 
@@ -90,8 +98,7 @@ export class TeamHelpers {
 	}
 
 	/**
-	 * Archives temp knights: each stops answering, keeps its history, and its Discord thread is
-	 * closed. Names that are no active temp knight are passed over. Says which were archived.
+	 * Archives temp knights: each stops answering, keeps its history, and its thread is closed. Names that are no active temp knight are passed over. Says which were archived.
 	 */
 	async archive(names: readonly string[]): Promise<string[]> {
 		const { store } = this.#ctx.options;
@@ -105,19 +112,20 @@ export class TeamHelpers {
 		return archived;
 	}
 
-	/** Archives a temp knight and closes its thread, when it has one; a thread that will not close is logged. */
+	/** Archives a temp knight and closes its thread, when it has one; a thread that will not close is logged by the provider. */
 	async archiveOne(agent: Agent): Promise<void> {
-		const { channels, logger } = this.#ctx.options;
 		await this.#archiveAgent(agent);
-		if (!agent.channelId || !channels?.closeThread) return;
-		try {
-			await channels.closeThread(agent.channelId);
-		} catch (error) {
-			logger.warn(
-				{ agent: agent.name, err: error },
-				"temp knight's thread not closed; it stays silent where it is",
-			);
-		}
+		await this.#places.keep(this.#wish(agent), true);
+	}
+
+	/** The temp knight as a place owner: its name, shown under its display name. */
+	#wish(agent: Agent): PlaceWish {
+		return {
+			kind: "agent",
+			name: agent.name,
+			displayName: agent.displayName,
+			topic: agent.displayName,
+		};
 	}
 
 	/**
@@ -139,55 +147,63 @@ export class TeamHelpers {
 	}
 
 	/**
-	 * A `message_agent` call that names "discord", or names nothing from a Discord conversation, gives
-	 * a web-born temp knight its thread first.
+	 * A `message_agent` call that names a surface with stored places, or names nothing from a
+	 * conversation of one, gives a temp knight born in a room its thread there first.
 	 */
 	async reach(
 		caller: AgentTurnScope,
 		to: string,
 		conversation?: string,
 	): Promise<void> {
-		const { store } = this.#ctx.options;
+		const { store, places } = this.#ctx.options;
 		const { turns } = this.#ctx;
 		const target = store.agent(to);
 		const speaker = turns.speakerOf(caller);
 		const from = turns.turnChannel(caller);
-		// Unnamed, a message stays on the sender's surface, so one sent from Discord goes there too.
+		// Unnamed, a message stays on the sender's surface, so one sent from there goes there too.
 		const wanted = conversation?.trim() || surfaceOf(from);
-		if (wanted !== "discord" || !target || !speaker) return;
+		const provider = places.providerOf(wanted);
+		if (
+			provider?.surface !== wanted ||
+			provider.storage !== "stored" ||
+			!target ||
+			!speaker
+		)
+			return;
 		if (answersTo(target, caller.name, from, speaker))
-			await this.placeOnDiscord(to);
+			await this.placeOn(to, wanted);
 	}
 
 	/**
-	 * Gives an active temp knight made in the web app its thread under the parent's channel, the
-	 * first time someone reaches for it on Discord. One made on Discord, or before the origin was
-	 * kept, already has its place, and a host without Discord threads makes none; never rejects.
+	 * Gives an active temp knight born in a room its thread under the parent's place on a surface,
+	 * the first time someone reaches for it there. One made on that surface, or before the origin
+	 * was kept, already has its place, and a surface that makes no threads gives none; never rejects.
 	 */
-	placeOnDiscord(name: string): Promise<void> {
-		const pending = this.#placing.get(name);
+	placeOn(name: string, surface: string): Promise<void> {
+		const key = `${name}@${surface}`;
+		const pending = this.#placing.get(key);
 		if (pending) return pending;
-		const placing = this.#placeOnDiscord(name).finally(() =>
-			this.#placing.delete(name),
+		const placing = this.#placeOn(name, surface).finally(() =>
+			this.#placing.delete(key),
 		);
-		this.#placing.set(name, placing);
+		this.#placing.set(key, placing);
 		return placing;
 	}
 
-	async #placeOnDiscord(name: string): Promise<void> {
-		const { store, channels, logger } = this.#ctx.options;
+	async #placeOn(name: string, surface: string): Promise<void> {
+		const { store, places, logger } = this.#ctx.options;
 		const agent = store.agent(name);
-		const surface = helperSurface(agent);
-		if (agent?.status !== "active" || agent.channelId) return;
-		if (surface === undefined || surface === "discord") return;
+		const born = helperSurface(agent);
+		if (agent?.status !== "active" || places.idOf(this.#wish(agent), surface))
+			return;
+		if (born === undefined || born === surface) return;
 		const parent = store.agent(agent.parent as string);
-		if (!parent?.channelId || !channels?.createThread) return;
+		if (!parent) return;
+		const wish = this.#wish(agent);
+		let made: MadePlace | undefined;
 		try {
-			const channelId = await channels.createThread(
-				parent.channelId,
-				agent.displayName,
-			);
-			await store.updateAgent(name, { channelId });
+			made = await this.#places.makeOn(surface, wish, parent);
+			if (made) await this.#places.record(wish, [made]);
 		} catch (error) {
 			logger.warn(
 				{ agent: name, err: error },
@@ -195,6 +211,7 @@ export class TeamHelpers {
 			);
 			return;
 		}
+		if (!made) return;
 		logger.info(
 			{ agent: name, parent: parent.name },
 			"temp knight's thread made",
@@ -204,33 +221,37 @@ export class TeamHelpers {
 
 	/**
 	 * Restores one archived temp knight: its thread opens again, or a new one is made when the old
-	 * is gone. One made in the web app never gets a new thread: its old one reopens, if it had one
-	 * that is still there. It comes back finished, with nothing running.
+	 * is gone. One born in a room never gets a new thread on another surface: its old one reopens,
+	 * if it had one that is still there. It comes back finished, with nothing running.
 	 */
 	async restoreOne(agent: Agent): Promise<void> {
-		const { store, channels, logger } = this.#ctx.options;
+		const { store, places, logger } = this.#ctx.options;
 		const parent = store.agent(agent.parent as string);
 		if (parent?.status !== "active")
 			throw new AgentError(
 				`"${agent.name}" belongs to "${agent.parent}", which is archived; restore it first.`,
 			);
-		let { channelId } = agent;
-		const surface = helperSurface(agent);
-		const bornOnDiscord = surface === undefined || surface === "discord";
-		if (channels?.createThread && parent.channelId) {
+		const wish = this.#wish(agent);
+		const born = helperSurface(agent);
+		const made: MadePlace[] = [];
+		for (const provider of places.stored()) {
+			const { surface } = provider;
+			const own = places.idOf(wish, surface);
+			const bornHere = born === undefined || born === surface;
+			if (own === undefined && !bornHere) continue;
+			// Away from where it was born, only a thread that is still there is opened again.
 			if (
-				channelId &&
-				channels.openThread &&
-				(await channels.exists(channelId))
+				own !== undefined &&
+				!bornHere &&
+				provider.check &&
+				(await provider.check(own)) !== "ok"
 			)
-				await channels.openThread(channelId);
-			else if (bornOnDiscord)
-				channelId = await channels.createThread(
-					parent.channelId,
-					agent.displayName,
-				);
+				continue;
+			const place = await this.#places.makeOn(surface, wish, parent);
+			if (place) made.push(place);
 		}
-		await store.restoreAgent(agent.name, channelId);
+		await this.#places.record(wish, made);
+		await store.restoreAgent(agent.name);
 		logger.info(
 			{ name: agent.name, parent: parent.name },
 			"temp knight restored",

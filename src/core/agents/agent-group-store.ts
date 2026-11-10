@@ -1,13 +1,18 @@
 import type { SQL } from "bun";
+import {
+	LEGACY_CHANNEL_SURFACE,
+	setLegacyChannel,
+} from "../db/legacy-channels.ts";
 import { AgentError } from "../domain/errors.ts";
 import { AgentBook } from "./agent-book.ts";
-import type { AgentPlaces } from "./agent-places.ts";
+import type { AgentPlaces, PlaceOwnerKind } from "./agent-places.ts";
 import {
 	type AgentGroup,
 	type Backlog,
 	checkDisplayName,
 	type GroupMessage,
 } from "./agent-rules.ts";
+import type { AgentRow, GroupRow } from "./agent-schema.ts";
 import { AgentStatements } from "./agent-statements.ts";
 import { GroupMessages } from "./group-messages.ts";
 
@@ -43,6 +48,74 @@ export abstract class AgentGroupStore extends AgentBook {
 		const run = this.#queue.then(write);
 		this.#queue = run.catch(() => undefined);
 		return run;
+	}
+
+	/**
+	 * Records the place an agent or group has on a surface, in place of the one it had there. Until
+	 * 1.0 the place of the surface the legacy `channel_id` columns hold is written to its column as
+	 * well, in the same transaction.
+	 */
+	async setPlace(
+		kind: PlaceOwnerKind,
+		name: string,
+		surface: string,
+		id: string,
+	): Promise<void> {
+		return this.#writePlace(kind, name, surface, id);
+	}
+
+	/** Forgets the place an agent or group has on a surface; the place itself stays where it is. */
+	async clearPlace(
+		kind: PlaceOwnerKind,
+		name: string,
+		surface: string,
+	): Promise<void> {
+		return this.#writePlace(kind, name, surface, null);
+	}
+
+	#writePlace(
+		kind: PlaceOwnerKind,
+		name: string,
+		surface: string,
+		id: string | null,
+	): Promise<void> {
+		return this.serial(async () => {
+			const known =
+				kind === "agent" ? this.agentMap.has(name) : this.groupMap.has(name);
+			if (!known) throw new AgentError(`There is no ${kind} "${name}".`);
+			if (surface !== LEGACY_CHANNEL_SURFACE) {
+				if (id === null) await this.places.unbind(kind, name, surface);
+				else await this.places.bind(kind, name, surface, id);
+				return;
+			}
+			if (kind === "agent") {
+				const rows = await this.places.legacy(
+					"agent",
+					async (tx) =>
+						(await setLegacyChannel(
+							tx,
+							kind,
+							this.teamId,
+							name,
+							id,
+						)) as AgentRow[],
+				);
+				this.keepAgent(rows[0]);
+			} else {
+				const rows = await this.places.legacy(
+					"group",
+					async (tx) =>
+						(await setLegacyChannel(
+							tx,
+							kind,
+							this.teamId,
+							name,
+							id,
+						)) as GroupRow[],
+				);
+				this.keepGroup(rows[0]);
+			}
+		});
 	}
 
 	async createGroup(group: {

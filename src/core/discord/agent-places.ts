@@ -113,14 +113,20 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 					throw new AgentError("this Discord connection makes no threads");
 				return channels.createThread(spec.parent, spec.displayName);
 			}
-			const under = teamCategory(
-				spec.hints?.category,
-				spec.kind === "agent" ? "Agents" : "Groups",
-			);
+			const kind = spec.kind === "agent" ? "Agents" : "Groups";
+			const under = teamCategory(spec.hints?.category, kind);
 			if (
 				spec.existing !== undefined &&
 				(await channels.exists(spec.existing))
 			) {
+				// A channel already under a category of its kind (`Groups-Work`) stays there unless a category is asked for.
+				if (spec.hints?.category === undefined) {
+					const { existing } = spec;
+					const home = (await channels.layout()).find((c) =>
+						c.channelIds.includes(existing),
+					);
+					if (home && categoryKind(home.name) === kind) return existing;
+				}
 				await channels.placeIn(spec.existing, under);
 				return spec.existing;
 			}
@@ -154,9 +160,9 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 					{ name: spec.name, err: error },
 					"archived channel not moved",
 				);
-				return `its channel ${mention(id)} could not be moved to Archive (${error instanceof Error ? error.message : String(error)}); it stays silent where it is.`;
+				return `, but its channel ${mention(id)} could not be moved to Archive (${error instanceof Error ? error.message : String(error)}); it stays silent where it is.`;
 			}
-			return `its channel ${mention(id)} is kept under Archive.`;
+			return `; its channel ${mention(id)} is kept under Archive.`;
 		},
 		...(client ? { check: checkWith(client) } : {}),
 		describe: (id, topic) => channels.setTopic(id, topic),

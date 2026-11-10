@@ -119,6 +119,38 @@ export class AgentPlaces {
 		return rows;
 	}
 
+	/**
+	 * Records the owner's place on a surface the legacy columns do not hold, in place of the one it
+	 * had there. A place id belongs to one owner: another owner's holding it fails the write.
+	 */
+	async bind(
+		kind: PlaceOwnerKind,
+		name: string,
+		surface: string,
+		externalId: string,
+	): Promise<void> {
+		await this.#sql`
+			INSERT INTO agent_places (team_id, kind, name, surface, external_id)
+			VALUES (${this.#team}, ${kind}, ${name}, ${surface}, ${externalId})
+			ON CONFLICT (team_id, kind, name, surface)
+			DO UPDATE SET external_id = EXCLUDED.external_id`;
+		this.#replace({ kind, name, surface, externalId });
+	}
+
+	/** Forgets the owner's place on a surface the legacy columns do not hold. */
+	async unbind(
+		kind: PlaceOwnerKind,
+		name: string,
+		surface: string,
+	): Promise<void> {
+		await this.#sql`
+			DELETE FROM agent_places
+			WHERE team_id = ${this.#team} AND kind = ${kind} AND name = ${name}
+				AND surface = ${surface}`;
+		const place = this.#byOwner.get(ownerKey(kind, name, surface));
+		if (place) this.#forget(place);
+	}
+
 	/** Runs a write that deletes the owner's rows and, in the same transaction, every place it had. */
 	async dropping(
 		kind: PlaceOwnerKind,
