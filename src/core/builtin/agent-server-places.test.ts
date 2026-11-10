@@ -48,4 +48,28 @@ describeDb("agent server: places across a team move", () => {
 			name: "infra",
 		});
 	});
+
+	test("the places of any placeSpaces surface follow their space: moved from the team's own space they stay, from another's they are dropped", async () => {
+		sql = await migratedPool();
+		await sql.unsafe("DELETE FROM agent_places");
+		const boot = async (extra: Partial<AgentServerOptions>) =>
+			migrate(sql, agentServerPlugin(serverOptions(extra)).migrations ?? []);
+		await boot({ teamId: "pager-home" });
+		for (const [team, name, id] of [
+			["book-1", "infra", "pg-1"],
+			["book-0", "doctor", "pg-2"],
+		] as const)
+			await sql`INSERT INTO agent_places (team_id, kind, name, surface, external_id)
+				VALUES (${team}, 'agent', ${name}, 'pager', ${id})`;
+		await boot({
+			teamId: "pager-home",
+			formerTeamIds: ["book-0", "book-1"],
+			placeSpaces: [{ surface: "pager", space: "book-1" }],
+		});
+		const rows =
+			await sql`SELECT team_id, name, external_id FROM agent_places WHERE surface = 'pager' ORDER BY name`;
+		expect([...rows]).toEqual([
+			{ team_id: "pager-home", name: "infra", external_id: "pg-1" },
+		]);
+	});
 });

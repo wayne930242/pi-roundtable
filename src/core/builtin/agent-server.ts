@@ -150,12 +150,13 @@ export function agentServerPlugin(
 				...(legacySpace === undefined
 					? { clearChannels: true }
 					: { discordGuild: legacySpace }),
-				// The legacy channels' places follow their columns: kept in their space, dropped elsewhere.
+				// Every surface's places follow their space: kept in it, dropped elsewhere. The legacy
+				// channels' follow their columns, and with no space all of a moved row's go.
 				places: [
-					{
-						surface: LEGACY_CHANNEL_SURFACE,
-						...(legacySpace === undefined ? {} : { keep: legacySpace }),
-					},
+					...(legacySpace === undefined
+						? [{ surface: LEGACY_CHANNEL_SURFACE }]
+						: []),
+					...spaces.map(({ surface, space }) => ({ surface, keep: space })),
 				],
 			}),
 			// After the move, so the rows it brought in with their channel ids get their places at this boot.
