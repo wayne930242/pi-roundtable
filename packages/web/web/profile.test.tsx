@@ -102,11 +102,14 @@ const writes = () =>
 /** What the account head shows once its account picture, which this host does not serve, failed to load. */
 async function headWithoutKnight(): Promise<string | undefined> {
 	const image = q<HTMLImageElement>(".who .hpic img");
-	if (image?.getAttribute("src") !== `api/people/${ME}/picture`)
-		throw new Error("the account head does not ask for the account picture");
-	await page.act(() => {
-		image.dispatchEvent(new Event("error"));
-	});
+	// A picture that failed once is not asked for again in the page's life: the initials stand in.
+	if (image) {
+		if (image.getAttribute("src") !== `api/people/${ME}/picture`)
+			throw new Error("the account head does not ask for the account picture");
+		await page.act(() => {
+			image.dispatchEvent(new Event("error"));
+		});
+	}
 	return q(".who .hpic")?.textContent ?? undefined;
 }
 

@@ -357,6 +357,7 @@ export const ZH_TW_PEOPLE: Readonly<Record<string, string>> = {
 	"A test notification is on its way.": "測試通知已送出。",
 	"Send a test notification": "傳送測試通知",
 	"Shown as": "顯示為",
+	"Sign-in account": "登入帳號",
 	"The name and picture of this account are what others see in the app.":
 		"別人在應用程式裡看到的，是這個帳號的名稱與頭像。",
 	Automatic: "自動",

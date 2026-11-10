@@ -250,4 +250,13 @@ describeDb("a person's own knight over a real host", () => {
 		expect(saved.status).toBe(200);
 		expect((await profileOf(app, "owner")).character?.class).toBe("bard");
 	});
+
+	test("a stored knight with one unknown part id still gives a knight", async () => {
+		const sql = app.host.context.database();
+		await sql`
+			INSERT INTO web_person_characters (principal_id, character)
+			VALUES (${owner}, ${JSON.stringify({ v: 1, class: "knight", hat: "gone-hat" })}::text::jsonb)
+			ON CONFLICT (principal_id) DO UPDATE SET character = EXCLUDED.character`;
+		expect((await profileOf(app, "owner")).character?.class).toBe("knight");
+	});
 });

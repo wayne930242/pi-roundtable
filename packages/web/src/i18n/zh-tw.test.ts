@@ -96,7 +96,12 @@ describe("the built-in zh-TW catalog", () => {
 	});
 
 	test("holds nothing the code no longer asks for", () => {
-		const used = new Set([...client.client.keys(), ...server.keys()]);
+		// The label the host gives the sign-in account (`sessionLabel`, set in the core's notices mount).
+		const used = new Set([
+			...client.client.keys(),
+			...server.keys(),
+			"Sign-in account",
+		]);
 		const extra = Object.keys(ZH_TW).filter(
 			(key) => !used.has(key) && !characterKeys().includes(key),
 		);

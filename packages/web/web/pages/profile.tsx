@@ -7,7 +7,10 @@ import type {
 	SessionView,
 } from "../../src/api-types.ts";
 import { Confirm } from "../components/confirm.tsx";
-import { PersonPicture } from "../components/host-picture.tsx";
+import {
+	knownWithoutPicture,
+	PersonPicture,
+} from "../components/host-picture.tsx";
 import { Icon } from "../components/icons.tsx";
 import { Badge, Failure, Loading } from "../components/states.tsx";
 import { accountApi } from "../lib/account-api.ts";
@@ -23,6 +26,7 @@ const POLL_MS = 3_000;
 
 /** The person as the app shows them: their knight, their account picture, or their initials. */
 function Who({ profile }: { profile: ProfileView }) {
+	if (profile.picture === false) knownWithoutPicture(profile.principal);
 	return (
 		<div className="who">
 			<PersonPicture

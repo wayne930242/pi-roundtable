@@ -2,9 +2,9 @@
 // socket's `ready` and lives in the store; another person's is asked for once per page life.
 
 import type { CharacterSpec } from "pi-roundtable/characters";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "./app-store.ts";
-import { loadKit } from "./kit.ts";
+import { loadKit, useKit } from "./kit.ts";
 
 /** What the server answered for a person: their knight, or `null` for a person who has none. */
 const known = new Map<string, CharacterSpec | null>();
@@ -53,6 +53,17 @@ export function knightOf(id: string): Promise<CharacterSpec | null> {
 export function usePersonKnight(id: string): CharacterSpec | null | undefined {
 	const me = useSelector((state) => state.principal);
 	const own = id === me?.id;
+	const kit = useKit();
+	const mine = useMemo(() => {
+		if (!own || !me?.character) return null;
+		if (!kit) return undefined;
+		try {
+			return kit.parseCharacter(me.character);
+		} catch {
+			// A look this page's kit does not take is no knight: the account picture shows.
+			return null;
+		}
+	}, [own, me?.character, kit]);
 	const [answer, setAnswer] = useState<{
 		id: string;
 		knight: CharacterSpec | null;
@@ -67,7 +78,7 @@ export function usePersonKnight(id: string): CharacterSpec | null | undefined {
 			current = false;
 		};
 	}, [id, own]);
-	if (own) return me?.character ?? null;
+	if (own) return mine;
 	const settled = known.get(id);
 	if (settled !== undefined) return settled;
 	return answer?.id === id ? answer.knight : undefined;

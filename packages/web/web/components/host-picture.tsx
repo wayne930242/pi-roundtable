@@ -33,6 +33,15 @@ export function colorOf(name: string): string {
 	return `hsl(${hash} 42% 40%)`;
 }
 
+/** The pictures that could not be loaded, so one 404 is all a page life spends on a source. */
+const noPicture = new Set<string>();
+
+/** Records that a person has no account picture, where the page already knows it. */
+export function knownWithoutPicture(principal: string): void {
+	const src = pictureSrc({ principal });
+	if (src) noPicture.add(src);
+}
+
 interface PictureProps {
 	picture?: PictureRef | undefined;
 	name: string;
@@ -97,9 +106,10 @@ export function HostPicture(props: PictureProps) {
 
 function Circle(props: PictureProps) {
 	installStyle("picture", PICTURE_CSS);
-	const [failed, setFailed] = useState(false);
+	const [, redraw] = useState(0);
 	const size = props.size ?? 32;
-	const src = failed ? undefined : pictureSrc(props.picture);
+	const address = pictureSrc(props.picture);
+	const src = address && !noPicture.has(address) ? address : undefined;
 	const given =
 		props.picture && "initials" in props.picture ? props.picture : undefined;
 	const letters = given?.initials ?? initialsOf(props.name);
@@ -120,7 +130,10 @@ function Circle(props: PictureProps) {
 					alt=""
 					loading="lazy"
 					decoding="async"
-					onError={() => setFailed(true)}
+					onError={() => {
+						noPicture.add(src);
+						redraw((n) => n + 1);
+					}}
 				/>
 			) : (
 				<span aria-hidden="true">{letters}</span>

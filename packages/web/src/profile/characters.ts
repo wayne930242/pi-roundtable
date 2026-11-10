@@ -3,7 +3,7 @@ import type { Migration } from "pi-roundtable";
 import {
 	type CharacterInput,
 	type CharacterSpec,
-	parseCharacter,
+	readCharacter,
 	resolveCharacter,
 	suggestCharacter,
 } from "pi-roundtable/characters";
@@ -39,11 +39,7 @@ export class PersonCharacters {
 			SELECT character FROM web_person_characters
 			WHERE principal_id = ${principalId}`;
 		if (!row) return undefined;
-		try {
-			return parseCharacter(storedJson(row.character, "person's character"));
-		} catch {
-			return undefined;
-		}
+		return readCharacter(storedJson(row.character, "person's character"));
 	}
 
 	/**

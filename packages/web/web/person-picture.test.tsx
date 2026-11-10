@@ -207,3 +207,31 @@ test("the chat home's own picture is the person's knight inside the menu button,
 	]);
 	expect(asked).toEqual([]);
 });
+
+test("a picture that failed once is not asked for again by the next mount", async () => {
+	signIn("viewer");
+	await page.render(<PersonPicture principal="p-nopic" name="Nia Po" />);
+	await settle();
+	expect(drawn()).toEqual(["picture api/people/p-nopic/picture"]);
+	await page.act(() => {
+		page.container.querySelector("img")?.dispatchEvent(new Event("error"));
+	});
+	expect(drawn()).toEqual(["initials NP"]);
+	await page.render(null);
+	await page.render(
+		<>
+			<PersonPicture principal="p-nopic" name="Nia Po" />
+			<PersonPicture principal="p-nopic" name="Nia Po" size={16} />
+		</>,
+	);
+	await settle();
+	expect(drawn()).toEqual(["initials NP", "initials NP"]);
+	expect(page.container.querySelectorAll("img").length).toBe(0);
+});
+
+test("the viewer's own knight that the kit refuses falls back to the account picture", async () => {
+	signIn("me-odd", { v: 1, class: "gone" } as never);
+	await page.render(<PersonPicture principal="me-odd" name="Odd Me" />);
+	await settle();
+	expect(drawn()).toEqual(["picture api/people/me-odd/picture"]);
+});
