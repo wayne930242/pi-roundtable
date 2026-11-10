@@ -244,8 +244,18 @@ export const ARRANGED_CSS = `
 }
 
 [data-reordering] [data-drop-item]:not([data-lifted]),
-[data-reordering] [data-folder-block]:not([data-lifted]) {
+[data-reordering] [data-folder-block]:not([data-lifted]),
+[data-reordering] [data-pin-item]:not([data-lifted]) {
 	transition: transform var(--dur-fast) var(--ease-out);
+}
+
+/* A pin has no card to lift: its figure grows a little instead of casting a shadow. */
+[data-pin-item][data-lifted] {
+	box-shadow: none;
+}
+
+[data-pin-item][data-lifted] .pin-picture {
+	scale: 1.1;
 }
 
 /* Another zone the finger has taken the row into: a quiet fill, not a frame. */
@@ -268,7 +278,8 @@ export const ARRANGED_CSS = `
 @media (prefers-reduced-motion: reduce) {
 	.folder-chevron,
 	[data-reordering] [data-drop-item]:not([data-lifted]),
-	[data-reordering] [data-folder-block]:not([data-lifted]) {
+	[data-reordering] [data-folder-block]:not([data-lifted]),
+	[data-reordering] [data-pin-item]:not([data-lifted]) {
 		transition: none;
 	}
 	[data-lifted][data-resting] {

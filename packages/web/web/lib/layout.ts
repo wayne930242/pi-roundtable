@@ -18,3 +18,16 @@ export const roomLifting = (key: string): Lifting => ({
 	open: (folder) =>
 		void import("./folds.ts").then((one) => one.expandFolder(folder)),
 });
+
+/** What a lifted pin does: it is dropped among the other pins, and the drop reorders them. */
+export const pinLifting = (key: string): Lifting => ({
+	mode: "pin",
+	key,
+	item: (source) => source.closest<HTMLElement>("[data-pin-item]"),
+	root: (source) => source.closest<HTMLElement>(".pins"),
+	onDrop: (outcome) => {
+		if (outcome.type === "pin")
+			void actions().then((one) => one.pinRoom(key, true, outcome.before));
+	},
+	open: () => undefined,
+});

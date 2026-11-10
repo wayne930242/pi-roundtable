@@ -21,16 +21,19 @@ export type Outcome =
 	| { type: "tap" }
 	| { type: "cancel" }
 	| { type: "room"; drop: RoomDrop }
-	| { type: "folder"; before: string | null };
+	| { type: "folder"; before: string | null }
+	| { type: "pin"; before: string | null };
 
 export interface Lift {
-	mode: "room" | "folder";
+	mode: "room" | "folder" | "pin";
 	/** The row (`[data-drop-item]`) or the folder block (`[data-folder-block]`) that was lifted. */
 	item: HTMLElement;
 	/** Its room key or folder id. */
 	key: string;
 	pointerId: number;
 	y: number;
+	/** Where the finger is across; only a pin, which moves both ways, reads it. */
+	x?: number;
 	/** The region that holds the zones or the folder blocks. */
 	root: HTMLElement;
 	/** The finger rests on a folded folder: open it. */

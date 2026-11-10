@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { F1, F2, Home, loadChats, NEWS, seed } from "./chats-fixture.tsx";
 import {
 	all,
@@ -7,8 +7,10 @@ import {
 	page,
 	q,
 	SCOUT,
+	settle,
 	until,
 } from "./folders-fixture.tsx";
+import { layoutApi } from "./lib/layout-api.ts";
 
 foldersPage();
 
@@ -76,4 +78,63 @@ test("on a phone the pins sit in a dock above the bar, in pin order with their b
 	await show(<Home column />);
 	expect(q(".pin-dock")).toBeNull();
 	expect(names(".pins .pin-name")).toEqual(["build", "scout"]);
+});
+
+const press = (
+	target: Element,
+	type: "pointerdown" | "pointermove" | "pointerup",
+	x: number,
+	buttons = 0,
+) =>
+	target.dispatchEvent(
+		new PointerEvent(type, {
+			bubbles: true,
+			cancelable: true,
+			clientX: x,
+			clientY: 40,
+			pointerId: 1,
+			pointerType: "mouse",
+			isPrimary: true,
+			buttons,
+		}),
+	);
+
+test("a pin dragged onto another moves before it, and the click after the drop does not open it", async () => {
+	window.location.hash = "#/";
+	loadChats({ pins: [BUILD, SCOUT] });
+	await show(<Home column />);
+	// happy-dom has no layout: the pins stand side by side, 100 px apart.
+	all("[data-pin-item]").forEach((one, i) => {
+		one.getBoundingClientRect = () =>
+			({
+				top: 0,
+				left: i * 100,
+				width: 80,
+				height: 100,
+				bottom: 100,
+				right: i * 100 + 80,
+			}) as DOMRect;
+	});
+	const pin = spyOn(layoutApi, "pinRoom").mockResolvedValue({
+		pins: [SCOUT, BUILD],
+		hidden: [],
+		folders: [],
+	});
+	try {
+		const scout = all("a.pin")[1] as HTMLElement;
+		await page.act(() => press(scout, "pointerdown", 140, 1));
+		await page.act(() => press(scout, "pointermove", 120, 1));
+		await until(() => scout.closest("[data-lifted]") !== null);
+		await page.act(() => press(scout, "pointermove", 40, 1));
+		await new Promise((resolve) => setTimeout(resolve, 40));
+		await page.act(() => press(scout, "pointerup", 40));
+		await until(() => pin.mock.calls.length > 0);
+		expect(pin).toHaveBeenCalledWith(SCOUT, true, BUILD);
+		// The answer lands before the next test loads its own layout.
+		await settle(80);
+		await page.click(scout);
+		expect(window.location.hash).toBe("#/");
+	} finally {
+		pin.mockRestore();
+	}
 });

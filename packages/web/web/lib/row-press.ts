@@ -12,7 +12,7 @@ import { atScreenEdge } from "./swipe.ts";
 
 /** What a row needs to be lifted. */
 export interface Lifting {
-	mode: "room" | "folder";
+	mode: "room" | "folder" | "pin";
 	/** The room key or folder id. */
 	key: string;
 	/** The element that moves: the row, or the folder's whole block. */
@@ -29,6 +29,8 @@ export interface Lifting {
 const MOUSE_SLOP = 6;
 
 let dragModule = () => import("./drag.ts");
+const pinModule = () =>
+	import("./pin-drag.ts").then(({ liftPin }) => ({ lift: liftPin }));
 
 /** Loads the lift code through `load` until the returned function is called; for a test that delays the chunk. */
 export function loadDragWith(load: typeof dragModule): () => void {
@@ -71,12 +73,20 @@ export function useRowPress(
 	useEffect(() => (liftable ? armTouches() : undefined), [liftable]);
 	const finger = useRef<{
 		id: number;
+		/** Where it went down across; a mouse is lifted once it moves far enough from there. */
 		x: number;
+		/** Where it is across now. */
+		across: number;
 		y: number;
 		/** A touch or a pen, not a mouse. */
 		touch: boolean;
 	}>(undefined);
-	const chunk = useRef<ReturnType<typeof dragModule>>(undefined);
+	const chunk =
+		useRef<Promise<Pick<Awaited<ReturnType<typeof dragModule>>, "lift">>>(
+			undefined,
+		);
+	const load = () =>
+		latest.current?.mode === "pin" ? pinModule() : dragModule();
 	/** A mouse drag happened: the click that follows must not open the row. */
 	const dragged = useRef(false);
 
@@ -97,13 +107,14 @@ export function useRowPress(
 		source: HTMLElement,
 		pointerId: number,
 		y: () => number,
+		x: () => number,
 		onTap: () => void,
 	): boolean => {
 		const spec = latest.current;
 		const item = spec?.item(source);
 		const root = spec?.root(source);
 		if (!spec || !item || !root) return false;
-		chunk.current ??= dragModule();
+		chunk.current ??= load();
 		chunk.current.then(({ lift }) => {
 			// The chunk can arrive after the finger has gone: a lift now would wait for a pointer that
 			// never comes again and hold the page still. The release is a tap.
@@ -115,6 +126,7 @@ export function useRowPress(
 				root,
 				pointerId,
 				y: y(),
+				x: x(),
 				open: spec.open,
 				done: (outcome) => {
 					if (outcome.type === "tap") onTap();
@@ -134,7 +146,15 @@ export function useRowPress(
 		const held =
 			request.via === "hold" || (request.via === "contextmenu" && touch?.touch);
 		if (!held || !touch) return void menu();
-		if (!start(request.source, touch.id, () => touch.y, menu))
+		if (
+			!start(
+				request.source,
+				touch.id,
+				() => touch.y,
+				() => touch.across,
+				menu,
+			)
+		)
 			return void menu();
 		// A click that follows the lift must not open the row.
 		if (request.via === "contextmenu") dragged.current = true;
@@ -147,6 +167,7 @@ export function useRowPress(
 			finger.current = {
 				id: event.pointerId,
 				x: event.clientX,
+				across: event.clientX,
 				y: event.clientY,
 				touch: event.pointerType !== "mouse",
 			};
@@ -155,7 +176,7 @@ export function useRowPress(
 				event.pointerType !== "mouse" &&
 				atScreenEdge(event.clientX, window.innerWidth);
 			if (edge) finger.current = undefined;
-			else if (latest.current) chunk.current ??= dragModule();
+			else if (latest.current) chunk.current ??= load();
 			press.onPointerDown(event);
 		},
 		onPointerMove(event: PointerEvent<HTMLElement>) {
@@ -173,9 +194,11 @@ export function useRowPress(
 						event.currentTarget,
 						event.pointerId,
 						() => event.clientY,
+						() => event.clientX,
 						() => undefined,
 					);
 				}
+				touch.across = event.clientX;
 				touch.y = event.clientY;
 			}
 			press.onPointerMove(event);
