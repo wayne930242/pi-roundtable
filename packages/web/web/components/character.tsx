@@ -5,7 +5,7 @@ import type {
 	Expression,
 	Hex,
 } from "pi-roundtable/characters";
-import { memo, useId, useMemo } from "react";
+import { memo, type ReactNode, useId, useMemo } from "react";
 import { suggestionFor } from "../lib/character-spec.ts";
 import { type Kit, useKit } from "../lib/kit.ts";
 import { useCharacterStyle } from "../lib/look.ts";
@@ -158,10 +158,16 @@ export const PageCharacter = memo(function PageCharacter(
 	return <Character {...props} look={look} badge />;
 });
 
-/** Up to three members' characters overlapping, for a group; static. */
+/**
+ * Up to three members' characters overlapping, for a group; static unless `figure` draws a member
+ * itself.
+ */
 export const CharacterStack = memo(function CharacterStack(props: {
 	members: readonly { name: string; spec: CharacterSpec | undefined }[];
 	size: number;
+	figure?:
+		| ((member: { name: string; spec: CharacterSpec | undefined }) => ReactNode)
+		| undefined;
 }) {
 	const shown = props.members.slice(0, 3);
 	return (
@@ -182,12 +188,14 @@ export const CharacterStack = memo(function CharacterStack(props: {
 						zIndex: shown.length - index,
 					}}
 				>
-					<PageCharacter
-						spec={member.spec}
-						name={member.name}
-						size={props.size}
-						live={false}
-					/>
+					{props.figure?.(member) ?? (
+						<PageCharacter
+							spec={member.spec}
+							name={member.name}
+							size={props.size}
+							live={false}
+						/>
+					)}
 				</span>
 			))}
 		</span>

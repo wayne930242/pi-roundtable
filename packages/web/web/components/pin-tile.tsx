@@ -8,7 +8,7 @@ import { plural, translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { useRowPress } from "../lib/row-press.ts";
 import type { RowData } from "../pages/rooms.tsx";
-import { RoomPicture } from "./room-picture.tsx";
+import { ChatPicture } from "./chat-picture.tsx";
 
 /**
  * A pinned room as a big figure with its name under it; a hold, or a mouse drag, lifts it to move
@@ -26,11 +26,7 @@ export const PinTile = memo(function PinTile(
 	const { view } = props;
 	const press = useRowPress(() => roomMenuOf(view.key), pinLifting(view.key));
 	const accent = useAccentStyle(view.character);
-	const { style: phase, ...motion } = useFigureMotion(
-		view.key,
-		props.typing,
-		props.unread,
-	);
+	const { style: phase, ...motion } = useFigureMotion(view.key, props.unread);
 	const badge = pinBadge(props.waiting, props.unread, props.typing);
 	return (
 		<li className="pin-item" data-pin-item="" data-key={view.key}>
@@ -44,7 +40,7 @@ export const PinTile = memo(function PinTile(
 				style={{ ...accent, ...phase }}
 			>
 				<span className="pin-picture">
-					<RoomPicture view={view} size={props.size} />
+					<ChatPicture view={view} size={props.size} motion="pin" />
 					{badge && badge.kind !== "typing" ? (
 						<span
 							className="pin-count"

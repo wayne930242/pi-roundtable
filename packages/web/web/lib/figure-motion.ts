@@ -12,16 +12,13 @@ export function phaseOf(key: string): string {
 
 /**
  * What a figure of the chat home does, as attributes for the style to animate by transform alone:
- * `data-motion` is `working` while its agent works and `idle` otherwise, `data-pop` is there for one
- * pop after a new unread message, and `--phase` offsets its loop. One timer ends a pop; nothing runs
- * per frame.
+ * `data-pop` is there for one pop after a new unread message, and `--phase` offsets its loops. The
+ * state it shows is on the figure's host. One timer ends a pop; nothing runs per frame.
  */
 export function useFigureMotion(
 	key: string,
-	typing: boolean,
 	unread: number,
 ): {
-	"data-motion": "working" | "idle";
 	"data-pop"?: "";
 	style: CSSProperties;
 } {
@@ -36,7 +33,6 @@ export function useFigureMotion(
 		return () => clearTimeout(timer);
 	}, [unread]);
 	return {
-		"data-motion": typing ? "working" : "idle",
 		...(popping ? { "data-pop": "" as const } : {}),
 		style: { "--phase": phaseOf(key) } as CSSProperties,
 	};
