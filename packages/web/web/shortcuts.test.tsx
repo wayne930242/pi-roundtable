@@ -241,8 +241,8 @@ test("with a folder tab active it steps through the other folders' unread rooms,
 	load({ [B]: 1 }, [{ id: F1, name: "One", rooms: [G, C] }]);
 	rememberChip(F1);
 	try {
-		at(HOME);
-		for (const next of [B, C, G]) {
+		at(B);
+		for (const next of [C, G]) {
 			press(document.body, alt("ArrowDown"));
 			expect(open()).toBe(next);
 		}

@@ -20,7 +20,7 @@ const open = async () => {
 	await until(() => all(".palette-label").length > 0);
 };
 
-test("on the chat home the search lists Home, the pins, then the rooms by latest activity, and the hidden last", async () => {
+test("on the chat home the search lists the pins, then Home and the rooms by latest activity, and the hidden last", async () => {
 	loadChats({ pins: [BUILD], hidden: [NEWS] }, [
 		view(GUIDE, { home: true }),
 		view(SCOUT),
@@ -29,7 +29,7 @@ test("on the chat home the search lists Home, the pins, then the rooms by latest
 		view(QUIET),
 	]);
 	await open();
-	expect(labels()).toEqual(["guide", "build", "scout", "quiet", "news"]);
+	expect(labels()).toEqual(["build", "guide", "scout", "quiet", "news"]);
 	expect(all(".palette-list .meta").pop()?.textContent).toBe("Hidden");
 });
 

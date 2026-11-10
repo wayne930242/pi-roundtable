@@ -1,5 +1,5 @@
-// What the chat home shows, as plain functions of the arrangement (`sections`): the pins on top, the
-// folder chips, the one list a chip filters, and the badge a pin carries. Nothing here touches the
+// What the chat home shows, as plain functions of the arrangement (`sections`): the pins, the folder
+// chips, the one list a chip filters (Home leads all of it), and the badge a pin carries. Nothing here touches the
 // page or the clock, so a test needs no browser.
 
 import type { Sections } from "./sections.ts";
@@ -14,16 +14,16 @@ export interface Chip {
 	rooms: readonly string[];
 }
 
-/** Home first, then the pinned rooms in the owners' order. */
-export const pinsOf = (arrangement: Pick<Sections, "home" | "pinned">) => [
-	...arrangement.home,
+/** The pinned rooms in the owners' order; Home is not a pin, it leads the list of all. */
+export const pinsOf = (arrangement: Pick<Sections, "pinned">) => [
 	...arrangement.pinned,
 ];
 
-type ListInput = Pick<Sections, "folders" | "rest">;
+type ListInput = Pick<Sections, "home" | "folders" | "rest">;
 
-/** Every room the chat list can show: those in a folder and those in none. */
+/** Every room the chat list can show: Home, those in a folder and those in none. */
 const everyRoom = (arrangement: ListInput): string[] => [
+	...arrangement.home,
 	...arrangement.rest,
 	...arrangement.folders.flatMap((folder) => folder.rooms),
 ];
@@ -50,8 +50,9 @@ export function chipsOf(arrangement: ListInput): Chip[] {
 }
 
 /**
- * The rooms a chip lists, newest activity first, a tie in the server's `order`. The pinned and the
- * hidden rooms are in none of the chips; an unknown chip (a folder deleted meanwhile) lists everything.
+ * The rooms a chip lists, newest activity first, a tie in the server's `order`; all of them (and an
+ * unknown chip, a folder deleted meanwhile) start with Home whatever its activity. The pinned and the
+ * hidden rooms are in none of the chips, and Home is in no folder.
  */
 export function listFor(
 	arrangement: ListInput,
@@ -60,8 +61,10 @@ export function listFor(
 	order: readonly string[],
 ): string[] {
 	const found = chipsOf(arrangement).find((one) => one.id === chip);
-	const keys = found?.rooms ?? everyRoom(arrangement);
-	return newestFirst(keys, at, order);
+	if (found && found.kind !== "all") return newestFirst(found.rooms, at, order);
+	const home = new Set(arrangement.home);
+	const others = everyRoom(arrangement).filter((key) => !home.has(key));
+	return [...arrangement.home, ...newestFirst(others, at, order)];
 }
 
 /** `keys` by latest activity, a tie in the server's `order`. */
@@ -105,7 +108,8 @@ export function elsewhereUnread(
 	if (chip === "all" || !chipsOf(arrangement).some((one) => one.id === chip))
 		return [];
 	const owner = new Map<string, Elsewhere>();
-	for (const key of arrangement.rest) owner.set(key, { key });
+	for (const key of [...arrangement.home, ...arrangement.rest])
+		owner.set(key, { key });
 	for (const folder of arrangement.folders)
 		for (const key of folder.rooms)
 			owner.set(key, { key, folder: { id: folder.id, name: folder.name } });
@@ -130,8 +134,8 @@ export const folderOf = (
 };
 
 /**
- * Every room in the order the chat home shows them: Home and the pins, then the one list by latest
- * activity, then the hidden rooms. The switcher and the search list rooms in this order.
+ * Every room in the order the chat home shows them: the pins, then the list of all (Home first, the
+ * rest by latest activity), then the hidden rooms. The switcher and the search list rooms in this order.
  */
 export const homeOrder = (
 	arrangement: Sections,

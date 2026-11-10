@@ -14,7 +14,7 @@ const C = "app:agent.c";
 const D = "app:agent.d";
 const HOME = "app:agent.guide";
 
-/** The arrangement the home reads: Home and a pin on top, two folders, and the rest. */
+/** The arrangement the home reads: Home, a pin, two folders, and the rest. */
 const arrangement = (over: Partial<Sections> = {}): Sections => ({
 	home: [HOME],
 	pinned: [D],
@@ -34,9 +34,9 @@ const times: Record<string, number> = { [A]: 40, [B]: 30, [C]: 20 };
 const at = (key: string) => times[key] ?? Number.NEGATIVE_INFINITY;
 const order = [HOME, A, B, C, D];
 
-test("the pins are Home first, then the pinned rooms in their order", () => {
-	expect(pinsOf(arrangement())).toEqual([HOME, D]);
-	expect(pinsOf(arrangement({ home: [] }))).toEqual([D]);
+test("the pins are the pinned rooms in their order; Home is not one of them", () => {
+	expect(pinsOf(arrangement())).toEqual([D]);
+	expect(pinsOf(arrangement({ pinned: [] }))).toEqual([]);
 });
 
 test("there are no chips without a folder; with folders: all, each folder, and others only when rooms are in none", () => {
@@ -54,13 +54,22 @@ test("there are no chips without a folder; with folders: all, each folder, and o
 	]);
 });
 
-test("all lists every room that is neither pinned nor hidden by latest activity; a folder chip lists its rooms by the same order", () => {
-	expect(listFor(arrangement(), "all", at, order)).toEqual([A, B, C]);
+test("all lists Home first, then every room that is neither pinned nor hidden by latest activity; a folder chip lists its rooms by the same order", () => {
+	expect(listFor(arrangement(), "all", at, order)).toEqual([HOME, A, B, C]);
+	// Home leads even when every other room spoke later, and without folders too.
+	const late = (key: string) => (key === HOME ? 0 : 100);
+	expect(listFor(arrangement(), "all", late, order)[0]).toBe(HOME);
+	expect(listFor(arrangement({ folders: [] }), "all", at, order)).toEqual([
+		HOME,
+		B,
+		C,
+	]);
 	expect(listFor(arrangement(), "f1", at, order)).toEqual([A]);
 	expect(listFor(arrangement(), "f2", at, order)).toEqual([]);
 	expect(listFor(arrangement(), "other", at, order)).toEqual([B, C]);
 	// A folder that is gone shows everything rather than nothing.
 	expect(listFor(arrangement(), "folder.deleted", at, order)).toEqual([
+		HOME,
 		A,
 		B,
 		C,
@@ -71,7 +80,7 @@ test("all lists every room that is neither pinned nor hidden by latest activity;
 		C,
 		A,
 	]);
-	expect(flat).toEqual([B, C, A]);
+	expect(flat).toEqual([HOME, B, C, A]);
 });
 
 test("a folder's rooms are in the folder's chip even when the folder holds several, newest first", () => {

@@ -70,11 +70,10 @@ test("on a phone the pins sit in a dock above the bar, in pin order with their b
 	seed(0, { [BUILD]: 3 });
 	await show(<Home />);
 	expect(q(".pins:not(.pin-dock)")).toBeNull();
-	expect(names(".pin-dock .pin-name")).toEqual(["guide", "build", "scout"]);
-	expect(q(".pin-dock .pin-star")).not.toBeNull();
+	expect(names(".pin-dock .pin-name")).toEqual(["build", "scout"]);
 	expect(q(".pin-dock .pin-count")?.textContent).toBe("3");
 	expect(q(".chats-foot .pin-dock")).not.toBeNull();
 	await show(<Home column />);
 	expect(q(".pin-dock")).toBeNull();
-	expect(names(".pins .pin-name")).toEqual(["guide", "build", "scout"]);
+	expect(names(".pins .pin-name")).toEqual(["build", "scout"]);
 });

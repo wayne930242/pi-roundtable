@@ -226,14 +226,14 @@ test("a knight's temp knights are stops right after it, as the server lists them
 	expect(shown(stops)).toEqual(["app:agent.h"]);
 });
 
-test("on the chat home the run is the pins, then the rooms of the list as drawn", () => {
+test("on the chat home the run is the pins, then the rooms of the list as drawn, Home among them", () => {
 	const state = input(
 		[view(HOME, { home: true }), view(A), view(B), view(C), view(G)],
 		{ pins: [C], folders: [{ id: F1, name: "One", rooms: [A, B] }] },
 	);
-	expect(keys(roomStops(state, options({ home: [G, B, A] })))).toEqual([
-		HOME,
+	expect(keys(roomStops(state, options({ home: [HOME, G, B, A] })))).toEqual([
 		C,
+		HOME,
 		G,
 		B,
 		A,

@@ -1057,6 +1057,8 @@ button.yolo-action:hover:not(:disabled) {
 
 .av-stack {
 	position: relative;
+	/* The members' z-index orders them inside the stack only, not against a sticky bar over the list. */
+	isolation: isolate;
 	display: inline-block;
 	flex: none;
 }

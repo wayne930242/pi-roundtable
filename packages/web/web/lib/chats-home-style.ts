@@ -128,7 +128,6 @@ a.pin[aria-current="page"] {
 }
 
 .pin-count,
-.pin-star,
 .pin-dot {
 	position: absolute;
 }
@@ -156,18 +155,6 @@ a.pin[aria-current="page"] {
 	color: var(--on-accent);
 }
 
-.pin-star {
-	right: -0.25rem;
-	bottom: 0;
-	display: grid;
-	place-items: center;
-	width: 1.5rem;
-	height: 1.5rem;
-	border-radius: var(--radius-full);
-	background: var(--warn);
-	color: var(--bg);
-}
-
 .pin-dot {
 	right: 0.1rem;
 	bottom: 0.1rem;
@@ -176,11 +163,6 @@ a.pin[aria-current="page"] {
 	border-radius: var(--radius-full);
 	background: var(--success);
 	box-shadow: 0 0 0 3px var(--bg);
-}
-
-.pin-dot[data-home] {
-	right: auto;
-	left: 0.1rem;
 }
 
 /* A figure that stands free: no disc under it while the character kit loads either. */

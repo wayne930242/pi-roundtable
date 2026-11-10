@@ -27,9 +27,9 @@ export interface OrderOptions {
 }
 
 /**
- * Every room of the list in the order it is drawn: Home, the pinned rooms, the folders, the rest (agents
- * then groups while there are no folders), and the threads whose room is gone; a room's threads follow
- * it, the open ones first. `shown` is false for the rooms in a folded group (but the open room and the
+ * Every room of the list in the order it is drawn: Home (on the chat home, at the head of its list),
+ * the pinned rooms, the folders, the rest (agents then groups while there are no folders), and the
+ * threads whose room is gone; a room's threads follow it, the open ones first. `shown` is false for the rooms in a folded group (but the open room and the
  * ones that `stays`) and the finished threads under a closed fold.
  */
 export function roomStops(state: SectionsInput, options: OrderOptions): Stop[] {
@@ -47,7 +47,8 @@ export function roomStops(state: SectionsInput, options: OrderOptions): Stop[] {
 				shown: shown && (expanded.has(closed) || closed === current),
 			});
 	};
-	for (const key of arrangement.home) room(key, true);
+	// The chat home's run holds Home in its list of all, after the pins.
+	if (!options.home) for (const key of arrangement.home) room(key, true);
 	/** The rooms of one group: all while it is open, else those a fold leaves showing. */
 	const group = (id: string, keys: readonly string[]) => {
 		const folded = collapsed.has(id);

@@ -8,7 +8,7 @@ const C = "app:agent.c";
 const D = "app:agent.d";
 const HOME = "app:agent.guide";
 
-/** The arrangement the home reads: Home and a pin on top, two folders, and the rest. */
+/** The arrangement the home reads: Home, a pin, two folders, and the rest. */
 const arrangement = (over: Partial<Sections> = {}): Sections => ({
 	home: [HOME],
 	pinned: [D],
@@ -52,4 +52,16 @@ test("with a folder chip active, the unread rooms of the other folders and of no
 		elsewhereUnread(shape, "f2", { [A]: 0, [B]: 2, [C]: 0 }, at, order),
 	).toEqual([]);
 	expect(elsewhereUnread(shape, "all", unread, at, order)).toEqual([]);
+});
+
+test("Home is in no folder: All counts it, and under a folder or the other chip its unread shows among the other unread", () => {
+	const unread = { [HOME]: 1 };
+	const chips = chipsOf(arrangement());
+	expect(chips.map((chip) => chipUnread(chip, unread))).toEqual([1, 0, 0, 0]);
+	expect(elsewhereUnread(arrangement(), "f1", unread, at, order)).toEqual([
+		{ key: HOME },
+	]);
+	expect(elsewhereUnread(arrangement(), "other", unread, at, order)).toEqual([
+		{ key: HOME },
+	]);
 });

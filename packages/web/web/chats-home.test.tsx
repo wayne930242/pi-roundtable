@@ -50,15 +50,15 @@ const say = (room: string, id: number, at: string) =>
 	});
 const names = (selector: string) => all(selector).map((one) => one.textContent);
 
-test("the pins are Home first, then the pinned rooms in order, each with its name under it; Home wears a star", async () => {
+test("the pins are the pinned rooms in order, each with its name under it; Home is no pin and leads the list", async () => {
 	seed();
 	loadChats({ pins: [BUILD, SCOUT] });
 	await show(<Home />);
-	expect(names(".pin-name")).toEqual(["guide", "build", "scout"]);
-	expect(all(".pin-star").length).toBe(1);
-	expect(q(".pin[data-home] .pin-star")).not.toBeNull();
-	// Pinned rooms and Home are not in the list below them.
-	expect(names(".chat-row strong").sort()).toEqual(["news", "team"]);
+	expect(names(".pin-name")).toEqual(["build", "scout"]);
+	// Pinned rooms are not in the list below them; Home is its first row.
+	const rows = names(".chat-row strong");
+	expect(rows[0]).toBe("guide");
+	expect(rows.slice(1).sort()).toEqual(["news", "team"]);
 });
 
 test("a figure stands free: no frame, no background, one element each, in the pins and in the rows", async () => {
@@ -137,7 +137,7 @@ test("there are no chips without a folder; with folders a chip filters the one l
 	);
 	expect(
 		names(".chat-list:not(.elsewhere-list) .chat-row strong").sort(),
-	).toEqual(["build", "news", "scout", "team"]);
+	).toEqual(["build", "guide", "news", "scout", "team"]);
 	await page.click(all(".chip")[2] ?? null);
 	expect(names(".chat-list:not(.elsewhere-list) .chat-row strong")).toEqual([
 		"news",
@@ -148,7 +148,7 @@ test("there are no chips without a folder; with folders a chip filters the one l
 		names(".chat-list:not(.elsewhere-list) .chat-row strong").sort(),
 	).toEqual(["build", "team"]);
 	await page.click(all(".chip")[0] ?? null);
-	expect(all(".chat-row").length).toBe(4);
+	expect(all(".chat-row").length).toBe(5);
 });
 
 test("the list is by latest activity and a message moves its room up at once", async () => {
@@ -157,9 +157,18 @@ test("the list is by latest activity and a message moves its room up at once", a
 	await show(<Home />);
 	await say(BUILD, 1, "2026-10-30T10:00:00.000Z");
 	await say(NEWS, 1, "2026-10-30T11:00:00.000Z");
-	expect(names(".chat-row strong").slice(0, 2)).toEqual(["news", "build"]);
+	// Home stays first whatever spoke last.
+	expect(names(".chat-row strong").slice(0, 3)).toEqual([
+		"guide",
+		"news",
+		"build",
+	]);
 	await say(BUILD, 2, "2026-10-30T12:00:00.000Z");
-	expect(names(".chat-row strong").slice(0, 2)).toEqual(["build", "news"]);
+	expect(names(".chat-row strong").slice(0, 3)).toEqual([
+		"guide",
+		"build",
+		"news",
+	]);
 	// One line of the last message is the preview.
 	expect(q(`[data-room="${BUILD}"] .chat-preview`)?.textContent).toBe(
 		`hello from ${BUILD}`,
@@ -175,7 +184,7 @@ test("a row has no nested threads: dispatch threads are only a count, and the th
 		view(T2, { kind: "thread", parent: SCOUT, readOnly: true }),
 	]);
 	await show(<Home />);
-	expect(all(".chat-row").length).toBe(1);
+	expect(names(".chat-row strong")).toEqual(["guide", "scout"]);
 	expect(q(".thread-group, .helper-link")).toBeNull();
 	expect(
 		q(`[data-room="${SCOUT}"] .chat-pill[data-kind="threads"]`)?.textContent,
@@ -192,7 +201,7 @@ test("hidden rooms are off the home; the collapsed row counts hidden and archive
 	seed(4, { [QUIET]: 1 });
 	await show(<Home />);
 	await until(() => q(".hidden-row") !== null);
-	expect(names(".chat-row strong")).toEqual(["scout"]);
+	expect(names(".chat-row strong")).toEqual(["guide", "scout"]);
 	const row = q<HTMLAnchorElement>(".hidden-row");
 	expect(row?.textContent).toBe("Hidden 2 · Archived 4");
 	expect(row?.querySelector(".chip-dot")).not.toBeNull();
