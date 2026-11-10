@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { ENTRY_CHANNEL_WITHOUT_GUILD } from "../config/agent-team.ts";
 import type { PeerBotsConfig } from "../config/peer-bots.ts";
 import type {
 	ChannelContext,
@@ -7,7 +8,7 @@ import type {
 } from "../contract/channel-context.ts";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
 import { discordAgentGuild } from "../discord/agent-guild.ts";
-import { discordChannelOps } from "../discord/agent-tools.ts";
+import { discordChannelOps, discordTeamReads } from "../discord/agent-tools.ts";
 import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
@@ -83,7 +84,10 @@ export function discordFormerChannelOps(
 			connection &&
 			discordChannelOps({
 				channels: connection.agentChannels(guild),
-				directory: () => services.find(AGENTS)?.directory,
+				directory: () => {
+					const server = services.find(AGENTS);
+					return server && discordTeamReads(server);
+				},
 				logger,
 			})
 		);
@@ -151,9 +155,7 @@ const INTERCOM_KEEP = 300;
  */
 export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 	if (options.entryChannel !== undefined && options.agentGuild === undefined)
-		throw new ConfigError(
-			"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out, so the agents live in the app's rooms. Remove entryChannel and name the coordinator with coordinator, or add discord.guild.",
-		);
+		throw new ConfigError(ENTRY_CHANNEL_WITHOUT_GUILD);
 	const collection = new CommandCollection();
 	let surface: DiscordSurface | undefined;
 	return {

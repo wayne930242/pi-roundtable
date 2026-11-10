@@ -49,6 +49,10 @@ interface AgentGuildKeys {
 	agents?: readonly unknown[];
 }
 
+/** What `discord.entryChannel` without `discord.guild` is refused with, here and in the Discord plugin that takes the same option. */
+export const ENTRY_CHANNEL_WITHOUT_GUILD =
+	"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out, so the agents live in the app's rooms. Remove entryChannel and name the coordinator with coordinator, or add discord.guild.";
+
 /**
  * Whether the agent team lives in the Discord guild `discord.guild` names; refuses what that
  * guild needs and lacks, and an entry channel without it. Without `discord.guild` the bot still
@@ -62,9 +66,7 @@ export function checkAgentGuild(
 	if (!discord) return false;
 	if (discord.guild === undefined) {
 		if (discord.entryChannel !== undefined)
-			throw new ConfigError(
-				"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out, so the agents live in the app's rooms. Remove entryChannel and name the coordinator with coordinator, or add discord.guild.",
-			);
+			throw new ConfigError(ENTRY_CHANNEL_WITHOUT_GUILD);
 		if (agentServer && (config.agents?.length ?? 0) === 0)
 			throw new ConfigError(
 				"config discord.guild: left out, so the agents live in the app's rooms, and agents configures none. Add agents, add discord.guild for an agent server in Discord, or set agentServer: false for a host without agents.",

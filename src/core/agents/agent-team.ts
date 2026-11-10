@@ -10,11 +10,7 @@ import type { TurnSelection } from "../domain/sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import type { PromptVersion } from "../modules/prompts/prompt-history.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
-import {
-	type AgentOps,
-	type FormerChannelOps,
-	NO_CHANNELS,
-} from "../plugin-api/agent-ops.ts";
+import type { AgentOps, FormerChannelOps } from "../plugin-api/agent-ops.ts";
 import type { AgentChange, AgentTeam } from "../plugin-api/services.ts";
 import type { Agent } from "./agent-store.ts";
 import {
@@ -36,7 +32,7 @@ import { teamSystemPrompt } from "./team-prompt.ts";
 import { TeamRooms } from "./team-rooms.ts";
 import { teamSelection } from "./team-selection.ts";
 import { type TeamStatus, teamStatus } from "./team-status.ts";
-import { agentDetails, teamListText } from "./team-text.ts";
+import { agentDetails, NO_CHANNELS, teamListText } from "./team-text.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 export type { AgentTeamOptions } from "./team-options.ts";

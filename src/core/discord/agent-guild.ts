@@ -1,9 +1,13 @@
 import type { Client } from "discord.js";
-import type { Contribution, PluginContext } from "../plugin-api/plugin.ts";
+import type {
+	Contribution,
+	EventHandlers,
+	PluginContext,
+} from "../plugin-api/plugin.ts";
 import { AGENTS } from "../plugin-api/services.ts";
 import { agentDashboardContribution } from "./agent-dashboard-service.ts";
 import { discordPlaces } from "./agent-places.ts";
-import { discordAgentTools, ownerNameOf } from "./agent-tools.ts";
+import { discordAgentTools, discordTeamReads } from "./agent-tools.ts";
 import type { DiscordConnection } from "./connection.ts";
 
 export interface DiscordAgentGuildOptions {
@@ -25,6 +29,13 @@ export interface DiscordAgentGuildOptions {
 	 * names no coordinator in its configuration.
 	 */
 	entryChannel?: string;
+	/**
+	 * The services and event handlers the plugin contributes itself. Spreading the result puts
+	 * `services` and `events` in place of the plugin's own, so give them here: the services follow
+	 * the dashboard's, and a handler of an event the dashboard also hears runs after it, and runs
+	 * even when the dashboard's throws.
+	 */
+	own?: Pick<Contribution, "services" | "events">;
 }
 
 /** Discord's side of the agent guild, as a plugin's setup returns it. */
@@ -44,7 +55,8 @@ export type DiscordAgentGuild = Required<
  *   with the agents' and groups' names.
  * - `tools`: `channel_arrange` and `channel_read`, which an agent's turn carries.
  * - `services` and `events`: the `#dashboard` message, started once the agent server's team is
- *   ready. A plugin with services or event handlers of its own merges them with these.
+ *   ready. A plugin with services or event handlers of its own gives them as `own`, and the result
+ *   merges them with these.
  *
  * It reads the team through `AGENTS` when a tool runs or the dashboard updates, never during
  * setup, so the plugin may be set up before the agent server.
@@ -56,7 +68,10 @@ export function discordAgentGuild(
 	const { guild, connection } = options;
 	const { services, logger } = context;
 	const channels = connection.agentChannels(guild);
-	const directory = () => services.find(AGENTS)?.directory;
+	const directory = () => {
+		const server = services.find(AGENTS);
+		return server && discordTeamReads(server);
+	};
 	const dashboard = agentDashboardContribution({
 		board: connection.agentDashboard(guild),
 		agents: () => services.find(AGENTS)?.team,
@@ -73,15 +88,43 @@ export function discordAgentGuild(
 				guild,
 				channels,
 				onRemoved: (listener) => connection.onChannelDeleted(listener),
-				nameOf: (channelId) => {
-					const found = directory();
-					return found ? ownerNameOf(found)(channelId) : undefined;
-				},
+				nameOf: (channelId) => directory()?.ownerOf(channelId),
 				logger,
 			}),
 		],
 		tools: discordAgentTools({ channels, directory, logger }),
-		services: dashboard.services ?? [],
-		events: dashboard.events ?? {},
+		services: [...(dashboard.services ?? []), ...(options.own?.services ?? [])],
+		events: mergedEvents(dashboard.events ?? {}, options.own?.events ?? {}),
 	};
+}
+
+/**
+ * Handlers of both sets under one event name each: those of an event both hear run in order, each
+ * even when one before it throws, and the first error is the one raised.
+ */
+function mergedEvents(
+	first: EventHandlers,
+	second: EventHandlers,
+): EventHandlers {
+	const merged: Record<string, (...args: unknown[]) => Promise<void>> = {};
+	const names = new Set([...Object.keys(first), ...Object.keys(second)]);
+	for (const name of names) {
+		const handlers = [first, second].flatMap((set) => {
+			const handler = (set as Record<string, unknown>)[name] as
+				| ((...args: unknown[]) => Promise<void> | void)
+				| undefined;
+			return handler ? [{ set, handler }] : [];
+		});
+		merged[name] = async (...args) => {
+			const failures: unknown[] = [];
+			for (const { set, handler } of handlers)
+				try {
+					await handler.apply(set, args);
+				} catch (error) {
+					failures.push(error);
+				}
+			if (failures.length > 0) throw failures[0];
+		};
+	}
+	return merged as EventHandlers;
 }

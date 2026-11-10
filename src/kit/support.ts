@@ -5,8 +5,9 @@ export type {
 	AgentTurnRunner,
 } from "../core/agents/agent-ports.ts";
 export type { Backlog, GroupMessage } from "../core/agents/agent-rules.ts";
-// Deprecated here, removed from `pi-roundtable/kit` in 1.0: Discord's agent guild internals,
-// which `pi-roundtable/discord` exports too.
+// Deprecated here, removed from `pi-roundtable/kit` in 1.0: Discord's agent guild internals, which
+// `pi-roundtable/discord` exports then (an entry holds a name once until 1.0). Each type's own
+// `@deprecated` says so where an editor shows it.
 export type {
 	AgentCategory,
 	AgentChannels,

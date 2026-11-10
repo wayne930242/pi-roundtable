@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SQL } from "bun";
-import { discordKey } from "../contract/discord-key.ts";
+import { discordIdOf, discordKey } from "../contract/discord-key.ts";
 import type { PlaceProvider } from "../contract/places.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
@@ -371,7 +371,16 @@ export function useTeamFixture(
 				...(local
 					? {}
 					: {
-							formerChannelOps: () => discordTestChannelOps(channels, store),
+							formerChannelOps: () =>
+								discordTestChannelOps(channels, {
+									agent: (name) => store.agent(name),
+									group: (name) => store.group(name),
+									ownerOf: (id) => store.placeOwner(discordKey(id))?.name,
+									channelOf: (name) => {
+										const key = places.placeOn(name, "discord");
+										return key === undefined ? undefined : discordIdOf(key);
+									},
+								}),
 						}),
 				logger: silentLogger(),
 			});
