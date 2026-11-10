@@ -1,6 +1,4 @@
 import type { AgentRuntime, ContextUse } from "../contract/runtime.ts";
-import type { IntercomCard } from "../domain/conversation.ts";
-import type { InterimPosts } from "../domain/interim.ts";
 import type { ThinkingSetting } from "../domain/models.ts";
 
 export type { ContextUse };
@@ -14,102 +12,6 @@ export type AgentTurnRunner = Pick<
 	| "deleteConversation"
 	| "contextUsage"
 >;
-
-/** One agent's message in a channel, posted under its name and avatar. */
-export interface AgentPost {
-	name: string;
-	avatarUrl: string;
-	/** The turn's thinking, posted first as a quiet line. */
-	thinking?: string;
-	chunks: string[];
-	files?: { name: string; data: Uint8Array }[];
-	/** A thread of the channel to post in instead, such as a dispatch's. */
-	threadId?: string;
-	/** A message between agents, shown as a small card in place of `chunks` where the channel can. */
-	intercom?: IntercomCard;
-}
-
-/**
- * A category's name. Agents live under `Agents` or `Agents-<suffix>`, groups under `Groups` or
- * `Groups-<suffix>`, and archived ones, kept with their history, under `Archive`.
- */
-export type AgentCategory = string;
-
-/** A category of the agent server and its channels, in server order. */
-export interface CategoryLayout {
-	/** Absent for a category still to be made. */
-	id?: string;
-	name: string;
-	channelIds: string[];
-}
-
-/** A message of the agent server as `channel_read` returns it. */
-export interface ChannelMessage {
-	id: string;
-	author: string;
-	at: Date;
-	text: string;
-	attachments: string[];
-}
-
-/**
- * The agent server's channels. Discord's place provider drives them to make, keep and post in the
- * places of agents and groups; the team itself reads only `layout`, `arrange` and `read`, for the
- * tools that list, arrange and read categories, until those are contributed by Discord's plugin.
- */
-export interface AgentChannels {
-	post(channelId: string, post: AgentPost): Promise<void>;
-	/**
-	 * Where a running turn posts the text it writes before its final answer, under the same name
-	 * and avatar as `post`; absent = only the final reply is posted.
-	 */
-	interim?(
-		channelId: string,
-		as: Omit<AgentPost, "thinking" | "chunks" | "files">,
-	): InterimPosts;
-	/** Creates a text channel under the category, made when missing; returns its id. */
-	createChannel(
-		name: string,
-		topic: string,
-		category: AgentCategory,
-	): Promise<string>;
-	/**
-	 * Opens a thread under a channel to be a temp knight's place, with no start message; returns its
-	 * id. Posts to that id speak through the parent channel's webhook into the thread. Absent: Discord
-	 * makes no place for a temp knight, and making one from a Discord conversation fails.
-	 */
-	createThread?(parentChannelId: string, name: string): Promise<string>;
-	/** Archives and locks a temp knight's thread (locked only when permitted); its history stays. */
-	closeThread?(threadId: string): Promise<void>;
-	/** Opens a temp knight's archived thread again, unlocked. */
-	openThread?(threadId: string): Promise<void>;
-	/** Moves a channel into the category when it sits elsewhere; true when it moved. */
-	placeIn(channelId: string, category: AgentCategory): Promise<boolean>;
-	/** Every category of the server in order, each with its channels in order. */
-	layout(): Promise<CategoryLayout[]>;
-	/**
-	 * Puts the categories, and the channels in each, in this order, making categories without an
-	 * id; then deletes the categories of `remove` that hold no channel.
-	 */
-	arrange(layout: CategoryLayout[], remove: string[]): Promise<void>;
-	setTopic(channelId: string, topic: string): Promise<void>;
-	/** Deletes the assistant's webhook in the channel, when it has one; its past messages stay. */
-	removeWebhook(channelId: string): Promise<void>;
-	exists(channelId: string): Promise<boolean>;
-	/**
-	 * Up to `limit` messages of a text channel or thread of the agent server, oldest first: the
-	 * latest, or those around `around`. Other servers' channels are refused.
-	 */
-	read(
-		channelId: string,
-		options: { limit: number; around?: string },
-	): Promise<ChannelMessage[]>;
-}
-
-/** The dashboard channel's one pinned message, made when missing and edited in place. */
-export interface DashboardBoard {
-	show(sections: string[]): Promise<void>;
-}
 
 /** The models an agent can run on, and the assistant's own, which unset agents follow. */
 export interface AgentModels {

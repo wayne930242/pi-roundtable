@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentPost } from "../contract/agent-channels.ts";
 import { discordKey } from "../contract/discord-key.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
@@ -16,7 +17,6 @@ import { attachReplyFile } from "../shared/reply-files.ts";
 import { TEST_OWNER as OWNER, OWNER_SPEAKER } from "../testing/owner.ts";
 import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
-import type { AgentPost } from "./agent-ports.ts";
 import type { Agent, AgentGroup, PgAgentStore } from "./agent-store.ts";
 import { TeamTurns } from "./team-turns.ts";
 

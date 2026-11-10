@@ -1,13 +1,8 @@
+import type { CategoryLayout } from "../contract/agent-channels.ts";
 import { AgentError } from "../domain/errors.ts";
-import { messages } from "../i18n/index.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
-import type { CategoryLayout } from "./agent-ports.ts";
-import type { AgentGroup } from "./agent-store.ts";
 
-type TeamStore = Pick<
-	AgentDirectory,
-	"agent" | "group" | "agentByChannel" | "groupByChannel"
->;
+type TeamStore = Pick<AgentDirectory, "agent" | "group">;
 
 /** The two kinds of team category (spec behavior 56). */
 export type CategoryKind = "Agents" | "Groups";
@@ -36,32 +31,17 @@ export function teamCategory(
 	return name;
 }
 
-/** A group channel's topic: who is in it and who hosts. */
-export function groupTopic(
-	group: AgentGroup,
-	store: Pick<AgentDirectory, "agent">,
-): string {
-	const shown = (name: string) => store.agent(name)?.displayName ?? name;
-	return messages().groupTopic(
-		group.displayName,
-		group.members.map(shown),
-		shown(group.host),
-	);
-}
-
-/** The team categories in server order, each with its channels by agent or group name. */
-export function layoutText(
+/**
+ * The team categories in server order, each with its channels by agent or group name, or as a
+ * mention for a channel of neither; the section `agent_list` ends with.
+ */
+export function categoryLayoutText(
 	layout: readonly CategoryLayout[],
-	store: TeamStore,
+	nameOf: (channelId: string) => string | undefined,
 ): string {
 	const lines = layout.flatMap((c) => {
 		if (!categoryKind(c.name)) return [];
-		const shown = c.channelIds.map(
-			(id) =>
-				store.agentByChannel(id)?.name ??
-				store.groupByChannel(id)?.name ??
-				`<#${id}>`,
-		);
+		const shown = c.channelIds.map((id) => nameOf(id) ?? `<#${id}>`);
 		return [`- ${c.name}: ${shown.join(", ") || "empty"}`];
 	});
 	return `Categories, in server order:\n${lines.join("\n") || "none"}`;

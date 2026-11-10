@@ -80,6 +80,17 @@ export class TeamPlaces {
 			: undefined;
 	}
 
+	/**
+	 * The place whose agent is the coordinator, when a stored provider names one (Discord's entry
+	 * channel); undefined when none does, and the configured `coordinator` is it.
+	 */
+	entry(): ChannelKey | undefined {
+		for (const provider of this.stored())
+			if (provider.coordinatorPlace !== undefined)
+				return this.keyOfId(provider.surface, provider.coordinatorPlace);
+		return undefined;
+	}
+
 	/** The surfaces that hold places, in "auto" order. */
 	surfaces(): readonly string[] {
 		return this.ordered().map((provider) => provider.surface);

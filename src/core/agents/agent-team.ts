@@ -10,10 +10,15 @@ import type { TurnSelection } from "../domain/sessions.ts";
 import { type Speaker, THE_SPEAKER } from "../identity/speakers.ts";
 import type { PromptVersion } from "../modules/prompts/prompt-history.ts";
 import type { ResolvedSkill } from "../modules/skills/skill-rules.ts";
+import {
+	type AgentOps,
+	type FormerChannelOps,
+	NO_CHANNELS,
+} from "../plugin-api/agent-ops.ts";
 import type { AgentChange, AgentTeam } from "../plugin-api/services.ts";
 import type { Agent } from "./agent-store.ts";
 import {
-	type AgentOps,
+	type AgentToolOptions,
 	type AvatarMode,
 	agentToolsExtension,
 } from "./agent-tools.ts";
@@ -24,11 +29,6 @@ import { type Routes, routesOf } from "./routes.ts";
 import { TeamEditing } from "./team-editing.ts";
 import type { TeamHelpers } from "./team-helpers.ts";
 import { coordinatorOf } from "./team-keys.ts";
-import {
-	layoutText,
-	planArrangement,
-	resolveArrangement,
-} from "./team-layout.ts";
 import { TeamLifecycle } from "./team-lifecycle.ts";
 import { TeamLooks } from "./team-looks.ts";
 import type { AgentTeamOptions, TeamContext } from "./team-options.ts";
@@ -36,12 +36,7 @@ import { teamSystemPrompt } from "./team-prompt.ts";
 import { TeamRooms } from "./team-rooms.ts";
 import { teamSelection } from "./team-selection.ts";
 import { type TeamStatus, teamStatus } from "./team-status.ts";
-import {
-	agentDetails,
-	NO_CHANNELS,
-	readChannel,
-	teamListText,
-} from "./team-text.ts";
+import { agentDetails, teamListText } from "./team-text.ts";
 import { TeamTurns } from "./team-turns.ts";
 
 export type { AgentTeamOptions } from "./team-options.ts";
@@ -172,9 +167,18 @@ export class AgentServerTeam implements AgentOps, AgentTeam {
 	extension(scope: AgentTurnScope): ExtensionFactory {
 		return agentToolsExtension(this, scope, THE_SPEAKER, {
 			skills: this.#options.skills !== undefined,
-			channels: this.#options.channels !== undefined,
+			arguments: this.#createArguments(),
 			rooms: new TeamRooms(this.#options.store, () => this.#options.rooms?.()),
 		});
+	}
+
+	/** What the surfaces' place providers add to the creation tools, merged over the stored providers in contribution order. */
+	#createArguments(): NonNullable<AgentToolOptions["arguments"]> {
+		const stored = this.#options.places.stored();
+		return {
+			agent: Object.assign({}, ...stored.map((p) => p.createArguments?.agent)),
+			group: Object.assign({}, ...stored.map((p) => p.createArguments?.group)),
+		};
 	}
 
 	/** The skill files an agent's sessions load, built-in ones included; none while the skills addon is off. */
@@ -314,42 +318,16 @@ export class AgentServerTeam implements AgentOps, AgentTeam {
 		return this.#lifecycle.helpers.reach(...args);
 	}
 
-	read(...args: [string, string | undefined, number | undefined]) {
-		return readChannel(this.#options.channels, ...args);
-	}
-
 	// ── AgentOps ───────────────────────────────────────────────────────────
 
 	async list(): Promise<string> {
-		const { store, channels } = this.#options;
-		const list = teamListText(store);
-		return channels
-			? `${list}\n\n${layoutText(await channels.layout(), store)}`
-			: list;
-	}
-
-	/**
-	 * Sorts agent and group channels into team categories and orders them (spec behavior 57):
-	 * the listed categories and channels first, everything else after in its current order. A
-	 * wrong entry refuses the whole call before anything moves.
-	 */
-	async arrange(
-		entries: { category: string; names: string[] }[],
-	): Promise<string> {
-		const { store, channels, logger } = this.#options;
-		if (!channels) throw new AgentError(NO_CHANNELS);
-		const listed = resolveArrangement(entries, store);
-		const { layout, remove } = planArrangement(listed, await channels.layout());
-		await channels.arrange(layout, remove);
-		logger.info(
-			{ entries: listed.map((l) => l.category), removed: remove.length },
-			"agent channels arranged",
+		const sections = await Promise.all(
+			this.#options.places.stored().map((provider) => provider.layoutText?.()),
 		);
-		const removed =
-			remove.length > 0
-				? ` ${remove.length} empty team categories were deleted.`
-				: "";
-		return `Arranged the channels.${removed}\n\n${layoutText(await channels.layout(), store)}`;
+		return [
+			teamListText(this.#options.store),
+			...sections.filter((text) => text !== undefined),
+		].join("\n\n");
 	}
 
 	get(name: string): string {
@@ -491,5 +469,24 @@ export class AgentServerTeam implements AgentOps, AgentTeam {
 		change: Parameters<TeamEditing["updateGroup"]>[1],
 	): Promise<string> {
 		return this.#editing.updateGroup(name, change);
+	}
+
+	/** The surface's side of `arrange` and `read`, which its own tools took over; refuses without one. */
+	#formerChannelOps(): FormerChannelOps {
+		const ops = this.#options.formerChannelOps?.();
+		if (!ops) throw new AgentError(NO_CHANNELS);
+		return ops;
+	}
+
+	/** @deprecated The surface that holds the channels contributes the tool; see `AgentOps.arrange`. Removed in 1.0. */
+	async arrange(
+		...args: Parameters<FormerChannelOps["arrange"]>
+	): Promise<string> {
+		return this.#formerChannelOps().arrange(...args);
+	}
+
+	/** @deprecated The surface that holds the channels contributes the tool; see `AgentOps.read`. Removed in 1.0. */
+	async read(...args: Parameters<FormerChannelOps["read"]>): Promise<string> {
+		return this.#formerChannelOps().read(...args);
 	}
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Client } from "discord.js";
-import type { AgentChannels } from "../agents/agent-ports.ts";
+import type { AgentChannels } from "../contract/agent-channels.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { discordPlaceProvider, discordPlaces } from "./agent-places.ts";
 

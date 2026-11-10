@@ -2,7 +2,6 @@ import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { SQL } from "bun";
 import { agentClaim } from "../agents/agent-claim.ts";
-import { AgentDashboard } from "../agents/agent-dashboard.ts";
 import { PgAgentStore } from "../agents/agent-store.ts";
 import { AgentServerTeam } from "../agents/agent-team.ts";
 import { AGENT_TOOLS } from "../agents/agent-tools.ts";
@@ -12,9 +11,9 @@ import { modeOrigins } from "../agents/helper-modes.ts";
 import { Routes } from "../agents/routes.ts";
 import { TeamPlaces } from "../agents/team-places.ts";
 import { ownerAttachmentDir } from "../attachments/attachment-dir.ts";
-import { discordKey } from "../contract/discord-key.ts";
 import { ROOM_LAYOUT } from "../contract/room-layout.ts";
 import type { AgentSessions } from "../contract/runtime.ts";
+import { channelKey } from "../contract/surface.ts";
 import { LEGACY_CHANNEL_SURFACE } from "../db/legacy-channels.ts";
 import { moveTeam } from "../db/team-move.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
@@ -24,10 +23,15 @@ import type { SessionTool } from "../domain/sessions.ts";
 import type { Tier } from "../identity/speakers.ts";
 import { ConfirmationJudge } from "../judging/confirmation-judge.ts";
 import type { Logger } from "../kernel/log.ts";
+import {
+	AGENT_SERVER_PLUGIN,
+	AGENT_TEAM_SERVICE,
+} from "../plugin-api/agent-server-ids.ts";
 import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
 import {
 	AGENTS,
 	BACKGROUND_TURNS,
+	CHANNEL_CONTEXT,
 	IDENTITY,
 	MODES,
 	PROMPTS,
@@ -37,7 +41,6 @@ import {
 } from "../plugin-api/services.ts";
 import { splitReply } from "../presentation/reply-splitter.ts";
 import { agentPromptExtension } from "../runtime/extensions/agent-prompt.ts";
-import { DISCORD } from "./discord.ts";
 import { agentOnly } from "./session-tool.ts";
 
 export {
@@ -50,14 +53,10 @@ import {
 	LOCAL_TEAM_ID,
 } from "./agent-server-options.ts";
 
-/** The name of the agent server's plugin, as `serviceStarted` events name it. */
-export const AGENT_SERVER_PLUGIN = "agent-server";
-
-/**
- * The agent server's service that starts the team and the dashboard in the background: once its
- * `serviceStarted` event says `ready`, the agents' channels and the dashboard are up.
- */
-export const AGENT_TEAM_SERVICE = "team";
+export {
+	AGENT_SERVER_PLUGIN,
+	AGENT_TEAM_SERVICE,
+} from "../plugin-api/agent-server-ids.ts";
 
 /** The agent tools and the agent's own prompt, which only agent sessions load. */
 export function agentSessionTools(
@@ -78,7 +77,6 @@ const AGENT_TIERS: Readonly<Record<string, Tier>> = {
 	agent_list: "member",
 	agent_get: "member",
 	message_agent: "member",
-	channel_read: "member",
 	// A knight may make temp knights for whoever is talking to it; the limits hold the cost.
 	helper_create: "member",
 	helper_end: "member",
@@ -122,9 +120,22 @@ export function agentServerPlugin(
 			"the agent server: entryChannelId and coordinator both name the coordinator. Set the entry channel with Discord, the coordinator without it.",
 		);
 	const teamId = options.teamId ?? options.guildId ?? LOCAL_TEAM_ID;
+	// The spaces the team's stored places live in; the deprecated `guildId` is the legacy channels' one.
+	const spaces = [
+		...(options.placeSpaces ?? []),
+		...(options.guildId === undefined ||
+		options.placeSpaces?.some((s) => s.surface === LEGACY_CHANNEL_SURFACE)
+			? []
+			: [{ surface: LEGACY_CHANNEL_SURFACE, space: options.guildId }]),
+	];
+	const legacySpace = spaces.find(
+		(s) => s.surface === LEGACY_CHANNEL_SURFACE,
+	)?.space;
 	/** Set once the plugin has set up; the preflight reads it after every plugin linked. */
 	let hostsRooms: (() => boolean) | undefined;
-	let servesDiscord: (() => boolean) | undefined;
+	let servesSpaces:
+		| (() => { surface: string; space: string } | undefined)
+		| undefined;
 	let linkRoutes: (() => void) | undefined;
 	return {
 		name: AGENT_SERVER_PLUGIN,
@@ -136,14 +147,14 @@ export function agentServerPlugin(
 			moveTeam({
 				from: options.formerTeamIds ?? [],
 				to: teamId,
-				...(options.guildId === undefined
+				...(legacySpace === undefined
 					? { clearChannels: true }
-					: { discordGuild: options.guildId }),
-				// The legacy channels' places follow their columns: kept in the agent guild, dropped elsewhere.
+					: { discordGuild: legacySpace }),
+				// The legacy channels' places follow their columns: kept in their space, dropped elsewhere.
 				places: [
 					{
 						surface: LEGACY_CHANNEL_SURFACE,
-						...(options.guildId === undefined ? {} : { keep: options.guildId }),
+						...(legacySpace === undefined ? {} : { keep: legacySpace }),
 					},
 				],
 			}),
@@ -159,27 +170,28 @@ export function agentServerPlugin(
 				throw new ConfigError(
 					"the agents need a surface that hosts their rooms, such as pi-roundtable-web, and none is installed. Without Discord channels there is nowhere to talk to them; add a plugin whose chat surface declares agentRooms: true, or configure discord with its guild.",
 				);
-			// Channels the team makes but no provider reads would leave its agents unanswered.
-			if (servesDiscord && !servesDiscord())
+			// Places the team makes but no provider reads would leave its agents unanswered.
+			const unserved = servesSpaces?.();
+			if (unserved)
 				throw new ConfigError(
-					`the agent guild ${options.guildId} has Discord channels for the agents, but no plugin contributes the place provider of the "discord" surface, so the team cannot read them. A plugin that replaces DISCORD must contribute it with places: [discordPlaceProvider({ guild, connection, logger })] from pi-roundtable/discord.`,
+					unserved.surface === LEGACY_CHANNEL_SURFACE
+						? `the agent guild ${unserved.space} has Discord channels for the agents, but no plugin contributes the place provider of the "${unserved.surface}" surface, so the team cannot read them. A plugin that replaces DISCORD must contribute Discord's side of the agent guild, the place provider with its tools and dashboard: spread discordAgentGuild(context, { guild, connection }) from pi-roundtable/discord into what its setup returns.`
+						: `the team has places in the ${unserved.surface} space ${unserved.space}, but no plugin contributes the place provider of the "${unserved.surface}" surface, so the team cannot read them. Add the plugin that brings that surface's places.`,
 				);
 			// The surfaces the rules name exist only once every plugin has registered its own.
 			linkRoutes?.();
 		},
 		setup: async (context) => {
-			// Absent on a host without Discord: then the team has no channels or dashboard.
-			const discord = context.services.find(DISCORD);
 			const schedules = context.services.get(SCHEDULES);
-			const connection = discord?.connection;
 			const { logger, providers, surfaces } = context;
-			// The team's Discord channels, in the agent guild; a bot without one serves only the plugins.
-			const channels =
-				connection && options.guildId
-					? connection.agentChannels(options.guildId)
-					: undefined;
-			if (!channels) hostsRooms = () => surfaces.roomSurfaces().length > 0;
-			else servesDiscord = () => context.places.of("discord") !== undefined;
+			// A host with no space for stored places has its agents in rooms only.
+			if (spaces.length === 0)
+				hostsRooms = () => surfaces.roomSurfaces().length > 0;
+			else
+				servesSpaces = () =>
+					spaces.find(
+						({ surface }) => context.places.of(surface) === undefined,
+					);
 			const studio = new FileAvatarStudio({
 				dir: join(options.dataDir, "avatars"),
 				skins: context.env.characterSkins,
@@ -250,19 +262,23 @@ export function agentServerPlugin(
 				places,
 				teamId,
 				...(options.entryChannelId !== undefined
-					? { entryChannel: discordKey(options.entryChannelId) }
-					: {}),
-				// Without an entry channel the coordinator is the named agent, else the first seed.
-				...(options.entryChannelId === undefined
 					? {
+							entryChannel: channelKey(
+								LEGACY_CHANNEL_SURFACE,
+								options.entryChannelId,
+							),
+						}
+					: {
+							// Without an entry channel a place provider names, the coordinator is the named agent, else the first seed.
 							coordinator: () =>
 								options.coordinator ?? context.sessions().seeds[0]?.name,
-						}
-					: {}),
+						}),
 				seeds: () => context.sessions().seeds,
 				promptSections: () => context.sessions().prompt,
 				agentTools: context.env.agentTools,
 				pluginTools: () => context.sessions().agentTools,
+				pluginWithheldFromHelpers: () =>
+					context.sessions().agentToolsWithheldFromHelpers ?? [],
 				pluginSelection: () => context.sessions().agentSelection(),
 				events: context.events,
 				owner: options.owner,
@@ -270,7 +286,6 @@ export function agentServerPlugin(
 				shellUser: options.shellUser,
 				...(options.scratchDir ? { scratchDir: options.scratchDir } : {}),
 				store,
-				...(channels ? { channels } : {}),
 				studio,
 				...(options.refreshAvatars ? { refreshAvatars: true } : {}),
 				runtime: () => running,
@@ -304,6 +319,7 @@ export function agentServerPlugin(
 				...(skills ? { skills } : {}),
 				modes: () => context.services.find(MODES),
 				rooms: () => context.services.find(ROOM_LAYOUT),
+				formerChannelOps: () => options.formerChannelOps?.(context),
 				...(options.helpers !== undefined ? { helpers: options.helpers } : {}),
 				principals: () => context.services.find(IDENTITY),
 				logger,
@@ -311,7 +327,7 @@ export function agentServerPlugin(
 			// The deprecated `AgentTeam.discordGuild`, the agent guild: kept for plugins that read it
 			// until 1.0, though the team itself knows no guild but through its place providers.
 			Object.defineProperty(built, "discordGuild", {
-				value: options.guildId,
+				value: legacySpace,
 				enumerable: true,
 			});
 			const agentSessions: AgentSessions = {
@@ -341,17 +357,6 @@ export function agentServerPlugin(
 			});
 			const attachmentDir = (channel: ChannelKey) =>
 				ownerAttachmentDir(options.dataDir, channel);
-			// The dashboard is a Discord message; a team without Discord has none.
-			const dashboard =
-				connection && options.guildId
-					? new AgentDashboard({
-							status: () => built.status(),
-							board: connection.agentDashboard(options.guildId),
-							lines: () => context.dashboard(),
-							logger,
-						})
-					: undefined;
-			if (dashboard) built.onChange(() => dashboard.changed());
 			const connectErrorReporter = () =>
 				options.errorReporter?.connect({
 					channelOf: (name) =>
@@ -368,19 +373,14 @@ export function agentServerPlugin(
 				});
 			return {
 				services: [
-					...(dashboard
-						? [{ name: "dashboard", stop: () => dashboard.stop() }]
-						: []),
 					{
 						name: AGENT_TEAM_SERVICE,
 						stop: () => built.stop(),
 						busy: () => built.busy(),
-						// The dashboard shows the team, so it starts once the team has; the error
-						// reporter connects whether or not the team did, since it reports the failure.
+						// The error reporter connects whether or not the team started, since it reports the failure.
 						startInBackground: async () => {
 							try {
 								await built.start();
-								dashboard?.start();
 							} finally {
 								connectErrorReporter();
 							}
@@ -406,9 +406,9 @@ export function agentServerPlugin(
 							? { attachmentDownload: options.attachmentDownload }
 							: {}),
 						logger,
-						...(discord
-							? { channelContext: (message) => discord.channelContext(message) }
-							: {}),
+						// Read from the surface that holds the message's channel, when one reads context.
+						channelContext: async (message) =>
+							context.services.find(CHANNEL_CONTEXT)?.read(message),
 					}),
 				],
 				// The pictures are public on a listener only where a public address reaches it.

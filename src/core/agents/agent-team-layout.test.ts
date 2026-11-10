@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import type { AgentTeam } from "../plugin-api/services.ts";
@@ -25,7 +25,7 @@ describeDb("PostgreSQL", () => {
 				name: "pair",
 				displayName: "Pair",
 				members: ["infra", "doctor"],
-				...(category ? { category } : {}),
+				...(category ? { hints: { category } } : {}),
 			});
 		const newAgent = (category?: string) =>
 			duringTurn(() =>
@@ -41,7 +41,7 @@ describeDb("PostgreSQL", () => {
 						prompt: "Keep notes.",
 						avatarPrompt: "A scribe.",
 						task: "Say hi.",
-						...(category ? { category } : {}),
+						...(category ? { hints: { category } } : {}),
 					},
 				),
 			);
@@ -130,99 +130,18 @@ describeDb("PostgreSQL", () => {
 		});
 	});
 
-	describe("channel_arrange", () => {
-		const id = (name: string) =>
-			fx.store.agent(name)?.channelId ?? fx.store.group(name)?.channelId ?? "";
-		const shape = () =>
-			fx.channels.categories.map((c) => `${c.name}: ${c.channelIds.join(",")}`);
-
-		beforeEach(async () => {
+	describe("agent_list", () => {
+		test("shows the team categories in server order, from Discord's layout", async () => {
 			await fx.team.createGroup({
 				name: "pair",
 				displayName: "Pair",
 				members: ["infra", "doctor"],
 			});
-			// The owner's own category, and the coordinator's channel outside any category.
 			fx.channels.categories.unshift({
 				id: "8000",
 				name: "Notes room",
 				channelIds: ["8001"],
 			});
-		});
-
-		test("puts the listed categories and channels first, the rest after, and deletes emptied team categories", async () => {
-			const agentsId =
-				fx.channels.categories.find((c) => c.name === "Agents")?.id ?? "";
-			const said = await fx.team.arrange([
-				{ category: "Agents-Ops", names: ["infra", "doctor"] },
-				{ category: "Groups", names: ["pair"] },
-				{ category: "Agents-HQ", names: ["coordinator"] },
-			]);
-			expect(shape()).toEqual([
-				`Agents-Ops: ${id("infra")},${id("doctor")}`,
-				`Groups: ${id("pair")}`,
-				`Agents-HQ: ${ENTRY}`,
-				"Notes room: 8001",
-			]);
-			expect(fx.channels.arranged[0]?.remove).toEqual([agentsId]);
-			expect(said).toContain("1 empty team categories were deleted");
-			expect(said).toContain("- Agents-Ops: infra, doctor");
-		});
-
-		test("keeps a listed category's other channels after the listed ones", async () => {
-			fx.channels.categories
-				.find((c) => c.name === "Agents")
-				?.channelIds.push("8002");
-			await fx.team.arrange([{ category: "Agents", names: ["infra"] }]);
-			expect(shape()[0]).toBe(`Agents: ${id("infra")},${id("doctor")},8002`);
-			expect(fx.channels.arranged[0]?.remove).toEqual([]);
-		});
-
-		test("refuses the whole call on any wrong entry and moves nothing", async () => {
-			const before = shape();
-			await expect(
-				fx.team.arrange([{ category: "Groups-Work", names: ["infra"] }]),
-			).rejects.toThrow(/an agent goes under Agents/);
-			await expect(
-				fx.team.arrange([{ category: "Agents-Work", names: ["pair"] }]),
-			).rejects.toThrow(/a group goes under Groups/);
-			await expect(
-				fx.team.arrange([
-					{ category: "Agents-a", names: ["infra"] },
-					{ category: "Agents-b", names: ["infra"] },
-				]),
-			).rejects.toThrow(/listed twice/);
-			await expect(
-				fx.team.arrange([
-					{ category: "Agents", names: ["infra"] },
-					{ category: "Agents", names: ["doctor"] },
-				]),
-			).rejects.toThrow(/listed twice/);
-			await expect(
-				fx.team.arrange([{ category: "Agents", names: ["nobody"] }]),
-			).rejects.toThrow(/agent_list/);
-			await fx.team.archive(
-				{
-					name: "coordinator",
-					session: discordKey(ENTRY),
-					home: discordKey(ENTRY),
-				},
-				"pair",
-			);
-			const archived = shape();
-			await expect(
-				fx.team.arrange([{ category: "Groups", names: ["pair"] }]),
-			).rejects.toThrow(/archived/);
-			await expect(
-				fx.team.arrange([{ category: "Agents", names: [] }]),
-			).rejects.toThrow(/at least one/);
-			await expect(fx.team.arrange([])).rejects.toThrow(/at least one/);
-			expect(fx.channels.arranged).toEqual([]);
-			expect(archived).not.toEqual(before);
-			expect(shape()).toEqual(archived);
-		});
-
-		test("agent_list shows the team categories in server order", async () => {
 			const listed = await fx.team.list();
 			expect(listed).toContain(
 				`Categories, in server order:\n- Agents: doctor, infra\n- Groups: pair`,
@@ -277,33 +196,6 @@ describeDb("PostgreSQL", () => {
 				host: "Infra",
 				busy: 0,
 			});
-		});
-	});
-
-	describe("channel_read", () => {
-		test("reads a channel given as a mention, capped at 50, one line per message", async () => {
-			fx.channels.history = [
-				{
-					id: "55",
-					author: "Sam",
-					at: new Date("2026-09-27T06:03:00Z"),
-					text: "remember this",
-					attachments: ["log.txt"],
-				},
-			];
-			const text = await fx.team.read("<#321>", "55", 80);
-			expect(fx.channels.reads).toEqual([
-				{ channelId: "321", limit: 50, around: "55" },
-			]);
-			expect(text).toBe(
-				"[55] 2026-09-27 06:03 Sam: remember this [attachments: log.txt]",
-			);
-		});
-
-		test("refuses a channel that is not an id", async () => {
-			await expect(
-				fx.team.read("#notes", undefined, undefined),
-			).rejects.toThrow(/<#id>/);
 		});
 	});
 });

@@ -1,36 +1,10 @@
 import { CATALOG, type CharacterSpec } from "../../characters/index.ts";
-import { AgentError } from "../domain/errors.ts";
 import type { ThinkingSetting } from "../domain/models.ts";
-import { assistantName } from "../i18n/index.ts";
-import { zonedStamp } from "../kernel/time.ts";
+import { assistantName, messages } from "../i18n/index.ts";
 import type { AgentDirectory } from "../plugin-api/services.ts";
-import type { AgentChannels, ChannelMessage } from "./agent-ports.ts";
 import { characterOf, isHelper } from "./agent-rules.ts";
 import { describeThinking } from "./agent-settings.ts";
-import type { Agent } from "./agent-store.ts";
-
-/** Said by the tools that work on Discord channels when the team has none. */
-export const NO_CHANNELS =
-	"This host has no Discord channels: the agents live in rooms of a chat surface, so there is nothing to arrange or read here.";
-
-/** One message as channel_read shows it: id, local time, author, text, attachments. */
-export function messageLine(message: ChannelMessage): string {
-	const files =
-		message.attachments.length > 0
-			? ` [attachments: ${message.attachments.join(", ")}]`
-			: "";
-	return `[${message.id}] ${zonedStamp(message.at)} ${message.author}: ${message.text}${files}`;
-}
-
-/** A channel given as `<#id>` or its id, as its id. */
-export function channelIdFromRef(channel: string): string {
-	const id = /^<#(\d+)>$/.exec(channel.trim())?.[1] ?? channel.trim();
-	if (!/^\d+$/.test(id))
-		throw new AgentError(
-			"Give the channel as <#id> or its id, as in a forwarded message.",
-		);
-	return id;
-}
+import type { Agent, AgentGroup } from "./agent-store.ts";
 
 /** Every agent and group as agent_list shows them, before the category layout. */
 export function teamListText(store: Pick<AgentDirectory, "agents" | "groups">) {
@@ -91,22 +65,15 @@ export function agentDetails(
 	].join("\n");
 }
 
-const READ_LIMIT = 50;
-
-/** channel_read: messages of a Discord channel, newest last, around one when given. */
-export async function readChannel(
-	channels: Pick<AgentChannels, "read"> | undefined,
-	channel: string,
-	around: string | undefined,
-	limit: number | undefined,
-): Promise<string> {
-	if (!channels) throw new AgentError(NO_CHANNELS);
-	const id = channelIdFromRef(channel);
-	const messages = await channels.read(id, {
-		limit: Math.min(Math.max(limit ?? 20, 1), READ_LIMIT),
-		...(around ? { around } : {}),
-	});
-	return messages.length > 0
-		? messages.map(messageLine).join("\n")
-		: `<#${id}> has no messages there.`;
+/** A group channel's topic: who is in it and who hosts. */
+export function groupTopic(
+	group: AgentGroup,
+	store: Pick<AgentDirectory, "agent">,
+): string {
+	const shown = (name: string) => store.agent(name)?.displayName ?? name;
+	return messages().groupTopic(
+		group.displayName,
+		group.members.map(shown),
+		shown(group.host),
+	);
 }

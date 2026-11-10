@@ -7,6 +7,7 @@ import type {
 } from "../contract/room-layout.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
+import { discordTestPlaces } from "../testing/team-places.ts";
 import type { Agent, AgentGroup } from "./agent-store.ts";
 import { type AgentOps, agentToolsExtension } from "./agent-tools.ts";
 import { NO_ROOM_GROUPS, TeamRooms } from "./team-rooms.ts";
@@ -90,7 +91,7 @@ function tools(layout: RoomLayoutService | undefined, withRooms = true) {
 	} as unknown as ExtensionAPI;
 	agentToolsExtension(ops, SCOPE, TEST_OWNER, {
 		skills: false,
-		channels: true,
+		arguments: discordTestPlaces().createArguments ?? {},
 		...(withRooms ? { rooms: new TeamRooms(store, () => layout) } : {}),
 	})(pi);
 	const call = (tool: string, params: Record<string, unknown>) => {

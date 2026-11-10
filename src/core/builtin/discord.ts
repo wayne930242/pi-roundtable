@@ -6,6 +6,8 @@ import type {
 	ChannelContextOptions,
 } from "../contract/channel-context.ts";
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
+import { discordAgentGuild } from "../discord/agent-guild.ts";
+import { discordChannelOps } from "../discord/agent-tools.ts";
 import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
@@ -24,8 +26,10 @@ import type { DiscordPoster } from "../discord/poster/poster.ts";
 import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
-import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
-import { IDENTITY, THREADS } from "../plugin-api/services.ts";
+import { ConfigError } from "../domain/errors.ts";
+import type { FormerChannelOps } from "../plugin-api/agent-ops.ts";
+import type { PluginContext, RoundtablePlugin } from "../plugin-api/plugin.ts";
+import { AGENTS, IDENTITY, THREADS } from "../plugin-api/services.ts";
 import { PeerBots } from "../routing/peer-bots.ts";
 import type { DispatchThreads } from "../threads/dispatch-threads.ts";
 
@@ -63,6 +67,29 @@ export interface DiscordServices {
 export const DISCORD: ServiceKey<DiscordServices> =
 	serviceKey<DiscordServices>("roundtable.discord");
 
+/**
+ * Discord's side of the deprecated `AgentOps.arrange` and `AgentOps.read`, for the agent server:
+ * what the two channel tools run, over the agent guild's channels of whichever plugin provides
+ * `DISCORD`. Undefined on a host without one. Removed in 1.0.
+ */
+export function discordFormerChannelOps(
+	guild: string,
+): (
+	context: Pick<PluginContext, "services" | "logger">,
+) => FormerChannelOps | undefined {
+	return ({ services, logger }) => {
+		const connection = services.find(DISCORD)?.connection;
+		return (
+			connection &&
+			discordChannelOps({
+				channels: connection.agentChannels(guild),
+				directory: () => services.find(AGENTS)?.directory,
+				logger,
+			})
+		);
+	};
+}
+
 export interface DiscordOptions {
 	token: string;
 	/**
@@ -75,8 +102,13 @@ export interface DiscordOptions {
 	dataDir: string;
 	/** The name of the root slash command, without the slash. */
 	rootCommand: string;
-	/** The agent guild (`discord.guild`): when given, the plugin contributes the place provider of the agent team's channels and threads in it. */
+	/** The agent guild (`discord.guild`): when given, the plugin contributes Discord's side of it (`discordAgentGuild`): the place provider of the agent team's channels and threads, their tools, and the dashboard message. */
 	agentGuild?: string;
+	/**
+	 * The channel the coordinator lives in (`discord.entryChannel`): the agent in it is the
+	 * coordinator. Needs `agentGuild`; the agent server's `coordinator` names it without one.
+	 */
+	entryChannel?: string;
 	/** Text appended as it is to the refusal a non-owner gets, such as a pointer to the commands anyone may use. */
 	refusalHint?: string;
 	/** The host's channel context settings; `false` turns it off. Default: on, with the defaults. */
@@ -118,6 +150,10 @@ const INTERCOM_KEEP = 300;
  * preflight, so a clash fails before any service starts.
  */
 export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
+	if (options.entryChannel !== undefined && options.agentGuild === undefined)
+		throw new ConfigError(
+			"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out, so the agents live in the app's rooms. Remove entryChannel and name the coordinator with coordinator, or add discord.guild.",
+		);
 	const collection = new CommandCollection();
 	let surface: DiscordSurface | undefined;
 	return {
@@ -129,7 +165,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				collection.compose(ownerRootCommand(options.rootCommand)),
 			);
 		},
-		setup: async ({ conversations, services, logger, events }) => {
+		setup: async ({ conversations, services, logger, events, dashboard }) => {
 			const identity = services.find(IDENTITY);
 			// A host that keeps no copy texts on disk drops what an earlier run left.
 			if (options.cardCopies === false)
@@ -240,13 +276,25 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				channelContext: (message, given) =>
 					connected.channelContext(message, given),
 			});
+			// Discord's side of the agent guild: the team's channels and threads as its places, their tools, and the dashboard message.
+			const agentGuild = options.agentGuild
+				? discordAgentGuild(
+						{ services, logger, dashboard },
+						{
+							guild: options.agentGuild,
+							connection: connected,
+							client: connected.client(),
+							...(options.entryChannel === undefined
+								? {}
+								: { entryChannel: options.entryChannel }),
+						},
+					)
+				: undefined;
 			return {
 				// The host starts the surface first; it registers the composed commands as it connects.
 				surfaces: [connected],
-				// The agent team's channels and threads, when there is an agent guild for them.
-				places: options.agentGuild
-					? [connected.agentPlaces(options.agentGuild)]
-					: [],
+				places: agentGuild?.places ?? [],
+				tools: agentGuild?.tools ?? [],
 				// A person's Discord direct messages, through a Discord identity of theirs.
 				directChannels: [
 					discordDirectChannel({
@@ -256,7 +304,9 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 						ownerId: options.ownerId,
 					}),
 				],
+				...(agentGuild ? { events: agentGuild.events } : {}),
 				services: [
+					...(agentGuild?.services ?? []),
 					// The copy texts of the last cards are on disk before the host exits.
 					{
 						name: "card-copies",

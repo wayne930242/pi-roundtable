@@ -1,4 +1,7 @@
-import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
+import type {
+	AgentChannels,
+	DashboardBoard,
+} from "../contract/agent-channels.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import type { OwnerOperations } from "../modules/discord-admin/discord-admin.ts";
 import type { ThreadHost } from "../threads/dispatch-threads.ts";

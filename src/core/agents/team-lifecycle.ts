@@ -13,9 +13,9 @@ import type { Agent, AgentGroup } from "./agent-store.ts";
 import { refreshAvatars } from "./avatar-refresh.ts";
 import { TeamHelpers } from "./team-helpers.ts";
 import { coordinatorOf } from "./team-keys.ts";
-import { groupTopic } from "./team-layout.ts";
 import type { TeamContext } from "./team-options.ts";
 import { type PlaceWish, TeamPlaceWrites } from "./team-place-writes.ts";
+import { groupTopic } from "./team-text.ts";
 
 /** The team's startup, fresh starts, and archiving of agents and groups. */
 export class TeamLifecycle {

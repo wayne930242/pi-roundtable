@@ -95,6 +95,13 @@ describe("defineTool", () => {
 		expect(tool.agent).toBe(true);
 	});
 
+	test("withheldFromHelpers is off unless the tool asks for it", () => {
+		expect(defineTool(note).withheldFromHelpers).toBe(false);
+		expect(
+			defineTool({ ...note, withheldFromHelpers: true }).withheldFromHelpers,
+		).toBe(true);
+	});
+
 	test("a tool's run sees the origin of the turn's connection, and none when the session has none", async () => {
 		const seen: (string | undefined)[] = [];
 		const tool = defineTool({

@@ -11,6 +11,9 @@ import { PUBLIC_ENTRIES } from "./public-api.ts";
  *   `pi-roundtable/discord` entry's source.
  * - `package-entry`: a workspace package imports pi-roundtable only through its public entries,
  *   and nothing outside its own directory by a relative path.
+ * - `agent-server-discord`: the agent server's plugin (`src/core/builtin/agent-server*.ts`) imports
+ *   nothing of Discord: not its builtin, its area, its key, or its packages. The Discord plugin
+ *   contributes what the team needs of Discord (D3 of the core refactor plan).
  *
  * And the layers of the core, whose directories name them:
  * - `core-kernel`: `src/core/kernel` imports nothing else of the core, so every layer builds on it.
@@ -23,6 +26,7 @@ export type BoundaryRule =
 	| "discord-package"
 	| "discord-area"
 	| "package-entry"
+	| "agent-server-discord"
 	| "core-kernel"
 	| "core-host";
 
@@ -60,6 +64,14 @@ const DISCORD_AREA = [
 
 /** Where the Discord area's internals live; outside the area, nothing imports them. */
 const DISCORD_INTERNALS = [/^src\/core\/discord\//, /^src\/discord\//];
+
+/** The agent server's plugin and its options, which name no Discord. */
+const AGENT_SERVER = /^src\/core\/builtin\/agent-server(-options)?\.ts$/;
+/** What is Discord's: its builtin and its administration, its area's internals, and its key. */
+const DISCORD_OWN = [
+	/^src\/core\/builtin\/discord(-admin)?\.ts$/,
+	/^src\/core\/contract\/discord-key\.ts$/,
+];
 
 const CORE = "src/core/";
 const KERNEL = "src/core/kernel/";
@@ -166,8 +178,17 @@ function coreViolations(root: string): Violation[] {
 				!matches(file, DISCORD_PACKAGE_USERS)
 			)
 				violations.push({ rule: "discord-package", file, specifier });
+			if (AGENT_SERVER.test(file) && DISCORD_PACKAGES.test(specifier))
+				violations.push({ rule: "agent-server-discord", file, specifier });
 			if (!specifier.startsWith(".")) continue;
 			const target = resolved(root, file, specifier);
+			if (
+				AGENT_SERVER.test(file) &&
+				(matches(`${target}.ts`, DISCORD_OWN) ||
+					matches(target, DISCORD_OWN) ||
+					matches(target, DISCORD_INTERNALS))
+			)
+				violations.push({ rule: "agent-server-discord", file, specifier });
 			if (!matches(file, DISCORD_AREA) && matches(target, DISCORD_INTERNALS))
 				violations.push({ rule: "discord-area", file, specifier });
 			if (
@@ -373,6 +394,68 @@ export function discordNames(
 	);
 }
 
+/** What a surface's own tools are called in the team code: its tool names and the argument it adds to the creation tools. */
+const SURFACE_TOOL_NAME = /\bchannel_(arrange|read)\b/;
+const SURFACE_TOOL_WORDS = new Set(["category", "categories"]);
+
+/**
+ * The surface-specific tool names the team code (`agents`, tests and their fixtures excluded)
+ * still names, by file: `channel_arrange` or `channel_read` in a string, and `category` or
+ * `categories` as an identifier or a whole string, the argument Discord adds to the creation
+ * tools. D3 of the core refactor plan: a surface contributes its own tools and arguments, so
+ * the team code names none. Comments do not count.
+ */
+export function surfaceToolNames(root: string): Record<string, string[]> {
+	const found: Record<string, string[]> = {};
+	for (const path of sourcesUnder(join(root, "src/core/agents"))) {
+		const file = posix(relative(root, path));
+		if (TEST.test(file) || TEAM_TEST_SUPPORT.test(file)) continue;
+		const names = new Set<string>();
+		const seen = new Set<string>();
+		const visit = (node: unknown): void => {
+			if (Array.isArray(node)) {
+				for (const item of node) visit(item);
+				return;
+			}
+			if (typeof node !== "object" || node === null) return;
+			const value = node as {
+				type?: string;
+				name?: string;
+				value?: unknown;
+				start?: number;
+			};
+			const place = `${value.type}:${value.start}`;
+			const text =
+				value.type === "Identifier"
+					? value.name
+					: value.type === "StringLiteral"
+						? (value.value as string)
+						: value.type === "TemplateElement"
+							? (value.value as { raw: string }).raw
+							: undefined;
+			if (text !== undefined && !seen.has(place)) {
+				seen.add(place);
+				if (SURFACE_TOOL_WORDS.has(text)) names.add(text);
+				const tool = SURFACE_TOOL_NAME.exec(text);
+				if (tool && value.type !== "Identifier") names.add(tool[0]);
+			}
+			for (const [key, child] of Object.entries(node))
+				if (key !== "loc" && key !== "start" && key !== "end") visit(child);
+		};
+		visit(
+			parse(readFileSync(path, "utf8"), {
+				sourceType: "module",
+				plugins: [
+					"typescript",
+					...(file.endsWith("x") ? (["jsx"] as const) : []),
+				],
+			}).program,
+		);
+		if (names.size > 0) found[file] = [...names].sort();
+	}
+	return found;
+}
+
 if (import.meta.main) {
 	const root = resolve(
 		process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? ".",
@@ -380,7 +463,9 @@ if (import.meta.main) {
 	// With `--discord-names` the team code's Discord allowlist, the shape of its baseline file.
 	const report = process.argv.includes("--discord-names")
 		? discordNames(root)
-		: boundaryViolations(root);
+		: process.argv.includes("--surface-tools")
+			? surfaceToolNames(root)
+			: boundaryViolations(root);
 	// pi-lens-ignore: no-console-except-error — the script's printed report is its product
 	console.log(JSON.stringify(report, null, "\t"));
 }

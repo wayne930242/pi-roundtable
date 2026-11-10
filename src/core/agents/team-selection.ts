@@ -14,7 +14,11 @@ import type { AgentTeamOptions } from "./team-options.ts";
 export function teamSelection(
 	options: Pick<
 		AgentTeamOptions,
-		"pluginSelection" | "pluginTools" | "agentTools" | "helpers"
+		| "pluginSelection"
+		| "pluginTools"
+		| "pluginWithheldFromHelpers"
+		| "agentTools"
+		| "helpers"
 	> & { store?: Pick<AgentTeamOptions["store"], "agent"> },
 	scope?: AgentTurnScope,
 ): TurnSelection {
@@ -24,7 +28,11 @@ export function teamSelection(
 	const helper =
 		scope !== undefined && isHelper(options.store?.agent(scope.name));
 	const kept = (tool: string): boolean =>
-		!(helper && WITHHELD_FROM_HELPERS.includes(tool)) &&
+		!(
+			helper &&
+			(WITHHELD_FROM_HELPERS.includes(tool) ||
+				options.pluginWithheldFromHelpers?.().includes(tool))
+		) &&
 		!(
 			(options.helpers === false || scope?.group) &&
 			(HELPER_TOOLS as readonly string[]).includes(tool)

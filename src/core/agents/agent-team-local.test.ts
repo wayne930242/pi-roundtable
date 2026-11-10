@@ -68,18 +68,6 @@ describeDb("a team without Discord", () => {
 		expect(list).not.toContain("Category");
 	});
 
-	test("channel_arrange and channel_read refuse with a text", async () => {
-		await expect(
-			fx.team.arrange([{ category: "Agents", names: ["infra"] }]),
-		).rejects.toThrow(AgentError);
-		await expect(
-			fx.team.arrange([{ category: "Agents", names: ["infra"] }]),
-		).rejects.toThrow("This host has no Discord channels");
-		await expect(fx.team.read("<#123>", undefined, undefined)).rejects.toThrow(
-			"This host has no Discord channels",
-		);
-	});
-
 	test("a group is made without a channel, owns its room, and keeps its log under the room", async () => {
 		const text = await fx.team.createGroup({
 			name: "crew",

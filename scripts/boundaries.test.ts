@@ -13,6 +13,7 @@ import {
 	coreCycles,
 	discordNames,
 	importsOf,
+	surfaceToolNames,
 	type Violation,
 } from "./boundaries.ts";
 
@@ -252,4 +253,84 @@ test("agents, routing, and threads name no Discord surface, key, or guild; comme
 		"src/core/routing/leaky.ts": { "discord-surface": 1 },
 		"src/core/threads/leaky.ts": { guild: 3 },
 	});
+});
+
+test("the team code names no surface's own tool or creation argument", () => {
+	// Exact: Discord's `channel_arrange`, `channel_read` and `category` are contributed by its builtin.
+	expect(surfaceToolNames(ROOT)).toEqual({});
+});
+
+test("a tool name or a creation argument in team code is found; comments, tests, other directories and longer words are not", () => {
+	const root = tree({
+		"src/core/agents/clean.ts": [
+			"// channel_arrange and category are Discord's: this comment names them freely.",
+			"export const note = 'Move it to a category with the arrange tool';",
+			"export const layout = { categoryLayout: 1 };",
+		].join("\n"),
+		"src/core/agents/leaky.ts": [
+			"export const tools = ['channel_arrange', `x channel_read y`];",
+			"export const input = { category: 'Agents' };",
+			"export const schema = { categories: [] };",
+		].join("\n"),
+		"src/core/agents/leaky.test.ts": "export const category = 'Agents';",
+		"src/core/discord/tools.ts": "export const category = 'Agents';",
+	});
+	expect(surfaceToolNames(root)).toEqual({
+		"src/core/agents/leaky.ts": [
+			"categories",
+			"category",
+			"channel_arrange",
+			"channel_read",
+		],
+	});
+});
+
+test("the agent server's plugin imports nothing of Discord", () => {
+	const root = tree({
+		"src/core/builtin/agent-server.ts": [
+			'import { DISCORD } from "./discord.ts";',
+			'import { discordKey } from "../contract/discord-key.ts";',
+			'import { AgentDashboard } from "../discord/agent-dashboard.ts";',
+			'import { Client } from "discord.js";',
+			'import { channelKey } from "../contract/surface.ts";',
+		].join("\n"),
+		"src/core/builtin/agent-server-options.ts":
+			'import { DiscordOptions } from "./discord.ts";',
+		"src/core/builtin/agent-server.test.ts":
+			'import { DISCORD } from "./discord.ts";',
+		"src/core/builtin/other.ts": 'import { DISCORD } from "./discord.ts";',
+		"src/core/builtin/discord.ts": "export const DISCORD = 1;",
+		"src/core/contract/discord-key.ts": "export const discordKey = 1;",
+		"src/core/contract/surface.ts": "export const channelKey = 1;",
+		"src/core/discord/agent-dashboard.ts": "export const AgentDashboard = 1;",
+	});
+	expect(
+		boundaryViolations(root).filter((v) => v.rule === "agent-server-discord"),
+	).toEqual([
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server-options.ts",
+			specifier: "./discord.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "../contract/discord-key.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "../discord/agent-dashboard.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "./discord.ts",
+		},
+		{
+			rule: "agent-server-discord",
+			file: "src/core/builtin/agent-server.ts",
+			specifier: "discord.js",
+		},
+	]);
 });

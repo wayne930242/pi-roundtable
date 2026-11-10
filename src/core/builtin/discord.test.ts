@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Interaction, REST } from "discord.js";
 import type { ConversationPort } from "../contract/channels.ts";
+import type { PlaceProvider } from "../contract/places.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import { discordAgentGuild } from "../discord/agent-guild.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import { DiscordSurface } from "../discord/discord-surface.ts";
 import type {
@@ -400,3 +402,83 @@ test("DISCORD.poster is made over the surface's own REST queue, usable before th
 		request.mockRestore();
 	}
 });
+
+test("an entry channel needs the agent guild, in the words the configuration gives", () => {
+	const options = {
+		token: "t",
+		ownerId: "1",
+		ownerName: "Ada",
+		dataDir: "/tmp",
+		rootCommand: "roundtable",
+	};
+	expect(() => discordPlugin({ ...options, entryChannel: "9" })).toThrow(
+		"config discord.entryChannel: the coordinator's channel is in the agent guild, and discord.guild is left out",
+	);
+	expect(() =>
+		discordPlugin({ ...options, agentGuild: "8", entryChannel: "9" }),
+	).not.toThrow();
+});
+
+test("with an agent guild the plugin contributes what discordAgentGuild gives a plugin that replaces DISCORD", async () => {
+	const context = {
+		logger: silentLogger(),
+		queue: {},
+		conversations: {},
+		dashboard: () => [],
+		services: hostServices(),
+	} as unknown as PluginContext;
+	const shape = (contribution: {
+		places?: readonly PlaceProvider[];
+		tools?: readonly { name: string }[];
+		services?: readonly { name: string }[];
+		events?: object;
+	}) => ({
+		places: (contribution.places ?? []).map((provider) => ({
+			surface: provider.surface,
+			space: provider.space,
+			coordinatorPlace: provider.coordinatorPlace,
+			members: Object.keys(provider).sort(),
+		})),
+		tools: (contribution.tools ?? []).map((tool) => tool.name),
+		events: Object.keys(contribution.events ?? {}),
+	});
+	const builtin = await discordPlugin({
+		...OPTIONS,
+		dataDir: mkdtempSync(join(tmpdir(), "roundtable-discord-")),
+		agentGuild: "8",
+		entryChannel: "9",
+	}).setup(context);
+	const connection = contributionSurface(builtin);
+	const helper = discordAgentGuild(context, {
+		guild: "8",
+		connection,
+		client: connection.client(),
+		entryChannel: "9",
+	});
+	expect(shape(builtin)).toEqual(shape(helper));
+	expect(shape(builtin)).toMatchObject({
+		places: [{ surface: "discord", space: "8", coordinatorPlace: "9" }],
+		tools: ["channel_arrange", "channel_read"],
+		events: ["serviceStarted"],
+	});
+	expect((builtin.services ?? []).map(({ name }) => name)).toEqual([
+		...helper.services.map(({ name }) => name),
+		"card-copies",
+	]);
+	// Without the guild it contributes none of them.
+	const plain = await discordPlugin({
+		...OPTIONS,
+		dataDir: mkdtempSync(join(tmpdir(), "roundtable-discord-")),
+	}).setup(context);
+	expect(shape(plain)).toEqual({ places: [], tools: [], events: [] });
+});
+
+/** The Discord surface a set-up plugin contributed, which is its connection. */
+function contributionSurface(contribution: {
+	surfaces?: readonly ChatSurface[];
+}): DiscordSurface {
+	const surface = contribution.surfaces?.[0];
+	if (!(surface instanceof DiscordSurface))
+		throw new Error("the discord plugin contributed no Discord surface");
+	return surface;
+}

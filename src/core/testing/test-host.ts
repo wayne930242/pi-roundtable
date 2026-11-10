@@ -11,7 +11,7 @@ import { type RoundtableConfig, resolveConfig } from "../config/config.ts";
 import type { ConversationPort } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
-import { discordPlaceProvider } from "../discord/agent-places.ts";
+import { discordAgentGuild } from "../discord/agent-guild.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -186,17 +186,21 @@ export function standInDiscord(
 	channelContext: DiscordServices["channelContext"] = async () => undefined,
 	/** The agent guild, which makes the stand-in contribute Discord's place provider over `agentChannels`, as the built-in plugin does with one. */
 	agentGuild?: string,
+	/** The channel the coordinator lives in, as the built-in plugin gives it with an agent guild. */
+	entryChannel?: string,
 ): RoundtablePlugin {
 	const surface: ChatSurface = {
 		surface: "discord",
 		start: async () => undefined,
 		sendReply: async () => undefined,
+		// What the agents' claim reads through `CHANNEL_CONTEXT`, as the Discord surface answers it.
+		channelContext: (message, options) => channelContext(message, options),
 	};
 	return {
 		name: "test-discord",
 		provides: [DISCORD],
 		replaces: [DISCORD],
-		setup: ({ services }) => {
+		setup: ({ services, dashboard }) => {
 			const identity = services.find(IDENTITY);
 			const { poster, ...overrides } = given ?? {};
 			const ownerChannel =
@@ -226,20 +230,19 @@ export function standInDiscord(
 				poster: poster ?? fakeDiscordPoster(),
 				channelContext,
 			} as unknown as DiscordServices);
-			return {
-				surfaces: [surface],
-				directChannels: [direct],
-				places: agentGuild
-					? [
-							discordPlaceProvider({
-								guild: agentGuild,
-								// SAFETY: a stand-in's provider is read for keys; nothing asks the channels.
-								connection: connection as never,
-								logger: silentLogger(),
-							}),
-						]
-					: [],
-			};
+			// Discord's side of the agent guild, as the built-in plugin contributes it with one, over a board that shows nothing.
+			const guild = agentGuild
+				? discordAgentGuild(
+						{ services, dashboard, logger: silentLogger() },
+						{
+							guild: agentGuild,
+							...(entryChannel === undefined ? {} : { entryChannel }),
+							// SAFETY: a stand-in's provider is read for keys, and a test host does not run the tools; nothing asks the channels.
+							connection: connection as never,
+						},
+					)
+				: undefined;
+			return { ...guild, surfaces: [surface], directChannels: [direct] };
 		},
 	};
 }
@@ -307,6 +310,7 @@ export async function testHost(
 							discordOwnerOf(resolved).id,
 							undefined,
 							resolved.discord?.guild,
+							resolved.discord?.entryChannel,
 						),
 					]
 				: []),

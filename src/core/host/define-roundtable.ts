@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { ModelRegistry, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { agentServerPlugin, LOCAL_TEAM_ID } from "../builtin/agent-server.ts";
 import { channelContextPlugin } from "../builtin/channel-context.ts";
-import { discordPlugin } from "../builtin/discord.ts";
+import { discordFormerChannelOps, discordPlugin } from "../builtin/discord.ts";
 import { discordAdminPlugin } from "../builtin/discord-admin.ts";
 import { identityPlugin } from "../builtin/identity.ts";
 import { modulesPlugin, schedulerPlugin } from "../builtin/modules.ts";
@@ -154,6 +154,9 @@ function discordAssembly(
 			ownerName: owner.name,
 			rootCommand: discord.rootCommand,
 			...(discord.guild ? { agentGuild: discord.guild } : {}),
+			...(discord.guild && discord.entryChannel
+				? { entryChannel: discord.entryChannel }
+				: {}),
 			dataDir: config.dataDir,
 			...(discord.refusalHint === undefined
 				? {}
@@ -225,12 +228,11 @@ function agentAssembly(
 			teamId,
 			formerTeamIds: config.team.formerIds,
 			// Without the agent guild the team lives in the app's rooms, as on a host without Discord.
+			// With the agent guild the Discord plugin names the coordinator by its entry channel.
 			...(discord?.guild
 				? {
-						guildId: discord.guild,
-						...(discord.entryChannel
-							? { entryChannelId: discord.entryChannel }
-							: {}),
+						placeSpaces: [{ surface: "discord", space: discord.guild }],
+						formerChannelOps: discordFormerChannelOps(discord.guild),
 					}
 				: config.coordinator
 					? { coordinator: config.coordinator }

@@ -7,7 +7,11 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
-import { legacyRows, testPlaces } from "../testing/team-places.ts";
+import {
+	discordTestPlaces,
+	legacyRows,
+	testPlaces,
+} from "../testing/team-places.ts";
 import { AgentConversations } from "./agent-conversations.ts";
 import type { Agent } from "./agent-store.ts";
 import { AgentServerTeam, type AgentTeamOptions } from "./agent-team.ts";
@@ -395,7 +399,8 @@ describe("the agent tools, with and without an image provider", () => {
 				"class",
 				"color",
 				"task",
-				// The team has no Discord channels, so no category.
+				// Discord's place provider adds the category.
+				"category",
 				"group",
 				"long_running",
 				"skills",
@@ -456,7 +461,7 @@ describe("the agent_create and agent_avatar tools pass looks to the team", () =>
 		} as unknown as ExtensionAPI;
 		agentToolsExtension(ops, SCOPE, TEST_OWNER, {
 			skills: false,
-			channels: true,
+			arguments: discordTestPlaces().createArguments ?? {},
 		})(pi);
 		return { calls, run };
 	}

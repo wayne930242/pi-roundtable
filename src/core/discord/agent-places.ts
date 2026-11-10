@@ -1,12 +1,16 @@
 import { type Client, DiscordAPIError } from "discord.js";
 import { Type } from "typebox";
-import type { AgentChannels } from "../agents/agent-ports.ts";
-import { categoryKind, teamCategory } from "../agents/team-layout.ts";
+import type { AgentChannels } from "../contract/agent-channels.ts";
 import type { PlaceCheck, PlaceProvider } from "../contract/places.ts";
 import { channelKey, parseChannelKey } from "../contract/surface.ts";
 import { AgentError } from "../domain/errors.ts";
 import { PluginError } from "../kernel/errors.ts";
 import type { Logger } from "../kernel/log.ts";
+import {
+	categoryKind,
+	categoryLayoutText,
+	teamCategory,
+} from "./agent-layout.ts";
 import type { DiscordConnection } from "./connection.ts";
 
 const SURFACE = "discord";
@@ -26,7 +30,7 @@ export interface DiscordPlacesOptions {
 	/** Reports a server channel deleted, by id; as `DiscordConnection.onChannelDeleted`. */
 	onRemoved(listener: (channelId: string) => void): void;
 	logger: Logger;
-	/** The channel the coordinator lives in; absent = the configured `coordinator`. */
+	/** The channel the coordinator lives in; absent = the agent server's `coordinator`, else the first seed. */
 	entryChannel?: string;
 	/** The name of the agent or group whose channel it is, for `layoutText`; a channel nobody owns shows as a mention. */
 	nameOf?(channelId: string): string | undefined;
@@ -185,17 +189,8 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			agent: { category: category("Agents") },
 			group: { category: category("Groups") },
 		},
-		layoutText: async () => {
-			const layout = await channels.layout();
-			const lines = layout.flatMap((c) => {
-				if (!categoryKind(c.name)) return [];
-				const shown = c.channelIds.map(
-					(id) => options.nameOf?.(id) ?? mention(id),
-				);
-				return [`- ${c.name}: ${shown.join(", ") || "empty"}`];
-			});
-			return `Categories, in server order:\n${lines.join("\n") || "none"}`;
-		},
+		layoutText: async () =>
+			categoryLayoutText(await channels.layout(), (id) => options.nameOf?.(id)),
 	};
 }
 
@@ -207,13 +202,20 @@ export interface DiscordPlaceProviderOptions {
 	logger: Logger;
 	/** The discord.js client, so the team can check at start that its stored channels still exist; absent = they are taken as they are. */
 	client?: Client;
+	/**
+	 * The channel the coordinator lives in (`discord.entryChannel`): the agent in it is the
+	 * coordinator. Absent = the first agent the host seeds, since a host with `discord.guild`
+	 * names no coordinator in its configuration.
+	 */
+	entryChannel?: string;
 }
 
 /**
- * Discord's place provider for a plugin that replaces `DISCORD` with a Discord of its own: the
- * agent guild's channels as the team's places, with the keys, seats and log names the built-in
- * Discord plugin gives them, so no stored session, schedule or held action moves. Contribute it
- * with `places` from the replacing plugin whenever the host has `discord.guild`.
+ * Discord's place provider alone: the agent guild's channels as the team's places, with the keys,
+ * seats and log names the built-in Discord plugin gives them, so no stored session, schedule or
+ * held action moves. A plugin that replaces `DISCORD` contributes `discordAgentGuild`, which
+ * holds this provider with the names of `agent_list`, the two channel tools and the dashboard;
+ * with the provider alone the team has none of those.
  */
 export function discordPlaceProvider(
 	options: DiscordPlaceProviderOptions,
@@ -221,6 +223,9 @@ export function discordPlaceProvider(
 	const { guild, connection } = options;
 	return discordPlaces({
 		...(options.client ? { client: options.client } : {}),
+		...(options.entryChannel === undefined
+			? {}
+			: { entryChannel: options.entryChannel }),
 		guild,
 		channels: connection.agentChannels(guild),
 		onRemoved: (listener) => connection.onChannelDeleted(listener),

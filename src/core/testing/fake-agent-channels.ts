@@ -4,7 +4,7 @@ import type {
 	AgentPost,
 	CategoryLayout,
 	ChannelMessage,
-} from "./agent-ports.ts";
+} from "../contract/agent-channels.ts";
 
 /** The Discord channels of a team, recorded: what was posted, made, moved and read. */
 export class FakeChannels implements AgentChannels {

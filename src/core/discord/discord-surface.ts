@@ -8,12 +8,14 @@ import {
 	Partials,
 	type REST,
 } from "discord.js";
-import type { AgentChannels, DashboardBoard } from "../agents/agent-ports.ts";
+import type {
+	AgentChannels,
+	DashboardBoard,
+} from "../contract/agent-channels.ts";
 import type {
 	ChannelContext,
 	ChannelContextOptions,
 } from "../contract/channel-context.ts";
-import type { PlaceProvider } from "../contract/places.ts";
 import type {
 	ChatSurface,
 	SurfaceMessageEvents,
@@ -34,7 +36,6 @@ import type { MemberJoinedEvent } from "../plugin-api/event-types.ts";
 import { chunksFor } from "../presentation/reply-chunks.ts";
 import { threadsOfHost } from "../threads/host-threads.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
-import { discordPlaces } from "./agent-places.ts";
 import {
 	type ContextSourceMessage,
 	contextSourceOf,
@@ -137,6 +138,11 @@ export class DiscordSurface
 	): Promise<ChannelContext | undefined> =>
 		this.#options.channelContext?.(message, options);
 
+	/** The discord.js client, with which the agent guild's place provider checks its stored channels. */
+	client(): Client {
+		return this.#client;
+	}
+
 	/** The client's REST queue, whose rate limits every request of this process shares. */
 	rest(): REST {
 		return this.#client.rest;
@@ -170,17 +176,6 @@ export class DiscordSurface
 			guildId,
 			this.#options.intercomTexts,
 		);
-	}
-
-	/** The agent team's places in the agent guild: its channels and threads, as a place provider. */
-	agentPlaces(guildId: string): PlaceProvider {
-		return discordPlaces({
-			client: this.#client,
-			guild: guildId,
-			channels: this.agentChannels(guildId),
-			onRemoved: (listener) => this.onChannelDeleted(listener),
-			logger: this.#options.logger,
-		});
 	}
 
 	/** Threads for background dispatches, in the channel that started each. */
