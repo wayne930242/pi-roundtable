@@ -242,6 +242,7 @@ export const EXPRESSIONS = [
 	"playful",
 	"determined",
 	"sleepy",
+	"resting",
 ] as const;
 export type Expression = (typeof EXPRESSIONS)[number];
 
