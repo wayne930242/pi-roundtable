@@ -33,6 +33,7 @@ import {
 	discordTestPlaces,
 	testPlacePort,
 } from "../testing/team-places.ts";
+import type { Agent } from "./agent-rules.ts";
 import { PgAgentStore as AgentStore } from "./agent-store.ts";
 import {
 	AgentServerTeam as AgentTeam,
@@ -174,21 +175,32 @@ export const eventLog: string[] = [];
 /** What a plugin adds to every agent's tools: a tool of its own and a group of another server's. */
 const PLUGIN_SELECTION = { tools: ["memory_add"], groups: ["workspace"] };
 
+/** Whether an action of the agent waits for the owner, in any of its places. */
+function holdsAction(agent: Agent): boolean {
+	return places
+		.keysOf(agent.name)
+		.some((key) => runtime.held.has(places.scopeOf(agent, key).session));
+}
+
 /**
  * Waits until every queued channel task has settled, every active agent has its avatar, which
- * startup draws in the background, and every temp knight whose task ended is stamped finished
- * (the stamp is written after the turn, off the queue; with an action held, a knight stays
- * working); a fixed sleep was too short on a slow runner.
+ * startup draws in the background, and every temp knight's stamp has caught up with its work (the
+ * stamp is written after the turn starts or ends, off the queue): finished, or still working
+ * while an action of it is held. A fixed sleep was too short on a slow runner.
  */
 export async function settle(): Promise<void> {
 	const deadline = Date.now() + 10_000;
 	const quiet = () =>
 		queue.busy().length === 0 &&
 		store.agents().every((a) => a.status !== "active" || a.avatarHash) &&
-		(runtime.held.size > 0 ||
-			store
-				.agents()
-				.every((a) => !a.parent || a.status !== "active" || a.finishedAt));
+		store
+			.agents()
+			.every(
+				(a) =>
+					!a.parent ||
+					a.status !== "active" ||
+					(a.finishedAt === undefined) === holdsAction(a),
+			);
 	while (!quiet() && Date.now() < deadline) await Bun.sleep(5);
 	// Work the last task queued is still finishing.
 	await Bun.sleep(20);

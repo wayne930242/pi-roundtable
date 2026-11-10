@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
 import { AgentError } from "../domain/errors.ts";
@@ -215,6 +215,28 @@ describeDb("temp knights (Discord)", () => {
 			await writeTo("coordinator-1", "done");
 			await settle();
 			expect(fx.store.agent("coordinator-1")?.finishedAt).toBeInstanceOf(Date);
+		});
+
+		test("settle waits for the working stamp of a knight whose action is held, however late it lands", async () => {
+			await asCoordinator((caller) => fx.team.helperCreate(caller, SCOUT));
+			await settle();
+			const session = discordKey(
+				fx.store.agent("coordinator-1")?.channelId ?? "",
+			);
+			fx.runtime.held.set(session, { calls: [], speakerId: "1" } as never);
+			// The write that marks it working again runs after the turn starts; slow it, as a busy runner does.
+			const stamp = fx.store.setFinished.bind(fx.store);
+			const slow = spyOn(fx.store, "setFinished").mockImplementation(
+				async (name, finished) => {
+					if (!finished) await Bun.sleep(300);
+					return stamp(name, finished);
+				},
+			);
+			await writeTo("coordinator-1", "deploy");
+			await settle();
+			slow.mockRestore();
+			fx.runtime.held.delete(session);
+			expect(fx.store.agent("coordinator-1")?.finishedAt).toBeUndefined();
 		});
 
 		test("a permanent knight is never stamped", async () => {
