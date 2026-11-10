@@ -3879,6 +3879,7 @@ The parts are medieval: the clothes, hats and gear of an agent are what a late-m
 | `composeSvg(spec, options?)` | The picture as an SVG string, see below |
 | `accentOf(spec, on)` | `colors.primary` as a UI accent: shaded until it reads at 3:1 on the page. `on` is a scheme (`light`: white, `dark`: `#0d1018`) or a look (`modern-light`, `modern-dark` as the schemes; `camelot-light`: the darkest parchment `#e3d2a9`, `camelot-dark`: the lightest night blue `#243557`) |
 | `characterCss()` | The text of `characters.css` |
+| `PIVOTS` | Where a stylesheet turns each part, as CSS `transform-origin` values in the drawing's 100-unit space: `eyes`, `badge`, `orbit`, `character` (the feet) and `neck`, which is the pivot of the head group (`.hd`). `characters.css` uses all but `neck`; a page that moves the head writes its own rule with it |
 | `checkSkins(value, field?)` | A host's skin tones checked: exactly six `#rrggbb` colors, returned lower-cased and frozen; otherwise a `CharacterError` whose `field` is `field` (default `skins`) or the place in the list. The host's configuration and `composeSvg` call it |
 | `EAST_ASIAN_SKINS` | Six light East Asian skin tones, from very fair porcelain to light beige (`#fbebe0`, `#f8e1d2`, `#f5d8c5`, `#f1cfb8`, `#edc6ac`, `#e9bf9f`), warm pink to peach and never green or yellow, with the face lines reading on each at 5:1 or better. A frozen constant for a host's `characters.skins` |
 
@@ -3888,7 +3889,7 @@ The parts are medieval: the clothes, hats and gear of an agent are what a late-m
 
 `ComposeOptions` are all optional: `expr` (one of the 13 `EXPRESSIONS`, by default the one `STATE_EXPRESSION` gives the state), `state` (one of the seven `AVATAR_STATES`: `idle`, `thinking`, `working`, `waiting`, `done`, `error`, `sleepy`), `look` (`modern-light` by default, `modern-dark`, `camelot-light` or `camelot-dark`, which change only the background and ring), `frame` (`disc` or `shield`), `bare` (no frame or background), `mouth` (`open` or `closed`, drawn in place of the expression's own mouth, for the two frames of a talking figure), `still`, `uid`, `size`, `label` and `skins` (six `#rrggbb` skin tones that `CharacterSpec.skin` indexes, in place of `CATALOG.skins`; anything but six valid colors throws a `CharacterError` whose `field` is `skins` or `skins[3]`).
 
-- The output has literal colors only. It has no `style` attribute, variable, `<style>`, script, text, image, link, event handler or `<foreignObject>`, so a page whose content security policy forbids inline styles can inject it, and `canvas` rasterizes it as it is. It is at most 8 KB and the same for the same input. The root is `<svg class="av" data-expr>` and the layers are `<g class="NAME" data-part="NAME">` in a fixed order (`frame`, `ch` holding `back`, `body`, `head`, `hat`, `eyes-brows`, `mouth`, `fx`, `acc`, `prop`, then `state`); the prop group carries `data-prop`.
+- The output has literal colors only. It has no `style` attribute, variable, `<style>`, script, text, image, link, event handler or `<foreignObject>`, so a page whose content security policy forbids inline styles can inject it, and `canvas` rasterizes it as it is. It is at most 8 KB and the same for the same input. The root is `<svg class="av" data-expr>` and the layers are `<g class="NAME" data-part="NAME">` in a fixed order (`frame`, `ch` holding `back`, `body`, `headset`, `prop`, then `state`); `headset` (class `hd`) holds `head`, `hat`, `eyes-brows`, `mouth`, `fx` and `acc`, and `back` carries class `hd` too, so one rule turns the hair behind the head with the head about `PIVOTS.neck`; the prop group carries `data-prop`.
 - `composeSvg` checks the spec again with `parseCharacter`, so a spec cast from untrusted data throws instead of reaching the markup. `uid` (`/^[a-z0-9]{1,16}$/`, default `a`) ends every clip path id, so each avatar on a page needs its own `uid`: two with the same one share clip path ids and one clips the other. The server-side renders pass an explicit one. `size` (an integer up to 4096) adds `width` and `height`, which `canvas` needs. `label` (at most 200 characters) becomes `aria-label` with `<>"'=()&` written as entities; without it the figure is `aria-hidden`.
 - A live figure carries every state overlay and leaves the motion to the stylesheet. With `still: true` only the `state`'s overlay is drawn and the figure has class `av static`, for files, PNGs and 3D textures; an `error` state turns the ring red in both.
 
@@ -5185,6 +5186,7 @@ Import from the entries listed below; source area files are internal.
 | `CharacterError` | `pi-roundtable/characters` | value |
 | `EAST_ASIAN_SKINS` | `pi-roundtable/characters` | value |
 | `EXPRESSIONS` | `pi-roundtable/characters` | value |
+| `PIVOTS` | `pi-roundtable/characters` | value |
 | `STATE_EXPRESSION` | `pi-roundtable/characters` | value |
 | `accentOf` | `pi-roundtable/characters` | value |
 | `characterCss` | `pi-roundtable/characters` | value |

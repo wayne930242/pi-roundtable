@@ -190,12 +190,15 @@ const OVERLAY = {
 	zz: [73, 28] as const,
 };
 
-/** Where the animation turns each part; characters.css carries them. */
+/** Where the animation turns each part; characters.css carries them, and the page's own stylesheets the neck. */
 export const PIVOTS = {
 	eyes: `50px ${FACE.ey}px`,
 	badge: `${OVERLAY.badge[0]}px ${OVERLAY.badge[1]}px`,
 	orbit: `${OVERLAY.orbit[0]}px ${OVERLAY.orbit[1]}px`,
 	character: "50px 94px",
+	// Under the chin (the head ends at y 77) and over the torso (it starts at y 71), so a turn up to
+	// about 8° leaves no gap. The page's stylesheet for the head group (`.hd`) turns about it.
+	neck: "50px 76px",
 } as const;
 
 export const INK = "#2b2440";
