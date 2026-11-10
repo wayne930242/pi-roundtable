@@ -57,3 +57,18 @@ describeDb("a stored channel of another server at start", () => {
 		expect(fx.store.agent("doctor")?.status).toBe("archived");
 	});
 });
+
+describeDb("a stored channel that cannot be checked at start", () => {
+	useTeamFixture();
+
+	test("start finishes: the place stays, nobody is archived, and others still get theirs", async () => {
+		const stuck = fx.store.agent("doctor")?.channelId ?? "";
+		fx.channels.failing.add(stuck);
+		await fx.store.clearPlace("agent", "infra", "discord");
+		const made = fx.channels.created.length;
+		await restart();
+		expect(fx.store.agent("doctor")?.status).toBe("active");
+		expect(fx.store.places.on("agent", "doctor", "discord")).toBe(stuck);
+		expect(fx.channels.created.length).toBe(made + 1);
+	});
+});

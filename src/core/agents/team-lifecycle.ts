@@ -3,7 +3,7 @@ import {
 	resolveCharacter,
 	suggestCharacter,
 } from "../../characters/index.ts";
-import type { PlaceProvider } from "../contract/places.ts";
+import type { PlaceCheck, PlaceProvider } from "../contract/places.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
@@ -97,7 +97,7 @@ export class TeamLifecycle {
 				if (!isHelper(agent)) await this.#make(provider, wish);
 				continue;
 			}
-			const found = (await provider.check?.(id)) ?? "ok";
+			const found = await this.#checked(provider, wish, id);
 			if (found === "gone") await this.#archiveAgent(agent);
 			else if (found === "foreign") {
 				await this.#drop(provider, wish);
@@ -109,7 +109,8 @@ export class TeamLifecycle {
 			const wish = this.#wish(group);
 			const id = places.idOf(wish, provider.surface);
 			if (id === undefined) continue;
-			const found = (await provider.check?.(id)) ?? "ok";
+			const found = await this.#checked(provider, wish, id);
+			if (found === "unknown") continue;
 			if (found === "gone") {
 				await this.#archiveGroup(group);
 				continue;
@@ -120,9 +121,31 @@ export class TeamLifecycle {
 				continue;
 			}
 			this.retitle(group);
-			if (!provider.ensure) continue;
+			// Without `check` a place is taken as it is, as an agent's is: `ensure` would make a deleted one again.
+			if (!provider.ensure || !provider.check) continue;
 			const kept = await provider.ensure({ ...wish, existing: id });
 			if (kept !== id) await this.#record(provider, wish, kept);
+		}
+	}
+
+	/**
+	 * What the provider says of a stored place; `ok` when it cannot check. A check that fails says
+	 * nothing of the place: it is logged and `unknown` returned, so the place is kept as it is and
+	 * the start goes on.
+	 */
+	async #checked(
+		provider: PlaceProvider,
+		wish: PlaceWish,
+		id: string,
+	): Promise<PlaceCheck | "unknown"> {
+		try {
+			return (await provider.check?.(id)) ?? "ok";
+		} catch (error) {
+			this.#ctx.options.logger.warn(
+				{ [wish.kind]: wish.name, surface: provider.surface, err: error },
+				"place not checked; kept as it is",
+			);
+			return "unknown";
 		}
 	}
 

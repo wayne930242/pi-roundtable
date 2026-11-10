@@ -14,6 +14,9 @@ const SURFACE = "discord";
 /** Discord's error code for a channel that does not exist. */
 const UNKNOWN_CHANNEL = 10003;
 
+/** Discord's error code for a channel the bot may not see: one of a server it left, or a hidden one. */
+const MISSING_ACCESS = 50001;
+
 export interface DiscordPlacesOptions {
 	/** The discord.js client that can ask Discord whether a stored channel still exists; without one the provider has no `check`, and a stored channel is taken as it is. */
 	client?: Client;
@@ -51,17 +54,20 @@ export function discordPlaces(options: DiscordPlacesOptions): PlaceProvider {
 			// Fetched fresh: a cached channel says nothing of one deleted since.
 			const found = await asked.channels
 				.fetch(id, { force: true })
-				.catch((error: unknown) => {
-					// Only Discord's own "unknown" says gone. Missing Access (50001) says nothing of whose
-					// guild the channel is in: a hidden channel of the agent guild answers it too, so it throws.
-					if (
-						error instanceof DiscordAPIError &&
-						error.code === UNKNOWN_CHANNEL
-					)
-						return "gone" as const;
+				.catch(async (error: unknown) => {
+					if (!(error instanceof DiscordAPIError)) throw error;
+					if (error.code === UNKNOWN_CHANNEL) return "gone" as const;
+					// Missing Access says nothing of whose guild the channel is in, so the agent guild's own
+					// list does: an id it does not hold is another server's (the bot left it), and one it
+					// holds is a hidden channel of its own, which stays a failure.
+					if (error.code === MISSING_ACCESS) {
+						const layout = await channels.layout();
+						if (!layout.some((c) => c.channelIds.includes(id)))
+							return "foreign" as const;
+					}
 					throw error;
 				});
-			if (found === "gone") return found;
+			if (found === "gone" || found === "foreign") return found;
 			// A channel discord.js cannot build is none of the agent guild's; only Discord's own "unknown" says gone.
 			if (found === null) return "foreign";
 			return !found.isDMBased() && found.guildId === guild ? "ok" : "foreign";

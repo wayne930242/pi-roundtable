@@ -172,6 +172,28 @@ describeDb("a channel type whose places the team makes", () => {
 		expect(pager.pages.size).toBe(made);
 	});
 
+	test("a provider's remove line with no separator of its own still reads after the archive tool's words", async () => {
+		const { id } = page("agent", "infra");
+		pager.provider.remove = async () => `its page ${id} is kept.`;
+		const said = await fx.team.archive(undefined, "infra");
+		expect(said).toBe(`Archived "Infra"; its page ${id} is kept.`);
+	});
+
+	test("a provider without check leaves a group's missing place as it leaves an agent's", async () => {
+		await fx.team.createGroup({
+			name: "crew",
+			displayName: "Crew",
+			members: ["infra", "doctor"],
+		});
+		const { id } = page("group", "crew");
+		pager.pages.delete(id);
+		pager.provider.check = undefined;
+		const made = pager.pages.size;
+		await restart();
+		expect(pager.pages.size).toBe(made);
+		expect(pageOf("group", "crew")).toBe(id);
+	});
+
 	test("a group's topic follows its members through describe", async () => {
 		await fx.team.createGroup({
 			name: "crew",

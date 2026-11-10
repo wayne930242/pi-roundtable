@@ -136,7 +136,9 @@ export class TeamPlaceWrites {
 			const id = places.idOf(wish, provider.surface);
 			if (id === undefined || !provider.remove) continue;
 			try {
-				said += (await provider.remove(id, { ...specOf(wish), helper })) ?? "";
+				const line = await provider.remove(id, { ...specOf(wish), helper });
+				// A line that brings no separator of its own (a provider of the first contract) gets one.
+				if (line) said += /^[;,]/.test(line) ? line : `; ${line}`;
 			} catch (error) {
 				logger.warn(
 					{ name: wish.name, surface: provider.surface, err: error },

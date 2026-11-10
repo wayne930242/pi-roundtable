@@ -75,8 +75,8 @@ export interface AgentChannels {
 	): Promise<string>;
 	/**
 	 * Opens a thread under a channel to be a temp knight's place, with no start message; returns its
-	 * id. Posts to that id speak through the parent channel's webhook into the thread. Absent: a
-	 * temp knight lives in rooms only.
+	 * id. Posts to that id speak through the parent channel's webhook into the thread. Absent: Discord
+	 * makes no place for a temp knight, and making one from a Discord conversation fails.
 	 */
 	createThread?(parentChannelId: string, name: string): Promise<string>;
 	/** Archives and locks a temp knight's thread (locked only when permitted); its history stays. */

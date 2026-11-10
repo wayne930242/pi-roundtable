@@ -8,6 +8,10 @@ export interface FakeServer {
 	gone(id: string): boolean;
 	/** Whether the channel is one of another server. */
 	foreign(id: string): boolean;
+	/** Whether the server answers Missing Access (50001) for the channel, as for one of a server the bot left. */
+	denied?(id: string): boolean;
+	/** Whether the request fails with an error that says nothing of the channel. */
+	fails?(id: string): boolean;
 }
 
 /**
@@ -16,6 +20,16 @@ export interface FakeServer {
  */
 export function fakeDiscordClient(server: FakeServer): Client {
 	const fetch = async (id: string) => {
+		if (server.fails?.(id)) throw new Error("the server did not answer");
+		if (server.denied?.(id))
+			throw new DiscordAPIError(
+				{ message: "Missing Access", code: 50001 },
+				50001,
+				403,
+				"GET",
+				`/channels/${id}`,
+				{},
+			);
 		if (server.gone(id))
 			throw new DiscordAPIError(
 				{ message: "Unknown Channel", code: 10003 },

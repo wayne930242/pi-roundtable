@@ -244,7 +244,7 @@ export class TeamHelpers {
 				own !== undefined &&
 				!bornHere &&
 				provider.check &&
-				(await provider.check(own)) !== "ok"
+				(await provider.check(own).catch(() => "unknown")) !== "ok"
 			)
 				continue;
 			const place = await this.#places.makeOn(surface, wish, parent);

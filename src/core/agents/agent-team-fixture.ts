@@ -272,6 +272,7 @@ export function useTeamFixture(
 									server: {
 										gone: (id) => channels.deleted.has(id),
 										foreign: (id) => channels.foreign.has(id),
+										fails: (id) => channels.failing.has(id),
 									},
 									onRemoved: (listener) => removedListeners.push(listener),
 								}),
