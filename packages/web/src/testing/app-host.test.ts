@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { describeDb } from "pi-roundtable/testing";
-import { type Booted, boot, Client, GUIDE, ofType } from "./app-host.ts";
+import {
+	agentReply,
+	type Booted,
+	boot,
+	Client,
+	GUIDE,
+	ofType,
+} from "./app-host.ts";
 
 describeDb("the owner app's test host", () => {
 	let app: Booted;
@@ -18,6 +25,8 @@ describeDb("the owner app's test host", () => {
 		app.scripts.set("left-over", async () => ({ ok: true, text: "old" }));
 		tab.send({ type: "send", id: "m1", room: GUIDE, text: "left-over" });
 		await tab.take(ofType("accepted"));
+		// The turn starts after the message is accepted, so the host has seen it once the agent has answered.
+		await tab.take(agentReply("guide"));
 		app.stops.push(GUIDE);
 		expect(app.clients.size).toBe(1);
 		expect(app.seen.length).toBeGreaterThan(0);
