@@ -444,6 +444,12 @@ export interface QueuePort {
 	 * HostStoppingError, and a plugin that starts work on its own, such as a timer, starts none.
 	 */
 	readonly closed: boolean;
+	/**
+	 * Whether the host is shutting down, even inside `finishing`, which masks only `closed`: work
+	 * that a delivery's own turn spawns, such as a transient task, starts none. Absent on a host
+	 * that predates it: read `closed` then.
+	 */
+	readonly draining?: boolean;
 	/** Called whenever a channel's count of running and waiting tasks changes. */
 	onChange(listener: (channel: ChannelKey) => void): void;
 }

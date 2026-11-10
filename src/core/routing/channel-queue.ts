@@ -7,8 +7,11 @@ export class ChannelQueue {
 	readonly #tails = new Map<ChannelKey, Promise<unknown>>();
 	readonly #sizes = new Map<ChannelKey, number>();
 	readonly #listeners: ((channel: ChannelKey) => void)[] = [];
-	/** Set inside `finishing`, so what a delivery starts and awaits sees the queue as open. */
-	readonly #finishing = new AsyncLocalStorage<true>();
+	/**
+	 * Set inside `finishing`, so what a delivery starts and awaits sees the queue as open: 0 in the
+	 * delivery itself, 1 in the queue task it started, which starts no queue task of its own.
+	 */
+	readonly #finishing = new AsyncLocalStorage<0 | 1>();
 	#closed = false;
 	#sealed = false;
 
@@ -26,11 +29,22 @@ export class ChannelQueue {
 	 * `finishing` until the queue is sealed.
 	 */
 	get closed(): boolean {
-		return this.#closed && !this.#admitted();
+		return (
+			this.#closed && (this.#sealed || this.#finishing.getStore() === undefined)
+		);
 	}
 
+	/**
+	 * Whether the host is shutting down, whatever the scope: unlike `closed`, `finishing` does not
+	 * mask it, so work that a delivery's own turn spawns, such as a transient task, reads it true.
+	 */
+	get draining(): boolean {
+		return this.#closed;
+	}
+
+	/** Whether a queue task started here is admitted: the delivery's own, not one that task spawns. */
 	#admitted(): boolean {
-		return !this.#sealed && this.#finishing.getStore() === true;
+		return !this.#sealed && this.#finishing.getStore() === 0;
 	}
 
 	/**
@@ -53,19 +67,21 @@ export class ChannelQueue {
 	/**
 	 * Runs `task` as the delivery of work the shutdown drain waits for, such as the report of a
 	 * task that was running when the host began to stop. A queue task started inside it, and
-	 * everything that task awaits, is admitted although the queue is closed, until the drain ends.
-	 * Outside a shutdown it changes nothing.
+	 * everything that task awaits, is admitted although the queue is closed, until the drain ends;
+	 * a queue task that task starts in turn is refused, as is anything else the shutdown refuses
+	 * (`draining`). Outside a shutdown it changes nothing.
 	 */
 	finishing<T>(task: () => Promise<T>): Promise<T> {
-		return this.#finishing.run(true, task);
+		return this.#finishing.run(0, task);
 	}
 
 	run<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T> {
 		const admitted = this.#admitted();
-		const start = () =>
-			this.#closed && !(admitted && !this.#sealed)
-				? Promise.reject(new HostStoppingError())
-				: task();
+		const start = () => {
+			if (this.#closed && !(admitted && !this.#sealed))
+				return Promise.reject(new HostStoppingError());
+			return admitted ? this.#finishing.run(1, task) : task();
+		};
 		this.#sizes.set(channel, this.size(channel) + 1);
 		this.#changed(channel);
 		const previous = this.#tails.get(channel) ?? Promise.resolve();
