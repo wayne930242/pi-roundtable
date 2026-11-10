@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.45.2] - 2026-11-10
+
+- Release in lockstep with pi-roundtable 0.45.2 (chat home: one accent badge for every agent picture, pins drag again); no package-specific behavior changes.
+
 ## [0.45.1] - 2026-11-10
 
 - Release in lockstep with pi-roundtable 0.45.1 (chat home: Home leads the list, group figures under the bar); no package-specific behavior changes.
