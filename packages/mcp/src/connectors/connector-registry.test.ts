@@ -273,6 +273,14 @@ describeDb("PostgreSQL", () => {
 			);
 		});
 
+		test("a removal the database fails leaves the connector known", async () => {
+			const registry = await open();
+			await registry.add(notion);
+			await registry.close();
+			await expect(registry.remove("notion")).rejects.toThrow();
+			expect((await registry.resync("notion")).connector.name).toBe("notion");
+		});
+
 		describe("resync", () => {
 			const renamed = ["search", "find-page"];
 
@@ -430,17 +438,28 @@ describeDb("PostgreSQL", () => {
 				expect(admin.peak).toBe(1);
 			});
 
-			test("a connector removed while a resync waits is refused, not revived", async () => {
+			test("a connector removed while a resync waits is refused, not revived, even while its row is still being deleted", async () => {
 				const registry = await open();
 				await registry.add(notion);
-				const waiting = registry.resyncAll();
-				const queued = registry.resync("notion");
-				await registry.remove("notion");
-				await waiting;
-				await expect(queued).rejects.toThrow(
-					CONNECTOR_MESSAGES.unknownConnector("notion"),
-				);
+				const holder = new SQL(testDatabaseUrl);
+				let removed: Promise<void> | undefined;
+				try {
+					// Another session holds the row, so the removal's DELETE lands only after the queued resync had its turn.
+					await holder.begin(async (held) => {
+						await held`SELECT FROM owner_connectors WHERE name = 'notion' FOR UPDATE`;
+						const waiting = registry.resyncAll();
+						const queued = registry.resync("notion");
+						removed = registry.remove("notion");
+						await waiting;
+						await expect(queued).rejects.toThrow(
+							CONNECTOR_MESSAGES.unknownConnector("notion"),
+						);
+					});
+				} finally {
+					await Promise.all([removed, holder.close()]);
+				}
 				expect(registry.list()).toEqual([]);
+				expect(admin.servers.size).toBe(0);
 			});
 
 			test("an unknown name is refused before ContextForge is asked", async () => {

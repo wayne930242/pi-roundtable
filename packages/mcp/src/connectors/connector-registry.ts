@@ -91,6 +91,8 @@ export class ConnectorRegistry {
 	readonly #options: ConnectorRegistryOptions;
 	readonly #text: ConnectorMessages;
 	readonly #connectors = new Map<string, Connector>();
+	/** The connectors being removed: unknown to every later call, though listed until their rows are gone. */
+	readonly #removing = new Set<string>();
 	#version = 0;
 	/** The resync in progress or last done; the next one waits for it, so ContextForge sees one request at a time. */
 	#resyncing: Promise<unknown> = Promise.resolve();
@@ -225,8 +227,14 @@ export class ConnectorRegistry {
 	/** Deletes the connector, its virtual server, and the upstream server with its token. */
 	async remove(name: string): Promise<void> {
 		const connector = this.#get(name);
-		await this.#sql`DELETE FROM owner_connectors WHERE name = ${name}`;
-		this.#connectors.delete(name);
+		// Unknown from this call on: a resync that waits its turn is refused however long the row takes to go.
+		this.#removing.add(name);
+		try {
+			await this.#sql`DELETE FROM owner_connectors WHERE name = ${name}`;
+			this.#connectors.delete(name);
+		} finally {
+			this.#removing.delete(name);
+		}
 		this.#version += 1;
 		await this.#removeFromContextForge(
 			name,
@@ -440,7 +448,8 @@ export class ConnectorRegistry {
 
 	#get(name: string): Connector {
 		const connector = this.#connectors.get(name);
-		if (!connector) throw new ConnectorError(this.#text.unknownConnector(name));
+		if (!connector || this.#removing.has(name))
+			throw new ConnectorError(this.#text.unknownConnector(name));
 		return connector;
 	}
 
@@ -464,18 +473,7 @@ export class ConnectorRegistry {
 		serverId: string | undefined,
 	): Promise<void> {
 		const { admin, logger } = this.#options;
-		const steps: [string, () => Promise<void>][] = [
-			...(serverId
-				? [
-						["server", () => admin.deleteServer(serverId)] as [
-							string,
-							() => Promise<void>,
-						],
-					]
-				: []),
-			["gateway", () => admin.deleteGateway(gatewayId)],
-		];
-		for (const [what, step] of steps) {
+		const attempt = async (what: string, step: () => Promise<void>) => {
 			try {
 				await step();
 			} catch (error) {
@@ -484,7 +482,9 @@ export class ConnectorRegistry {
 					"connector leftover in ContextForge",
 				);
 			}
-		}
+		};
+		if (serverId) await attempt("server", () => admin.deleteServer(serverId));
+		await attempt("gateway", () => admin.deleteGateway(gatewayId));
 	}
 }
 
