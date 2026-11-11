@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-11-11
+
+### Changed
+
+- pi-roundtable-web: The quiet hours on the profile page are two drop-downs, From and To, in half-hour steps, in place of the browser's time pickers; a time saved earlier that is not a half hour (22:10) stays listed and chosen until you pick another. The time zone stands level with the two times, on a phone and on a desktop.
+- pi-roundtable-web: The choices under "Shown as" on the profile page stand closer together: the rows touch, each still a full touch target on a phone.
+- pi-roundtable-web: A field that shows an error wears it: a host form's field with an error, and a name marked invalid (a folder's, a knight's, a group's, a preset's), take a red border and focus ring.
+- pi-roundtable-web: Fixed: a drop-down lost its look (the chevron fell under the control) once a page with the selection bar had loaded, because both styles were installed under one id.
+
 ## [0.47.0] - 2026-11-11
 
 ### Added
