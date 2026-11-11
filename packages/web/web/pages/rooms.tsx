@@ -388,6 +388,7 @@ function PlainRoomsPage(props: RoomsPageProps) {
 					<button
 						type="button"
 						className="header-button search-button"
+						aria-label={t("Find a room")}
 						onClick={props.onSearch}
 					>
 						<Icon name="search" size={16} />

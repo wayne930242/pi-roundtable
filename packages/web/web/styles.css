@@ -936,61 +936,6 @@ button.yolo-action:hover:not(:disabled) {
 	background: var(--on-accent);
 }
 
-.segmented {
-	display: inline-flex;
-	gap: 2px;
-	padding: 3px;
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
-	background: var(--surface-2);
-}
-
-.segmented-wide {
-	display: flex;
-}
-
-.segmented-wide label {
-	flex: 1;
-}
-
-.segmented label {
-	position: relative;
-	flex-direction: row;
-	align-items: center;
-	justify-content: center;
-	gap: var(--space-2);
-	min-height: 2.25rem;
-	padding: 0 var(--space-3);
-	border-radius: calc(var(--radius) - 3px);
-	color: var(--muted);
-	font-weight: var(--weight-medium);
-	cursor: pointer;
-	transition:
-		background-color var(--dur) var(--ease-out),
-		color var(--dur) var(--ease-out);
-}
-
-.segmented label[data-checked="true"] {
-	background: var(--surface);
-	color: var(--text);
-	box-shadow:
-		var(--shadow-1),
-		inset 0 0 0 1px var(--border-strong);
-}
-
-.segmented input {
-	position: absolute;
-	opacity: 0;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	cursor: pointer;
-}
-
-.segmented label:has(:focus-visible) {
-	outline: 2px solid var(--accent);
-}
-
 /* The look picker's swatches: each look in its own page, surface and accent colours, whatever look is on. */
 
 .look-swatch {
@@ -1687,7 +1632,6 @@ a.menu-item:focus-visible,
 	}
 
 	.link-button,
-	.segmented label,
 	.to-end,
 	.prompt-details summary,
 	.rail-link {
