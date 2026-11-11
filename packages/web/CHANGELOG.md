@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.2] - 2026-11-11
+
+### Changed
+
+- Every segmented choice of the console (the color scheme and look in settings, the round table's animation or chat switch, a knight's build) is one shared `Segmented` component, with the same `size` and `tone` the other form fields take.
+- The rooms page's search button now has an accessible name on a phone, where its words are hidden.
+
 ## [0.47.1] - 2026-11-11
 
 ### Changed
