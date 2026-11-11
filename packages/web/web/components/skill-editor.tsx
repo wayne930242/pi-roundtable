@@ -5,6 +5,7 @@ import { editApi } from "../lib/edit-api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { toast } from "../lib/toast.ts";
 import { TextDiff } from "./diff-block.tsx";
+import { TextArea } from "./fields.tsx";
 import { Icon } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 import { Failure, Loading } from "./states.tsx";
@@ -154,7 +155,7 @@ export function SkillEditor(props: {
 										</span>
 									) : null}
 								</div>
-								<textarea
+								<TextArea
 									id={field}
 									className="prompt-full"
 									spellCheck={false}

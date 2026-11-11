@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { TranscriptEntry } from "../../src/api-types.ts";
-import { Select } from "../components/select.tsx";
+import { Select } from "../components/fields.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useConfig } from "../lib/config.ts";

@@ -7,6 +7,7 @@ import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { Chips } from "./chips.tsx";
+import { TextField } from "./fields.tsx";
 import { KnightPicker, useKnights } from "./knight-picker.tsx";
 import { Failure, Loading } from "./states.tsx";
 
@@ -119,7 +120,7 @@ export function GroupEditor(props: { name?: string; onDone(): void }) {
 		>
 			<label htmlFor={nameId}>
 				{t("Name")}
-				<input
+				<TextField
 					id={nameId}
 					value={displayName}
 					autoComplete="off"
@@ -139,7 +140,7 @@ export function GroupEditor(props: { name?: string; onDone(): void }) {
 			{loaded ? null : (
 				<label htmlFor={idId}>
 					{t("Permanent name")}
-					<input
+					<TextField
 						id={idId}
 						value={name}
 						autoComplete="off"

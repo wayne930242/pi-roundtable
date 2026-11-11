@@ -1,4 +1,9 @@
-import type { SelectHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
+import {
+	type FieldLook,
+	type FieldVariant,
+	lookAttributes,
+} from "../lib/field-look.ts";
 import { installStyle } from "../lib/lazy-style.ts";
 import { Icon } from "./icons.tsx";
 
@@ -48,24 +53,41 @@ export const SELECT_CSS = `
 /**
  * The page's drop-down: the native control (so a phone opens its own picker) drawn with the
  * inputs' height, radius, border and focus ring and one chevron of the icon set, not the
- * system's inset look. `chip` is the pill that stands beside the breadcrumb chips. A list box
- * (`size` above one, or `multiple`) has no drop-down to point at and stays the native control.
- * `className` goes on the wrapper, which is what sits in the layout.
+ * system's inset look. It takes the `size`, `tone` and `variant` of the other fields
+ * (`lib/field-look.ts`), and one variant of its own: `chip`, the pill that stands beside the
+ * breadcrumb chips, which the `chip` flag also asks for. `rows` above one, or `multiple`, makes it
+ * a list box, which has no drop-down to point at and stays the native control. `className` goes
+ * on the wrapper, which is what sits in the layout.
  */
 export function Select({
 	chip,
 	className,
+	rows,
+	size,
+	tone,
+	variant,
 	...rest
-}: SelectHTMLAttributes<HTMLSelectElement> & { chip?: boolean }) {
-	if ((rest.size ?? 1) > 1 || rest.multiple === true)
-		return <select className={className} {...rest} />;
-	installStyle("select", SELECT_CSS);
+}: Omit<ComponentProps<"select">, "size"> &
+	Omit<FieldLook, "variant"> & {
+		variant?: FieldVariant | "chip";
+		chip?: boolean;
+		rows?: number;
+	}) {
+	const pill = chip === true || variant === "chip";
+	const look = lookAttributes(
+		{ size, tone, ...(variant && variant !== "chip" ? { variant } : {}) },
+		rest["aria-invalid"],
+	);
+	if ((rows ?? 1) > 1 || rest.multiple === true)
+		return <select className={className} size={rows} {...rest} {...look} />;
+	// Not "select": that id is the selection bar's (`lib/select-style.ts`), and a second style under one id is never installed.
+	installStyle("drop-down", SELECT_CSS);
 	return (
 		<span
 			className={className ? `select ${className}` : "select"}
-			data-chip={chip || undefined}
+			data-chip={pill || undefined}
 		>
-			<select {...rest} />
+			<select {...rest} {...look} />
 			<Icon name="chevron" size={16} />
 		</span>
 	);

@@ -5,8 +5,9 @@ import type {
 	FormSpecView,
 } from "../../src/api-types.ts";
 import { messageOf } from "../lib/api.ts";
+import type { FieldTone } from "../lib/field-look.ts";
 import { translate as t } from "../lib/messages.ts";
-import { Select } from "./select.tsx";
+import { Checkbox, Select, TextArea, TextField } from "./fields.tsx";
 import { Failure } from "./states.tsx";
 
 type Values = Record<string, string | string[]>;
@@ -48,6 +49,8 @@ function Choice(props: {
 	id: string;
 	value: string | string[];
 	described: string | undefined;
+	/** The tone of the drop-down: danger while the field shows an error. */
+	tone: FieldTone | undefined;
 	onChange(value: string | string[]): void;
 }) {
 	const { field, value } = props;
@@ -58,7 +61,7 @@ function Choice(props: {
 			)
 		: field.options;
 	const search = field.search ? (
-		<input
+		<TextField
 			type="search"
 			value={needle}
 			placeholder={t("Search…")}
@@ -75,7 +78,8 @@ function Choice(props: {
 					value={String(value)}
 					required={field.required === true}
 					aria-describedby={props.described}
-					{...(field.search ? { size: 6 } : {})}
+					tone={props.tone}
+					{...(field.search ? { rows: 6 } : {})}
 					onChange={(event) => props.onChange(event.target.value)}
 				>
 					{field.required ? null : <option value="">{t("None")}</option>}
@@ -94,8 +98,7 @@ function Choice(props: {
 			<fieldset aria-describedby={props.described}>
 				{shown.map((option) => (
 					<label key={option.value}>
-						<input
-							type="checkbox"
+						<Checkbox
 							checked={chosen.has(option.value)}
 							onChange={(event) => {
 								const next = new Set(chosen);
@@ -126,6 +129,8 @@ function Field(props: {
 	const id = useId();
 	const hint = "hint" in field ? field.hint : undefined;
 	const described = props.error || hint ? `${id}-note` : undefined;
+	// A field that shows an error wears it.
+	const tone = props.error ? "danger" : undefined;
 	let control: React.ReactNode;
 	if ("options" in field)
 		control = (
@@ -134,30 +139,33 @@ function Field(props: {
 				id={id}
 				value={value}
 				described={described}
+				tone={tone}
 				onChange={props.onChange}
 			/>
 		);
 	else if (field.type === "textarea")
 		control = (
-			<textarea
+			<TextArea
 				id={id}
 				rows={5}
 				value={String(value)}
 				maxLength={field.max ?? 8000}
 				required={field.required === true}
 				aria-describedby={described}
+				tone={tone}
 				onChange={(event) => props.onChange(event.target.value)}
 			/>
 		);
 	else
 		control = (
-			<input
+			<TextField
 				id={id}
 				type={field.type === "url" ? "url" : "text"}
 				value={String(value)}
 				maxLength={field.max ?? 500}
 				required={field.required === true}
 				aria-describedby={described}
+				tone={tone}
 				onChange={(event) => props.onChange(event.target.value)}
 			/>
 		);

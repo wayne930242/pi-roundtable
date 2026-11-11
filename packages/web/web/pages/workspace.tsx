@@ -7,8 +7,8 @@ import {
 } from "react";
 import type { WorkspaceEntry, WorkspaceRootView } from "../../src/api-types.ts";
 import { Confirm } from "../components/confirm.tsx";
+import { Select } from "../components/fields.tsx";
 import { Icon } from "../components/icons.tsx";
-import { Select } from "../components/select.tsx";
 import { Sheet } from "../components/sheet.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { messageOf } from "../lib/api.ts";

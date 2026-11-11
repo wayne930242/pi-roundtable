@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import type { WorkspaceRootView } from "../../src/api-types.ts";
 import { Dialog } from "../components/dialog.tsx";
+import { TextField } from "../components/fields.tsx";
 import { Failure } from "../components/states.tsx";
 import { messageOf } from "../lib/api.ts";
 import { translate as t } from "../lib/messages.ts";
@@ -70,7 +71,7 @@ export function NameDialog(props: {
 		<Dialog open={ask !== undefined} title={title} onClose={props.onClose}>
 			<form className="stack" onSubmit={submit}>
 				<label htmlFor={id}>{t("Name")}</label>
-				<input
+				<TextField
 					id={id}
 					value={value}
 					autoComplete="off"

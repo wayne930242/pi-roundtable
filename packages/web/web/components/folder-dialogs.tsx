@@ -14,6 +14,7 @@ import {
 import { translate as t } from "../lib/messages.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";
+import { FieldNote, TextField } from "./fields.tsx";
 import { MoveSheet } from "./move-sheet.tsx";
 
 type NameAsk = Extract<FolderDialog, { kind: "new" | "rename" }>;
@@ -55,7 +56,7 @@ function NameForm(props: { ask: NameAsk; onClose(): void }) {
 				<label className="field-label" htmlFor="folder-name">
 					{t("Folder name")}
 				</label>
-				<input
+				<TextField
 					id="folder-name"
 					type="text"
 					ref={field}
@@ -66,11 +67,7 @@ function NameForm(props: { ask: NameAsk; onClose(): void }) {
 					aria-invalid={error ? true : undefined}
 					onChange={(event) => setName(event.target.value)}
 				/>
-				{error ? (
-					<p className="field-error" role="alert">
-						{error}
-					</p>
-				) : null}
+				{error ? <FieldNote tone="danger">{error}</FieldNote> : null}
 			</div>
 			<div className="actions">
 				<button

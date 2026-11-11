@@ -10,6 +10,7 @@ import { activityAt, type RoomsState } from "../lib/rooms.ts";
 import { hrefFor, navigate } from "../lib/router.ts";
 import { sections } from "../lib/sections.ts";
 import { PageCharacter } from "./character.tsx";
+import { TextField } from "./fields.tsx";
 import { Icon, type IconName } from "./icons.tsx";
 import { Sheet } from "./sheet.tsx";
 
@@ -121,7 +122,7 @@ export function Palette(props: {
 			<div className="palette-box">
 				<div className="palette-input">
 					<Icon name="search" size={18} />
-					<input
+					<TextField
 						ref={input}
 						value={query}
 						placeholder={t("Find a room or page")}

@@ -18,6 +18,7 @@ import { useRowPress } from "../lib/row-press.ts";
 import { drawerGroups, sections, type ThreadKeys } from "../lib/sections.ts";
 import { installSwitcherThreadsStyle } from "../lib/switcher-threads-style.ts";
 import { ThreadList } from "../pages/rooms.tsx";
+import { TextField } from "./fields.tsx";
 import { Icon } from "./icons.tsx";
 import { ReadReveal, useReadSwipe } from "./read-swipe.tsx";
 import { RoomPicture } from "./room-picture.tsx";
@@ -311,7 +312,7 @@ export default function SwitcherList(props: {
 		<>
 			<div className="switcher-search">
 				<Icon name="search" size={16} />
-				<input
+				<TextField
 					type="search"
 					value={query}
 					placeholder={t("Find a room")}

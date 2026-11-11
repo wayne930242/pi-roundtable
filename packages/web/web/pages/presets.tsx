@@ -5,6 +5,7 @@ import type {
 	SessionView,
 } from "../../src/api-types.ts";
 import { PageCharacter } from "../components/character.tsx";
+import { Select } from "../components/fields.tsx";
 import { Icon } from "../components/icons.tsx";
 import { useKnights } from "../components/knight-picker.tsx";
 import { PresetSheet } from "../components/preset-editor.tsx";
@@ -14,7 +15,6 @@ import {
 	recruitSummary,
 } from "../components/preset-parts.tsx";
 import { SearchField } from "../components/search-field.tsx";
-import { Select } from "../components/select.tsx";
 import { Empty, Failure, Loading } from "../components/states.tsx";
 import { api } from "../lib/api.ts";
 import { useCharacters } from "../lib/characters.ts";

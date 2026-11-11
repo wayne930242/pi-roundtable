@@ -4,6 +4,7 @@ import { translate as t } from "../lib/messages.ts";
 import { editQueued } from "../lib/queued-actions.ts";
 import { clearQueuedEdit, useQueuedEdit } from "../lib/queued-edit.ts";
 import { Dialog } from "./dialog.tsx";
+import { TextArea } from "./fields.tsx";
 
 /** The text of a waiting message. It mounts when the sheet opens, so each time starts from the message. */
 function EditForm(props: { message: RoomMessage; onClose(): void }) {
@@ -27,7 +28,7 @@ function EditForm(props: { message: RoomMessage; onClose(): void }) {
 	return (
 		<form className="stack" onSubmit={submit}>
 			<div className="field">
-				<textarea
+				<TextArea
 					ref={field}
 					className="queued-edit-text"
 					rows={6}

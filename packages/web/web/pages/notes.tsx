@@ -6,7 +6,12 @@ import type {
 	PrincipalsView,
 } from "../../src/api-types.ts";
 import { Dialog } from "../components/dialog.tsx";
-import { Select } from "../components/select.tsx";
+import {
+	DateField,
+	Select,
+	TextArea,
+	TextField,
+} from "../components/fields.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
 import { Tabs } from "../components/tabs.tsx";
 import { api, messageOf } from "../lib/api.ts";
@@ -133,7 +138,7 @@ export function NotesPage() {
 					})}
 					onChange={setKind}
 				/>
-				<input
+				<TextField
 					type="search"
 					placeholder={t("Search (words separated by spaces)")}
 					aria-label={t("Search notes")}
@@ -326,8 +331,7 @@ function NoteEditor(props: {
 			{draft.kind === "event" ? (
 				<label>
 					{t("Date")}
-					<input
-						type="date"
+					<DateField
 						value={draft.eventDate}
 						onChange={(event) =>
 							setDraft({ ...draft, eventDate: event.target.value })
@@ -337,7 +341,7 @@ function NoteEditor(props: {
 			) : null}
 			<label>
 				{t("Text")}
-				<textarea
+				<TextArea
 					rows={4}
 					value={draft.fact}
 					onChange={(event) => setDraft({ ...draft, fact: event.target.value })}

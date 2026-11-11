@@ -13,8 +13,8 @@ import { translate as t } from "../lib/messages.ts";
 import { toast } from "../lib/toast.ts";
 import { webhooksApi } from "../lib/webhooks-api.ts";
 import { Confirm } from "./confirm.tsx";
+import { Select, TextField } from "./fields.tsx";
 import { SecretUrlDialog } from "./secret-url-dialog.tsx";
-import { Select } from "./select.tsx";
 import { Badge, Failure } from "./states.tsx";
 
 /** One webhook: who made it, its use and its expiry, never its URL. */
@@ -83,7 +83,7 @@ export function WebhookForm(props: {
 		<form className="stack" onSubmit={create}>
 			<label htmlFor={nameId}>
 				{t("Webhook name")}
-				<input
+				<TextField
 					id={nameId}
 					value={name}
 					maxLength={80}

@@ -20,7 +20,18 @@
 			"a11y": {
 				"noLabelWithoutControl": {
 					"level": "error",
-					"options": { "inputComponents": ["SelectBox"] }
+					"options": {
+						"inputComponents": [
+							"Checkbox",
+							"ColorField",
+							"DateField",
+							"Radio",
+							"Select",
+							"SelectBox",
+							"TextArea",
+							"TextField"
+						]
+					}
 				}
 			}
 		}

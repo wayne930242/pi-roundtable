@@ -9,6 +9,7 @@ import { characterLabel, type LabelKind } from "../lib/character-labels.ts";
 import { translate as t } from "../lib/messages.ts";
 import { characterLabelBuild, PALETTES, PARTS } from "./creator-parts.ts";
 import { ClassTile, Field, Strip, Swatch } from "./creator-pieces.tsx";
+import { ColorField, Radio } from "./fields.tsx";
 
 /** One group of the form, as the phone lists it: a title, what is chosen, a rejected field's message and the group's controls. */
 export interface CreatorGroup {
@@ -88,8 +89,7 @@ export function creatorFields(state: CreatorState): {
 									? t("Secondary")
 									: t("Trim")}
 						</span>
-						<input
-							type="color"
+						<ColorField
 							value={draft.colors[key]}
 							onChange={(event) =>
 								change({ colors: { [key]: event.target.value } })
@@ -124,8 +124,7 @@ export function creatorFields(state: CreatorState): {
 					<legend className="visually-hidden">{t("Build")}</legend>
 					{(["slim", "regular", "stout"] as const).map((build) => (
 						<label key={build} data-checked={draft.build === build}>
-							<input
-								type="radio"
+							<Radio
 								name={`${titleId}-build`}
 								checked={draft.build === build}
 								onChange={() => change({ build })}
@@ -164,8 +163,7 @@ export function creatorFields(state: CreatorState): {
 							onPick={() => change({ hairColor: hex })}
 						/>
 					))}
-					<input
-						type="color"
+					<ColorField
 						aria-label={t("Hair color")}
 						value={draft.hairColor}
 						onChange={(event) =>

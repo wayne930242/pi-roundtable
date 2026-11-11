@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useState } from "react";
 import type { PromptSummary, PromptView } from "../../src/api-types.ts";
 import { TextDiff } from "../components/diff-block.tsx";
+import { TextArea } from "../components/fields.tsx";
 import { Icon } from "../components/icons.tsx";
 import { Sheet } from "../components/sheet.tsx";
 import { Badge, Empty, Failure, Loading } from "../components/states.tsx";
@@ -201,7 +202,7 @@ function PromptEditor({ id, onClose }: { id: string; onClose(): void }) {
 										</button>
 									</span>
 								</div>
-								<textarea
+								<TextArea
 									id={field}
 									className="prompt-full"
 									value={draft}

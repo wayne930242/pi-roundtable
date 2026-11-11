@@ -3,6 +3,7 @@ import type { Outcome, Running } from "../lib/batch.ts";
 import { translate as t } from "../lib/messages.ts";
 import { installSelectStyle } from "../lib/select-style.ts";
 import { IDLE_STEPS, type Idle } from "../lib/selection.ts";
+import { Checkbox } from "./fields.tsx";
 
 installSelectStyle();
 
@@ -19,9 +20,8 @@ export function SelectBox(props: {
 		if (box.current) box.current.indeterminate = props.mixed === true;
 	}, [props.mixed]);
 	return (
-		<input
+		<Checkbox
 			ref={box}
-			type="checkbox"
 			className="select-box"
 			aria-label={props.label}
 			checked={props.checked}

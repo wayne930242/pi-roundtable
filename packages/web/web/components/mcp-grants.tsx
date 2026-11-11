@@ -13,8 +13,8 @@ import { toast } from "../lib/toast.ts";
 import { useReloadable } from "../lib/use-reloadable.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";
+import { Checkbox, Select, TextArea, TextField } from "./fields.tsx";
 import { SecretUrlDialog } from "./secret-url-dialog.tsx";
-import { Select } from "./select.tsx";
 import { Badge, Empty, Failure, Loading } from "./states.tsx";
 
 type Operations = McpGrantsView["operations"];
@@ -39,8 +39,7 @@ function OperationChoice(props: {
 					return (
 						<li key={op.id}>
 							<label className="menu-item menu-toggle">
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={on}
 									onChange={() =>
 										props.onChange(
@@ -128,7 +127,7 @@ function AuthorizeForm(props: {
 			{bundle === NEW_BUNDLE ? (
 				<label>
 					{t("New bundle name")}
-					<input
+					<TextField
 						value={newName}
 						maxLength={80}
 						required
@@ -165,7 +164,7 @@ function AuthorizeForm(props: {
 			/>
 			<label>
 				{t("Name outside AI clients see (optional)")}
-				<input
+				<TextField
 					value={displayName}
 					maxLength={100}
 					onChange={(e) => setDisplayName(e.target.value)}
@@ -173,7 +172,7 @@ function AuthorizeForm(props: {
 			</label>
 			<label>
 				{t("Purpose (optional)")}
-				<textarea
+				<TextArea
 					value={description}
 					maxLength={1000}
 					rows={2}
@@ -232,7 +231,7 @@ function DescribeForm(props: {
 		<form className="stack" onSubmit={submit}>
 			<label>
 				{t("Name outside AI clients see")}
-				<input
+				<TextField
 					value={displayName}
 					maxLength={100}
 					required
@@ -241,7 +240,7 @@ function DescribeForm(props: {
 			</label>
 			<label>
 				{t("Purpose")}
-				<textarea
+				<TextArea
 					value={description}
 					maxLength={1000}
 					rows={3}

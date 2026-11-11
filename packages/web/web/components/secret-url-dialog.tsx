@@ -1,6 +1,7 @@
 import { translate as t } from "../lib/messages.ts";
 import { toast } from "../lib/toast.ts";
 import { Dialog } from "./dialog.tsx";
+import { TextField } from "./fields.tsx";
 
 /** A secret URL, shown this once with a copy button: what it is for and that it is not shown again is `note`. */
 export function SecretUrlDialog(props: {
@@ -16,7 +17,7 @@ export function SecretUrlDialog(props: {
 		>
 			<div className="stack">
 				<p>{shown?.note}</p>
-				<input
+				<TextField
 					readOnly
 					aria-label={shown?.label}
 					className="mcp-url"
