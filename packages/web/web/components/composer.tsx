@@ -38,6 +38,7 @@ import {
 import { toast } from "../lib/toast.ts";
 import { useMentionInsert } from "../lib/use-mention-insert.ts";
 import { type Attached, AttachedChips } from "./attached-chips.tsx";
+import { BareInput, BareTextArea } from "./bare-fields.tsx";
 import { Icon } from "./icons.tsx";
 
 // The menu of commands, and its styles, load when the text first starts with a slash.
@@ -416,7 +417,7 @@ export function Composer(props: {
 				</Suspense>
 			) : null}
 			<div className="composer-row">
-				<input
+				<BareInput
 					ref={picker}
 					id={inputId}
 					type="file"
@@ -436,7 +437,7 @@ export function Composer(props: {
 				>
 					<Icon name="attach" />
 				</button>
-				<textarea
+				<BareTextArea
 					ref={area}
 					rows={1}
 					value={text}

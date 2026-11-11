@@ -7,6 +7,7 @@ import type {
 } from "../../src/api-types.ts";
 import { translate as t } from "../lib/messages.ts";
 import type { CardState } from "../lib/rooms.ts";
+import { BareInput, BareTextArea } from "./bare-fields.tsx";
 import {
 	Collapse,
 	describeAnswer,
@@ -52,7 +53,7 @@ export function Field(props: {
 					{question.header ? `${question.header} · ` : ""}
 					{question.question}
 				</legend>
-				<textarea
+				<BareTextArea
 					rows={2}
 					value={pick.text}
 					onChange={(event) => onChange({ ...pick, text: event.target.value })}
@@ -88,7 +89,7 @@ export function Field(props: {
 						className="option"
 						data-checked={pick.choices.includes(option.label)}
 					>
-						<input
+						<BareInput
 							type={question.multi ? "checkbox" : "radio"}
 							name={props.name}
 							checked={pick.choices.includes(option.label)}
@@ -104,7 +105,7 @@ export function Field(props: {
 				))}
 				{question.allowOther ? (
 					<label className="option" data-checked={pick.other}>
-						<input
+						<BareInput
 							type={question.multi ? "checkbox" : "radio"}
 							name={props.name}
 							checked={pick.other}
@@ -123,7 +124,7 @@ export function Field(props: {
 				) : null}
 			</div>
 			{pick.other ? (
-				<input
+				<BareInput
 					type="text"
 					value={pick.text}
 					placeholder={t("Your answer")}
@@ -254,7 +255,7 @@ export function QuestionnaireCard({
 				{frame.questions.some((question) => question.options.length > 0) ? (
 					<label>
 						{t("Add a note")}
-						<textarea
+						<BareTextArea
 							rows={2}
 							value={note}
 							disabled={sent}

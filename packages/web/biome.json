@@ -22,6 +22,8 @@
 					"level": "error",
 					"options": {
 						"inputComponents": [
+							"BareInput",
+							"BareTextArea",
 							"Checkbox",
 							"ColorField",
 							"DateField",

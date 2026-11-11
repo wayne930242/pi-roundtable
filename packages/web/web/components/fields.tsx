@@ -8,14 +8,16 @@ import {
 	type LookAttributes,
 	lookAttributes,
 } from "../lib/field-look.ts";
+import { BareInput, BareTextArea } from "./bare-fields.tsx";
 
 // The page's form controls, one component for each kind, so no page or component writes an
 // `<input>` or a `<textarea>` of its own (`form-controls.test.ts` checks) and a kind has one place
-// to change. Each draws the native control and passes every attribute and the `ref` on to it. With
+// to change. Each draws the native control, through the bare ones of `bare-fields.tsx`, and passes every attribute and the `ref` on to it. With
 // no look set the control is the page's own (`styles.css` gives `input` and `textarea` their box,
 // focus ring and phone text size); `size`, `tone` and `variant` come from the one stylesheet of
-// `lib/field-look.ts`. A room's composer and its question cards alone keep their own controls:
-// the page's first chunk carries them, and the first load has no bytes to spare for this file.
+// `lib/field-look.ts`. A room's composer and its question cards, which the page's first chunk
+// carries, take the bare controls of `bare-fields.tsx` directly, and not this file, whose look
+// loads with the lazy parts.
 
 // The drop-down has a file and a stylesheet of its own and is taken from here like the others:
 // with one module for every control the fields and the drop-down load as one lazy chunk, and the
@@ -40,17 +42,17 @@ export function TextField(
 	props: InputProps &
 		FieldLook & { type?: "text" | "search" | "url" | "password" },
 ) {
-	return <input {...withLook(props)} />;
+	return <BareInput {...withLook(props)} />;
 }
 
 /** Text of more than one line. */
 export function TextArea(props: ComponentProps<"textarea"> & FieldLook) {
-	return <textarea {...withLook(props)} />;
+	return <BareTextArea {...withLook(props)} />;
 }
 
 /** A day, chosen in the system's date picker; its value is `YYYY-MM-DD` or empty. */
 export function DateField(props: InputProps & FieldLook) {
-	return <input {...withLook(props)} type="date" />;
+	return <BareInput {...withLook(props)} type="date" />;
 }
 
 /** The look of a control the browser draws: its size and the colour of its tick, with no box to fill. */
@@ -58,17 +60,17 @@ type MarkLook = Pick<FieldLook, "size" | "tone">;
 
 /** A tick box: one of several that may be chosen together. Ticked, it is the accent colour, or its tone's. */
 export function Checkbox(props: InputProps & MarkLook) {
-	return <input {...withLook(props)} type="checkbox" />;
+	return <BareInput {...withLook(props)} type="checkbox" />;
 }
 
 /** A radio button: one of the choices that share its `name`. Chosen, it is the accent colour, or its tone's. */
 export function Radio(props: InputProps & MarkLook) {
-	return <input {...withLook(props)} type="radio" />;
+	return <BareInput {...withLook(props)} type="radio" />;
 }
 
 /** A colour, chosen in the system's colour picker; its value is `#rrggbb`. */
 export function ColorField(props: InputProps & MarkLook) {
-	return <input {...withLook(props)} type="color" />;
+	return <BareInput {...withLook(props)} type="color" />;
 }
 
 /**

@@ -18,15 +18,19 @@ const sources = (dir: string = here): string[] =>
 				: [],
 	);
 
-/** The shared components, which write the native controls. */
-const SHARED = ["components/fields.tsx", "components/select.tsx"];
+/**
+ * The shared components, which write the native controls: the bare ones, with no look, that the
+ * page's first chunk takes, and the ones with a look, built on them and loaded with the lazy parts.
+ */
+const SHARED = [
+	"components/bare-fields.tsx",
+	"components/fields.tsx",
+	"components/select.tsx",
+];
 
 /**
- * The two files of the page's first chunk that draw a control, which keep their own: a room's
- * composer (its text box and its hidden file picker) and its question cards. They are drawn
- * before any lazy part loads, and a shared component there would be bytes of the first load,
- * which has none to spare (`src/page.test.ts` holds the budget; the bare controls alone measured
- * 22 bytes gzipped). They take the page's own look, with no size, tone or variant.
+ * The two files of the page's first chunk that draw a control, a room's composer and its question
+ * cards. They take the bare controls and not the fields with a look, whose stylesheet is lazy.
  */
 const FIRST_CHUNK = [
 	"components/cards-questions.tsx",
@@ -45,23 +49,22 @@ const written = (file: string): string[] =>
 
 test("no page or component writes an <input>, a <select> or a <textarea> of its own: each control is a shared component", () => {
 	const bare = sources()
-		.filter((file) => !SHARED.includes(file) && !FIRST_CHUNK.includes(file))
+		.filter((file) => !SHARED.includes(file))
 		.flatMap(written);
 	expect(bare).toEqual([]);
 });
 
-test("the first chunk's own controls are the seven it has today, so one more is a choice and not a slip", () => {
+test("the first chunk's controls are the bare ones, and none is left out", () => {
+	for (const file of FIRST_CHUNK)
+		expect(readFileSync(join(here, file), "utf8")).toMatch(
+			/from "\.\/bare-fields\.tsx"/,
+		);
+});
+
+test("the bare controls import nothing of the look, so the first load carries two passthroughs and no stylesheet", () => {
 	expect(
-		FIRST_CHUNK.flatMap(written).map((line) => line.replace(/:\d+:/, ":")),
-	).toEqual([
-		"components/cards-questions.tsx: <textarea",
-		"components/cards-questions.tsx: <input",
-		"components/cards-questions.tsx: <input",
-		"components/cards-questions.tsx: <input",
-		"components/cards-questions.tsx: <textarea",
-		"components/composer.tsx: <input",
-		"components/composer.tsx: <textarea",
-	]);
+		readFileSync(join(here, "components/bare-fields.tsx"), "utf8"),
+	).not.toMatch(/from "(?!react")/);
 });
 
 test("the first chunk does not take the shared fields, whose stylesheet and looks load with the lazy parts", () => {
@@ -80,7 +83,7 @@ test("the drop-down is taken from fields.tsx like every other control, which kee
 
 test("the shared components are where the native controls are written", () => {
 	const text = (file: string) => readFileSync(join(here, file), "utf8");
-	expect(text("components/fields.tsx")).toMatch(/<input \{/);
-	expect(text("components/fields.tsx")).toMatch(/<textarea \{/);
+	expect(text("components/bare-fields.tsx")).toMatch(/<input \{/);
+	expect(text("components/bare-fields.tsx")).toMatch(/<textarea \{/);
 	expect(text("components/select.tsx")).toMatch(/<select \{/);
 });
