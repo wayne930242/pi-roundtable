@@ -12,7 +12,9 @@ import {
 	PersonPicture,
 } from "../components/host-picture.tsx";
 import { Icon } from "../components/icons.tsx";
+import { RadioGroup } from "../components/radio-group.tsx";
 import { Badge, Failure, Loading } from "../components/states.tsx";
+import { TimeRange } from "../components/time-range.tsx";
 import { accountApi } from "../lib/account-api.ts";
 import "../lib/account-styles.ts";
 import { api, messageOf } from "../lib/api.ts";
@@ -266,29 +268,12 @@ function Notifications() {
 					"In your quiet hours a normal notice waits in the bell instead of ringing your phone. An urgent one still rings.",
 				)}
 			</p>
-			<div className="quiet-row">
-				<label>
-					{t("From")}{" "}
-					<input
-						type="time"
-						value={draft.start}
-						onChange={(event) =>
-							setDraft({ ...draft, start: event.target.value })
-						}
-					/>
-				</label>
-				<label>
-					{t("To")}{" "}
-					<input
-						type="time"
-						value={draft.end}
-						onChange={(event) =>
-							setDraft({ ...draft, end: event.target.value })
-						}
-					/>
-				</label>
-				<span className="meta">{zone}</span>
-			</div>
+			<TimeRange
+				start={draft.start}
+				end={draft.end}
+				zone={zone}
+				onChange={(next) => setDraft({ ...draft, ...next })}
+			/>
 			{error ? <Failure message={error} /> : null}
 			{note ? <p className="meta">{note}</p> : null}
 			<div className="actions">
@@ -340,6 +325,9 @@ function Notifications() {
 	);
 }
 
+/** The choice of no account in particular: the host picks the one that names the person. */
+const AUTOMATIC = "";
+
 /** Which of their accounts names the person in the app, when more than one could. */
 function ShownAs({
 	profile,
@@ -366,29 +354,21 @@ function ShownAs({
 					"The name and picture of this account are what others see in the app.",
 				)}
 			</p>
-			<fieldset className="choice">
-				<legend className="visually-hidden">{t("Shown as")}</legend>
-				<label>
-					<input
-						type="radio"
-						name="shown-as"
-						checked={profile.source === undefined}
-						onChange={() => choose(null)}
-					/>
-					{t("Automatic")}
-				</label>
-				{profile.sources.map((source) => (
-					<label key={source.provider}>
-						<input
-							type="radio"
-							name="shown-as"
-							checked={profile.source === source.provider}
-							onChange={() => choose(source.provider)}
-						/>
-						{t(source.label)}
-					</label>
-				))}
-			</fieldset>
+			<RadioGroup
+				legend={t("Shown as")}
+				name="shown-as"
+				value={profile.source ?? AUTOMATIC}
+				options={[
+					{ value: AUTOMATIC, label: t("Automatic") },
+					...profile.sources.map((source) => ({
+						value: source.provider,
+						label: t(source.label),
+					})),
+				]}
+				onChange={(provider) =>
+					choose(provider === AUTOMATIC ? null : provider)
+				}
+			/>
 			{error ? <Failure message={error} /> : null}
 		</section>
 	);

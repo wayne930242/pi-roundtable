@@ -23,6 +23,7 @@ import { installSwitcherChatsStyle } from "../lib/switcher-chats-style.ts";
 import { useUnreadMap } from "../lib/unread-map.ts";
 import { ThreadList, useRowData } from "../pages/rooms.tsx";
 import { ChatRow } from "./chat-row.tsx";
+import { TextField } from "./fields.tsx";
 import { HomeChips } from "./home-chips.tsx";
 import { Icon } from "./icons.tsx";
 import { PinTile } from "./pin-tile.tsx";
@@ -206,7 +207,7 @@ export default function SwitcherChats(props: {
 				</button>
 				<div className="switcher-search">
 					<Icon name="search" size={16} />
-					<input
+					<TextField
 						type="search"
 						value={query}
 						placeholder={t("Find a room")}

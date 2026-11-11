@@ -17,6 +17,7 @@ import { navigate } from "../lib/router.ts";
 import { refreshRooms, teamApi } from "../lib/team-api.ts";
 import { toast } from "../lib/toast.ts";
 import { Chips } from "./chips.tsx";
+import { Checkbox, TextField } from "./fields.tsx";
 import { RoomPicture } from "./room-picture.tsx";
 import { useAgents } from "./round-table.tsx";
 import { Sheet } from "./sheet.tsx";
@@ -211,8 +212,7 @@ function CouncilBody(props: {
 						return (
 							<li key={agent.key}>
 								<label className="menu-item menu-toggle seat-row">
-									<input
-										type="checkbox"
+									<Checkbox
 										checked={on}
 										disabled={!on && full}
 										onChange={() =>
@@ -247,7 +247,7 @@ function CouncilBody(props: {
 			{naming ? (
 				<label htmlFor={nameId}>
 					{t("Council name")}
-					<input
+					<TextField
 						id={nameId}
 						value={displayName}
 						autoComplete="off"

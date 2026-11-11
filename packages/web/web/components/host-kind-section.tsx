@@ -11,6 +11,7 @@ import { installHostStyle } from "../lib/host-style.ts";
 import { useLive } from "../lib/live.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
+import { TextField } from "./fields.tsx";
 import { HostPicture } from "./host-picture.tsx";
 import { Icon, type IconName } from "./icons.tsx";
 import { Empty, Failure } from "./states.tsx";
@@ -96,7 +97,7 @@ export default function HostKindSection(props: {
 				{props.label}
 			</h2>
 			{rooms && (rooms.length >= FILTER_FROM || filter || typed) ? (
-				<input
+				<TextField
 					type="search"
 					className="kind-filter"
 					value={typed}

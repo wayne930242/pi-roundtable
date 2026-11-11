@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useSelector } from "../lib/app-store.ts";
+import { Checkbox } from "./fields.tsx";
 
 /** Splits the names of one agent from its display name in the selector's one string. */
 const SEP = "\u0000";
@@ -55,8 +56,7 @@ export function KnightPicker(props: {
 					return (
 						<li key={knight.name}>
 							<label className="menu-item menu-toggle">
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={on}
 									disabled={!on && max !== undefined && chosen.length >= max}
 									onChange={() =>

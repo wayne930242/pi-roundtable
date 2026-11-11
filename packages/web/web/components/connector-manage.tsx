@@ -7,6 +7,7 @@ import { toast } from "../lib/toast.ts";
 import { useReloadable } from "../lib/use-reloadable.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";
+import { TextArea, TextField } from "./fields.tsx";
 import { Badge, Empty, Failure, Loading } from "./states.tsx";
 
 const EMPTY = { name: "", url: "", description: "", header: "", token: "" };
@@ -50,7 +51,7 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 		<form className="stack" onSubmit={submit} autoComplete="off">
 			<label>
 				{t("Name")}
-				<input
+				<TextField
 					value={fields.name}
 					maxLength={12}
 					placeholder="notion"
@@ -65,7 +66,7 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 			</label>
 			<label>
 				{t("MCP URL")}
-				<input
+				<TextField
 					type="url"
 					value={fields.url}
 					maxLength={500}
@@ -81,7 +82,7 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 			</label>
 			<label>
 				{t("Purpose")}
-				<textarea
+				<TextArea
 					value={fields.description}
 					maxLength={1000}
 					rows={3}
@@ -95,7 +96,7 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 			<div className="form-row">
 				<label>
 					{t("Header name (optional)")}
-					<input
+					<TextField
 						value={fields.header}
 						maxLength={100}
 						placeholder="X-API-Key"
@@ -107,7 +108,7 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 				</label>
 				<label>
 					{t("Token (optional)")}
-					<input
+					<TextField
 						type="password"
 						value={fields.token}
 						maxLength={4000}
@@ -165,7 +166,7 @@ function PurposeForm(props: {
 		<form className="stack" onSubmit={submit}>
 			<label>
 				{t("Purpose")}
-				<textarea
+				<TextArea
 					value={text}
 					maxLength={1000}
 					rows={4}

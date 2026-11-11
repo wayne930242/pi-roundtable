@@ -25,6 +25,7 @@ import {
 } from "./agent-fields.tsx";
 import { Chips } from "./chips.tsx";
 import { Confirm } from "./confirm.tsx";
+import { TextField } from "./fields.tsx";
 import { KnightPicker } from "./knight-picker.tsx";
 import { LookCreator, LookSummary } from "./look-pick.tsx";
 import { PresetRecruits, TransferPreset } from "./preset-parts.tsx";
@@ -198,7 +199,7 @@ export function PresetSheet(props: {
 					<fieldset className="stack" disabled={readOnly}>
 						<label htmlFor={nameId}>
 							{t("Preset name")}
-							<input
+							<TextField
 								id={nameId}
 								value={name}
 								readOnly={preset !== undefined}

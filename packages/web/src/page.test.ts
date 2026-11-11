@@ -87,6 +87,10 @@ test("the page builds with relative URLs only, and every file it names is in the
  * save, an own message row and the row of a message not taken yet reach the lazy picture, and an
  * own row is laid out from the right (5 bytes of the stylesheet). The picture, the fetch of another
  * person's knight, the profile's card and the creator are lazy chunks.
+ * The 35 bytes after that are the composer's and the question cards' controls taking the shared
+ * bare `<input>` and `<textarea>` (`components/bare-fields.tsx`), measured 176,763 to 176,798: every
+ * control of the page is a shared component, with no exemption for the first chunk; the look
+ * (`lib/field-look.ts` and its stylesheet) stays with the lazy fields.
  */
 const FIRST_LOAD_BASELINE =
 	145_612 +
@@ -109,7 +113,8 @@ const FIRST_LOAD_BASELINE =
 	150 +
 	800 +
 	20 +
-	94;
+	94 +
+	35;
 // 16 KB since the host's skin tones (`characters.skins`) reach the entry: about 0.2 KB gzipped, on 0.17 KB of headroom.
 // 16.5 KB since every page figure wears its accent badge (its accent worked out per figure, the disc and
 // ring in the stylesheet): about 0.19 KB gzipped, on 0.01 KB of headroom.

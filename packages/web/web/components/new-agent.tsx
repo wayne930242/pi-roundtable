@@ -18,6 +18,7 @@ import {
 	type FieldsDraft,
 	NAME,
 } from "./agent-fields.tsx";
+import { TextArea, TextField } from "./fields.tsx";
 import { LookCreator, LookSummary } from "./look-pick.tsx";
 import { Failure } from "./states.tsx";
 
@@ -160,7 +161,7 @@ export function NewAgent({
 			>
 				<label htmlFor={ids[0]}>
 					{t("Permanent name")}
-					<input
+					<TextField
 						id={ids[0]}
 						value={name}
 						autoComplete="off"
@@ -181,7 +182,7 @@ export function NewAgent({
 			</AgentFields>
 			<label htmlFor={ids[1]}>
 				{t("Opening task")}
-				<textarea
+				<TextArea
 					id={ids[1]}
 					rows={3}
 					value={task}

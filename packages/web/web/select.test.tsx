@@ -52,7 +52,7 @@ test("the chip variant is marked for the pill that stands beside the breadcrumbs
 
 test("a list box stays the native control: no wrapper, no chevron", async () => {
 	await page.render(
-		<Select aria-label="Pick" size={6} className="mine">
+		<Select aria-label="Pick" rows={6} className="mine">
 			<option>A</option>
 		</Select>,
 	);

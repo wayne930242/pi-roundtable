@@ -7,6 +7,7 @@ import { toast } from "../lib/toast.ts";
 import { useReloadable } from "../lib/use-reloadable.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";
+import { Checkbox, TextArea, TextField } from "./fields.tsx";
 import { Icon } from "./icons.tsx";
 import { Empty, Failure, Loading } from "./states.tsx";
 
@@ -168,7 +169,7 @@ function GroupForm(props: {
 		<form className="stack" onSubmit={submit} autoComplete="off">
 			<label>
 				{t("Name")}
-				<input
+				<TextField
 					value={name}
 					maxLength={64}
 					placeholder="coding"
@@ -181,7 +182,7 @@ function GroupForm(props: {
 			</label>
 			<label>
 				{t("Description")}
-				<textarea
+				<TextArea
 					value={description}
 					maxLength={1000}
 					rows={2}
@@ -197,8 +198,7 @@ function GroupForm(props: {
 						return (
 							<li key={skill.name}>
 								<label className="menu-item menu-toggle">
-									<input
-										type="checkbox"
+									<Checkbox
 										checked={on}
 										onChange={() =>
 											setSkills(

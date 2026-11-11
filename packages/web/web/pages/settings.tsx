@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { PushDeviceView, SessionView } from "../../src/api-types.ts";
+import { Radio } from "../components/fields.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
@@ -205,8 +206,7 @@ export function SettingsPage() {
 					<legend className="visually-hidden">{t("Color scheme")}</legend>
 					{THEMES.map((theme) => (
 						<label key={theme.value} data-checked={preference === theme.value}>
-							<input
-								type="radio"
+							<Radio
 								name="theme"
 								checked={preference === theme.value}
 								onChange={(event) => {
@@ -226,8 +226,7 @@ export function SettingsPage() {
 					<legend className="visually-hidden">{t("Look")}</legend>
 					{LOOKS.map((option) => (
 						<label key={option.value} data-checked={look === option.value}>
-							<input
-								type="radio"
+							<Radio
 								name="look"
 								checked={look === option.value}
 								// Choosing the look the host sets goes back to following the host.

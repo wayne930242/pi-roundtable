@@ -1,8 +1,8 @@
 import { type ReactNode, useId, useState } from "react";
 import { translate as t, wording } from "../lib/messages.ts";
 import { Chips } from "./chips.tsx";
+import { Select, TextArea, TextField } from "./fields.tsx";
 import { Icon } from "./icons.tsx";
-import { Select } from "./select.tsx";
 import { Sheet } from "./sheet.tsx";
 
 /** The value of a model or thinking level not chosen: the agent follows the assistant's, a preset its knight's. */
@@ -103,7 +103,7 @@ export function AgentFields(props: {
 		<>
 			<label htmlFor={nameId}>
 				{t("Name")}
-				<input
+				<TextField
 					id={nameId}
 					value={draft.displayName}
 					autoComplete="off"
@@ -139,7 +139,7 @@ export function AgentFields(props: {
 						</button>
 					</span>
 				</div>
-				<textarea
+				<TextArea
 					id={promptId}
 					rows={8}
 					value={draft.prompt}
@@ -188,7 +188,7 @@ export function AgentFields(props: {
 				size="full"
 				onClose={() => setFull(false)}
 			>
-				<textarea
+				<TextArea
 					className="prompt-full"
 					aria-label={t("Prompt")}
 					value={draft.prompt}

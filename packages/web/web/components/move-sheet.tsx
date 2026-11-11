@@ -7,6 +7,7 @@ import { translate as t } from "../lib/messages.ts";
 import { activityAt } from "../lib/rooms.ts";
 import { placeOf, sections } from "../lib/sections.ts";
 import { Dialog } from "./dialog.tsx";
+import { Radio } from "./fields.tsx";
 import { Icon } from "./icons.tsx";
 
 function Body(props: { room: string; onClose(): void }) {
@@ -38,8 +39,7 @@ function Body(props: { room: string; onClose(): void }) {
 				<ul className="menu">
 					<li>
 						<label className="menu-item menu-link">
-							<input
-								type="radio"
+							<Radio
 								name="move-folder"
 								checked={loose}
 								onChange={() => choose(null)}
@@ -55,8 +55,7 @@ function Body(props: { room: string; onClose(): void }) {
 					{folders.map((folder) => (
 						<li key={folder.id}>
 							<label className="menu-item menu-link">
-								<input
-									type="radio"
+								<Radio
 									name="move-folder"
 									checked={where.folder === folder.id}
 									onChange={() => choose(folder.id)}

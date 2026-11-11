@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { characterCss } from "pi-roundtable/characters";
 import { Home, loadChats, rooms, seed } from "./chats-fixture.tsx";
 import {
@@ -15,6 +15,24 @@ import {
 import { store } from "./lib/app-store.ts";
 
 foldersPage();
+
+// The page reads the wall clock, and a quiet agent is sleepy between 01:00 and 06:00 local
+// (`lib/presence.ts`), so a run in those hours would draw closed-eyed sleepers, not idle figures.
+// Every test here runs with the clock moved to 14:00 of the same day, still ticking, whatever the
+// machine's zone. (`setSystemTime` would freeze it, and `until` waits on the clock.)
+const realNow = Date.now.bind(Date);
+const shift = () => {
+	const day = new Date(realNow());
+	day.setHours(14, 0, 0, 0);
+	return day.getTime() - realNow();
+};
+beforeEach(() => {
+	const by = shift();
+	spyOn(Date, "now").mockImplementation(() => realNow() + by);
+});
+afterEach(() => {
+	Date.now = realNow;
+});
 
 const show = async (node: React.ReactNode) => {
 	await page.render(node);

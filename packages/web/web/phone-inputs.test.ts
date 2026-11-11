@@ -115,6 +115,9 @@ function controlOf(
 	};
 }
 
+/** The native text controls and the shared components that draw one and pass their class on to it. */
+const TEXT_CONTROLS = "input|textarea|select|TextField|TextArea|DateField";
+
 /** The classes put on a text control in the page's components. */
 function controlClasses(): Set<string> {
 	const found = new Set<string>();
@@ -122,7 +125,7 @@ function controlClasses(): Set<string> {
 		if (!file.endsWith(".tsx") || file.endsWith(".test.tsx")) continue;
 		const text = readFileSync(file, "utf8");
 		for (const tag of text.matchAll(
-			/<(input|textarea|select)\b([^<>]*?)(?:\/>|>)/gs,
+			new RegExp(`<(${TEXT_CONTROLS})\\b([^<>]*?)(?:\\/>|>)`, "gs"),
 		)) {
 			const type = /type=["'](\w+)["']/.exec(tag[2] ?? "")?.[1] ?? "text";
 			if (/^(checkbox|radio|range|color|file|hidden)$/.test(type)) continue;
@@ -137,6 +140,9 @@ function controlClasses(): Set<string> {
 
 test("every rule that sets the size of a text control gives 16px or more at phone widths", () => {
 	const classes = controlClasses();
+	// The classes the page gives a text control are found through the shared components.
+	for (const name of ["kind-filter", "mcp-url", "prompt-full"])
+		expect(classes.has(name)).toBe(true);
 	// The later rule of one selector wins, so a narrow-screen rule that follows its base rule counts.
 	const last = new Map<string, { one: string; rule: Rule }>();
 	for (const rule of allRules().filter((one) => onPhone(one.media)))

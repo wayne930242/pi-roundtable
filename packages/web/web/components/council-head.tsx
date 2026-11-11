@@ -4,6 +4,7 @@ import type { CouncilMode } from "../lib/council-mode.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { openTeamSheet } from "../lib/team-sheet.ts";
+import { Radio } from "./fields.tsx";
 import { HeaderPicture } from "./header-picture.tsx";
 import { Icon } from "./icons.tsx";
 import { RoomPicture } from "./room-picture.tsx";
@@ -20,8 +21,7 @@ function ModeSwitch(props: {
 		icon: "table" | "rooms",
 	) => (
 		<label data-checked={props.mode === mode} title={label}>
-			<input
-				type="radio"
+			<Radio
 				name="table-mode"
 				value={mode}
 				checked={props.mode === mode}
