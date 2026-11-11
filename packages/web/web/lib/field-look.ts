@@ -223,6 +223,100 @@ input[type="radio"][data-size="lg"] {
 		min-height: var(--touch);
 	}
 }
+
+/* A short row of choices of which one holds, as one bar. Written with :where so a caller's own rule for one bar (the round table's switch) wins at any load order. */
+:where(.segmented) {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface-2);
+}
+
+:where(.segmented[data-wide]) {
+	display: flex;
+}
+
+:where(.segmented[data-wide]) label {
+	flex: 1;
+}
+
+:where(.segmented) label {
+	position: relative;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	min-height: 2.25rem;
+	padding: 0 var(--space-3);
+	border-radius: calc(var(--radius) - 3px);
+	color: var(--muted);
+	font-weight: var(--weight-medium);
+	cursor: pointer;
+	transition:
+		background-color var(--dur) var(--ease-out),
+		color var(--dur) var(--ease-out);
+}
+
+:where(.segmented) label[data-checked="true"] {
+	background: var(--surface);
+	color: var(--text);
+	box-shadow:
+		var(--shadow-1),
+		inset 0 0 0 1px var(--border-strong);
+}
+
+:where(.segmented) input {
+	position: absolute;
+	opacity: 0;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	cursor: pointer;
+}
+
+:where(.segmented) label:has(:focus-visible) {
+	outline: 2px solid var(--accent);
+}
+
+.segmented[data-tone="danger"] {
+	--field-tone: var(--danger);
+}
+
+.segmented[data-tone="warn"] {
+	--field-tone: var(--warn);
+}
+
+.segmented[data-tone="success"] {
+	--field-tone: var(--success);
+}
+
+.segmented[data-tone] {
+	border-color: var(--field-tone);
+}
+
+.segmented[data-tone] label:has(:focus-visible) {
+	outline-color: var(--field-tone);
+}
+
+.segmented[data-size="sm"] label {
+	min-height: 1.75rem;
+	font-size: var(--text-xs);
+}
+
+.segmented[data-size="lg"] label {
+	min-height: 2.75rem;
+	font-size: var(--text-md);
+}
+
+/* On a phone a choice is a touch target at every size. */
+@media (max-width: 719px), (pointer: coarse) {
+	:where(.segmented) label,
+	.segmented[data-size] label {
+		min-height: var(--touch);
+	}
+}
 `;
 
 /** Puts the stylesheet of the looks, the time range, the radio group and the field note in the page, once. */

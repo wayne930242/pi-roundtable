@@ -9,7 +9,8 @@ import { characterLabel, type LabelKind } from "../lib/character-labels.ts";
 import { translate as t } from "../lib/messages.ts";
 import { characterLabelBuild, PALETTES, PARTS } from "./creator-parts.ts";
 import { ClassTile, Field, Strip, Swatch } from "./creator-pieces.tsx";
-import { ColorField, Radio } from "./fields.tsx";
+import { ColorField } from "./fields.tsx";
+import { Segmented } from "./segmented.tsx";
 
 /** One group of the form, as the phone lists it: a title, what is chosen, a rejected field's message and the group's controls. */
 export interface CreatorGroup {
@@ -120,19 +121,16 @@ export function creatorFields(state: CreatorState): {
 	const body = (
 		<>
 			<Field field="build" title={t("Build")} error={errors.build}>
-				<fieldset className="segmented">
-					<legend className="visually-hidden">{t("Build")}</legend>
-					{(["slim", "regular", "stout"] as const).map((build) => (
-						<label key={build} data-checked={draft.build === build}>
-							<Radio
-								name={`${titleId}-build`}
-								checked={draft.build === build}
-								onChange={() => change({ build })}
-							/>
-							{characterLabelBuild(build)}
-						</label>
-					))}
-				</fieldset>
+				<Segmented
+					legend={t("Build")}
+					name={`${titleId}-build`}
+					value={draft.build}
+					options={(["slim", "regular", "stout"] as const).map((build) => ({
+						value: build,
+						label: characterLabelBuild(build),
+					}))}
+					onChange={(build) => change({ build })}
+				/>
 			</Field>
 			<Field field="skin" title={t("Skin tone")} error={errors.skin}>
 				<fieldset className="creator-swatches">

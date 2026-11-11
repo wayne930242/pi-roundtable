@@ -4,10 +4,10 @@ import type { CouncilMode } from "../lib/council-mode.ts";
 import { translate as t } from "../lib/messages.ts";
 import { hrefFor } from "../lib/router.ts";
 import { openTeamSheet } from "../lib/team-sheet.ts";
-import { Radio } from "./fields.tsx";
 import { HeaderPicture } from "./header-picture.tsx";
 import { Icon } from "./icons.tsx";
 import { RoomPicture } from "./room-picture.tsx";
+import { Segmented } from "./segmented.tsx";
 import { WaitingButton } from "./waiting-button.tsx";
 
 /** The switch between the scene with its dialogue box and the council's messages as a chat. */
@@ -19,24 +19,28 @@ function ModeSwitch(props: {
 		mode: CouncilMode,
 		label: string,
 		icon: "table" | "rooms",
-	) => (
-		<label data-checked={props.mode === mode} title={label}>
-			<Radio
-				name="table-mode"
-				value={mode}
-				checked={props.mode === mode}
-				onChange={() => props.onMode(mode)}
-			/>
-			<Icon name={icon} size={16} />
-			<span className="mode-label">{label}</span>
-		</label>
-	);
+	) => ({
+		value: mode,
+		title: label,
+		label: (
+			<>
+				<Icon name={icon} size={16} />
+				<span className="mode-label">{label}</span>
+			</>
+		),
+	});
 	return (
-		<fieldset className="segmented table-mode">
-			<legend className="visually-hidden">{t("Show the council as")}</legend>
-			{option("scene", t("Animation mode"), "table")}
-			{option("chat", t("Chat mode"), "rooms")}
-		</fieldset>
+		<Segmented
+			className="table-mode"
+			legend={t("Show the council as")}
+			name="table-mode"
+			value={props.mode}
+			options={[
+				option("scene", t("Animation mode"), "table"),
+				option("chat", t("Chat mode"), "rooms"),
+			]}
+			onChange={props.onMode}
+		/>
 	);
 }
 

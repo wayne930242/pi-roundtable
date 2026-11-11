@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { PushDeviceView, SessionView } from "../../src/api-types.ts";
-import { Radio } from "../components/fields.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
+import { Segmented } from "../components/segmented.tsx";
 import { api, messageOf } from "../lib/api.ts";
 import { useSelector } from "../lib/app-store.ts";
 import { useConfig } from "../lib/config.ts";
@@ -202,51 +202,53 @@ export function SettingsPage() {
 			) : null}
 			<section className="card stack">
 				<h2>{t("Appearance")}</h2>
-				<fieldset className="segmented segmented-wide">
-					<legend className="visually-hidden">{t("Color scheme")}</legend>
-					{THEMES.map((theme) => (
-						<label key={theme.value} data-checked={preference === theme.value}>
-							<Radio
-								name="theme"
-								checked={preference === theme.value}
-								onChange={(event) => {
-									const box = event.target.getBoundingClientRect();
-									setTheme(theme.value, {
-										x: box.left + box.width / 2,
-										y: box.top + box.height / 2,
-									});
-								}}
-							/>
-							<Icon name={theme.icon} size={18} />
-							{t(theme.label)}
-						</label>
-					))}
-				</fieldset>
-				<fieldset className="segmented segmented-wide">
-					<legend className="visually-hidden">{t("Look")}</legend>
-					{LOOKS.map((option) => (
-						<label key={option.value} data-checked={look === option.value}>
-							<Radio
-								name="look"
-								checked={look === option.value}
-								// Choosing the look the host sets goes back to following the host.
-								onChange={() =>
-									setLook(option.value === hostLook ? undefined : option.value)
-								}
-							/>
-							<span
-								className="look-swatch"
-								data-swatch={option.value}
-								aria-hidden="true"
-							>
-								<i />
-								<i />
-								<i />
-							</span>
-							{t(option.label)}
-						</label>
-					))}
-				</fieldset>
+				<Segmented
+					wide
+					legend={t("Color scheme")}
+					name="theme"
+					value={preference}
+					options={THEMES.map((theme) => ({
+						value: theme.value,
+						label: (
+							<>
+								<Icon name={theme.icon} size={18} />
+								{t(theme.label)}
+							</>
+						),
+					}))}
+					onChange={(value, event) => {
+						const box = event.target.getBoundingClientRect();
+						setTheme(value, {
+							x: box.left + box.width / 2,
+							y: box.top + box.height / 2,
+						});
+					}}
+				/>
+				<Segmented
+					wide
+					legend={t("Look")}
+					name="look"
+					value={look}
+					options={LOOKS.map((option) => ({
+						value: option.value,
+						label: (
+							<>
+								<span
+									className="look-swatch"
+									data-swatch={option.value}
+									aria-hidden="true"
+								>
+									<i />
+									<i />
+									<i />
+								</span>
+								{t(option.label)}
+							</>
+						),
+					}))}
+					// Choosing the look the host sets goes back to following the host.
+					onChange={(value) => setLook(value === hostLook ? undefined : value)}
+				/>
 				<p className="meta">
 					{t(LOOKS.find((option) => option.value === look)?.hint ?? "")}
 				</p>

@@ -87,3 +87,18 @@ test("the shared components are where the native controls are written", () => {
 	expect(text("components/bare-fields.tsx")).toMatch(/<textarea \{/);
 	expect(text("components/select.tsx")).toMatch(/<select \{/);
 });
+
+test("a segmented choice is the Segmented component: no other file writes a `segmented` fieldset", () => {
+	const own = sources()
+		.filter((file) => file !== "components/segmented.tsx")
+		.flatMap((file) =>
+			readFileSync(join(here, file), "utf8")
+				.split("\n")
+				.flatMap((line, index) =>
+					/className=\{?["'`][^"'`]*\bsegmented\b/.test(line)
+						? [`${file}:${index + 1}: ${line.trim()}`]
+						: [],
+				),
+		);
+	expect(own).toEqual([]);
+});
