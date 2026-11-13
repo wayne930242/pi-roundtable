@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.3] - 2026-11-13
+
+### Fixed
+
+- pi-roundtable-web: A knight's row on the chat home and in the room drawer marks its Yolo and long-running modes again, with the same bolt and timer marks as the switcher, so a swipe that turns them shows on the row.
+- pi-roundtable-mcp: A connector is unknown to every other call from the moment its removal is asked, not only once its row is deleted: a resync that waits its turn (`resync`, or the connector's turn in `resyncAll`), a `describe`, or a second `remove` is refused with the unknown-connector message while the row is still being deleted. Before, a resync whose turn came in that time ran on the connector being removed and reported it resynced. A removal the database fails leaves the connector as it was.
+
 ## [0.47.2] - 2026-11-11
 
 ### Changed

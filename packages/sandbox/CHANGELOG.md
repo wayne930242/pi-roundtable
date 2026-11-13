@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.47.3] - 2026-11-13
+
+- Release in lockstep with pi-roundtable 0.47.3 (chat home: knight rows mark their Yolo and long-running modes); no package-specific behavior changes.
+
 ## [0.47.2] - 2026-11-11
 
 - Release in lockstep with pi-roundtable 0.47.2; no package-specific behavior changes.

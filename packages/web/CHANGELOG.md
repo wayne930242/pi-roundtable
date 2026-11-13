@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.3] - 2026-11-13
+
+### Fixed
+
+- A knight's row on the chat home and in the room drawer marks its Yolo and long-running modes again, with the same bolt and timer marks as the switcher, so a swipe that turns them shows on the row.
+
 ## [0.47.2] - 2026-11-11
 
 ### Changed
