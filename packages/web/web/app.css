@@ -794,11 +794,16 @@ button.room-picture:hover:not(:disabled) {
 	flex: none;
 }
 
-.switcher-mode[data-mode="yolo"] {
+.mode-mark {
+	display: inline-flex;
+	flex: none;
+}
+
+.mode-mark[data-mode="yolo"] {
 	color: var(--yolo);
 }
 
-.switcher-mode[data-mode="long"] {
+.mode-mark[data-mode="long"] {
 	color: var(--long);
 }
 

@@ -10,6 +10,7 @@ import { hrefFor } from "../lib/router.ts";
 import { type RowData, Typing } from "../pages/rooms.tsx";
 import { ChatPicture } from "./chat-picture.tsx";
 import { Icon } from "./icons.tsx";
+import { ModeMarks } from "./mode-marks.tsx";
 import { ReadReveal } from "./read-swipe.tsx";
 
 /**
@@ -58,6 +59,7 @@ export const ChatRow = memo(function ChatRow(
 				<span className="room-row-main">
 					<span className="room-row-top">
 						<strong>{view.displayName}</strong>
+						<ModeMarks yolo={props.yolo} longRunning={props.longRunning} />
 						{view.muted ? (
 							<Icon
 								name="bell-off"

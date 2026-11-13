@@ -194,6 +194,47 @@ test("a row has no nested threads: dispatch threads are only a count, and the th
 	).toBe("2 threads");
 });
 
+test("a row marks its Yolo and long-running modes by its name, and drops each mark once the mode is off", async () => {
+	seed();
+	loadChats({}, [view(GUIDE, { home: true }), view(SCOUT), view(BUILD)]);
+	await show(<Home />);
+	const marks = (room: string) =>
+		all(`[data-room="${room}"] .room-row-top .mode-mark`).map(
+			(mark) => mark.dataset.mode,
+		);
+	expect(marks(SCOUT)).toEqual([]);
+	await page.act(() => {
+		store.dispatch({
+			type: "mode",
+			room: SCOUT,
+			yolo: true,
+			longRunning: true,
+		});
+		store.dispatch({
+			type: "mode",
+			room: BUILD,
+			yolo: true,
+			longRunning: false,
+		});
+	});
+	expect(marks(SCOUT)).toEqual(["yolo", "long"]);
+	expect(marks(BUILD)).toEqual(["yolo"]);
+	expect(
+		q(`[data-room="${SCOUT}"] .mode-mark[data-mode="long"]`)?.getAttribute(
+			"aria-label",
+		),
+	).toBe("Long-running");
+	await page.act(() => {
+		store.dispatch({
+			type: "mode",
+			room: SCOUT,
+			yolo: false,
+			longRunning: false,
+		});
+	});
+	expect(marks(SCOUT)).toEqual([]);
+});
+
 test("hidden rooms are off the home, which has no row or link to the hidden page; the features grid is the way in", async () => {
 	loadChats({ hidden: [QUIET, NEWS] }, [
 		...[GUIDE, SCOUT, NEWS].map((key) =>

@@ -20,6 +20,7 @@ import { installSwitcherThreadsStyle } from "../lib/switcher-threads-style.ts";
 import { ThreadList } from "../pages/rooms.tsx";
 import { TextField } from "./fields.tsx";
 import { Icon } from "./icons.tsx";
+import { ModeMarks } from "./mode-marks.tsx";
 import { ReadReveal, useReadSwipe } from "./read-swipe.tsx";
 import { RoomPicture } from "./room-picture.tsx";
 import { FoldToggle } from "./section-fold.tsx";
@@ -187,22 +188,10 @@ function Row(props: {
 						</span>
 					</span>
 				) : null}
-				{room?.mode.yolo ? (
-					<span className="switcher-mode" data-mode="yolo" title={t("Yolo")}>
-						<Icon name="bolt" size={14} />
-						<span className="visually-hidden">{t("Yolo")}</span>
-					</span>
-				) : null}
-				{room?.mode.longRunning ? (
-					<span
-						className="switcher-mode"
-						data-mode="long"
-						title={t("Long-running")}
-					>
-						<Icon name="timer" size={14} />
-						<span className="visually-hidden">{t("Long-running")}</span>
-					</span>
-				) : null}
+				<ModeMarks
+					yolo={room?.mode.yolo ?? false}
+					longRunning={room?.mode.longRunning ?? false}
+				/>
 			</a>
 			{threads && count ? (
 				<button
