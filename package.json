@@ -73,8 +73,8 @@
 		"canvas": "3.2.3",
 		"discord.js": "14.27.0",
 		"pi-jev-compaction": "1.0.0",
-		"pi-better-show": "0.5.0",
-		"pi-mcp-adapter": "5.3.0",
+		"pi-better-show": "0.5.2",
+		"pi-mcp-adapter": "7.0.1",
 		"pino": "10.4.0",
 		"typebox": "1.4.6",
 		"unpdf": "1.8.1"
@@ -87,6 +87,6 @@
 		"@biomejs/biome": "2.5.15",
 		"@types/bun": "1.4.3",
 		"pi-self-compact": "0.2.0",
-		"pi-web-access": "0.40.0"
+		"pi-web-access": "0.47.0"
 	}
 }

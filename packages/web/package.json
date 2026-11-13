@@ -41,7 +41,7 @@
 	},
 	"dependencies": {
 		"jose": "6.2.12",
-		"pi-better-show": "0.5.0",
+		"pi-better-show": "0.5.2",
 		"typebox": "1.4.6"
 	},
 	"peerDependencies": {
