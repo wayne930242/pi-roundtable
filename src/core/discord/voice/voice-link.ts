@@ -15,6 +15,7 @@ import type {
 export type VoiceLib = Pick<
 	typeof import("@discordjs/voice"),
 	| "joinVoiceChannel"
+	| "getVoiceConnection"
 	| "VoiceConnectionStatus"
 	| "VoiceConnectionDisconnectReason"
 	| "EndBehaviorType"
@@ -95,22 +96,48 @@ export function openVoiceLink(
 	lib: VoiceLib,
 	options: VoiceLinkOptions,
 ): VoiceLink {
+	const { guildId, channelId } = options;
+	let connection: VoiceConnection | undefined;
+	try {
+		connection = lib.joinVoiceChannel({
+			guildId,
+			channelId,
+			group: GROUP,
+			adapterCreator: options.adapterCreator,
+			selfDeaf: false,
+			selfMute: true,
+		});
+		return linkOver(lib, connection, options);
+	} catch (error) {
+		// Not left behind: the library keeps a connection by guild, even one whose join threw, and hands it to the guild's next join.
+		const left = connection ?? lib.getVoiceConnection(guildId, GROUP);
+		try {
+			if (left && left.state.status !== lib.VoiceConnectionStatus.Destroyed)
+				left.destroy();
+		} catch {
+			// The library forgot the connection before this threw; the failure to report is the first.
+		}
+		throw error;
+	}
+}
+
+/** The link over a connection the library made: what `openVoiceLink` answers. */
+function linkOver(
+	lib: VoiceLib,
+	connection: VoiceConnection,
+	options: VoiceLinkOptions,
+): VoiceLink {
 	const { guildId, channelId, logger } = options;
 	const clock = options.clock ?? systemClock;
 	const { VoiceConnectionStatus: Status } = lib;
-	const connection: VoiceConnection = lib.joinVoiceChannel({
-		guildId,
-		channelId,
-		group: GROUP,
-		adapterCreator: options.adapterCreator,
-		selfDeaf: false,
-		selfMute: true,
-	});
 	const decoders = new Map<string, OpusDecoder>();
 	const subscribed = new Set<string>();
 	let handlers: VoiceLinkHandlers | undefined;
 	let closed = false;
+	/** The timer of the next rejoin, while the last one was refused. */
 	let rejoin: unknown;
+	/** Whether a rejoin is being asked for right now. */
+	let rejoining = false;
 	let undecoded = 0;
 
 	const statusOf = (state: VoiceConnectionState): VoiceLinkStatus => {
@@ -118,15 +145,29 @@ export function openVoiceLink(
 		return state.status === Status.Destroyed ? "closed" : "reconnecting";
 	};
 
-	/** A connection the main gateway dropped is asked for again until it is carried; Discord's own disconnect is not. */
+	/**
+	 * A connection the main gateway dropped is asked for again, once now and once every `REJOIN_MS`
+	 * until it is carried; Discord's own disconnect is not. Whoever owns the link ends the waiting
+	 * by closing it.
+	 */
 	const recover = (state: VoiceConnectionState): void => {
+		// `rejoin()` reports its own outcome as a state change before it answers: that one is not a drop to recover from.
+		if (rejoining) return;
 		clock.clearTimeout(rejoin);
 		rejoin = undefined;
 		if (closed || state.status !== Status.Disconnected) return;
 		const refused =
 			state.reason === lib.VoiceConnectionDisconnectReason.WebSocketClose &&
 			state.closeCode === DISCONNECTED;
-		if (refused || connection.rejoin()) return;
+		if (refused) return;
+		let carried: boolean;
+		rejoining = true;
+		try {
+			carried = connection.rejoin();
+		} finally {
+			rejoining = false;
+		}
+		if (carried) return;
 		rejoin = clock.setTimeout(() => recover(connection.state), REJOIN_MS);
 	};
 

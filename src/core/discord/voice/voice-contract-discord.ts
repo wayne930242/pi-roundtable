@@ -21,7 +21,7 @@ import type { VoiceMember } from "./voice.ts";
 import { type ManualVoiceClock, manualVoiceClock } from "./voice-clock.ts";
 import type { VoiceSubject, VoiceWorld } from "./voice-contract.ts";
 import { discordVoiceGateway } from "./voice-discord.ts";
-import type { VoiceLib } from "./voice-link.ts";
+import type { OpusDecoder, VoiceLib } from "./voice-link.ts";
 import { type VoiceService, voiceService } from "./voice-service.ts";
 
 // The Discord plugin's voice over stand-ins of what it stands on: a discord.js client that answers
@@ -117,10 +117,20 @@ export class StubConnection extends EventEmitter {
 		);
 	}
 
+	/** As the library's: a request the main gateway refuses leaves the connection disconnected, and says so before it answers. */
 	rejoin(): boolean {
-		this.rejoins++;
-		if (this.carries) this.to({ status: VoiceConnectionStatus.Signalling });
-		return this.carries;
+		if (this.state.status === VoiceConnectionStatus.Destroyed) return false;
+		const notReady = this.state.status !== VoiceConnectionStatus.Ready;
+		if (notReady) this.rejoins++;
+		if (this.carries) {
+			if (notReady) this.to({ status: VoiceConnectionStatus.Signalling });
+			return true;
+		}
+		this.to({
+			status: VoiceConnectionStatus.Disconnected,
+			reason: VoiceConnectionDisconnectReason.AdapterUnavailable,
+		});
+		return false;
 	}
 
 	destroy(): void {
@@ -146,8 +156,10 @@ export interface DiscordVoiceWorld extends VoiceSubject {
 	clock: ManualVoiceClock;
 	logs: RecordingLogger;
 	client: Client;
-	/** Every connection `joinVoiceChannel` made, in order. */
+	/** Every connection the stand-in `joinVoiceChannel` made, in order; none with the library itself. */
 	connections: StubConnection[];
+	/** The main gateway as a voice connection of the library itself sees it: how many payloads it was given, and `send` answers whether it carried one. */
+	adapter: { sends: number; send: () => boolean };
 	/** How often the voice library and the decoders were loaded. */
 	loads: { lib: number; decoders: number };
 	/** How many decoders were made and freed. */
@@ -157,14 +169,18 @@ export interface DiscordVoiceWorld extends VoiceSubject {
 /**
  * The real voice service and gateway over a stand-in client and voice library. `connect: false`
  * leaves a new connection signalling until the test calls `ready()`; `realStreams` gives the
- * receiver @discordjs/voice's own stream class; `decode` replaces the decoder that hands a packet on as it is.
+ * receiver @discordjs/voice's own stream class; `decode` replaces the decoder that hands a packet
+ * on as it is, and `decoders` the maker of decoders; `lib` is the voice library itself in place of
+ * the stand-in connection, over the world's `adapter`.
  */
 export function discordVoiceWorld(
 	options: {
 		connect?: boolean;
 		realStreams?: boolean;
 		decode?: (packet: Uint8Array) => Uint8Array;
+		decoders?: () => OpusDecoder;
 		resumeMs?: number;
+		lib?: VoiceLib;
 	} = {},
 ): DiscordVoiceWorld {
 	const clock = manualVoiceClock();
@@ -176,6 +192,7 @@ export function discordVoiceWorld(
 	const loads = { lib: 0, decoders: 0 };
 	const decoders = { made: 0, freed: 0 };
 	const emitter = new EventEmitter();
+	const adapter = { sends: 0, send: (): boolean => true };
 	let online = true;
 
 	const memberOf = (member: VoiceMember) => ({
@@ -194,7 +211,13 @@ export function discordVoiceWorld(
 	};
 	const guildOf = (guildId: string) => ({
 		id: guildId,
-		voiceAdapterCreator: () => ({ sendPayload: () => true, destroy: () => {} }),
+		voiceAdapterCreator: () => ({
+			sendPayload: () => {
+				adapter.sends++;
+				return adapter.send();
+			},
+			destroy: () => {},
+		}),
 		voiceStates: {
 			get cache() {
 				return new Map(
@@ -266,10 +289,12 @@ export function discordVoiceWorld(
 		},
 	}) as unknown as Client;
 
-	const lib: VoiceLib = {
+	const lib: VoiceLib = options.lib ?? {
 		VoiceConnectionStatus,
 		VoiceConnectionDisconnectReason,
 		EndBehaviorType,
+		getVoiceConnection: ((guildId: string) =>
+			connectionOf(guildId)) as unknown as VoiceLib["getVoiceConnection"],
 		// SAFETY: the link uses only what `StubConnection` has of a voice connection.
 		joinVoiceChannel: ((joinConfig: JoinVoiceChannelOptions) => {
 			const connection = new StubConnection(
@@ -302,11 +327,16 @@ export function discordVoiceWorld(
 			decoders: async () => {
 				loads.decoders++;
 				return () => {
+					const made = options.decoders?.();
 					decoders.made++;
 					return {
-						decode: options.decode ?? ((packet) => Uint8Array.from(packet)),
+						decode: (packet) =>
+							made
+								? made.decode(packet)
+								: (options.decode?.(packet) ?? Uint8Array.from(packet)),
 						free: () => {
 							decoders.freed++;
+							made?.free();
 						},
 					};
 				};
@@ -326,6 +356,7 @@ export function discordVoiceWorld(
 		logs,
 		client,
 		connections,
+		adapter,
 		loads,
 		decoders,
 		world: {
