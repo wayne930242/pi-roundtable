@@ -170,6 +170,7 @@ function discordAssembly(
 				? {}
 				: { formatting: discord.formatting }),
 			...(discord.memberEvents ? { memberEvents: true } : {}),
+			...(discord.voice ? { voice: true } : {}),
 			cardGraceMs: discord.cardGraceSeconds * 1_000,
 			cardCopies: discord.cardCopies,
 		}),

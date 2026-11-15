@@ -4,7 +4,14 @@ import type { ServiceKey } from "../contract/services.ts";
 import type { PendingConfirmation } from "../domain/conversation.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { NotLinkedError, PluginError } from "../kernel/errors.ts";
+import type {
+	EventSink,
+	TurnEndEvent,
+	TurnEvent,
+	TurnProgressEvent,
+} from "../plugin-api/plugin.ts";
 import type { ChannelRouter } from "../routing/channel-router.ts";
+import type { RecordedEvent } from "./test-plugin-types.ts";
 
 /** The same pre-link failures and wording the host exposes during setup. */
 export const NOT_LINKED = {
@@ -43,6 +50,26 @@ export function partialService<T extends object>(
 			);
 		},
 	});
+}
+
+/** What `testPlugin` reports the plugin's own events to: each is kept in `events` and delivered to the plugin's handlers. */
+export function recordedSink(events: RecordedEvent[], sink: EventSink) {
+	return {
+		turnStarted: (turn: TurnEvent) => {
+			events.push({ name: "turnStarted", turn });
+			sink.turnStarted(turn);
+		},
+		turnEnded: (turn: TurnEndEvent) => {
+			events.push({ name: "turnEnded", turn });
+			sink.turnEnded(turn);
+		},
+		// Delivered to the plugin's handlers, not recorded: a turn reports many.
+		turnProgress: (event: TurnProgressEvent) => sink.turnProgress?.(event),
+		changed: () => {
+			events.push({ name: "changed" });
+			sink.changed();
+		},
+	};
 }
 
 /** Held actions kept in memory, for the runtime a plugin's provider builds under test. */

@@ -82,6 +82,7 @@ handler 和 `build` 函式要自己呼叫，範例 [`events.test.ts`](https://gi
 - `partial<Port>({ ... })`：代替你的程式碼當作參數收到的 port。讀取你沒給的成員時，會丟出指出它的錯誤。
 - `fakeDiscord()`：給新增斜線指令的外掛用的 `DISCORD` 服務。`discord.added()` 列出外掛新增的東西，`discord.compose()` 回傳 Discord 會收到的指令樹。`fakeDiscord({ poster })` 把你傳入的 poster 當作 `DISCORD.poster`；預設是新的 `fakeDiscordPoster()`，由 `discord.poster` 回傳。
 - `fakeDiscordPoster({ idOffset?, now? })`：記憶體裡的 `DiscordPoster`。`messagesIn(channelId)` 列出頻道裡的訊息，`directs` 是送出的私訊，`failNext(operation, error)`、`closedDirects`、`goneChannels`、`hiddenFrom`、`pinNotices` 等是測試可以調的旋鈕。它沿用真正 poster 的參數檢查和錯誤種類，所以外掛超出限制時，測試裡也會失敗。
+- `fakeDiscordVoice({ now? })`：記憶體裡的 `DiscordVoice`，給透過 `DISCORD.voice` 加入語音頻道的外掛用；用 `fakeDiscord({ voice })` 交給外掛。用 `voice.channels.set(channelId, { guildId, members })` 建頻道，`enter`、`exit` 讓人進出，`say(channelId, userId, ...frames)` 餵入一段話（48 kHz、16 位元、單聲道 PCM），`drop` 從外部結束一場 session。`voice.joins` 和 `voice.ended` 記錄外掛要求加入的頻道，以及每場 session 結束的原因。完整的呼叫和規則在指南的 [Voice](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#voice-hearing-a-voice-channel-through-discordvoice)（英文）。
 - `useTestLocale()`：把整個行程的 locale 重設為英文，時區重設為 UTC。
 
 唯一需要 PostgreSQL 的範例測試是 [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts)。

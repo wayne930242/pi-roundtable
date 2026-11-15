@@ -8,6 +8,7 @@ import type {
 } from "../discord/interaction-module.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import type { DiscordPoster } from "../discord/poster/poster.ts";
+import type { DiscordVoice } from "../discord/voice/voice.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { fakeDiscordPoster } from "./fake-poster.ts";
 import { type ServicePair, servicePair } from "./service-pair.ts";
@@ -32,8 +33,10 @@ export interface FakeDiscord {
  * A `DISCORD` service for a plugin that adds slash commands, without a Discord connection: the
  * plugin's `commands.add` calls are recorded, and `compose()` shows the tree Discord would get.
  * `rootCommand` is the root command's name, `roundtable` by default. `channelContext` is what
- * `DISCORD.channelContext` answers, by default no context, as on a host with it off. Only
- * `commands`, `guard`, `poster`, and `channelContext` are given; reading another member throws.
+ * `DISCORD.channelContext` answers, by default no context, as on a host with it off. `voice` is
+ * what `DISCORD.voice` is, such as a `fakeDiscordVoice()`; without it the plugin reads none, as on
+ * a host with `discord.voice` off. Only `commands`, `guard`, `poster`, `channelContext`, and
+ * `voice` are given; reading another member throws.
  */
 export function fakeDiscord(
 	options: {
@@ -41,6 +44,7 @@ export function fakeDiscord(
 		rootCommand?: string;
 		channelContext?: DiscordServices["channelContext"];
 		poster?: DiscordPoster;
+		voice?: DiscordVoice;
 	} = {},
 ): FakeDiscord {
 	const collection = new CommandCollection();
@@ -57,6 +61,7 @@ export function fakeDiscord(
 			guard,
 			poster,
 			channelContext: options.channelContext ?? (async () => undefined),
+			voice: options.voice,
 		}),
 		poster,
 		commands: collection.registrar,

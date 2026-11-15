@@ -253,6 +253,11 @@ When a conversation is started over in a server channel or thread, the assistant
 | `false` | `false` | The bot asks Discord for no privileged intent beyond Message Content |
 | `true` | | Plugins hear each member that joins the server (`memberJoined`). Needs Server Members Intent switched on under Bot in the Developer Portal; `roundtable doctor` checks it |
 
+| `discord.voice` | Default | What it is |
+| --- | --- | --- |
+| `false` | `false` | The bot asks Discord for no voice intent and loads no voice package |
+| `true` | | Plugins may join the server's voice channels through `DISCORD.voice` and hear each speaker, such as one that records a meeting. Asks for the Guild Voice States intent, which needs no change in the Developer Portal; the bot needs View Channel and Connect in a channel it joins |
+
 | `discord.formatting` | Default | What it is |
 | --- | --- | --- |
 | text | Markdown renders except tables | What the model is told, in English, about how a reply renders in Discord; appended to the system prompt of every turn that replies there |

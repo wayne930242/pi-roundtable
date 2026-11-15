@@ -22,6 +22,7 @@ import type {
 } from "../discord/interaction-module.ts";
 import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import type { DiscordPoster } from "../discord/poster/poster.ts";
+import type { DiscordVoice } from "../discord/voice/voice.ts";
 import type {
 	AgentTurnScope,
 	ChannelKey,
@@ -72,6 +73,8 @@ export interface TestHostOptions {
 		  > & {
 				/** What `DISCORD.poster` is; by default a `fakeDiscordPoster()`. */
 				poster?: DiscordPoster;
+				/** What `DISCORD.voice` is, such as a `fakeDiscordVoice()`; by default none, as with `discord.voice` off. */
+				voice?: DiscordVoice;
 		  });
 }
 
@@ -202,7 +205,7 @@ export function standInDiscord(
 		replaces: [DISCORD],
 		setup: ({ services, dashboard }) => {
 			const identity = services.find(IDENTITY);
-			const { poster, ...overrides } = given ?? {};
+			const { poster, voice, ...overrides } = given ?? {};
 			const ownerChannel =
 				overrides.ownerChannel ?? (async () => "discord:owner-dm" as const);
 			// Each person's direct messages, as the Discord plugin's provider reaches them; the owner's is the owner channel.
@@ -229,6 +232,7 @@ export function standInDiscord(
 				threads: { open: async () => undefined, sweep: async () => undefined },
 				poster: poster ?? fakeDiscordPoster(),
 				channelContext,
+				...(voice ? { voice } : {}),
 			} as unknown as DiscordServices);
 			// Discord's side of the agent guild, as the built-in plugin contributes it with one, over a board that shows nothing.
 			const guild = agentGuild

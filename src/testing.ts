@@ -26,9 +26,6 @@ import type {
 	HostEnv,
 	LinkedSessions,
 	RoundtablePlugin,
-	TurnEndEvent,
-	TurnEvent,
-	TurnProgressEvent,
 } from "./core/plugin-api/plugin.ts";
 import {
 	AGENTS,
@@ -61,6 +58,7 @@ import { memberOf } from "./core/testing/partial.ts";
 import {
 	memoryHeldActions,
 	partialService,
+	recordedSink,
 	routedConversations,
 	unlinked,
 } from "./core/testing/plugin-stand-ins.ts";
@@ -97,6 +95,11 @@ export type {
 	FakeRoleChange,
 } from "./core/testing/fake-poster.ts";
 export { fakeDiscordPoster } from "./core/testing/fake-poster.ts";
+export type {
+	FakeDiscordVoice,
+	FakeVoiceChannel,
+} from "./core/testing/fake-voice.ts";
+export { fakeDiscordVoice } from "./core/testing/fake-voice.ts";
 export type { TestLocale } from "./core/testing/locale.ts";
 export { useTestLocale } from "./core/testing/locale.ts";
 export { OWNER_SPEAKER } from "./core/testing/owner.ts";
@@ -190,22 +193,7 @@ export async function testPlugin(
 			: unlinked("surfaces"),
 	);
 	const observers = new MessageObservers(logger, () => surfaces.roomSurfaces());
-	const sink = {
-		turnStarted: (turn: TurnEvent) => {
-			events.push({ name: "turnStarted", turn });
-			bus.sink.turnStarted(turn);
-		},
-		turnEnded: (turn: TurnEndEvent) => {
-			events.push({ name: "turnEnded", turn });
-			bus.sink.turnEnded(turn);
-		},
-		// Delivered to the plugin's handlers, not recorded: a turn reports many.
-		turnProgress: (event: TurnProgressEvent) => bus.sink.turnProgress?.(event),
-		changed: () => {
-			events.push({ name: "changed" });
-			bus.sink.changed();
-		},
-	};
+	const sink = recordedSink(events, bus.sink);
 	const turns: ConversationTurns =
 		options.turns ??
 		conversationTurns({
