@@ -1,15 +1,16 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import {
 	getVoiceConnection,
 	type VoiceConnection,
 	type VoiceConnectionState,
 	VoiceConnectionStatus,
 } from "@discordjs/voice";
+import type { VoiceSession } from "./voice.ts";
 import {
 	type DiscordVoiceWorld,
 	discordVoiceWorld,
 } from "./voice-contract-discord.ts";
-import { loadVoiceLib } from "./voice-link.ts";
+import { loadOpusDecoders, loadVoiceLib } from "./voice-link.ts";
 
 // The voice link over @discordjs/voice itself, where the other voice tests drive a stand-in
 // connection: the library's own `joinVoiceChannel`, state changes and `rejoin`, over an adapter the
@@ -170,4 +171,147 @@ test("a connection whose setup throws is destroyed, so the guild's next join is 
 	});
 	expect(getVoiceConnection(guildId, GROUP)).toBeUndefined();
 	expect(failures()).toHaveLength(2);
+});
+
+const GUILD = "100000000000000001";
+const speaker = (index: number) => ({
+	userId: String(1_000 + index),
+	bot: false,
+	displayName: `Speaker ${index}`,
+});
+
+/** Eight Opus packets of 20 ms each, as Discord sends them: a 400 Hz tone on both channels. */
+async function tonePackets(): Promise<Uint8Array[]> {
+	const { default: OpusScript } = await import("opusscript");
+	const encoder = new OpusScript(48_000, 2, OpusScript.Application.AUDIO);
+	const stereo = Buffer.alloc(960 * 4);
+	for (let sample = 0; sample < 960; sample++) {
+		const value = Math.round(
+			Math.sin((sample / 960) * 2 * Math.PI * 8) * 8_000,
+		);
+		stereo.writeInt16LE(value, sample * 4);
+		stereo.writeInt16LE(value, sample * 4 + 2);
+	}
+	const packets = Array.from({ length: 8 }, () => encoder.encode(stereo, 960));
+	encoder.delete();
+	return packets;
+}
+
+/** Whether an utterance is the eight packets decoded: all of their audio, ending in the tone at its level. */
+function isTone(pcm: Uint8Array | undefined): boolean {
+	if (pcm?.byteLength !== 8 * 1_920) return false;
+	const peak = Math.max(...new Int16Array(pcm.buffer, 7 * 1_920, 960));
+	return peak > 6_000 && peak < 10_000;
+}
+
+// Every decoder of the process shares one heap: a test that fails gives its decoders back all the same.
+const sessions: VoiceSession[] = [];
+afterEach(async () => {
+	for (const session of sessions.splice(0)) await session.leave();
+});
+
+/** A session over the stand-in connection and the Opus decoder that ships, with what each speaker's last utterance held. */
+async function hearing(count: number) {
+	const subject = discordVoiceWorld({ decoders: await loadOpusDecoders() });
+	const members = Array.from({ length: count }, (_, index) => speaker(index));
+	subject.world.channel(ROOM, { guildId: GUILD, members });
+	const answer = await subject.voice.join({ guildId: GUILD, channelId: ROOM });
+	if (!answer.ok) throw new Error(`join failed: ${answer.failure}`);
+	sessions.push(answer.session);
+	const said = new Map<string, Uint8Array>();
+	answer.session.onUtterance(({ userId, pcm }) => said.set(userId, pcm));
+	const packets = await tonePackets();
+	const speaks = (userId: string) => {
+		for (const packet of packets) subject.world.audio(ROOM, userId, packet);
+	};
+	const undecoded = () =>
+		subject.logs.lines
+			.filter((line) => line.message === "voice packet not decoded")
+			.map((line) => line.fields.userId);
+	return { subject, session: answer.session, members, said, speaks, undecoded };
+}
+
+test("a speaker's decoder is freed when they leave the channel and after a minute of their silence, and made again when they speak", async () => {
+	const subject = discordVoiceWorld();
+	const [ann, ben] = [speaker(1), speaker(2)];
+	subject.world.channel(ROOM, { guildId: GUILD, members: [ann, ben] });
+	const answer = await subject.voice.join({ guildId: GUILD, channelId: ROOM });
+	if (!answer.ok) throw new Error(`join failed: ${answer.failure}`);
+	const said: string[] = [];
+	answer.session.onUtterance(({ userId }) => said.push(userId));
+	const frame = new Uint8Array(1_920).fill(1);
+	subject.world.audio(ROOM, ann.userId, frame);
+	subject.world.audio(ROOM, ben.userId, frame);
+	expect(subject.decoders).toEqual({ made: 2, freed: 0 });
+	subject.world.exit(ROOM, ann.userId);
+	expect(subject.decoders).toEqual({ made: 2, freed: 1 });
+
+	// Ben speaks again half a minute on: his minute starts over.
+	subject.clock.advance(30_000);
+	subject.world.audio(ROOM, ben.userId, frame);
+	subject.clock.advance(59_979);
+	expect(subject.decoders).toEqual({ made: 2, freed: 1 });
+	subject.clock.advance(1);
+	expect(subject.decoders).toEqual({ made: 2, freed: 2 });
+
+	subject.world.audio(ROOM, ben.userId, frame);
+	subject.world.quiet();
+	expect(subject.decoders).toEqual({ made: 3, freed: 2 });
+	expect(said).toEqual([ann.userId, ben.userId, ben.userId, ben.userId]);
+	await answer.session.leave();
+	expect(subject.decoders).toEqual({ made: 3, freed: 3 });
+});
+
+test("a hundred speakers who each leave after speaking are all heard: more than the decoder holds at once", async () => {
+	const { subject, session, members, said, speaks, undecoded } =
+		await hearing(100);
+	for (const { userId } of members) {
+		speaks(userId);
+		subject.world.exit(ROOM, userId);
+	}
+	expect(members.filter(({ userId }) => !isTone(said.get(userId)))).toEqual([]);
+	expect(undecoded()).toEqual([]);
+	await session.leave();
+});
+
+test("a hundred speakers who stay, each speaking a second after the last, are all heard: a decoder is freed after a minute of silence", async () => {
+	const { subject, session, members, said, speaks, undecoded } =
+		await hearing(100);
+	for (const { userId } of members) {
+		speaks(userId);
+		subject.clock.advance(1_000);
+	}
+	expect(members.filter(({ userId }) => !isTone(said.get(userId)))).toEqual([]);
+	expect(undecoded()).toEqual([]);
+	await session.leave();
+});
+
+test("speakers past what the decoder holds at once are named in the log, once each, and heard as soon as others leave", async () => {
+	const { subject, session, members, said, speaks, undecoded } =
+		await hearing(100);
+	for (const { userId } of members) speaks(userId);
+	subject.world.quiet();
+	const heard = members.filter(({ userId }) => isTone(said.get(userId)));
+	const unheard = members.filter(({ userId }) => !said.has(userId));
+	expect(heard.length + unheard.length).toBe(100);
+	expect(unheard.length).toBeGreaterThan(0);
+	expect(undecoded()).toEqual(unheard.map(({ userId }) => userId));
+	// Whoever was heard still is: nobody's audio is spoilt by the ones past the limit.
+	said.clear();
+	for (const { userId } of heard) speaks(userId);
+	subject.world.quiet();
+	expect(heard.filter(({ userId }) => !isTone(said.get(userId)))).toEqual([]);
+
+	for (const { userId } of heard) subject.world.exit(ROOM, userId);
+	for (const { userId } of unheard) speaks(userId);
+	subject.world.quiet();
+	expect(unheard.filter(({ userId }) => !isTone(said.get(userId)))).toEqual([]);
+	// Named once each, whatever they lost.
+	expect(undecoded()).toHaveLength(unheard.length);
+	await session.leave();
+	expect(
+		subject.logs.lines.find(
+			(line) => line.message === "voice packets were not decoded",
+		)?.fields,
+	).toMatchObject({ undecoded: unheard.length * 8, speakers: unheard.length });
 });

@@ -135,6 +135,7 @@ export function fakeDiscordVoice(
 					listen: (handlers) => {
 						link.handlers = handlers;
 					},
+					forget: () => undefined,
 					close: () => {
 						status = "closed";
 						if (links.get(guildId) === link) links.delete(guildId);

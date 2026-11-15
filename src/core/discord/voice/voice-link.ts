@@ -34,6 +34,20 @@ const DISCONNECTED = 4014;
 const REJOIN_MS = 3_000;
 /** The voice connection group, so a connection another library opened in the guild is never taken for ours. */
 const GROUP = "pi-roundtable";
+/**
+ * How long a speaker is quiet before their decoder is freed. opusscript's decoders share one
+ * fixed heap, which holds 79 of them in the whole process: one more decodes nothing until others
+ * are freed. So a decoder is kept only for who is speaking, not for everyone who ever spoke.
+ */
+const DECODER_IDLE_MS = 60_000;
+
+/** One speaker's decoder, and when it last had a packet. */
+interface Hearing {
+	decoder: OpusDecoder;
+	lastAt: number;
+	/** Runs when the speaker may have been quiet for `DECODER_IDLE_MS`. */
+	timer: unknown;
+}
 
 /**
  * Loads @discordjs/voice with the DAVE library Discord's end-to-end encryption needs, which
@@ -130,7 +144,9 @@ function linkOver(
 	const { guildId, channelId, logger } = options;
 	const clock = options.clock ?? systemClock;
 	const { VoiceConnectionStatus: Status } = lib;
-	const decoders = new Map<string, OpusDecoder>();
+	const decoders = new Map<string, Hearing>();
+	/** How many packets of each speaker were not decoded. */
+	const undecoded = new Map<string, number>();
 	const subscribed = new Set<string>();
 	let handlers: VoiceLinkHandlers | undefined;
 	let closed = false;
@@ -138,7 +154,6 @@ function linkOver(
 	let rejoin: unknown;
 	/** Whether a rejoin is being asked for right now. */
 	let rejoining = false;
-	let undecoded = 0;
 
 	const statusOf = (state: VoiceConnectionState): VoiceLinkStatus => {
 		if (state.status === Status.Ready) return "ready";
@@ -171,6 +186,57 @@ function linkOver(
 		rejoin = clock.setTimeout(() => recover(connection.state), REJOIN_MS);
 	};
 
+	/** Frees a speaker's decoder; their next packet makes a new one. */
+	const forget = (userId: string): void => {
+		const hearing = decoders.get(userId);
+		if (!hearing) return;
+		decoders.delete(userId);
+		clock.clearTimeout(hearing.timer);
+		hearing.decoder.free();
+	};
+
+	/** The idle timer ran: the decoder is freed if no packet came since, else the timer waits out the rest. */
+	const idle = (userId: string): void => {
+		const hearing = decoders.get(userId);
+		if (!hearing) return;
+		const left = hearing.lastAt + DECODER_IDLE_MS - clock.now();
+		if (left > 0) hearing.timer = clock.setTimeout(() => idle(userId), left);
+		else forget(userId);
+	};
+
+	/** One packet through its speaker's decoder, which is made when first needed; undefined for a packet that was not decoded. */
+	const decode = (
+		userId: string,
+		packet: Uint8Array,
+	): Uint8Array | undefined => {
+		try {
+			let hearing = decoders.get(userId);
+			if (!hearing) {
+				hearing = { decoder: options.decoder(), lastAt: 0, timer: undefined };
+				hearing.timer = clock.setTimeout(() => idle(userId), DECODER_IDLE_MS);
+				decoders.set(userId, hearing);
+			}
+			hearing.lastAt = clock.now();
+			return hearing.decoder.decode(packet);
+		} catch (error) {
+			// Counted and named by its speaker, once; never logged with its bytes.
+			const lost = (undecoded.get(userId) ?? 0) + 1;
+			undecoded.set(userId, lost);
+			if (lost === 1)
+				logger.warn(
+					{
+						guildId,
+						userId,
+						reason: error instanceof Error ? error.message : String(error),
+					},
+					"voice packet not decoded",
+				);
+			// The decoder may be one the heap had no room for: the next packet gets a new one, which decodes once others were freed.
+			forget(userId);
+			return undefined;
+		}
+	};
+
 	const hear = (userId: string): void => {
 		if (closed || subscribed.has(userId)) return;
 		subscribed.add(userId);
@@ -180,21 +246,8 @@ function linkOver(
 		stream.on("data", (packet: Uint8Array) => {
 			// A packet the stream still held when the link closed is not decoded: its decoder is freed.
 			if (closed) return;
-			let decoder = decoders.get(userId);
-			if (!decoder) {
-				decoder = options.decoder();
-				decoders.set(userId, decoder);
-			}
-			let pcm: Uint8Array;
-			try {
-				pcm = decoder.decode(packet);
-			} catch {
-				// Counted, never logged with its bytes.
-				if (undecoded++ === 0)
-					logger.warn({ guildId, userId }, "voice packet not decoded");
-				return;
-			}
-			handlers?.frame(userId, pcm);
+			const pcm = decode(userId, packet);
+			if (pcm) handlers?.frame(userId, pcm);
 		});
 		// @discordjs/voice destroys the stream on a packet it cannot decrypt; the speaker is heard again from the next one.
 		stream.on("error", (error: Error) =>
@@ -226,10 +279,14 @@ function linkOver(
 		connection.receiver.speaking.off("start", hear);
 		for (const stream of connection.receiver.subscriptions.values())
 			stream.destroy();
-		for (const decoder of decoders.values()) decoder.free();
-		decoders.clear();
-		if (undecoded > 0)
-			logger.warn({ guildId, undecoded }, "voice packets were not decoded");
+		for (const userId of [...decoders.keys()]) forget(userId);
+		let lost = 0;
+		for (const count of undecoded.values()) lost += count;
+		if (lost > 0)
+			logger.warn(
+				{ guildId, undecoded: lost, speakers: undecoded.size },
+				"voice packets were not decoded",
+			);
 	};
 
 	recover(connection.state);
@@ -238,6 +295,7 @@ function linkOver(
 		listen: (given) => {
 			handlers = given;
 		},
+		forget,
 		close: () => {
 			release();
 			// Tells Discord the bot left the channel; reports `closed` through the state change.

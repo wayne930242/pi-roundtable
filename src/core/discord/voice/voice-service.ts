@@ -45,6 +45,8 @@ export interface VoiceLink {
 	status(): VoiceLinkStatus;
 	/** Takes the one listener of the link; what happened before it is read from `status()`. */
 	listen(handlers: VoiceLinkHandlers): void;
+	/** Someone left the channel: what the link kept to hear them is freed, and made again if they are heard after all. */
+	forget(userId: string): void;
 	/** Leaves the channel and frees the decoders; does nothing the second time. */
 	close(): void;
 }
@@ -158,6 +160,12 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 		}
 	};
 
+	/** Someone is no longer in the session's channel: what they were saying is delivered, then the link lets go of them. */
+	const gone = (entry: Joined, userId: string): void => {
+		entry.session.memberLeft(userId);
+		entry.link?.forget(userId);
+	};
+
 	gateway.onVoiceState((change) => {
 		const entry = joined.get(change.guildId);
 		if (!entry) return;
@@ -169,7 +177,7 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 		}
 		if (change.channelId === session.channelId)
 			session.memberJoined(change.member);
-		else session.memberLeft(change.userId);
+		else gone(entry, change.userId);
 	});
 
 	/** Resolves true once the link is ready; false when it closed or took longer than `connectMs`. */
