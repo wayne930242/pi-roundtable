@@ -73,6 +73,8 @@ describeDb("both plugins on a host without Discord", () => {
 		await migrateDatabase(testDatabaseUrl, [connectors, remote]);
 		const sql = new SQL(testDatabaseUrl);
 		await sql`DELETE FROM owner_connectors`;
+		// index.test.ts imports a bundle into the shared database; grants cascade with it.
+		await sql`DELETE FROM discord_mcp_bundles`;
 		await sql.close();
 		cf.reset();
 		const runtime = recordingRuntime();
