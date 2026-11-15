@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-15
+
+### Added
+
+- Discord voice for plugins, off unless the configuration says `discord: { voice: true }`. With it, the Discord plugin provides `DISCORD.voice` (`DiscordVoice`, from `pi-roundtable/discord`): `join({ guildId, channelId }, options?)` puts the bot in a voice or stage channel, muted and not deafened, and answers a `VoiceSession` or a `VoiceJoinFailure` (`forbidden`, `channel_gone`, `not_voice`, `full`, `unavailable`, `already_joined`; one session per guild) as a `VoiceJoinResult`. A session hands each speaker's audio to `onUtterance` as a `VoiceUtterance` of 48 kHz 16-bit mono PCM (`VOICE_PCM`) with the speaker's Discord user id and the times it started and ended, cut where the speaker went quiet (`VoiceJoinOptions`: `silenceMs`, `maxUtteranceMs`); reports who starts and stops speaking (`VoiceSpeakingEvent`) and who is in the channel (`members()`, `VoiceMember`, `VoiceMemberEvent`); and ends with `leave()` or a `VoiceDisconnectEvent` whose `VoiceDisconnectReason` says why. A dropped connection has 20 seconds to come back. Discord's end-to-end encryption (DAVE) is handled by `@discordjs/voice`; decoded audio stays in memory and is never written to disk or to a log. The bot asks for the Guild Voice States intent, which is not privileged. Without `discord.voice` nothing changes: no intent, and none of the new dependencies (`@discordjs/voice`, `@snazzah/davey`, `opusscript`, `@noble/ciphers`) is loaded.
+- `fakeDiscordVoice` in `pi-roundtable/testing` makes that service in memory for a plugin's tests (`FakeDiscordVoice`, `FakeVoiceChannel`): the test makes channels, moves people, feeds frames of PCM, and ends sessions from outside, and reads the joins asked for and why each session ended. `fakeDiscord({ voice })` and `testHost({ discord: { voice } })` hand it to the plugin.
+
 ## [0.47.3] - 2026-11-13
 
 ### Fixed
