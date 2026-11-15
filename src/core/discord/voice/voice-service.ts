@@ -150,8 +150,10 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 		if (status === "closed") {
 			end(entry, "connection_lost");
 		} else if (status === "ready") {
+			if (entry.resume === undefined) return;
 			clock.clearTimeout(entry.resume);
 			entry.resume = undefined;
+			void reread(entry);
 		} else {
 			entry.resume ??= clock.setTimeout(
 				() => end(entry, "connection_lost"),
@@ -164,6 +166,28 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 	const gone = (entry: Joined, userId: string): void => {
 		entry.session.memberLeft(userId);
 		entry.link?.forget(userId);
+	};
+
+	/**
+	 * A dropped connection is back: who is in the channel is read again, and whoever left or
+	 * entered meanwhile is reported now. A gateway that had to identify again is sent the guild's
+	 * voice states anew, with no word of what changed.
+	 */
+	const reread = async (entry: Joined): Promise<void> => {
+		const { session } = entry;
+		try {
+			const facts = await gateway.channel(session.channelId);
+			if (session.ended() !== undefined || typeof facts === "string") return;
+			const there = new Set(facts.members.map((member) => member.userId));
+			for (const { userId } of session.members())
+				if (!there.has(userId)) gone(entry, userId);
+			for (const member of facts.members) session.memberJoined(member);
+		} catch (error) {
+			logger.warn(
+				{ guildId: session.guildId, channelId: session.channelId, err: error },
+				"voice members not read again",
+			);
+		}
 	};
 
 	gateway.onVoiceState((change) => {

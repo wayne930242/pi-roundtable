@@ -158,6 +158,8 @@ export interface DiscordVoiceWorld extends VoiceSubject {
 	client: Client;
 	/** Every connection the stand-in `joinVoiceChannel` made, in order; none with the library itself. */
 	connections: StubConnection[];
+	/** Who is in a channel changes with no word of it, as when the gateway identifies again and is sent the guild's voice states anew. */
+	resync(channelId: string, members: VoiceMember[]): void;
 	/** The main gateway as a voice connection of the library itself sees it: how many payloads it was given, and `send` answers whether it carried one. */
 	adapter: { sends: number; send: () => boolean };
 	/** How often the voice library and the decoders were loaded. */
@@ -356,6 +358,13 @@ export function discordVoiceWorld(
 		logs,
 		client,
 		connections,
+		resync: (channelId, members) => {
+			for (const [userId, state] of states)
+				if (state.channelId === channelId && userId !== BOT)
+					states.delete(userId);
+			for (const member of members)
+				states.set(member.userId, { channelId, member });
+		},
 		adapter,
 		loads,
 		decoders,

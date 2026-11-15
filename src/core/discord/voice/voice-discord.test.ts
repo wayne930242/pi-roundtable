@@ -14,6 +14,7 @@ const GUILD = "100000000000000001";
 const ROOM = "200000000000000001";
 const ANN = { userId: "301", bot: false, displayName: "Ann" };
 const BEN = { userId: "302", bot: false, displayName: "Ben" };
+const CAL = { userId: "303", bot: false, displayName: "Cal" };
 const AT = { guildId: GUILD, channelId: ROOM };
 const frame = (fill: number) => new Uint8Array(1_920).fill(fill);
 const tick = () => new Promise((done) => setImmediate(done));
@@ -139,6 +140,54 @@ test("a drop that comes back within the resume time ends nothing, and audio is h
 	subject.world.audio(ROOM, ANN.userId, frame(1));
 	subject.world.quiet();
 	expect(said).toEqual([1_920]);
+});
+
+test("when a drop comes back, who is in the channel is read again, and whoever left or entered meanwhile is reported", async () => {
+	const subject = discordVoiceWorld();
+	const session = await joined(subject);
+	const lines: string[] = [];
+	session.onMember(({ kind, member }) =>
+		lines.push(`${kind} ${member.displayName}`),
+	);
+	session.onUtterance(({ userId }) => lines.push(`said ${userId}`));
+	const connection = subject.connections[0];
+	if (!connection) throw new Error("no connection");
+	// While the connection is up, the gateway's word is all the session goes by.
+	subject.resync(ROOM, [BEN]);
+	await tick();
+	expect(session.members()).toEqual([ANN, BEN]);
+
+	subject.world.audio(ROOM, ANN.userId, frame(1));
+	connection.disconnected();
+	subject.resync(ROOM, [BEN, CAL]);
+	connection.ready();
+	await tick();
+	// What Ann was saying comes first, and her decoder is freed.
+	expect(lines).toEqual(["said 301", "left Ann", "joined Cal"]);
+	expect(session.members()).toEqual([BEN, CAL]);
+	expect(subject.decoders).toEqual({ made: 1, freed: 1 });
+	expect(session.ended()).toBeUndefined();
+});
+
+test("a channel that cannot be read again after a drop is logged, and the session goes on with who it knew", async () => {
+	const subject = discordVoiceWorld();
+	const session = await joined(subject);
+	const reasons = ends(session);
+	const connection = subject.connections[0];
+	if (!connection) throw new Error("no connection");
+	connection.disconnected();
+	subject.client.channels.fetch = async () => {
+		throw new Error("Discord cannot be reached");
+	};
+	connection.ready();
+	await tick();
+	expect(
+		subject.logs.lines.filter(
+			(line) => line.message === "voice members not read again",
+		),
+	).toMatchObject([{ level: "warn", fields: { guildId: GUILD } }]);
+	expect(session.members()).toEqual([ANN, BEN]);
+	expect(reasons).toEqual([]);
 });
 
 test("Discord's own disconnect (4014) is not rejoined, and without word of where the bot is the session ends after the resume time", async () => {
