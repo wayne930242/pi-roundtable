@@ -152,25 +152,26 @@ export class VoiceSessionState implements VoiceSession {
 		const { clock, silenceMs } = this.#options;
 		const now = clock.now();
 		let open = this.#open.get(userId);
+		/** The utterance this frame cuts off, when the one before it was full. */
+		let cut: OpenUtterance | undefined;
 		if (!open) {
 			open = { chunks: [], bytes: 0, startedAt: now, lastAt: now, timer: 0 };
 			open.timer = clock.setTimeout(() => this.#quiet(userId), silenceMs);
 			this.#open.set(userId, open);
 			this.#speaking.emit({ userId, speaking: true, at: now });
+		} else if (open.bytes >= this.#maxBytes) {
+			// Full, and only now known to go on: this frame starts the next utterance, in the same breath.
+			cut = { ...open };
+			open.chunks = [];
+			open.bytes = 0;
+			open.startedAt = now;
 		}
 		open.chunks.push(pcm);
 		open.bytes += pcm.byteLength;
 		open.lastAt = now;
-		if (open.bytes >= this.#maxBytes) {
-			// The speaker goes on: the next frame carries on from here, in the same breath. The open
-			// utterance is emptied before its audio is handed over, so a listener that ends the session
-			// there is not handed the same audio again.
-			const cut = { ...open };
-			open.chunks = [];
-			open.bytes = 0;
-			open.startedAt = now;
-			this.#deliver(userId, cut, true);
-		}
+		// Handed over last, with the open utterance already holding what follows: a listener that
+		// ends the session here is handed the rest once, and none of this audio again.
+		if (cut) this.#deliver(userId, cut, true);
 	}
 
 	/** Ends the session, once: every open utterance is delivered, then the disconnect is reported. */

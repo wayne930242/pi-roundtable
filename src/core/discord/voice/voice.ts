@@ -65,7 +65,11 @@ export interface VoiceUtterance {
 	startedAt: number;
 	/** When its last audio arrived. */
 	endedAt: number;
-	/** True when it was cut at `maxUtteranceMs` while the speaker went on: what they say next arrives as their next utterance. */
+	/**
+	 * True when it holds `maxUtteranceMs` of audio and the speaker went on: the rest is their next
+	 * utterance, which always follows, so a run of `continues` utterances ends with one that says
+	 * false. One that is full just as its speaker stops says false.
+	 */
 	continues: boolean;
 }
 
@@ -110,8 +114,8 @@ export interface VoiceSession {
 	onSpeaking(listener: (event: VoiceSpeakingEvent) => void): () => void;
 	/**
 	 * A finished utterance of one speaker. One arrives when the speaker went quiet, when their
-	 * utterance reached `maxUtteranceMs` (`continues: true`), when they left the channel, and when
-	 * the session ends, so no audio heard is dropped.
+	 * utterance is full at `maxUtteranceMs` and they go on (`continues: true`), when they left the
+	 * channel, and when the session ends, so no audio heard is dropped.
 	 */
 	onUtterance(listener: (utterance: VoiceUtterance) => void): () => void;
 	/** The session ended, once; a listener added after the end is called at once. */

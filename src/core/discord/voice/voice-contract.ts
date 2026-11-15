@@ -351,6 +351,39 @@ const scenarios: Scenario[] = [
 			expect(fills).toEqual(fills.map((_, index) => index));
 		},
 	},
+	{
+		name: "15. an utterance that is full just as its speaker stops is their last, and one that is cut is followed by the rest",
+		async run(subject) {
+			const { world } = subject;
+			const session = await joined(subject, [ANN], { maxUtteranceMs: 1_000 });
+			const lines = heard(session);
+			const spans: [number, number][] = [];
+			session.onUtterance(({ startedAt, endedAt }) =>
+				spans.push([startedAt, endedAt]),
+			);
+			// Exactly one second, 50 frames of 20 ms: nothing follows, so nothing says it continues.
+			for (let index = 0; index < 50; index++)
+				world.audio(ROOM, ANN.userId, frame(index));
+			world.quiet();
+			expect(lines).toEqual(["speaks 301", "quiet 301", "said 301 96000"]);
+			// One frame more: the full second is handed over as that frame arrives, which starts the next.
+			for (let index = 0; index < 51; index++)
+				world.audio(ROOM, ANN.userId, frame(index));
+			expect(lines.slice(3)).toEqual([
+				"speaks 301",
+				"said 301 96000 continues",
+			]);
+			world.quiet();
+			expect(lines.slice(5)).toEqual(["quiet 301", "said 301 1920"]);
+			const from = spans[1]?.[0] ?? 0;
+			expect(
+				spans.slice(1).map(([start, end]) => [start - from, end - from]),
+			).toEqual([
+				[0, 980],
+				[1_000, 1_000],
+			]);
+		},
+	},
 ];
 
 /** Runs every scenario over a fresh subject; `make` builds the voice under test and its world. */
