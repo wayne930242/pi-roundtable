@@ -173,6 +173,27 @@ test("a connection whose setup throws is destroyed, so the guild's next join is 
 	expect(failures()).toHaveLength(2);
 });
 
+test("a later rejoin that throws is warned, not thrown, and asked for again", async () => {
+	const guildId = "100000000000000015";
+	const subject = await realWorld(guildId);
+	subject.adapter.send = () => false;
+	const joining = subject.voice.join({ guildId, channelId: ROOM });
+	await tick();
+	subject.adapter.send = () => {
+		throw new Error("no shard");
+	};
+	expect(() => subject.clock.advance(3_000)).not.toThrow();
+	expect(
+		subject.logs.lines.filter((line) => line.message === "voice rejoin failed"),
+	).toHaveLength(1);
+	subject.adapter.send = () => true;
+	subject.clock.advance(3_000);
+	ready(connectionOf(guildId));
+	const answer = await joining;
+	expect(answer.ok).toBe(true);
+	if (answer.ok) await answer.session.leave();
+});
+
 const GUILD = "100000000000000001";
 const speaker = (index: number) => ({
 	userId: String(1_000 + index),

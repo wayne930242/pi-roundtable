@@ -183,7 +183,24 @@ function linkOver(
 			rejoining = false;
 		}
 		if (carried) return;
-		rejoin = clock.setTimeout(() => recover(connection.state), REJOIN_MS);
+		rejoin = clock.setTimeout(() => retry(), REJOIN_MS);
+	};
+
+	/** A later rejoin that throws is a refused one: warned, no audio, asked for again. */
+	const retry = (): void => {
+		try {
+			recover(connection.state);
+		} catch (error) {
+			logger.warn(
+				{
+					guildId,
+					channelId,
+					reason: error instanceof Error ? error.message : String(error),
+				},
+				"voice rejoin failed",
+			);
+			rejoin = clock.setTimeout(() => retry(), REJOIN_MS);
+		}
 	};
 
 	/** Frees a speaker's decoder; their next packet makes a new one. */
