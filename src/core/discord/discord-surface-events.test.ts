@@ -15,7 +15,9 @@ afterEach(() => {
 });
 
 /** Starts a surface over a client that never connects, and hands back the client to emit events on. */
-async function started(options: { memberEvents?: boolean } = {}) {
+async function started(
+	options: { memberEvents?: boolean; voice?: boolean } = {},
+) {
 	let client: Client | undefined;
 	spyOn(Client.prototype, "login").mockImplementation(async function (
 		this: Client,
@@ -162,4 +164,18 @@ test("the Server Members intent is asked for only with memberEvents", async () =
 	expect(await intents(false)).toBe(false);
 	(Client.prototype.login as unknown as { mockRestore(): void }).mockRestore();
 	expect(await intents(true)).toBe(true);
+});
+
+test("the Guild Voice States intent is asked for only with voice, and changes no other intent", async () => {
+	const intents = async (voice: boolean) => {
+		const { client } = await started({ voice });
+		(
+			Client.prototype.login as unknown as { mockRestore(): void }
+		).mockRestore();
+		return client.options.intents.bitfield;
+	};
+	const without = await intents(false);
+	const withVoice = await intents(true);
+	expect(without & GatewayIntentBits.GuildVoiceStates).toBe(0);
+	expect(withVoice).toBe(without | GatewayIntentBits.GuildVoiceStates);
 });

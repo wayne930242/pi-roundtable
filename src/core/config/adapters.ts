@@ -79,6 +79,13 @@ export interface DiscordConfig {
 	 */
 	memberEvents?: boolean;
 	/**
+	 * Lets plugins join the server's voice channels through `DISCORD.voice` and hear each speaker:
+	 * the bot asks Discord for the Guild Voice States intent, which is not privileged and needs no
+	 * portal change, and loads its voice packages as it starts. The bot needs View Channel and
+	 * Connect in a channel it joins. Default `false`: no intent, and no voice package is loaded.
+	 */
+	voice?: boolean;
+	/**
 	 * What the model is told, English, about how a reply renders in Discord, appended to the system
 	 * prompt of every turn that replies there, after the persona. The default says Markdown
 	 * renders except tables, so the model writes bullet lists or `key: value` lines instead. A text
@@ -127,6 +134,7 @@ export interface ResolvedDiscord {
 	peerBots?: PeerBotsConfig;
 	freshMarker?: string | false;
 	memberEvents: boolean;
+	voice: boolean;
 	formatting?: string | false;
 	cardGraceSeconds: number;
 	/** As configured: `{}` when left out, so the defaults apply, or `false`. */
@@ -163,6 +171,7 @@ export function resolvedDiscord(
 			? {}
 			: { freshMarker: discord.freshMarker }),
 		memberEvents: discord.memberEvents ?? false,
+		voice: discord.voice ?? false,
 		...(discord.formatting === undefined
 			? {}
 			: { formatting: discord.formatting }),
@@ -211,6 +220,7 @@ export const discordShape = shape({
 	peerBots: optional(peerBotsShape),
 	freshMarker: optional(orOff(text)),
 	memberEvents: optional(bool),
+	voice: optional(bool),
 	formatting: optional(orOff(text)),
 	cardGraceSeconds: optional(integer(1, 86_400)),
 	cardCopies: optional(

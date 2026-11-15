@@ -88,6 +88,10 @@ A few helpers cover the rest:
 - `fakeDiscordPoster({ idOffset?, now? })` is a `DiscordPoster` in memory.
   `messagesIn(channelId)` lists what a channel holds, `directs` the direct messages sent, and `failNext(operation, error)`, `closedDirects`, `goneChannels`, `hiddenFrom`, `pinNotices` and the rest are the knobs a test turns.
   It keeps the real poster's argument checks and error kinds, so a plugin that breaks a limit fails in the test too.
+- `fakeDiscordVoice({ now? })` is a `DiscordVoice` in memory, for a plugin that joins a voice channel through `DISCORD.voice`; give it with `fakeDiscord({ voice })`.
+  Make channels with `voice.channels.set(channelId, { guildId, members })`, move people with `enter` and `exit`, feed speech with `say(channelId, userId, ...frames)` (48 kHz 16-bit mono PCM), and end a session from outside with `drop`.
+  `voice.joins` and `voice.ended` record what the plugin asked for and why each session ended.
+  The calls and rules are in [Voice](https://github.com/wayne930242/pi-roundtable/blob/master/docs/plugins.md#voice-hearing-a-voice-channel-through-discordvoice) in the guide.
 - `useTestLocale()` resets the process-wide locale to English and the time zone to UTC.
 
 The one example whose test needs PostgreSQL is [`migrations.test.ts`](https://github.com/wayne930242/pi-roundtable/blob/master/examples/migrations.test.ts).

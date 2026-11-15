@@ -277,7 +277,7 @@ The built-in plugins provide these, from the main entry:
 
 The data types the ports use (`Schedule`, `NewSchedule`, `Agent`, `AgentGroup`, `TeamStatus`, `Memory`, `SkillSet`, `DelegationJob`, and so on) are in the main entry too.
 Your plugins run after the built-ins, so they can read every key above.
-The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, `threads` (the same instance as `THREADS`), `poster` (see [Posting through `DISCORD.poster`](#posting-through-discordposter)) and `channelContext`; commands are in [`commands.add`](#slash-commands-commandsadd). A plugin's own stand-in for `DISCORD` (such as one written with `as unknown as DiscordServices`) needs a `poster` too before code that posts runs under it; `fakeDiscord()` and `testHost` give one.
+The Discord connection's key, `DISCORD`, is in the Discord entry, because its port names discord.js types: `DiscordServices` has `connection`, `commands`, `guard`, `threads` (the same instance as `THREADS`), `poster` (see [Posting through `DISCORD.poster`](#posting-through-discordposter)), `channelContext`, and `voice` when the host's `discord.voice` is on (see [Voice](#voice-hearing-a-voice-channel-through-discordvoice)); commands are in [`commands.add`](#slash-commands-commandsadd). A plugin's own stand-in for `DISCORD` (such as one written with `as unknown as DiscordServices`) needs a `poster` too before code that posts runs under it; `fakeDiscord()` and `testHost` give one.
 
 To share your own service, export its key as a constant and its port as an interface.
 Plugins registered after yours can read it during setup.
@@ -2981,6 +2981,41 @@ await poster.postCard(channelId, {
 
 In a test, `fakeDiscordPoster()` is a `DiscordPoster` in memory and `fakeDiscord({ poster })` or `testHost({ discord: { poster } })` gives it to the plugin; see [Testing a plugin](#testing-a-plugin). The real poster and the fake run the same scenarios, the real one over a local emulation of Discord's HTTP API.
 
+### Voice: hearing a voice channel through `DISCORD.voice`
+
+`DISCORD.voice` (`DiscordVoice`, from `pi-roundtable/discord`) lets a plugin join a server's voice channel and hear each speaker apart, for a plugin that records a meeting and has it transcribed.
+It is there only when the host's configuration says `discord: { voice: true }`; without it `DISCORD.voice` is `undefined`, the bot asks Discord for no voice intent, and no voice package is loaded.
+With it, the bot asks for the Guild Voice States intent, which is not privileged and needs no change in the Developer Portal, and loads its voice packages as the host starts, so a host that cannot hear fails at start and not at the first meeting.
+The bot needs View Channel and Connect in a channel it joins.
+It joins muted and not deafened, and never speaks.
+
+```ts
+import { DISCORD, VOICE_PCM } from "pi-roundtable/discord";
+
+const voice = services.get(DISCORD).voice;
+if (!voice) throw new Error("Set discord.voice to true to record meetings.");
+const answer = await voice.join({ guildId, channelId });
+if (!answer.ok) return `Not joined: ${answer.failure}. ${answer.message}`;
+const { session } = answer;
+session.onUtterance(({ userId, pcm, startedAt, endedAt }) => {
+	// pcm is 48 kHz signed 16-bit little-endian mono: wrap it as WAV and send it to speech-to-text.
+	transcribe(userId, pcm, VOICE_PCM.sampleRate, startedAt, endedAt);
+});
+session.onMember(({ kind, member }) => note(`${member.displayName} ${kind}`));
+session.onDisconnect(({ reason }) => finish(reason));
+// Later:
+await session.leave();
+```
+
+- **Joining.** `join({ guildId, channelId }, options?)` answers `{ ok: true, session }` or `{ ok: false, failure, message }` and never rejects for something Discord refuses. The failures (`VoiceJoinFailure`) are `forbidden` (the bot may not see the channel or connect to it), `channel_gone` (the guild has no such channel), `not_voice` (neither a voice nor a stage channel), `full` (at its user limit, and the bot may not move members), `unavailable` (Discord is not connected, the host is stopping, or the voice connection did not come up in 20 seconds; asking again may work) and `already_joined`. Discord allows a bot one voice connection per guild, so a guild has one session: a second `join` there, to the same channel or another, answers `already_joined` until the first ended. `voice.session(guildId)` is the open session of a guild, if any. Call `join` from a service's `start`, a tool, or a command, not from `setup`.
+- **Utterances.** A session cuts each speaker's audio into utterances and hands each to `onUtterance` when it is complete: `{ userId, pcm, startedAt, endedAt, continues }`. `pcm` is decoded audio in the format `VOICE_PCM` names: 48 kHz, signed 16-bit little-endian, one channel (Discord's stereo is mixed down to mono). It holds what Discord sent and nothing for the pauses inside the utterance, so it may be shorter than `endedAt - startedAt`; both times are the host's clock in milliseconds since the epoch, taken when the first and the last audio arrived. An utterance ends when its speaker was quiet for `silenceMs` (option, 200 to 5,000, default 800), when it holds `maxUtteranceMs` of audio (1,000 to 300,000, default 30,000, about 2.9 MB; `continues: true`, and what the speaker says next is their next utterance), when the speaker leaves the channel, and when the session ends, so nothing heard is dropped. An option out of its range throws a `RangeError`.
+- **Speaking.** `onSpeaking` reports `{ userId, speaking, at }`: `true` with the first audio of an utterance and `false` when it ends, just before the utterance is delivered. Use it to show who is talking; the audio comes with the utterance.
+- **Members.** `session.members()` lists who is in the channel now as `{ userId, bot, displayName }` (the server nickname, else the account's display name), without the bot itself; `onMember` reports `{ kind: "joined" | "left", member }` as people enter and leave. Other bots are listed with `bot: true`.
+- **The end.** `session.leave()` leaves the channel. `onDisconnect` reports `{ reason }` once, however the session ended: `left` (your `leave()`), `removed` (someone disconnected the bot, or the channel was deleted), `moved` (someone moved the bot to another channel; a session never follows, so it hears nothing its plugin did not ask for), `connection_lost` and `stopped` (the host is stopping). A connection that drops has up to 20 seconds to come back, which the session does not report; after that it ends with `connection_lost`. After the end `session.ended()` is the reason, `members()` is empty, nothing more is reported, and the guild can be joined again; a listener added after the end is called at once. Every `on…` returns a function that removes the listener, and a listener that throws is logged and does not stop the others.
+- **Privacy.** Discord encrypts voice end to end (DAVE), and the host is one of the ends: the audio is decrypted and decoded in the host's memory, handed to your listeners, and kept nowhere else. The core writes no audio to disk and none to its logs or errors; what your plugin does with an utterance is its own to answer for, and Discord shows the bot in the channel to everyone in it. Tell the people in the channel before you record them.
+
+In a test, `fakeDiscordVoice()` is a `DiscordVoice` in memory, and `fakeDiscord({ voice })` or `testHost({ discord: { voice } })` gives it to the plugin; see [Testing a plugin](#testing-a-plugin). The real voice and the fake run the same scenarios, the real one over a stand-in for the discord.js client and the voice connection.
+
 ### `backgroundTargets`: whose turn a schedule or delegated task is
 
 Schedules and delegated tasks return later as turns without a new message in the channel.
@@ -4173,9 +4208,10 @@ Use `partial<Port>({ ... })` to stand in for a port your code takes as an argume
 It provides the members you give it and throws an error naming any missing member you read, so the test needs no `as unknown as Port` cast.
 `fakePrecheck(name, answer, { description?, timeoutMs? })` is a precheck that answers `answer` (a `PrecheckResult`, an `Error` it throws, or a function of its context) and records each context in `calls`; `fakePrechecks(...prechecks)` is a real in-memory `PrecheckRegistry` with them registered, which a test gives a plugin as `servicePair(PRECHECKS, registry)` and reads back with `registry.get(name)`.
 `fakeScriptRunner(answer, { describe?, timeoutMs? })` is a `PrecheckScriptRunner` that runs nothing and answers `answer` (a result, an `Error` it throws, or a function of the script and its context), recording each call in `calls`; give it to `registry.useScriptRunner`.
-`fakeDiscord({ ownerId?, rootCommand?, channelContext?, poster? })` is the `DISCORD` service for a plugin that adds slash commands, reads channel context or posts through `DISCORD.poster`: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`; `channelContext` answers `DISCORD.channelContext`, by default with no context.
-Only `commands`, `guard`, `poster` and `channelContext` are given; `discord.poster` is the poster the test passed, else a new `fakeDiscordPoster()`. A plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
+`fakeDiscord({ ownerId?, rootCommand?, channelContext?, poster?, voice? })` is the `DISCORD` service for a plugin that adds slash commands, reads channel context, posts through `DISCORD.poster` or listens through `DISCORD.voice`: give it as `services: [discord.service]`, read what the plugin added with `discord.added()`, and compose the tree Discord would get with `discord.compose()`; `channelContext` answers `DISCORD.channelContext`, by default with no context.
+Only `commands`, `guard`, `poster`, `channelContext` and `voice` are given; `discord.poster` is the poster the test passed, else a new `fakeDiscordPoster()`, and `DISCORD.voice` is the `voice` the test passed, else `undefined`, as on a host with `discord.voice` off. A plugin that reads another member of `DISCORD` in a test gives its own with `servicePair(DISCORD, { ... })`.
 `fakeDiscordPoster({ idOffset?, now? })` is a `DiscordPoster` in memory: `channels` with their messages, pins and webhook pictures, `directs`, and the knobs a test turns (`closedDirects`, `goneChannels`, `categories`, `forums` (a forum is an entry `{ tags }` here plus a `channels` entry; a forum post is a channel whose `parentId` is the forum, with `appliedTags`), `memberNames`, `hiddenFrom`, `nonMembers`, `pinNotices`, `canReadAuditLog`, `failNext(operation, error)`, `speak`, `personCloses`, `autoArchives`, `personOpens`, `deleteWebhook`, `recreateWebhook`). `messagesIn(channelId)` lists what a channel holds. It keeps the real poster's argument checks and error kinds, a channel's two renames in ten minutes (by `now`) and the 250 pins. `idOffset` moves every id it makes, so test files that share a database never meet the same id.
+`fakeDiscordVoice({ now? })` is a `DiscordVoice` in memory (`FakeDiscordVoice`) that runs the real session logic over a Discord the test drives. Make the channels that exist with `voice.channels.set(channelId, { guildId, kind?, members?, forbidden?, full? })` (a `FakeVoiceChannel`; `kind` is `voice`, `stage` or `text`), and set `voice.available = false` for a Discord that is not connected. `enter(channelId, member)` and `exit(channelId, userId)` move people; `audio(channelId, userId, pcm)` is one frame of someone in the channel speaking (48 kHz 16-bit mono PCM, which a session there hears), `quiet()` lets five seconds pass so every open utterance ends, and `say(channelId, userId, ...frames)` is both: one whole utterance. The fake's clock starts at `now` and moves only with the audio a test feeds and with `quiet()`, so `startedAt` and `endedAt` are the same on every run. `drop(guildId, "removed" | "moved" | "connection_lost")` ends a session from outside and `stop()` as a stopping host does. `voice.joins` lists every join asked for, and `voice.ended` every session that ended with its `reason`, `left` for the plugin's own `leave()`.
 
 ### `testHost`: the built-in plugins and yours, over PostgreSQL
 
@@ -4189,7 +4225,7 @@ It boots `defineRoundtable` over `ROUNDTABLE_TEST_DATABASE_URL`, with stand-ins 
 | `plugins` | Your plugins, placed after the built-in ones as `defineRoundtable` places them |
 | `runtime` | The runtime every turn runs on; by default one that answers `""` and builds no Pi session |
 | `apiKeys` | The credentials `context.apiKey(provider)` returns, by provider name; a provider not listed reads as having none, whatever login the machine holds |
-| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)`, `ownerChannel()`, `channelInfo(channelId)` and `poster` (what `DISCORD.poster` is; by default a `fakeDiscordPoster()`); `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration; give `config: { agents }` and a plugin whose surface declares `agentRooms` to boot an [agent team without Discord](#an-agent-team-without-discord) |
+| `discord` | What the stand-in Discord hands out: `agentChannels(guildId)`, `ownerChannel()`, `channelInfo(channelId)`, `poster` (what `DISCORD.poster` is; by default a `fakeDiscordPoster()`) and `voice` (what `DISCORD.voice` is; by default none); `false` boots a [host without Discord](#a-host-without-discord), with no `discord`, `http`, or `agents` in the test configuration; give `config: { agents }` and a plugin whose surface declares `agentRooms` to boot an [agent team without Discord](#an-agent-team-without-discord) |
 
 It returns:
 
@@ -4908,6 +4944,9 @@ Import from the entries listed below; source area files are internal.
 | `eagerText` | `pi-roundtable/testing` | value |
 | `fakeDiscord` | `pi-roundtable/testing` | value |
 | `fakeDiscordPoster` | `pi-roundtable/testing` | value |
+| `fakeDiscordVoice` | `pi-roundtable/testing` | value |
+| `FakeDiscordVoice` | `pi-roundtable/testing` | type |
+| `FakeVoiceChannel` | `pi-roundtable/testing` | type |
 | `FakeDiscordPoster` | `pi-roundtable/testing` | type |
 | `FakePosterChannel` | `pi-roundtable/testing` | type |
 | `FakeForum` | `pi-roundtable/testing` | type |
@@ -5174,6 +5213,18 @@ Import from the entries listed below; source area files are internal.
 | `ThreadState` | `pi-roundtable/discord` | type |
 | `WebhookCardPost` | `pi-roundtable/discord` | type |
 | `WebhookPost` | `pi-roundtable/discord` | type |
+| `DiscordVoice` | `pi-roundtable/discord` | type |
+| `VOICE_PCM` | `pi-roundtable/discord` | value |
+| `VoiceDisconnectEvent` | `pi-roundtable/discord` | type |
+| `VoiceDisconnectReason` | `pi-roundtable/discord` | type |
+| `VoiceJoinFailure` | `pi-roundtable/discord` | type |
+| `VoiceJoinOptions` | `pi-roundtable/discord` | type |
+| `VoiceJoinResult` | `pi-roundtable/discord` | type |
+| `VoiceMember` | `pi-roundtable/discord` | type |
+| `VoiceMemberEvent` | `pi-roundtable/discord` | type |
+| `VoiceSession` | `pi-roundtable/discord` | type |
+| `VoiceSpeakingEvent` | `pi-roundtable/discord` | type |
+| `VoiceUtterance` | `pi-roundtable/discord` | type |
 | `InteractionContribution` | `pi-roundtable/discord` | type |
 | `InteractionModule` | `pi-roundtable/discord` | type |
 | `ManagedChannel` | `pi-roundtable/discord` | type |

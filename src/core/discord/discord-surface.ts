@@ -59,6 +59,7 @@ import { listenForMessages, reportChanges } from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
 import { showStopPanel } from "./stop-button.ts";
+import { voiceIntents } from "./voice/voice-discord.ts";
 
 const PREFIX = "discord:";
 const TYPING_REFRESH_MS = 8_000;
@@ -76,6 +77,8 @@ export interface DiscordSurfaceOptions {
 	freshMarker?: string | false;
 	/** Asks Discord for the privileged Server Members intent, so `onMemberJoined` hears joins. Default: off. */
 	memberEvents?: boolean;
+	/** Asks Discord for the Guild Voice States intent, which `DISCORD.voice` needs. Default: off. */
+	voice?: boolean;
 	/** What the model is told about how replies render here; `false` tells it nothing. Default: `DISCORD_FORMATTING`. */
 	formatting?: string | false;
 	/** Where the agents' message cards keep their whole texts for the open button; without it a card posts as text. */
@@ -122,6 +125,7 @@ export class DiscordSurface
 				GatewayIntentBits.DirectMessages,
 				GatewayIntentBits.MessageContent,
 				...memberIntents(options.memberEvents),
+				...voiceIntents(options.voice),
 			],
 			partials: [Partials.Channel, Partials.Message],
 			allowedMentions: { parse: [] },

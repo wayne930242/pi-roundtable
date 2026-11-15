@@ -26,6 +26,9 @@ import { commandGuard, ownerRootCommand } from "../discord/owner-command.ts";
 import type { DiscordPoster } from "../discord/poster/poster.ts";
 import { restOf, restPoster } from "../discord/poster/rest-poster.ts";
 import { stopButtonModule } from "../discord/stop-button.ts";
+import type { DiscordVoice } from "../discord/voice/voice.ts";
+import { discordVoiceGateway } from "../discord/voice/voice-discord.ts";
+import { voiceService } from "../discord/voice/voice-service.ts";
 import type { InboundMessage } from "../domain/conversation.ts";
 import { ConfigError } from "../domain/errors.ts";
 import type { FormerChannelOps } from "../plugin-api/agent-ops.ts";
@@ -62,6 +65,12 @@ export interface DiscordServices {
 		message: InboundMessage,
 		options?: ChannelContextOptions,
 	): Promise<ChannelContext | undefined>;
+	/**
+	 * Discord voice: joining a guild's voice channel, muted, to hear each speaker apart. There only
+	 * when the host's `discord.voice` is on; a join before the connection is ready answers
+	 * `unavailable`. See `DiscordVoice`.
+	 */
+	voice?: DiscordVoice;
 }
 
 /** The Discord connection, provided by the Discord plugin. */
@@ -127,6 +136,12 @@ export interface DiscordOptions {
 	 * the connection is refused. Default: off.
 	 */
 	memberEvents?: boolean;
+	/**
+	 * Asks Discord for the Guild Voice States intent (not privileged) and provides `DISCORD.voice`,
+	 * with which a plugin joins a voice channel and hears each speaker. The voice packages are
+	 * loaded as the host starts, and only then. Default: off.
+	 */
+	voice?: boolean;
 	/** What the model is told about how replies render in Discord; `false` tells it nothing. Default: Markdown renders, except tables. */
 	formatting?: string | false;
 	/**
@@ -222,8 +237,16 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					? {}
 					: { formatting: options.formatting }),
 				...(options.memberEvents ? { memberEvents: true } : {}),
+				...(options.voice ? { voice: true } : {}),
 			});
 			surface = connected;
+			// Voice sessions over the same client; nothing of the voice packages is loaded before its service starts.
+			const voice = options.voice
+				? voiceService({
+						gateway: discordVoiceGateway(connected.client(), { logger }),
+						logger,
+					})
+				: undefined;
 			// Joins come only with the Server Members intent, which `memberEvents` asks for.
 			if (options.memberEvents)
 				connected.onMemberJoined((event) => events.memberJoined?.(event));
@@ -277,6 +300,14 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				poster: restPoster(restOf(connected.rest())),
 				channelContext: (message, given) =>
 					connected.channelContext(message, given),
+				...(voice
+					? {
+							voice: {
+								join: (target, given) => voice.join(target, given),
+								session: (guildId) => voice.session(guildId),
+							},
+						}
+					: {}),
 			});
 			// Discord's side of the agent guild: the team's channels and threads as its places, their tools, and the dashboard message.
 			const agentGuild = options.agentGuild
@@ -321,6 +352,16 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 							await intercomTexts.stop();
 						},
 					},
+					// Fails the start when the voice packages cannot be loaded; ends every session as the host stops.
+					...(voice
+						? [
+								{
+									name: "discord-voice",
+									start: () => voice.start(),
+									stop: () => voice.stop(),
+								},
+							]
+						: []),
 				],
 			};
 		},

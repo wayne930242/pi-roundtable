@@ -118,5 +118,19 @@ export {
 	DiscordPosterError,
 	ROLE_LIMITS,
 } from "../core/discord/poster/poster.ts";
+export type {
+	DiscordVoice,
+	VoiceDisconnectEvent,
+	VoiceDisconnectReason,
+	VoiceJoinFailure,
+	VoiceJoinOptions,
+	VoiceJoinResult,
+	VoiceMember,
+	VoiceMemberEvent,
+	VoiceSession,
+	VoiceSpeakingEvent,
+	VoiceUtterance,
+} from "../core/discord/voice/voice.ts";
+export { VOICE_PCM } from "../core/discord/voice/voice.ts";
 export type { OwnerOperations } from "../core/modules/discord-admin/discord-admin.ts";
 export { DISCORD_ADMIN_TOOLS } from "../core/modules/discord-admin/discord-admin.ts";
