@@ -331,6 +331,26 @@ const scenarios: Scenario[] = [
 			expect(lines).toEqual(["Ben"]);
 		},
 	},
+	{
+		name: "14. a listener that leaves when an utterance is cut is handed every frame once",
+		async run(subject) {
+			const { world } = subject;
+			const session = await joined(subject, [ANN], { maxUtteranceMs: 1_000 });
+			/** The first byte of each frame handed over, in order. */
+			const fills: number[] = [];
+			session.onUtterance(({ pcm, continues }) => {
+				for (let at = 0; at < pcm.byteLength; at += 1_920)
+					fills.push(pcm[at] ?? -1);
+				if (continues) void session.leave();
+			});
+			for (let index = 0; index < 60; index++)
+				world.audio(ROOM, ANN.userId, frame(index));
+			expect(session.ended()).toBe("left");
+			// Everything up to the cut, and nothing of it again as the session ends.
+			expect(fills.length).toBeGreaterThanOrEqual(50);
+			expect(fills).toEqual(fills.map((_, index) => index));
+		},
+	},
 ];
 
 /** Runs every scenario over a fresh subject; `make` builds the voice under test and its world. */

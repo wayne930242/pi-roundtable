@@ -162,11 +162,14 @@ export class VoiceSessionState implements VoiceSession {
 		open.bytes += pcm.byteLength;
 		open.lastAt = now;
 		if (open.bytes >= this.#maxBytes) {
-			// The speaker goes on: the next frame carries on from here, in the same breath.
-			this.#deliver(userId, open, true);
+			// The speaker goes on: the next frame carries on from here, in the same breath. The open
+			// utterance is emptied before its audio is handed over, so a listener that ends the session
+			// there is not handed the same audio again.
+			const cut = { ...open };
 			open.chunks = [];
 			open.bytes = 0;
 			open.startedAt = now;
+			this.#deliver(userId, cut, true);
 		}
 	}
 
