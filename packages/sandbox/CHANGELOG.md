@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.49.1] - 2026-11-16
+
+### Fixed
+
+- Sandbox's `channelContext` option now accepts `starter` and `authors`, which its type already allowed but its startup check rejected.
+- Channel context no longer looks up a thread's starter on every turn: it skips the lookup once the starter was handed over and reuses the fetched window's copy when it holds it.
+
 ## [0.49.0] - 2026-11-16
 
 - Release in lockstep with pi-roundtable 0.49.0 (channel context can include a thread's opening message); no package-specific behavior changes.
