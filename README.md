@@ -232,6 +232,7 @@ Tune it under `discord.channelContext`, or set `channelContext: false` to turn i
 | `botMessageChars` | `80` | Where another bot's message is cut |
 | `peerMessageChars` | `4000` | Where a peer bot's message is cut (a bot `discord.peerBots` lists for the channel) |
 | `foreignWebhook` | none | `(webhookId) => boolean \| "skip"`: posts through the webhooks it returns true for are read as other people's messages, not the assistant's; `"skip"` drops a webhook's posts as if absent, without ending the window (code only) |
+| `starter` | `false` | In a thread, always include its opening message (a forum post's first message, or the message a text channel's thread started from), even outside the `fetch` window; subject to the same filters, handed over once, outside `keep` |
 | `attachments` | `{ images: 0, maxBytes: 10 MiB }` | `images`: how many images of the kept messages are fetched for the turn, at most 4 |
 
 By default the assistant ignores every other bot. To let separate bots talk, list the ones to answer by user id under `discord.peerBots`:

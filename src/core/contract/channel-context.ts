@@ -56,6 +56,22 @@ export interface ChannelContextOptions {
 	authors?: (
 		message: ChannelContextSource,
 	) => ChannelContextVerdict | undefined;
+	/**
+	 * Whether a thread's opening message is always part of the context, even when it lies outside
+	 * the `fetch` messages read; default false. In a forum post the opening message is the post's
+	 * first message (its id is the thread's); in a text channel's thread it is the message the
+	 * thread was started from. A thread that has none (a private thread, a deleted starter) or one
+	 * Discord cannot return adds nothing, and never fails the turn; so does any channel that is not
+	 * a thread. The starter is subject to every filter of the other messages: `authors` (or
+	 * `foreignWebhook`) saying `"skip"` or `"end"` for it drops it, as do an empty text, the
+	 * assistant's own post and a message handed over (or addressed to the assistant) before, so it
+	 * comes in the first turn's context and not again. It is also dropped when it is the addressed
+	 * message itself. It comes first, oldest first, outside `keep` (a context may hold `keep` plus
+	 * the starter), is cut at the same limits as another message by its author, and never merges as
+	 * a near repeat; when the window holds it already it is not repeated, and it stays even when
+	 * the assistant's last post lies after it.
+	 */
+	starter?: boolean;
 	/** Which attachments of the kept messages are fetched for the turn; none by default. */
 	attachments?: ChannelContextAttachmentOptions;
 }

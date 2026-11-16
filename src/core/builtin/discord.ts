@@ -281,6 +281,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			const context = new ChannelContextReader({
 				read: (channelId, before, limit) =>
 					connected.messagesBefore(channelId, before, limit),
+				starter: (channelId) => connected.threadStarter(channelId),
 				owners: () => owners.ids(),
 				...(peers
 					? {
