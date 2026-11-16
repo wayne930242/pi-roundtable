@@ -19,9 +19,9 @@ export interface BlockSupport {
 	 */
 	readonly lang?: TextLang;
 	/**
-	 * `false` = the surface's own guidance already says what it cannot do with forms, option
-	 * buttons and checklists, so core adds no line about them. Absent = core adds one whenever the
-	 * surface does not draw every interactive kind.
+	 * `false` = the surface's own guidance already says what becomes of a form, option-button or
+	 * checklist block it does not draw, so core adds no line about them. Absent = core adds one
+	 * whenever the surface does not draw every interactive kind.
 	 */
 	readonly blockNote?: false;
 }
@@ -37,7 +37,9 @@ export interface ChannelSupport extends BlockSupport {
  * channel's `support` lays what differs (a host's room on an app, which draws no blocks). A
  * surface that does not draw every interactive kind (`options`, `suggest`, `form`, `checklist`,
  * `review`) gets a closing line in its `formatting` that says so, so the model does not expect
- * its reader to fill one in. `lang` is the host's language for the text form of a block.
+ * its reader to fill one in. The line speaks of blocks written in a reply and of nothing else:
+ * a tool that asks the user on the surface's own cards, as `ask_user` does, is not a block.
+ * `lang` is the host's language for the text form of a block.
  */
 export function supportOf(
 	surface:
@@ -73,16 +75,18 @@ export function supportOf(
 
 /**
  * What the model is told about the interactive kinds a surface does not draw: none when it draws
- * them all. Such a block reaches the reader as a question to answer by typing.
+ * them all. Such a block reaches the reader as a question to answer by typing. It names blocks
+ * written in a reply only, and says so: read as "this chat has no buttons", it kept a model from
+ * `ask_user`, whose card with buttons the same chat shows.
  */
 function interactiveNote(
 	blocks: readonly BlockKind[] | undefined,
 ): string | undefined {
 	const missing = INTERACTIVE_KINDS.filter((kind) => !blocks?.includes(kind));
 	if (missing.length === 0) return undefined;
-	const cannot =
+	const notDrawn =
 		missing.length === INTERACTIVE_KINDS.length
-			? "forms, option buttons or checklists"
-			: `${missing.map((kind) => `\`${kind}\``).join(", ")} blocks`;
-	return `This chat cannot show ${cannot}. Ask in plain text. If you write such a block anyway, the user sees it as text and answers by typing.`;
+			? "Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply)"
+			: `The display blocks ${missing.map((kind) => `\`${kind}\``).join(", ")}`;
+	return `${notDrawn} are not drawn in this chat: the user sees one as text and answers by typing, so put the question in plain words instead of writing one. This is about blocks written in a reply only: a tool that asks the user, such as ask_user, works as its description says.`;
 }

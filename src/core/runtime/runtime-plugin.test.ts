@@ -249,7 +249,7 @@ describe("the runtime plugin", () => {
 		expect(deps?.formatting?.("chat:quiet")).toBe("Quiet.");
 		// A surface that draws no interactive kind is told so, even with no guidance of its own.
 		expect(deps?.formatting?.("bare:1")).toStartWith(
-			"This chat cannot show forms, option buttons or checklists.",
+			"Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply) are not drawn in this chat:",
 		);
 		expect(deps?.formatting?.("other:1")).toBeUndefined();
 	});

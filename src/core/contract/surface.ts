@@ -143,7 +143,8 @@ export interface ChatSurface {
 	 * text. Absent = none. Listing an interactive kind (`options`, `suggest`, `form`, `checklist`,
 	 * `review`) also promises that the surface hands the reader's answer to the agent as a message
 	 * from them, the way typing it would; a surface that cannot promise that leaves the kind out,
-	 * and core tells the model it cannot show forms, option buttons or checklists (see `blockNote`).
+	 * and core tells the model that such a block written in a reply is not drawn here (see
+	 * `blockNote`), which says nothing against a tool that asks the user, such as `ask_user`.
 	 */
 	readonly blocks?: readonly BlockKind[];
 	/**
@@ -157,9 +158,9 @@ export interface ChatSurface {
 	 */
 	readonly lang?: TextLang;
 	/**
-	 * `false` = this surface's `formatting` already says what it cannot do with forms, option
-	 * buttons and checklists, so core adds no line about them. Absent = core adds one to the
-	 * guidance of a turn when the surface does not draw every interactive kind.
+	 * `false` = this surface's `formatting` already says what becomes of a form, option-button or
+	 * checklist block it does not draw, so core adds no line about them. Absent = core adds one to
+	 * the guidance of a turn when the surface does not draw every interactive kind.
 	 */
 	readonly blockNote?: false;
 	/**

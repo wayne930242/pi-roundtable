@@ -20,7 +20,8 @@ test("a surface's support is its own unless it says a channel differs", () => {
 	expect(supportOf(undefined, "none:1")).toEqual({});
 });
 
-const CANNOT = "This chat cannot show forms, option buttons or checklists.";
+const NOT_DRAWN =
+	"Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply) are not drawn in this chat:";
 
 test("a surface that draws no interactive kind tells the model so, after its own guidance", () => {
 	const guided = supportOf(
@@ -28,10 +29,22 @@ test("a surface that draws no interactive kind tells the model so, after its own
 		"discord:1",
 	);
 	expect(guided.formatting?.startsWith("Markdown renders. ")).toBe(true);
-	expect(guided.formatting).toContain(CANNOT);
+	expect(guided.formatting).toContain(NOT_DRAWN);
 	expect(guided.formatting).toContain("answers by typing");
 	// With no guidance of its own the line is all there is, and a bare surface gets it too.
-	expect(supportOf({}, "bare:1").formatting).toContain(CANNOT);
+	expect(supportOf({}, "bare:1").formatting).toContain(NOT_DRAWN);
+});
+
+test("the line is about blocks written in a reply, and leaves a tool that asks the user alone", () => {
+	const none = supportOf({}, "discord:1").formatting;
+	const some = supportOf({ blocks: ["options", "suggest"] }, "x:1").formatting;
+	for (const formatting of [none, some]) {
+		expect(formatting).toContain("blocks written in a reply only");
+		expect(formatting).toContain("ask_user");
+		// Nothing says the chat has no buttons, or that every question is to be asked in plain text: ask_user posts a card with buttons.
+		expect(formatting).not.toContain("cannot show");
+		expect(formatting).not.toContain("Ask in plain text.");
+	}
 });
 
 test("a surface that draws every interactive kind says nothing about them", () => {
@@ -45,7 +58,7 @@ test("a surface that draws every interactive kind says nothing about them", () =
 
 test("a surface that draws only some interactive kinds names the ones it cannot", () => {
 	const { formatting } = supportOf({ blocks: ["options", "suggest"] }, "x:1");
-	expect(formatting).not.toContain(CANNOT);
+	expect(formatting).not.toContain(NOT_DRAWN);
 	expect(formatting).toContain("form");
 	expect(formatting).toContain("checklist");
 	expect(formatting).toContain("review");
@@ -64,7 +77,7 @@ test("a channel that draws no blocks gets the line even when its surface draws t
 	expect(supportOf(surface, "app:agent.a").formatting).toBe("Tables render.");
 	const host = supportOf(surface, "app:host.1").formatting;
 	expect(host?.startsWith("Markdown only. ")).toBe(true);
-	expect(host).toContain(CANNOT);
+	expect(host).toContain(NOT_DRAWN);
 });
 
 test("a surface whose own guidance covers blocks opts out of the line", () => {
