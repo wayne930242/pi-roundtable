@@ -1,4 +1,5 @@
 import type { TextDisplayBuilder } from "discord.js";
+import type { InboundMessage } from "../contract/channels.ts";
 import type {
 	ApprovedBy,
 	OwnerQuestion,
@@ -45,6 +46,8 @@ export interface LateTurn {
 	/** The server the channel belongs to; absent in a direct message. */
 	guildId?: string;
 	isDirect: boolean;
+	/** The thread the card was posted in, and its parent; absent outside a thread. */
+	thread?: InboundMessage["thread"];
 	text: string;
 }
 
@@ -56,6 +59,8 @@ export interface Answerer {
 	messageId?: string;
 	guildId?: string;
 	isDirect: boolean;
+	/** The thread the card was answered in, and its parent. */
+	thread?: InboundMessage["thread"];
 }
 
 /** One open card: how it looks, and how it ends. */

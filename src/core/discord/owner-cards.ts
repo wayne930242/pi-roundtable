@@ -12,6 +12,7 @@ import type { Logger } from "../kernel/log.ts";
 import { type CardAudienceOptions, CardAudiences } from "./card-audience.ts";
 import { CardCopies, copyReply, offeredCopy } from "./card-copies.ts";
 import { DiscordOwners, discordUser } from "./discord-owners.ts";
+import { threadOf } from "./inbound-message.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import {
 	answerDeferred,
@@ -289,6 +290,7 @@ export class OwnerCards implements InteractionModule {
 							user: by.user,
 							...(by.guildId ? { guildId: by.guildId } : {}),
 							isDirect: by.isDirect,
+							...(by.thread ? { thread: by.thread } : {}),
 							text,
 						});
 					} catch (error) {
@@ -382,11 +384,13 @@ export class OwnerCards implements InteractionModule {
 			return true;
 		}
 		const user = discordUser(interaction);
+		const thread = await threadOf(interaction.channel);
 		const by: Answerer = {
 			user,
 			...(interaction.message ? { messageId: interaction.message.id } : {}),
 			...(interaction.guildId ? { guildId: interaction.guildId } : {}),
 			isDirect: !interaction.inGuild(),
+			...(thread ? { thread } : {}),
 		};
 		// A menu pick or Submit is deferred before the audience is looked up, which may take a while.
 		if (

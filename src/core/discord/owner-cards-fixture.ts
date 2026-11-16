@@ -1,4 +1,4 @@
-import type { Interaction } from "discord.js";
+import { ChannelType, type Interaction } from "discord.js";
 import { CARD_PREFIX, type CardPayload } from "./owner-cards.ts";
 
 /** The primary owner of the cards' tests. */
@@ -53,6 +53,8 @@ export function press(
 		fields?: Record<string, string>;
 		/** Holds `deferUpdate` until it resolves, so the card can change while the press is in flight. */
 		gate?: Promise<void>;
+		/** The thread the card sits in: its parent and the parent's kind. */
+		thread?: { parentId: string; forum: boolean };
 	} = {},
 ) {
 	const replies: string[] = [];
@@ -74,6 +76,17 @@ export function press(
 		inGuild: () => true,
 		guildId: "300000000000000003",
 		message: { id: "400000000000000004" },
+		channel: options.thread
+			? {
+					isThread: () => true,
+					parentId: options.thread.parentId,
+					parent: {
+						type: options.thread.forum
+							? ChannelType.GuildForum
+							: ChannelType.GuildText,
+					},
+				}
+			: null,
 		user: { id: options.user ?? OWNER },
 		member: {
 			roles: { cache: new Map((options.roles ?? []).map((r) => [r, r])) },
