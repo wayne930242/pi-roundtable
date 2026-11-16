@@ -220,7 +220,10 @@ test("options are core's, images are never asked for, even when the option asks"
 		const plain = await serving(true, async () => around(said("1", "x")));
 		try {
 			await plain.host.conversations.handle(message);
-			expect(plain.asked[0]?.options).toEqual({ attachments: { images: 0 } });
+			expect(plain.asked[0]?.options).toEqual({
+				conversation: expect.any(Function),
+				attachments: { images: 0 },
+			});
 		} finally {
 			await plain.done();
 		}
