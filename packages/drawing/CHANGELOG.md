@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.2] - 2026-11-16
+
+- Release in lockstep with pi-roundtable 0.50.2 (late card answer keeps its thread); no package-specific behavior changes.
+
 ## [0.50.1] - 2026-11-16
 
 - Release in lockstep with pi-roundtable 0.50.1 (channel context conversation callback guarded; sandbox refuses it); no package-specific behavior changes.

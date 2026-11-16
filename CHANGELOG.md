@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.2] - 2026-11-16
+
+### Fixed
+
+- A card answered after its turn stopped waiting now starts its late turn with the card's thread (`thread.parentId` and `parentKind`), as the live message there carries it, so a consumer that routes by thread, such as a forum post, handles the late answer the same way as a live one.
+
 ## [0.50.1] - 2026-11-16
 
 ### Fixed
