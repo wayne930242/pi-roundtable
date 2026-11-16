@@ -20,7 +20,8 @@ import { OWNER_SPEAKER, testPlugin } from "./testing.ts";
 
 const TABLES = "Reply formatting (test chat): no Markdown tables.";
 const PLAIN = "Reply formatting (plain chat): plain text only.";
-const CANNOT = "This chat cannot show forms, option buttons or checklists.";
+const NOT_DRAWN =
+	"Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply) are not drawn in this chat:";
 
 /** Every string in a value, in order: the text of the request's system messages, however Pi lays them out. */
 function textOf(value: unknown): string[] {
@@ -246,11 +247,11 @@ test("a surface without guidance adds only the line about forms, and a channel w
 		const bare = await f.promptOn("bare:room");
 		expect(bare).toContain("You are the persona.");
 		expect(bare).not.toContain("Reply formatting");
-		expect(bare).toContain(CANNOT);
+		expect(bare).toContain(NOT_DRAWN);
 		const unserved = await f.promptOn("schedule:nightly");
 		expect(unserved).toContain("You are the persona.");
 		expect(unserved).not.toContain("Reply formatting");
-		expect(unserved).not.toContain(CANNOT);
+		expect(unserved).not.toContain(NOT_DRAWN);
 	} finally {
 		await f.close();
 	}
@@ -289,11 +290,13 @@ test("a turn on a surface that cannot show forms is told so, and one on a surfac
 	try {
 		const onTables = await f.promptOn("tables:room");
 		expect(onTables).toContain(TABLES);
-		expect(onTables).toContain(CANNOT);
-		expect(onTables.indexOf(CANNOT)).toBeGreaterThan(onTables.indexOf(TABLES));
+		expect(onTables).toContain(NOT_DRAWN);
+		expect(onTables.indexOf(NOT_DRAWN)).toBeGreaterThan(
+			onTables.indexOf(TABLES),
+		);
 		const onForms = await f.promptOn("forms:room");
 		expect(onForms).toContain(PLAIN);
-		expect(onForms).not.toContain(CANNOT);
+		expect(onForms).not.toContain(NOT_DRAWN);
 	} finally {
 		await f.close();
 	}

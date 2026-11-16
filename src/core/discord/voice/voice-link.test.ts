@@ -194,6 +194,36 @@ test("a later rejoin that throws is warned, not thrown, and asked for again", as
 	if (answer.ok) await answer.session.leave();
 });
 
+test("a rejoin that throws as a live connection drops is warned, not thrown into the library, and asked for again", async () => {
+	const guildId = "100000000000000016";
+	const subject = await realWorld(guildId);
+	const joining = subject.voice.join({ guildId, channelId: ROOM });
+	await tick();
+	const connection = connectionOf(guildId);
+	ready(connection);
+	const answer = await joining;
+	if (!answer.ok) throw new Error(`join failed: ${answer.failure}`);
+
+	// The main gateway refuses the library's own request, then fails the link's first one.
+	subject.adapter.sends = 0;
+	subject.adapter.send = () => {
+		if (subject.adapter.sends === 2) throw new Error("no shard");
+		return false;
+	};
+	expect(() => socketCloses(connection)).not.toThrow();
+	expect(subject.adapter.sends).toBe(2);
+	expect(
+		subject.logs.lines.filter((line) => line.message === "voice rejoin failed"),
+	).toMatchObject([{ level: "warn", fields: { guildId, reason: "no shard" } }]);
+	subject.adapter.send = () => true;
+	subject.clock.advance(3_000);
+	expect(subject.adapter.sends).toBe(3);
+	expect(connection.state.status).toBe(VoiceConnectionStatus.Signalling);
+	ready(connection);
+	expect(answer.session.ended()).toBeUndefined();
+	await answer.session.leave();
+});
+
 const GUILD = "100000000000000001";
 const speaker = (index: number) => ({
 	userId: String(1_000 + index),

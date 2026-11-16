@@ -95,6 +95,6 @@ test("a host room is told no block guide and draws no block, though the app's ro
 	expect(there?.formatting).not.toContain("`table`");
 	// Core tells the model what a guest's page cannot show.
 	expect(supportOf(surface, host).formatting).toContain(
-		"This chat cannot show forms, option buttons or checklists.",
+		"Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply) are not drawn in this chat:",
 	);
 });

@@ -15,7 +15,7 @@ export type VoiceDisconnectReason =
 	| "left" // the plugin called `leave()`
 	| "removed" // the bot was disconnected from the channel: someone disconnected it, or the channel was deleted
 	| "moved" // someone moved the bot to another channel; a session never follows
-	| "connection_lost" // the voice connection dropped and did not come back within the resume time
+	| "connection_lost" // the voice connection dropped and did not come back within the resume time, or it heard nothing while someone spoke and neither setting it up again nor rejoining the channel brought the audio back
 	| "stopped"; // the host is stopping
 
 /** Someone in a voice channel. */

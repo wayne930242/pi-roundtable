@@ -38,6 +38,8 @@ export interface VoiceLinkHandlers {
 	status(status: VoiceLinkStatus): void;
 	/** One decoded frame of a speaker, in the `VOICE_PCM` format, which the link keeps no reference to. */
 	frame(userId: string, pcm: Uint8Array): void;
+	/** Whether the user is a person in the channel, not a bot; with no user, whether any person is. */
+	person(userId?: string): boolean;
 }
 
 /** One voice connection: the bot in a channel, muted and not deafened. */
@@ -47,6 +49,12 @@ export interface VoiceLink {
 	listen(handlers: VoiceLinkHandlers): void;
 	/** Someone left the channel: what the link kept to hear them is freed, and made again if they are heard after all. */
 	forget(userId: string): void;
+	/**
+	 * Whether the bot's leaving the channel, as the gateway now reports it, is the link's own on
+	 * its way to join again, as it does for a speaker it does not hear. True once for each such leave: a second one before the link is back
+	 * is someone removing the bot.
+	 */
+	leftItself(): boolean;
 	/** Leaves the channel and frees the decoders; does nothing the second time. */
 	close(): void;
 }
@@ -61,6 +69,11 @@ export interface VoiceGateway {
 	channel(channelId: string): Promise<VoiceChannelFacts | "gone" | "forbidden">;
 	/** Reports every voice channel change in every guild. */
 	onVoiceState(listener: (change: VoiceStateChange) => void): void;
+	/**
+	 * Reports each time the gateway connection is up again, resumed or identified anew: who is in
+	 * a channel may have changed meanwhile with no word of it.
+	 */
+	onReady(listener: () => void): void;
 	/** Loads what a connection needs, so a host that cannot hear fails as it starts. */
 	prepare(): Promise<void>;
 	/** Opens the voice connection; rejects when it cannot be opened at all. */
@@ -169,9 +182,9 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 	};
 
 	/**
-	 * A dropped connection is back: who is in the channel is read again, and whoever left or
-	 * entered meanwhile is reported now. A gateway that had to identify again is sent the guild's
-	 * voice states anew, with no word of what changed.
+	 * A dropped connection is back, the voice one or the gateway's: who is in the channel is read
+	 * again, and whoever left or entered meanwhile is reported now. A gateway that had to identify
+	 * again is sent the guild's voice states anew, with no word of what changed.
 	 */
 	const reread = async (entry: Joined): Promise<void> => {
 		const { session } = entry;
@@ -190,6 +203,11 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 		}
 	};
 
+	// A gateway that identified again holds the guild's voice states anew, whatever the voice connection did meanwhile.
+	gateway.onReady(() => {
+		for (const entry of [...joined.values()]) void reread(entry);
+	});
+
 	gateway.onVoiceState((change) => {
 		const entry = joined.get(change.guildId);
 		if (!entry) return;
@@ -197,6 +215,8 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 		if (change.userId === gateway.botId()) {
 			// Its own way into the channel is the join's to wait for.
 			if (!entry.open || change.channelId === session.channelId) return;
+			// A link that left to join again, for a speaker it does not hear, was not removed.
+			if (change.channelId === undefined && entry.link?.leftItself()) return;
 			return end(entry, change.channelId === undefined ? "removed" : "moved");
 		}
 		if (change.channelId === session.channelId)
@@ -219,6 +239,14 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 					onStatus(entry, status);
 				},
 				frame: (userId, pcm) => entry.session.frame(userId, pcm),
+				person: (userId) =>
+					entry.session
+						.members()
+						.some(
+							(member) =>
+								!member.bot &&
+								(userId === undefined || member.userId === userId),
+						),
 			});
 			settle(link.status());
 		});

@@ -150,6 +150,18 @@ export function discordVoiceGateway(
 				}
 			});
 		},
+		onReady(listener) {
+			const ready = () => {
+				try {
+					listener();
+				} catch (error) {
+					logger.error({ err: error }, "voice gateway handler failed");
+				}
+			};
+			// Ready once the shard has its guilds again, so their voice states are the new ones.
+			client.on(Events.ShardReady, ready);
+			client.on(Events.ShardResume, ready);
+		},
 		async prepare() {
 			await loaded();
 		},
@@ -164,6 +176,9 @@ export function discordVoiceGateway(
 				decoder,
 				logger,
 				...(options.clock ? { clock: options.clock } : {}),
+				deafened: () =>
+					guild.voiceStates.cache.get(client.user?.id ?? "")?.serverDeaf ===
+					true,
 			});
 		},
 	};

@@ -5,6 +5,7 @@ import type {
 } from "@discordjs/voice";
 import type { Logger } from "../../kernel/log.ts";
 import { systemClock, type VoiceClock } from "./voice-clock.ts";
+import { hearingTaps, hearingWatch, networkingOf } from "./voice-hearing.ts";
 import type {
 	VoiceLink,
 	VoiceLinkHandlers,
@@ -99,6 +100,11 @@ export interface VoiceLinkOptions {
 	logger: Logger;
 	/** What the rejoin attempts wait by. Default: the host's clock. */
 	clock?: VoiceClock;
+	/**
+	 * Whether a moderator deafened the bot in the guild. Discord then sends it no audio, so a
+	 * speaker it does not hear is no fault of the connection. Default: never.
+	 */
+	deafened?: () => boolean;
 }
 
 /**
@@ -152,8 +158,12 @@ function linkOver(
 	let closed = false;
 	/** The timer of the next rejoin, while the last one was refused. */
 	let rejoin: unknown;
-	/** Whether a rejoin is being asked for right now. */
-	let rejoining = false;
+	/** Whether the connection is being asked for something right now, which it reports as a state change before it answers. */
+	let asking = false;
+	/** Whether the link itself left the channel to join it again, and the gateway has yet to report that leave. */
+	let leaving = false;
+	/** The networking the connection was last ready over: ready over it again is a resume, over another a new media path. */
+	let path: object | undefined;
 
 	const statusOf = (state: VoiceConnectionState): VoiceLinkStatus => {
 		if (state.status === Status.Ready) return "ready";
@@ -167,7 +177,7 @@ function linkOver(
 	 */
 	const recover = (state: VoiceConnectionState): void => {
 		// `rejoin()` reports its own outcome as a state change before it answers: that one is not a drop to recover from.
-		if (rejoining) return;
+		if (asking) return;
 		clock.clearTimeout(rejoin);
 		rejoin = undefined;
 		if (closed || state.status !== Status.Disconnected) return;
@@ -176,17 +186,22 @@ function linkOver(
 			state.closeCode === DISCONNECTED;
 		if (refused) return;
 		let carried: boolean;
-		rejoining = true;
+		asking = true;
 		try {
-			carried = connection.rejoin();
+			// The link's own channel, which the connection no longer names once the link left it to join again.
+			carried = connection.rejoin({
+				channelId,
+				selfDeaf: false,
+				selfMute: true,
+			});
 		} finally {
-			rejoining = false;
+			asking = false;
 		}
 		if (carried) return;
 		rejoin = clock.setTimeout(() => retry(), REJOIN_MS);
 	};
 
-	/** A later rejoin that throws is a refused one: warned, no audio, asked for again. */
+	/** A rejoin that throws, after the join itself, is a refused one: warned, no audio, asked for again. */
 	const retry = (): void => {
 		try {
 			recover(connection.state);
@@ -279,9 +294,74 @@ function linkOver(
 		});
 	};
 
+	/** What the connection is asked for a link that does not hear; a failure is warned and never thrown into the watch's timer. */
+	const attempt = (what: string, run: () => void): void => {
+		asking = true;
+		try {
+			run();
+		} catch (error) {
+			logger.warn(
+				{
+					guildId,
+					channelId,
+					reason: error instanceof Error ? error.message : String(error),
+				},
+				`voice ${what} failed`,
+			);
+		} finally {
+			asking = false;
+		}
+	};
+	const watch = hearingWatch({
+		clock,
+		logger,
+		fields: { guildId, channelId },
+		person: (userId) => handlers?.person(userId) ?? false,
+		deafened: () => options.deafened?.() ?? false,
+		rebuild: () => {
+			const before = networkingOf(connection.state);
+			attempt("networking", () => connection.configureNetworking());
+			return networkingOf(connection.state) !== before;
+		},
+		rejoin: () => {
+			leaving = true;
+			// Leaves the channel; `retry` then finds the connection disconnected and asks for the channel again.
+			attempt("leave", () => connection.disconnect());
+			retry();
+		},
+		giveUp: () => {
+			attempt("leave", close);
+			// A connection that could not be destroyed reports nothing: the session ends all the same.
+			if (connection.state.status !== Status.Destroyed)
+				attempt("leave", () => handlers?.status("closed"));
+		},
+	});
+	const taps = hearingTaps(connection, watch);
+	/** The watch is told when the connection can hear: over a new media path, or the one it had. */
+	const heardOver = (
+		before: VoiceConnectionState,
+		state: VoiceConnectionState,
+	): void => {
+		if (state.status !== Status.Ready) {
+			if (before.status === Status.Ready) watch.down();
+			return;
+		}
+		if (before.status === Status.Ready) return;
+		leaving = false;
+		const networking = networkingOf(state);
+		if (networking !== undefined && networking === path) {
+			watch.resumed();
+			return;
+		}
+		path = networking;
+		watch.up();
+	};
+
 	connection.receiver.speaking.on("start", hear);
-	connection.on("stateChange", (_before, state) => {
-		recover(state);
+	connection.on("stateChange", (before, state) => {
+		taps.follow(state);
+		heardOver(before, state);
+		retry();
 		if (state.status === Status.Destroyed) release();
 		handlers?.status(statusOf(state));
 	});
@@ -293,6 +373,8 @@ function linkOver(
 		if (closed) return;
 		closed = true;
 		clock.clearTimeout(rejoin);
+		watch.stop();
+		taps.stop();
 		connection.receiver.speaking.off("start", hear);
 		for (const stream of connection.receiver.subscriptions.values())
 			stream.destroy();
@@ -306,6 +388,19 @@ function linkOver(
 			);
 	};
 
+	const close = (): void => {
+		release();
+		// Tells Discord the bot left the channel; reports `closed` through the state change.
+		if (connection.state.status !== Status.Destroyed) connection.destroy();
+	};
+
+	taps.follow(connection.state);
+	// A connection the library already had ready is heard over the networking it has.
+	if (connection.state.status === Status.Ready) {
+		path = networkingOf(connection.state);
+		watch.up();
+	}
+	// The join's own first request is not caught: a connection whose setup throws is not joined.
 	recover(connection.state);
 	return {
 		status: () => (closed ? "closed" : statusOf(connection.state)),
@@ -313,10 +408,11 @@ function linkOver(
 			handlers = given;
 		},
 		forget,
-		close: () => {
-			release();
-			// Tells Discord the bot left the channel; reports `closed` through the state change.
-			if (connection.state.status !== Status.Destroyed) connection.destroy();
+		leftItself: () => {
+			if (!leaving || closed) return false;
+			leaving = false;
+			return true;
 		},
+		close,
 	};
 }

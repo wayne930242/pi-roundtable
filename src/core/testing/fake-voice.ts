@@ -122,6 +122,7 @@ export function fakeDiscordVoice(
 			onVoiceState: (listener) => {
 				report = listener;
 			},
+			onReady: () => undefined,
 			prepare: async () => undefined,
 			connect: async ({ guildId, channelId }) => {
 				let status: VoiceLinkStatus = "ready";
@@ -136,6 +137,7 @@ export function fakeDiscordVoice(
 						link.handlers = handlers;
 					},
 					forget: () => undefined,
+					leftItself: () => false,
 					close: () => {
 						status = "closed";
 						if (links.get(guildId) === link) links.delete(guildId);
