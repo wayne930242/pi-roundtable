@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.50.2] - 2026-11-16
+
+- Release in lockstep with pi-roundtable 0.50.2 (late card answer keeps its thread); no package-specific behavior changes.
+
 ## [0.50.1] - 2026-11-16
 
 ### Fixed
