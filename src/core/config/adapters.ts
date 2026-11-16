@@ -191,6 +191,7 @@ const channelContextShape = shape({
 	messageChars: optional(integer(1, 4000)),
 	botMessageChars: optional(integer(1, 4000)),
 	peerMessageChars: optional(integer(1, 4000)),
+	starter: optional(bool),
 	foreignWebhook: optional(
 		guarded(
 			"a function of a webhook id",

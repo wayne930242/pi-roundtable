@@ -36,15 +36,13 @@ import type { MemberJoinedEvent } from "../plugin-api/event-types.ts";
 import { chunksFor } from "../presentation/reply-chunks.ts";
 import { threadsOfHost } from "../threads/host-threads.ts";
 import { DiscordAgentChannels, DiscordDashboard } from "./agent-discord.ts";
-import {
-	type ContextSourceMessage,
-	contextSourceOf,
-} from "./channel-context.ts";
+import type { ContextSourceMessage } from "./channel-context.ts";
 import { discordChannelExecutor } from "./channel-executor.ts";
 import { channelInfoOf } from "./channel-info.ts";
 import type { ChannelExecutor } from "./channel-operations.ts";
 import type { ComposedCommands } from "./compose-commands.ts";
 import type { ChannelInfo, DiscordConnection } from "./connection.ts";
+import { readMessagesBefore, readThreadStarter } from "./context-reading.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
@@ -202,22 +200,21 @@ export class DiscordSurface
 	 * direct message or a channel that holds no messages. Throws while the connection is not ready
 	 * or when Discord refuses, such as for a channel the bot cannot read.
 	 */
-	async messagesBefore(
+	messagesBefore(
 		channelId: string,
 		before: string,
 		limit: number,
 	): Promise<ContextSourceMessage[] | undefined> {
-		if (!this.#client.isReady()) throw new Error("Discord is not connected");
-		const channel = await this.#client.channels.fetch(channelId);
-		if (!channel?.isTextBased() || channel.isDMBased()) return undefined;
-		const fetched = await channel.messages.fetch({ before, limit });
-		const self = {
-			botId: this.#client.user.id,
-			applicationId: this.#client.application.id,
-		};
-		return [...fetched.values()].map((message) =>
-			contextSourceOf(message, self),
-		);
+		return readMessagesBefore(this.#client, channelId, before, limit);
+	}
+
+	/**
+	 * A thread's opening message, as channel context reads it; undefined for a channel that is not
+	 * a thread and for a thread without one. Throws while the connection is not ready or when
+	 * Discord refuses.
+	 */
+	threadStarter(channelId: string): Promise<ContextSourceMessage | undefined> {
+		return readThreadStarter(this.#client, channelId);
 	}
 
 	/** Reports deleted server channels by id; register before start. */
