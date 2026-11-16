@@ -160,8 +160,8 @@ function linkOver(
 	let rejoin: unknown;
 	/** Whether the connection is being asked for something right now, which it reports as a state change before it answers. */
 	let asking = false;
-	/** Whether the link itself left the channel to join it again, until it is back. */
-	let away = false;
+	/** Whether the link itself left the channel to join it again, and the gateway has yet to report that leave. */
+	let leaving = false;
 	/** The networking the connection was last ready over: ready over it again is a resume, over another a new media path. */
 	let path: object | undefined;
 
@@ -324,7 +324,7 @@ function linkOver(
 			return networkingOf(connection.state) !== before;
 		},
 		rejoin: () => {
-			away = true;
+			leaving = true;
 			// Leaves the channel; `retry` then finds the connection disconnected and asks for the channel again.
 			attempt("leave", () => connection.disconnect());
 			retry();
@@ -347,7 +347,7 @@ function linkOver(
 			return;
 		}
 		if (before.status === Status.Ready) return;
-		away = false;
+		leaving = false;
 		const networking = networkingOf(state);
 		if (networking !== undefined && networking === path) {
 			watch.resumed();
@@ -408,7 +408,11 @@ function linkOver(
 			handlers = given;
 		},
 		forget,
-		away: () => away && !closed,
+		leftItself: () => {
+			if (!leaving || closed) return false;
+			leaving = false;
+			return true;
+		},
 		close,
 	};
 }

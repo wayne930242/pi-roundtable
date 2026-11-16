@@ -86,7 +86,9 @@ function interactiveNote(
 	if (missing.length === 0) return undefined;
 	const notDrawn =
 		missing.length === INTERACTIVE_KINDS.length
-			? "Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply)"
-			: `The display blocks ${missing.map((kind) => `\`${kind}\``).join(", ")}`;
-	return `${notDrawn} are not drawn in this chat: the user sees one as text and answers by typing, so put the question in plain words instead of writing one. This is about blocks written in a reply only: a tool that asks the user, such as ask_user, works as its description says.`;
+			? "Display blocks that ask for input (a form, option buttons or a checklist written as a fenced block in a reply) are"
+			: missing.length === 1
+				? `The display block \`${missing[0]}\` is`
+				: `The display blocks ${missing.map((kind) => `\`${kind}\``).join(", ")} are`;
+	return `${notDrawn} not drawn in this chat: the user sees one as text and answers by typing, so put the question in plain words instead of writing one. This is about blocks written in a reply only: a tool that asks the user, such as ask_user, works as its description says.`;
 }

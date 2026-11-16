@@ -137,7 +137,7 @@ export function fakeDiscordVoice(
 						link.handlers = handlers;
 					},
 					forget: () => undefined,
-					away: () => false,
+					leftItself: () => false,
 					close: () => {
 						status = "closed";
 						if (links.get(guildId) === link) links.delete(guildId);

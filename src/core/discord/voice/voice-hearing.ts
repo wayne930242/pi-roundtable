@@ -66,7 +66,10 @@ export interface HearingWatch {
 	down(): void;
 	/** The voice socket says the user is speaking. */
 	speaking(userId: string): void;
-	/** An audio datagram arrived; `named` is whether the voice socket said whose it is. */
+	/**
+	 * An audio datagram arrived; `named` is whether the voice socket said whose it is. Only a named
+	 * one is heard: the receiver hands nobody the audio of a speaker it cannot name.
+	 */
 	audio(named: boolean): void;
 	stop(): void;
 }
@@ -75,7 +78,7 @@ export interface HearingWatch {
  * Watches whether a link hears, and remedies a link that does not: first the media path is set
  * up again, which nobody in the channel notices; a speaker still not heard 10 s later has the
  * bot leave the channel and join it again; a speaker not heard after that closes the link.
- * A datagram ends it all. Silence alone goes no further than the first remedy, and that one
+ * A datagram of a speaker the voice socket named ends it all. Silence alone goes no further than the first remedy, and that one
  * only after a resume: a quiet channel is never left, and never closed.
  */
 export function hearingWatch(options: HearingOptions): HearingWatch {
@@ -84,7 +87,7 @@ export function hearingWatch(options: HearingOptions): HearingWatch {
 	let stopped = false;
 	/** When the media path came up or was resumed. */
 	let since = 0;
-	/** When the media path last carried audio. */
+	/** When the media path last carried audio of a speaker the voice socket named. */
 	let lastAudioAt: number | undefined;
 	/** How long the media path had carried none when the connection last stopped being ready; undefined when it never had. */
 	let quietAtDrop: number | undefined;
@@ -94,8 +97,10 @@ export function hearingWatch(options: HearingOptions): HearingWatch {
 	let remedies: 0 | 1 | 2 = 0;
 	/** Whether someone was said to speak and was not heard, since audio was last heard. */
 	let evidenced = false;
-	/** Datagrams of speakers the voice socket has not named, on this media path. */
+	/** Datagrams of speakers the voice socket has not named, since the media path came up or was resumed. */
 	let unnamed = 0;
+	/** When someone was first said to speak while the first remedy is waited on: its 10 s are not cut short for them. */
+	let saidAt: number | undefined;
 	/** The one deadline that runs: for a datagram after a speaking state or a resume, or after a remedy. */
 	let timer: unknown;
 	let waitsFor: "speaking" | "resume" | "remedy" | undefined;
@@ -154,8 +159,19 @@ export function hearingWatch(options: HearingOptions): HearingWatch {
 			remedy("speaking");
 		} else if (what === "resume") remedy("resume");
 		// A remedy brought no audio in its time: the next one is for a speaker, never for silence.
-		else if (evidenced && remedies === 1) remedy("speaking");
-		else
+		else if (remedies === 1 && (evidenced || saidAt !== undefined)) {
+			// Someone named while it was waited on has their own 2 s to be heard, like anyone.
+			const left =
+				evidenced || saidAt === undefined
+					? 0
+					: SPEAKING_PROOF_MS - (clock.now() - saidAt);
+			saidAt = undefined;
+			if (left > 0) arm("speaking", left);
+			else {
+				evidenced = true;
+				remedy("speaking");
+			}
+		} else
 			logger.warn(
 				{ ...fields, remedies },
 				"voice has heard nothing since its remedy",
@@ -168,11 +184,13 @@ export function hearingWatch(options: HearingOptions): HearingWatch {
 			since = clock.now();
 			lastAudioAt = undefined;
 			unnamed = 0;
+			saidAt = undefined;
 			if (remedies > 0) arm("remedy", VERIFY_MS);
 		},
 		resumed() {
 			ready = true;
 			since = clock.now();
+			unnamed = 0;
 			if (remedies > 0) {
 				arm("remedy", VERIFY_MS);
 				return;
@@ -188,22 +206,38 @@ export function hearingWatch(options: HearingOptions): HearingWatch {
 				heardAway = false;
 			}
 			ready = false;
+			saidAt = undefined;
 			disarm();
 		},
 		speaking(userId) {
 			if (stopped || !ready || waitsFor === "speaking") return;
 			if (clock.now() - since < SETTLE_MS || !options.person(userId)) return;
 			if (options.deafened()) return;
+			const now = clock.now();
+			// The word of a speaker can come after their audio: the voice socket resends what it lost, a
+			// datagram is never resent. Whoever was heard this shortly before is no evidence of deafness.
+			if (lastAudioAt !== undefined && now - lastAudioAt < SPEAKING_PROOF_MS)
+				return;
+			// The first remedy keeps its time: the speaker is weighed when it is over.
+			if (waitsFor === "remedy" && remedies === 1) {
+				saidAt ??= now;
+				return;
+			}
 			arm("speaking", SPEAKING_PROOF_MS);
 		},
 		audio(named) {
+			// Audio nobody is handed is not hearing: it ends no deadline and no remedy.
+			if (!named) {
+				if (++unnamed === UNNAMED_DATAGRAMS)
+					logger.warn(
+						{ ...fields, datagrams: unnamed },
+						"voice audio arrives from a speaker the voice socket has not named",
+					);
+				return;
+			}
 			lastAudioAt = clock.now();
 			if (!ready) heardAway = true;
-			if (!named && ++unnamed === UNNAMED_DATAGRAMS)
-				logger.warn(
-					{ ...fields, datagrams: unnamed },
-					"voice audio arrives from a speaker the voice socket has not named",
-				);
+			saidAt = undefined;
 			if (timer !== undefined) disarm();
 			if (remedies === 0) return;
 			logger.info({ ...fields, remedies }, "voice hears again");

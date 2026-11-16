@@ -65,6 +65,21 @@ test("a surface that draws only some interactive kinds names the ones it cannot"
 	expect(formatting).not.toContain("options");
 });
 
+test("one kind that is not drawn is named in the singular", () => {
+	const { formatting } = supportOf(
+		{ blocks: ["options", "suggest", "form", "checklist"] },
+		"x:1",
+	);
+	expect(formatting).toStartWith(
+		"The display block `review` is not drawn in this chat:",
+	);
+	expect(
+		supportOf({ blocks: ["options", "suggest", "form"] }, "x:1").formatting,
+	).toStartWith(
+		"The display blocks `checklist`, `review` are not drawn in this chat:",
+	);
+});
+
 test("a channel that draws no blocks gets the line even when its surface draws them", () => {
 	const surface = {
 		formatting: "Tables render.",

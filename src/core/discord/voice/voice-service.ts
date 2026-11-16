@@ -50,11 +50,11 @@ export interface VoiceLink {
 	/** Someone left the channel: what the link kept to hear them is freed, and made again if they are heard after all. */
 	forget(userId: string): void;
 	/**
-	 * Whether the link itself left the channel and is joining it again, as it does for a speaker
-	 * it does not hear: the bot's leaving is then nobody's doing, and its `status()` is
-	 * `reconnecting` until it is back.
+	 * Whether the bot's leaving the channel, as the gateway now reports it, is the link's own on
+	 * its way to join again, as it does for a speaker it does not hear. True once for each such leave: a second one before the link is back
+	 * is someone removing the bot.
 	 */
-	away(): boolean;
+	leftItself(): boolean;
 	/** Leaves the channel and frees the decoders; does nothing the second time. */
 	close(): void;
 }
@@ -216,7 +216,7 @@ export function voiceService(options: VoiceServiceOptions): VoiceService {
 			// Its own way into the channel is the join's to wait for.
 			if (!entry.open || change.channelId === session.channelId) return;
 			// A link that left to join again, for a speaker it does not hear, was not removed.
-			if (change.channelId === undefined && entry.link?.away()) return;
+			if (change.channelId === undefined && entry.link?.leftItself()) return;
 			return end(entry, change.channelId === undefined ? "removed" : "moved");
 		}
 		if (change.channelId === session.channelId)
