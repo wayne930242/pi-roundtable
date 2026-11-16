@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { VoiceConnectionStatus } from "@discordjs/voice";
-import { GatewayIntentBits } from "discord.js";
+import { Events, GatewayIntentBits } from "discord.js";
 import type { VoiceSession } from "./voice.ts";
 import {
 	type DiscordVoiceWorld,
@@ -167,6 +167,32 @@ test("when a drop comes back, who is in the channel is read again, and whoever l
 	expect(session.members()).toEqual([BEN, CAL]);
 	expect(subject.decoders).toEqual({ made: 1, freed: 1 });
 	expect(session.ended()).toBeUndefined();
+});
+
+test("when the gateway is ready again or resumed, who is in the channel is read again, though the voice connection never dropped", async () => {
+	const subject = discordVoiceWorld();
+	const session = await joined(subject);
+	const lines: string[] = [];
+	session.onMember(({ kind, member }) =>
+		lines.push(`${kind} ${member.displayName}`),
+	);
+	// The gateway identified again: the guild's voice states are sent anew, with no word of what changed.
+	subject.resync(ROOM, [BEN, CAL]);
+	subject.client.emit(Events.ShardReady, 0, undefined);
+	await tick();
+	expect(lines).toEqual(["left Ann", "joined Cal"]);
+	subject.resync(ROOM, [CAL]);
+	subject.client.emit(Events.ShardResume, 0, 0);
+	await tick();
+	expect(lines).toEqual(["left Ann", "joined Cal", "left Ben"]);
+	expect(session.members()).toEqual([CAL]);
+	expect(session.ended()).toBeUndefined();
+	// A session that ended is read no more.
+	await session.leave();
+	subject.resync(ROOM, [ANN]);
+	subject.client.emit(Events.ShardReady, 0, undefined);
+	await tick();
+	expect(lines).toEqual(["left Ann", "joined Cal", "left Ben"]);
 });
 
 test("a channel that cannot be read again after a drop is logged, and the session goes on with who it knew", async () => {

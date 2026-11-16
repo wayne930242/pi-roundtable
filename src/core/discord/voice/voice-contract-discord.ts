@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import {
-	AudioReceiveStream,
+	type DiscordGatewayAdapterLibraryMethods,
 	EndBehaviorType,
 	type JoinVoiceChannelOptions,
 	VoiceConnectionDisconnectReason,
@@ -20,6 +20,7 @@ import {
 import type { VoiceMember } from "./voice.ts";
 import { type ManualVoiceClock, manualVoiceClock } from "./voice-clock.ts";
 import type { VoiceSubject, VoiceWorld } from "./voice-contract.ts";
+import { StubConnection } from "./voice-contract-connection.ts";
 import { discordVoiceGateway } from "./voice-discord.ts";
 import type { OpusDecoder, VoiceLib } from "./voice-link.ts";
 import { type VoiceService, voiceService } from "./voice-service.ts";
@@ -32,125 +33,6 @@ const BOT = "900000000000000001";
 
 type ChannelSpec = Parameters<VoiceWorld["channel"]>[1];
 
-/** The state of a stand-in connection, as @discordjs/voice shapes it. */
-interface StubState {
-	status: VoiceConnectionStatus;
-	reason?: VoiceConnectionDisconnectReason;
-	closeCode?: number;
-}
-
-/** A receive stream that hands a packet on at once, where the library's own starts on the next tick. */
-class StubStream extends EventEmitter {
-	destroyed = false;
-	destroy(error?: Error): void {
-		if (this.destroyed) return;
-		this.destroyed = true;
-		if (error) this.emit("error", error);
-		this.emit("close");
-	}
-}
-
-/** A voice connection a test drives: its state, the packets it hears, and what the link asked of it. */
-export class StubConnection extends EventEmitter {
-	state: StubState = { status: VoiceConnectionStatus.Signalling };
-	readonly joinConfig: JoinVoiceChannelOptions;
-	/** How often the link asked to join again. */
-	rejoins = 0;
-	/** What `rejoin()` answers: whether the main gateway carried the request. */
-	carries = true;
-	readonly receiver: {
-		speaking: EventEmitter;
-		subscriptions: Map<string, StubStream | AudioReceiveStream>;
-		subscribe(userId: string): StubStream | AudioReceiveStream;
-	};
-	readonly #onDestroy: () => void;
-
-	constructor(
-		joinConfig: JoinVoiceChannelOptions,
-		realStreams: boolean,
-		onDestroy: () => void,
-	) {
-		super();
-		this.joinConfig = joinConfig;
-		this.#onDestroy = onDestroy;
-		const subscriptions = new Map<string, StubStream | AudioReceiveStream>();
-		this.receiver = {
-			speaking: new EventEmitter(),
-			subscriptions,
-			subscribe: (userId) => {
-				const stream = realStreams
-					? new AudioReceiveStream({
-							end: { behavior: EndBehaviorType.Manual },
-						})
-					: new StubStream();
-				const closes: EventEmitter = stream;
-				closes.once("close", () => subscriptions.delete(userId));
-				subscriptions.set(userId, stream);
-				return stream;
-			},
-		};
-	}
-
-	to(state: StubState): void {
-		const before = this.state;
-		this.state = state;
-		this.emit("stateChange", before, state);
-	}
-
-	ready(): void {
-		this.to({ status: VoiceConnectionStatus.Ready });
-	}
-
-	/** The connection drops: with 4014 Discord disconnected the bot, otherwise the main gateway could not carry it. */
-	disconnected(closeCode?: number): void {
-		this.to(
-			closeCode === undefined
-				? {
-						status: VoiceConnectionStatus.Disconnected,
-						reason: VoiceConnectionDisconnectReason.AdapterUnavailable,
-					}
-				: {
-						status: VoiceConnectionStatus.Disconnected,
-						reason: VoiceConnectionDisconnectReason.WebSocketClose,
-						closeCode,
-					},
-		);
-	}
-
-	/** As the library's: a request the main gateway refuses leaves the connection disconnected, and says so before it answers. */
-	rejoin(): boolean {
-		if (this.state.status === VoiceConnectionStatus.Destroyed) return false;
-		const notReady = this.state.status !== VoiceConnectionStatus.Ready;
-		if (notReady) this.rejoins++;
-		if (this.carries) {
-			if (notReady) this.to({ status: VoiceConnectionStatus.Signalling });
-			return true;
-		}
-		this.to({
-			status: VoiceConnectionStatus.Disconnected,
-			reason: VoiceConnectionDisconnectReason.AdapterUnavailable,
-		});
-		return false;
-	}
-
-	destroy(): void {
-		if (this.state.status === VoiceConnectionStatus.Destroyed)
-			throw new Error(
-				"Cannot destroy VoiceConnection - it has already been destroyed",
-			);
-		this.to({ status: VoiceConnectionStatus.Destroyed });
-		this.#onDestroy();
-	}
-
-	/** One packet of a speaker arrives, as the receiver hands it on: the speaking map first, then their stream. */
-	packet(userId: string, packet: Uint8Array): void {
-		this.receiver.speaking.emit("start", userId);
-		const stream = this.receiver.subscriptions.get(userId);
-		if (stream instanceof AudioReceiveStream) stream.push(Buffer.from(packet));
-		else stream?.emit("data", packet);
-	}
-}
-
 export interface DiscordVoiceWorld extends VoiceSubject {
 	voice: VoiceService;
 	clock: ManualVoiceClock;
@@ -158,10 +40,23 @@ export interface DiscordVoiceWorld extends VoiceSubject {
 	client: Client;
 	/** Every connection the stand-in `joinVoiceChannel` made, in order; none with the library itself. */
 	connections: StubConnection[];
+	/** Whether a moderator deafened the bot in its guild: Discord then sends it no audio. */
+	deafened: boolean;
 	/** Who is in a channel changes with no word of it, as when the gateway identifies again and is sent the guild's voice states anew. */
 	resync(channelId: string, members: VoiceMember[]): void;
-	/** The main gateway as a voice connection of the library itself sees it: how many payloads it was given, and `send` answers whether it carried one. */
-	adapter: { sends: number; send: () => boolean };
+	/**
+	 * The main gateway as a voice connection of the library itself sees it: how many payloads it
+	 * was given, `send` answers whether it carried one, and `carried` is told each one it did, with
+	 * what the library hears the gateway's answer through.
+	 */
+	adapter: {
+		sends: number;
+		send: () => boolean;
+		carried?: (
+			payload: { d: { channel_id: string | null } },
+			methods: DiscordGatewayAdapterLibraryMethods,
+		) => void;
+	};
 	/** How often the voice library and the decoders were loaded. */
 	loads: { lib: number; decoders: number };
 	/** How many decoders were made and freed. */
@@ -194,8 +89,12 @@ export function discordVoiceWorld(
 	const loads = { lib: 0, decoders: 0 };
 	const decoders = { made: 0, freed: 0 };
 	const emitter = new EventEmitter();
-	const adapter = { sends: 0, send: (): boolean => true };
+	const adapter: DiscordVoiceWorld["adapter"] = {
+		sends: 0,
+		send: (): boolean => true,
+	};
 	let online = true;
+	let deafened = false;
 
 	const memberOf = (member: VoiceMember) => ({
 		id: member.userId,
@@ -209,14 +108,17 @@ export function discordVoiceWorld(
 			guild: guildOf(guildId),
 			channelId: state?.channelId ?? null,
 			member: state ? memberOf(state.member) : null,
+			serverDeaf: userId === BOT && deafened,
 		};
 	};
 	const guildOf = (guildId: string) => ({
 		id: guildId,
-		voiceAdapterCreator: () => ({
-			sendPayload: () => {
+		voiceAdapterCreator: (methods: DiscordGatewayAdapterLibraryMethods) => ({
+			sendPayload: (payload: { d: { channel_id: string | null } }) => {
 				adapter.sends++;
-				return adapter.send();
+				const carried = adapter.send();
+				if (carried) adapter.carried?.(payload, methods);
+				return carried;
 			},
 			destroy: () => {},
 		}),
@@ -299,11 +201,19 @@ export function discordVoiceWorld(
 			connectionOf(guildId)) as unknown as VoiceLib["getVoiceConnection"],
 		// SAFETY: the link uses only what `StubConnection` has of a voice connection.
 		joinVoiceChannel: ((joinConfig: JoinVoiceChannelOptions) => {
-			const connection = new StubConnection(
+			// The bot leaves the channel and enters it, which the gateway reports like anyone's doing so.
+			const leaves = () => move(joinConfig.guildId, me, undefined);
+			const connection: StubConnection = new StubConnection(
 				joinConfig,
 				options.realStreams ?? false,
-				// The bot leaves the channel, which the gateway reports like anyone's leaving.
-				() => move(joinConfig.guildId, me, undefined),
+				{
+					destroyed: leaves,
+					left: leaves,
+					entered: () => {
+						const channelId = connection.joinConfig.channelId;
+						if (channelId) move(joinConfig.guildId, me, channelId);
+					},
+				},
 			);
 			connections.push(connection);
 			if (options.connect ?? true)
@@ -358,6 +268,12 @@ export function discordVoiceWorld(
 		logs,
 		client,
 		connections,
+		get deafened() {
+			return deafened;
+		},
+		set deafened(value: boolean) {
+			deafened = value;
+		},
 		resync: (channelId, members) => {
 			for (const [userId, state] of states)
 				if (state.channelId === channelId && userId !== BOT)
