@@ -484,6 +484,8 @@ test("startup refuses an invalid option naming it, and the option without Discor
 		{ peerMessageChars: 0 },
 		{ foreignWebhook: "no" as unknown as () => boolean },
 		{ attachments: { images: 9 } },
+		{ starter: "yes" as unknown as boolean },
+		{ authors: "no" as unknown as () => undefined },
 		false as unknown as true,
 		"yes" as unknown as true,
 	]) {
@@ -494,4 +496,12 @@ test("startup refuses an invalid option naming it, and the option without Discor
 	await expect(serving(true, async () => undefined, false)).rejects.toThrow(
 		/channelContext.*Discord/i,
 	);
+});
+
+test("channelContext accepts starter and authors", async () => {
+	const run = await serving(
+		{ starter: true, authors: () => undefined },
+		async () => undefined,
+	);
+	expect(run).toBeDefined();
 });
