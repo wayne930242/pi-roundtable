@@ -1,4 +1,9 @@
-import { ChannelType, type Message, MessageReferenceType } from "discord.js";
+import {
+	type Channel,
+	ChannelType,
+	type Message,
+	MessageReferenceType,
+} from "discord.js";
 import type { InboundMessage } from "../contract/channels.ts";
 import { channelKey } from "../contract/surface.ts";
 import type { AttachmentRef } from "../domain/attachment.ts";
@@ -38,11 +43,10 @@ function referenceOf(referenced: Message, mention: RegExp) {
 }
 
 /** What a thread's parent is: a text channel, a forum, or something else (also a parent that cannot be read). */
-async function threadOf(
-	message: Message,
+export async function threadOf(
+	channel: Channel | null | undefined,
 ): Promise<InboundMessage["thread"] | undefined> {
-	const { channel } = message;
-	if (!channel.isThread() || !channel.parentId) return undefined;
+	if (!channel?.isThread() || !channel.parentId) return undefined;
 	const parent =
 		channel.parent ??
 		(await channel.guild.channels.fetch(channel.parentId).catch(() => null));
@@ -87,7 +91,7 @@ export async function toInbound(
 	const roleIds = message.member
 		? [...message.member.roles.cache.keys()]
 		: undefined;
-	const thread = await threadOf(message);
+	const thread = await threadOf(message.channel);
 	return {
 		channel: channelKey("discord", message.channelId),
 		messageId: message.id,
@@ -169,6 +173,8 @@ export function lateAnswerMessage(turn: LateTurn): InboundMessage {
 		...(roles ? { authorRoleIds: roles } : {}),
 		...(turn.guildId ? { space: turn.guildId } : {}),
 		isDirect: turn.isDirect,
+		// The card's thread, as the live message there carries it, so a consumer routes it the same.
+		...(turn.thread ? { thread: turn.thread } : {}),
 		// Pressing the assistant's card speaks to it, as a mention does.
 		mentionsBot: true,
 		repliesToBot: true,

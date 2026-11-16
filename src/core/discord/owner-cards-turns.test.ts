@@ -84,6 +84,7 @@ describe("a card answered after its turn stopped waiting", () => {
 		expect(result?.content[0]?.text).toContain("has not answered yet");
 		const pick = press("select", `${CARD_PREFIX}${fake.cardId()}:pick`, {
 			values: ["1"],
+			thread: { parentId: "700000000000000007", forum: true },
 		});
 		await owner.handle(pick.interaction);
 		expect(resumed).toHaveLength(1);
@@ -94,6 +95,8 @@ describe("a card answered after its turn stopped waiting", () => {
 			authorIsBot: false,
 			mentionsBot: true,
 			actor: { provider: "discord", subject: OWNER },
+			// The forum post it was asked in, as the live message there carries it.
+			thread: { parentId: "700000000000000007", parentKind: "forum" },
 		});
 		expect(message.text).toContain("Question: Which day?");
 		expect(message.text).toContain("chose: Sunday");
