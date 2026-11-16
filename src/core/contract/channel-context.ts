@@ -83,7 +83,10 @@ export interface ChannelContextOptions {
 	 * history. So a second person who asks in a post gets the earlier messages and the starter, and
 	 * the first who asks again after them gets them once more. `undefined` names the channel's own
 	 * conversation. One record is kept per channel either way, so the memory it takes is as without
-	 * this option. Default: none, every turn of a channel is one conversation's.
+	 * this option. Set it as the host default or on every read of a channel: a read that names none
+	 * is the channel's own conversation, a key of its own, so mixing named and unnamed reads starts
+	 * the record anew each time. A callback that throws or returns a non-string is logged and counts
+	 * as `undefined`. Default: none, every turn of a channel is one conversation's.
 	 */
 	conversation?: (message: InboundMessage) => string | undefined;
 	/** Which attachments of the kept messages are fetched for the turn; none by default. */

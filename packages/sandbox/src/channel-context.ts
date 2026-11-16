@@ -48,7 +48,6 @@ const KEYS = [
 	"attachments",
 	"starter",
 	"authors",
-	"conversation",
 ];
 
 function onlyKeys(name: string, value: object, allowed: readonly string[]) {
@@ -69,6 +68,10 @@ export function resolveChannelContextOptions(
 			"channelContext must be true or channel context options",
 		);
 	const given = option === true ? {} : (option as ChannelContextOptions);
+	if ("conversation" in given)
+		throw new TypeError(
+			"channelContext.conversation is not supported in the sandbox: its history is one file per channel and never starts fresh for another asker",
+		);
 	onlyKeys("channelContext", given, KEYS);
 	bounded("fetch", given.fetch, 100);
 	bounded("keep", given.keep, 100);
@@ -95,11 +98,6 @@ export function resolveChannelContextOptions(
 		throw new TypeError("channelContext.starter must be a boolean");
 	if (given.authors !== undefined && typeof given.authors !== "function")
 		throw new TypeError("channelContext.authors must be a function");
-	if (
-		given.conversation !== undefined &&
-		typeof given.conversation !== "function"
-	)
-		throw new TypeError("channelContext.conversation must be a function");
 	if (given.attachments !== undefined) {
 		if (typeof given.attachments !== "object" || given.attachments === null)
 			throw new TypeError("channelContext.attachments must be an object");
@@ -122,7 +120,8 @@ export function resolveChannelContextOptions(
 			`channelContext.attachments.images must be an integer from 0 to 4, got ${String(images)}`,
 		);
 	const { attachments: _images, ...rest } = given;
-	return { ...rest, attachments: { images: 0 } };
+	// `conversation` is forced off too, so a host default of it does not reach the sandbox.
+	return { ...rest, conversation: () => undefined, attachments: { images: 0 } };
 }
 
 /** Whether a message is one whose channel context the sandbox may read: a Discord server message. */
