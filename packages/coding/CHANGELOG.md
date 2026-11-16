@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-16
+
+- Release in lockstep with pi-roundtable 0.50.0 (per-conversation channel context); no package-specific behavior changes.
+
 ## [0.49.1] - 2026-11-16
 
 - Release in lockstep with pi-roundtable 0.49.1 (starter review fixes); no package-specific behavior changes.
