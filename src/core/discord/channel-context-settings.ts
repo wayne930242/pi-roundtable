@@ -27,6 +27,7 @@ export const CHANNEL_CONTEXT_DEFAULTS: Readonly<
 	foreignWebhook: () => false,
 	authors: () => undefined,
 	starter: false,
+	conversation: () => undefined,
 	attachments: Object.freeze({ images: 0, maxBytes: 10 * 1024 * 1024 }),
 });
 
@@ -87,6 +88,10 @@ export function assertChannelContextSettings(
 		throw new TypeError("channel context option authors must be a function");
 	if (typeof settings.starter !== "boolean")
 		throw new TypeError("channel context option starter must be a boolean");
+	if (typeof settings.conversation !== "function")
+		throw new TypeError(
+			"channel context option conversation must be a function",
+		);
 	if (!Number.isInteger(images) || images < 0 || images > MAX_TURN_IMAGES)
 		throw new RangeError(
 			`channel context option attachments.images must be an integer from 0 to ${MAX_TURN_IMAGES}, got ${images}`,

@@ -48,6 +48,7 @@ const KEYS = [
 	"attachments",
 	"starter",
 	"authors",
+	"conversation",
 ];
 
 function onlyKeys(name: string, value: object, allowed: readonly string[]) {
@@ -94,6 +95,11 @@ export function resolveChannelContextOptions(
 		throw new TypeError("channelContext.starter must be a boolean");
 	if (given.authors !== undefined && typeof given.authors !== "function")
 		throw new TypeError("channelContext.authors must be a function");
+	if (
+		given.conversation !== undefined &&
+		typeof given.conversation !== "function"
+	)
+		throw new TypeError("channelContext.conversation must be a function");
 	if (given.attachments !== undefined) {
 		if (typeof given.attachments !== "object" || given.attachments === null)
 			throw new TypeError("channelContext.attachments must be an object");

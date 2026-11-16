@@ -65,13 +65,27 @@ export interface ChannelContextOptions {
 	 * a thread. The starter is subject to every filter of the other messages: `authors` (or
 	 * `foreignWebhook`) saying `"skip"` or `"end"` for it drops it, as do an empty text, the
 	 * assistant's own post and a message handed over (or addressed to the assistant) before, so it
-	 * comes in the first turn's context and not again. It is also dropped when it is the addressed
-	 * message itself. It comes first, oldest first, outside `keep` (a context may hold `keep` plus
-	 * the starter), is cut at the same limits as another message by its author, and never merges as
-	 * a near repeat; when the window holds it already it is not repeated, and it stays even when
-	 * the assistant's last post lies after it.
+	 * comes in the first turn's context and not again (in each conversation, with `conversation`).
+	 * It is also dropped when it is the addressed message itself. It comes first, oldest first,
+	 * outside `keep` (a context may hold `keep` plus the starter), is cut at the same limits as
+	 * another message by its author, and never merges as a near repeat; when the window holds it
+	 * already it is not repeated, and it stays even when the assistant's last post lies after it.
 	 */
 	starter?: boolean;
+	/**
+	 * Names the conversation the turn for `message` runs in, when one channel holds several in turn,
+	 * such as a forum post where each person who asks gets a private conversation of their own: a
+	 * key of it, such as the principal id of the private `TurnRequest.conversation` the turn runs
+	 * in. What is remembered as handed over then belongs to that conversation: a turn of the
+	 * conversation the channel's last turn ran in reads only what is new to it, as without this
+	 * option, and a turn of another one reads the window as if nothing had been handed over, the
+	 * starter too, since the runtime makes that conversation's session anew without the other's
+	 * history. So a second person who asks in a post gets the earlier messages and the starter, and
+	 * the first who asks again after them gets them once more. `undefined` names the channel's own
+	 * conversation. One record is kept per channel either way, so the memory it takes is as without
+	 * this option. Default: none, every turn of a channel is one conversation's.
+	 */
+	conversation?: (message: InboundMessage) => string | undefined;
 	/** Which attachments of the kept messages are fetched for the turn; none by default. */
 	attachments?: ChannelContextAttachmentOptions;
 }

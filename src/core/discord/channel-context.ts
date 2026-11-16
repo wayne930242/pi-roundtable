@@ -161,6 +161,7 @@ export interface ChannelContextSelection {
 		| "attachments"
 		| "peerMessageChars"
 		| "starter"
+		| "conversation"
 	> &
 		Partial<
 			Pick<
@@ -311,11 +312,16 @@ export interface ChannelContextReaderOptions {
 
 /**
  * Reads the channel context of addressed messages and remembers, per channel and in memory, what
- * it handed over and which messages addressed the assistant, so neither comes again.
+ * it handed over and which messages addressed the assistant, so neither comes again; a turn of
+ * another conversation than the channel's last (`ChannelContextOptions.conversation`) starts
+ * the channel's record anew.
  */
 export class ChannelContextReader {
 	readonly #options: ChannelContextReaderOptions;
-	readonly #seen = new Map<string, Set<string>>();
+	readonly #seen = new Map<
+		string,
+		{ conversation: string | undefined; ids: Set<string> }
+	>();
 
 	constructor(options: ChannelContextReaderOptions) {
 		this.#options = options;
@@ -337,7 +343,7 @@ export class ChannelContextReader {
 		if (surface !== "discord") return undefined;
 		const settings = resolvedSettings(host, options);
 		assertChannelContextSettings(settings);
-		const seen = this.#seenIn(channelId);
+		const seen = this.#seenIn(channelId, settings.conversation(message));
 		seen.add(message.messageId);
 		try {
 			const fetched = await this.#options.read(
@@ -435,15 +441,17 @@ export class ChannelContextReader {
 		}
 	}
 
-	#seenIn(channelId: string): Set<string> {
-		let seen = this.#seen.get(channelId);
-		if (!seen) {
-			seen = new Set();
-			this.#seen.set(channelId, seen);
-			const oldest = this.#seen.keys().next().value;
-			if (this.#seen.size > SEEN_CHANNELS && oldest !== undefined)
-				this.#seen.delete(oldest);
-		}
+	/** The channel's record of what was handed over, made anew for a conversation other than its own. */
+	#seenIn(channelId: string, conversation: string | undefined): Set<string> {
+		const record = this.#seen.get(channelId);
+		if (record && record.conversation === conversation) return record.ids;
+		const seen = new Set<string>();
+		// Another conversation's record is replaced, not kept beside it: the channel holds one at a time.
+		this.#seen.delete(channelId);
+		this.#seen.set(channelId, { conversation, ids: seen });
+		const oldest = this.#seen.keys().next().value;
+		if (this.#seen.size > SEEN_CHANNELS && oldest !== undefined)
+			this.#seen.delete(oldest);
 		return seen;
 	}
 

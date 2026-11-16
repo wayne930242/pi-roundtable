@@ -1,4 +1,9 @@
-import type { ChannelContextOptions } from "../contract/channel-context.ts";
+import type {
+	ChannelContextOptions,
+	ChannelContextSource,
+	ChannelContextVerdict,
+} from "../contract/channel-context.ts";
+import type { InboundMessage } from "../contract/channels.ts";
 import { ConfigError } from "../domain/errors.ts";
 import { type PeerBotsConfig, peerBotsShape } from "./peer-bots.ts";
 import {
@@ -196,6 +201,23 @@ const channelContextShape = shape({
 		guarded(
 			"a function of a webhook id",
 			(value): value is (webhookId: string) => boolean | "skip" =>
+				typeof value === "function",
+		),
+	),
+	authors: optional(
+		guarded(
+			"a function of a fetched message",
+			(
+				value,
+			): value is (
+				message: ChannelContextSource,
+			) => ChannelContextVerdict | undefined => typeof value === "function",
+		),
+	),
+	conversation: optional(
+		guarded(
+			"a function of a message",
+			(value): value is (message: InboundMessage) => string | undefined =>
 				typeof value === "function",
 		),
 	),
