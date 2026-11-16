@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.48.1] - 2026-11-16
+
+- Release in lockstep with pi-roundtable 0.48.1 (Voice links recover when they stop hearing after a resume; the turn note no longer discourages ask_user cards); no package-specific behavior changes.
+
 ## [0.48.0] - 2026-11-15
 
 - Release in lockstep with pi-roundtable 0.48.0 (opt-in Discord voice); no package-specific behavior changes.
