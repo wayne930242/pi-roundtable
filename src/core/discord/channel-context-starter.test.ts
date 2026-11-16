@@ -380,3 +380,27 @@ test("REAL ADAPTER + READER: a post whose first message lies outside the fetched
 	const got = await r.of(inbound(), { starter: true });
 	expect(got?.messages.map((m) => m.id)).toEqual([STARTER, "20", "21"]);
 });
+
+test("the starter lookup is skipped once handed over, and when the window holds it", async () => {
+	const opening = source(STARTER, "forum post body");
+	let asked = 0;
+	const starter = async () => {
+		asked++;
+		return opening;
+	};
+	const first = reader({ fetched: [source("20", "reply")], starter });
+	const got = await first.reader.of(inbound(), { starter: true });
+	expect(got?.messages.map((m) => m.id)).toEqual([STARTER, "20"]);
+	expect(asked).toBe(1);
+	await first.reader.of(inbound({ messageId: "51" }), { starter: true });
+	expect(asked).toBe(1);
+
+	asked = 0;
+	const inWindow = reader({
+		fetched: [opening, source("20", "reply")],
+		starter,
+	});
+	const again = await inWindow.reader.of(inbound(), { starter: true });
+	expect(again?.messages.map((m) => m.id)).toEqual([STARTER, "20"]);
+	expect(asked).toBe(0);
+});

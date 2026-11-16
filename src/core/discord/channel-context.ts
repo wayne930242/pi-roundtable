@@ -348,9 +348,13 @@ export class ChannelContextReader {
 			if (!fetched) return undefined;
 			const owners = await this.#owners();
 			const peer = this.#options.peer;
-			const starter = settings.starter
-				? await this.#starter(channelId, message.messageId)
-				: undefined;
+			// The starter's id is the thread's id: one already handed over needs no lookup, and the
+			// window's own copy of it needs no fetch.
+			const starter =
+				settings.starter && !seen.has(channelId)
+					? (fetched.find((found) => found.id === channelId) ??
+						(await this.#starter(channelId, message.messageId)))
+					: undefined;
 			const { messages, window } = selectChannelContext(fetched, {
 				seen,
 				owners,

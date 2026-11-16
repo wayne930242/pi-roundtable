@@ -46,6 +46,8 @@ const KEYS = [
 	"peerMessageChars",
 	"foreignWebhook",
 	"attachments",
+	"starter",
+	"authors",
 ];
 
 function onlyKeys(name: string, value: object, allowed: readonly string[]) {
@@ -88,6 +90,10 @@ export function resolveChannelContextOptions(
 		typeof given.foreignWebhook !== "function"
 	)
 		throw new TypeError("channelContext.foreignWebhook must be a function");
+	if (given.starter !== undefined && typeof given.starter !== "boolean")
+		throw new TypeError("channelContext.starter must be a boolean");
+	if (given.authors !== undefined && typeof given.authors !== "function")
+		throw new TypeError("channelContext.authors must be a function");
 	if (given.attachments !== undefined) {
 		if (typeof given.attachments !== "object" || given.attachments === null)
 			throw new TypeError("channelContext.attachments must be an object");
