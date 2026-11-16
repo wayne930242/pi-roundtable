@@ -486,6 +486,7 @@ test("startup refuses an invalid option naming it, and the option without Discor
 		{ attachments: { images: 9 } },
 		{ starter: "yes" as unknown as boolean },
 		{ authors: "no" as unknown as () => undefined },
+		{ conversation: "alice" as unknown as () => undefined },
 		false as unknown as true,
 		"yes" as unknown as true,
 	]) {
@@ -498,9 +499,13 @@ test("startup refuses an invalid option naming it, and the option without Discor
 	);
 });
 
-test("channelContext accepts starter and authors", async () => {
+test("channelContext accepts starter, authors and conversation", async () => {
 	const run = await serving(
-		{ starter: true, authors: () => undefined },
+		{
+			starter: true,
+			authors: () => undefined,
+			conversation: (message) => message.authorId,
+		},
 		async () => undefined,
 	);
 	expect(run).toBeDefined();
