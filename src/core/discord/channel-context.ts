@@ -343,7 +343,10 @@ export class ChannelContextReader {
 		if (surface !== "discord") return undefined;
 		const settings = resolvedSettings(host, options);
 		assertChannelContextSettings(settings);
-		const seen = this.#seenIn(channelId, settings.conversation(message));
+		const seen = this.#seenIn(
+			channelId,
+			this.#conversationOf(settings, message),
+		);
 		seen.add(message.messageId);
 		try {
 			const fetched = await this.#options.read(
@@ -438,6 +441,26 @@ export class ChannelContextReader {
 				"could not read the owners; channel context marks none",
 			);
 			return [];
+		}
+	}
+
+	/** The conversation the callback names; a throw or a value that is no string is logged and counts as none. */
+	#conversationOf(
+		settings: ChannelContextSettings,
+		message: InboundMessage,
+	): string | undefined {
+		try {
+			const given: unknown = settings.conversation(message);
+			if (given === undefined || typeof given === "string") return given;
+			throw new TypeError(
+				`channel context option conversation returned ${typeof given}, not a string or undefined`,
+			);
+		} catch (error) {
+			this.#options.logger.warn(
+				{ channel: message.channel, err: error },
+				"channel context conversation not named; the channel's own is used",
+			);
+			return undefined;
 		}
 	}
 

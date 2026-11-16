@@ -151,3 +151,29 @@ test("conversation must be a function", async () => {
 		reader().of(inbound("50", ALICE), { conversation: "alice" as never }),
 	).rejects.toThrow("channel context option conversation must be a function");
 });
+
+test("a conversation callback that throws or returns a non-string is logged and counts as undefined", async () => {
+	for (const bad of [
+		() => {
+			throw new Error("boom");
+		},
+		() => ({}) as unknown as string,
+	]) {
+		const r = new ChannelContextReader({
+			read: async (_channel, before) =>
+				POSTED.filter((message) => Number(message.id) < Number(before)),
+			owners: async () => [],
+			starter: async () => source(POST, "the project card", { at: 1 }),
+			settings: {},
+			logger: recordingLogger().logger,
+		});
+		const options = { ...FORUM, conversation: bad };
+		// The read still runs, in the channel's own conversation: a repeat reads only what is new.
+		expect(ids(await r.of(inbound("50", ALICE), options))).toEqual([
+			POST,
+			"10",
+			"20",
+		]);
+		expect(ids(await r.of(inbound("57", ALICE), options))).toEqual(["56"]);
+	}
+});

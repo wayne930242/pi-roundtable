@@ -212,12 +212,18 @@ test("options are core's, images are never asked for, even when the option asks"
 		expect(run.asked[0]?.options).toEqual({
 			keep: 5,
 			messageChars: 100,
+			conversation: expect.any(Function),
 			attachments: { images: 0 },
 		});
+		// A host default of `conversation` never reaches the sandbox: its own answers none.
+		expect(run.asked[0]?.options?.conversation?.(message)).toBeUndefined();
 		const plain = await serving(true, async () => around(said("1", "x")));
 		try {
 			await plain.host.conversations.handle(message);
-			expect(plain.asked[0]?.options).toEqual({ attachments: { images: 0 } });
+			expect(plain.asked[0]?.options).toEqual({
+				conversation: expect.any(Function),
+				attachments: { images: 0 },
+			});
 		} finally {
 			await plain.done();
 		}
@@ -486,7 +492,6 @@ test("startup refuses an invalid option naming it, and the option without Discor
 		{ attachments: { images: 9 } },
 		{ starter: "yes" as unknown as boolean },
 		{ authors: "no" as unknown as () => undefined },
-		{ conversation: "alice" as unknown as () => undefined },
 		false as unknown as true,
 		"yes" as unknown as true,
 	]) {
@@ -499,14 +504,16 @@ test("startup refuses an invalid option naming it, and the option without Discor
 	);
 });
 
-test("channelContext accepts starter, authors and conversation", async () => {
+test("channelContext accepts starter and authors, and refuses conversation", async () => {
 	const run = await serving(
-		{
-			starter: true,
-			authors: () => undefined,
-			conversation: (message) => message.authorId,
-		},
+		{ starter: true, authors: () => undefined },
 		async () => undefined,
 	);
 	expect(run).toBeDefined();
+	await expect(
+		serving(
+			{ conversation: (message) => message.authorId },
+			async () => undefined,
+		),
+	).rejects.toThrow(/conversation is not supported in the sandbox/);
 });
