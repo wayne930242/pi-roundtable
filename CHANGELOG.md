@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-16
+
+### Added
+
+- `ChannelContextOptions.conversation(message)` (and the host default `discord.channelContext.conversation`, code only) names the conversation a turn runs in, such as the principal of a person's private conversation in a forum post. What channel context remembers as handed over then belongs to that conversation: a turn of another conversation than the channel's last reads the window as if nothing had been handed over, the thread's starter too, so a second person who asks in a post gets the card, the comments and the earlier discussion that the first asker's turn already read. One record is still kept per channel, so it takes no more memory. Without the option nothing changes. The sandbox's `channelContext` accepts it.
+
+### Fixed
+
+- `discord.channelContext.authors` is accepted as a host default, as the plugin docs describe; the configuration refused it as an unknown key.
+
 ## [0.49.1] - 2026-11-16
 
 ### Fixed
