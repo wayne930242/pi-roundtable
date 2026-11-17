@@ -205,6 +205,7 @@ export class TeamTurns {
 		const progress = roomProgress(this.#options, postTo);
 		let result: TurnResult;
 		try {
+			// Named for a turn outside a queue task too; inside one, the task's channel is the same.
 			result = await settleTurnIn(
 				postTo,
 				() =>
