@@ -117,6 +117,43 @@ describe("readAttachmentText", () => {
 		).toBe("unreadable");
 	});
 
+	test("leaves the caller's bytes alone, so a PDF is read piece by piece from one array", async () => {
+		const file = pdf("Hello roundtable");
+		const size = file.byteLength;
+		const first = await readAttachmentText({
+			name: "r.pdf",
+			bytes: file,
+			limit: 5,
+		});
+		expect(file.byteLength).toBe(size);
+		const second = await readAttachmentText({
+			name: "r.pdf",
+			bytes: file,
+			offset: first.nextOffset ?? 0,
+			limit: 5,
+		});
+		expect(second).toMatchObject({
+			kind: "pdf",
+			offset: 5,
+			total: first.total,
+		});
+		expect(file.byteLength).toBe(size);
+		// Without a name or type that says PDF, its bytes still say so.
+		expect(
+			(await readAttachmentText({ name: "file", bytes: file, offset: 10 }))
+				.kind,
+		).toBe("pdf");
+	});
+
+	test("rejects with an AttachmentTextError whatever goes wrong inside", async () => {
+		const gone = new Uint8Array(new ArrayBuffer(8));
+		structuredClone(gone.buffer, { transfer: [gone.buffer] });
+		for (const name of ["file", "a.txt", "x.pdf"]) {
+			const read = readAttachmentText({ name, bytes: gone });
+			await expect(read).rejects.toBeInstanceOf(AttachmentTextError);
+		}
+	});
+
 	test("refuses an offset or limit that is not a whole number", async () => {
 		for (const [offset, limit] of [
 			[-1, undefined],

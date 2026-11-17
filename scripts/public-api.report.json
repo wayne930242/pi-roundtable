@@ -1429,7 +1429,7 @@
 		"src/core/shared/attachment-text.d.ts#ATTACHMENT_TEXT_LIMIT": "declare const ATTACHMENT_TEXT_LIMIT = 60000;",
 		"src/core/shared/attachment-text.d.ts#AttachmentText": "interface AttachmentText {\n    \n    kind: \"text\" | \"pdf\";\n    \n    text: string;\n    \n    offset: number;\n    \n    nextOffset?: number;\n    \n    total: number;\n    \n    pages?: number;\n}",
 		"src/core/shared/attachment-text.d.ts#AttachmentTextError": "declare class AttachmentTextError extends Error {\n    readonly code: AttachmentTextErrorCode;\n    constructor(code: AttachmentTextErrorCode, message: string);\n}",
-		"src/core/shared/attachment-text.d.ts#AttachmentTextErrorCode": "type AttachmentTextErrorCode = \"unsupported\" | \"unreadable\" | \"invalid\";",
+		"src/core/shared/attachment-text.d.ts#AttachmentTextErrorCode": "type AttachmentTextErrorCode = \"unsupported\" | \"unreadable\" | \"invalid\" | \"tooLarge\";",
 		"src/core/shared/attachment-text.d.ts#AttachmentTextRequest": "interface AttachmentTextRequest {\n    name: string;\n    contentType?: string | null;\n    bytes: Uint8Array;\n    \n    offset?: number;\n    \n    limit?: number;\n}",
 		"src/core/shared/attachment-text.d.ts#readAttachmentText": "declare function readAttachmentText(request: AttachmentTextRequest): Promise<AttachmentText>;",
 		"src/core/shared/child-env.d.ts#childEnv": "declare function childEnv(source: Readonly<Record<string, string | undefined>>, options?: ShellEnv): Record<string, string>;",
