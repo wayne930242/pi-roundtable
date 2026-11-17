@@ -81,7 +81,7 @@ test("on a phone the pins sit in a dock above the bar, in pin order with their b
 	expect(names(".pins .pin-name")).toEqual(["build", "scout"]);
 });
 
-test("the folder tabs scroll sideways on a phone though the page's own .chips wraps, and wrap only in a column", async () => {
+test("the folder tabs stay one row that scrolls sideways, on a phone and in a column, though the page's own .chips wraps", async () => {
 	// The page's stylesheet is in place before the home's lazy styles, as in a browser.
 	const style = document.createElement("style");
 	style.textContent = readFileSync(
@@ -99,7 +99,10 @@ test("the folder tabs scroll sideways on a phone though the page's own .chips wr
 		expect(wrap()).toBe("nowrap");
 		await show(<Home column />);
 		await until(() => q("fieldset.chips") !== null);
-		expect(wrap()).toBe("wrap");
+		expect(wrap()).toBe("nowrap");
+		expect(getComputedStyle(q("fieldset.chips") as HTMLElement).overflowX).toBe(
+			"auto",
+		);
 	} finally {
 		style.remove();
 	}

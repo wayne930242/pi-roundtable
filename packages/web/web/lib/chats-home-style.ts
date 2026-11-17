@@ -98,8 +98,18 @@ button.chats-add {
 	list-style: none;
 }
 
+/* The column shows five pins in one row; more scroll sideways, so no pin sits alone on a second row. */
 .chats[data-column] .pins {
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: none;
+	grid-auto-flow: column;
+	grid-auto-columns: calc((100% - 4 * var(--space-1)) / 5);
+	gap: var(--space-1);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.chats[data-column] .pins::-webkit-scrollbar {
+	display: none;
 }
 
 a.pin {

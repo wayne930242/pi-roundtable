@@ -3,7 +3,7 @@
 // four sides.
 
 export const CHATS_CHIPS_CSS = `
-/* ── Folder tabs: 48px tall buttons that scroll sideways on a phone and wrap in a column ───────── */
+/* ── Folder tabs: one row that scrolls sideways; 48px tall on a phone, shorter in a column ─────── */
 
 fieldset.chips {
 	display: flex;
@@ -30,12 +30,16 @@ fieldset.chips {
 	display: none;
 }
 
+/* In the column the tabs stay one row too, shorter, as a pointer needs no 48px target. */
 .chats[data-column] fieldset.chips {
-	flex-wrap: wrap;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-	mask-image: none;
+	gap: var(--space-1);
+}
+
+.chats[data-column] button.chip {
+	height: 2.25rem;
+	padding: 0 0.625rem;
+	border-radius: var(--radius-full);
+	font-size: var(--text-sm);
 }
 
 button.chip {

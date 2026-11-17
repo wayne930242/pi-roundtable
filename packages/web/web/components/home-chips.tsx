@@ -2,7 +2,7 @@ import { type Chip, chipUnread } from "../lib/chats-home.ts";
 import { plural, translate as t } from "../lib/messages.ts";
 
 /**
- * The folders as tabs above the list: a real button 48px tall with its name and, when a room of it
+ * The folders as tabs above the list, one row: a real button (48px tall on a phone) with its name and, when a room of it
  * has something unread, the count of those messages. Every tab has the one look: the surface with a
  * one-pixel border, and the theme's accent when chosen.
  */
