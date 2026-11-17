@@ -45,7 +45,7 @@ const identity = {
 	],
 };
 
-test("a second owner's connector form reaches the registry; a member's is ignored", async () => {
+test("a second owner's connector form reaches the registry; a member's is refused", async () => {
 	const added: string[] = [];
 	// SAFETY: the form's submit calls only `add`; a refusal from it is shown as a panel.
 	const registry = {
@@ -74,7 +74,32 @@ test("a second owner's connector form reaches the registry; a member's is ignore
 		});
 	const member = form(MEMBER);
 	expect(await module.handle(member.interaction)).toBe(true);
-	expect(member.replies.edits).toEqual([]);
+	expect(member.replies.edits).toHaveLength(1);
+	expect(added).toEqual([]);
 	expect(await module.handle(form(SECOND_OWNER).interaction)).toBe(true);
 	expect(added).toEqual([`from-${SECOND_OWNER}`]);
+});
+
+test("connector add shows its form first, with nothing awaited before it, not even the owner check", async () => {
+	const hanging = {
+		...identity,
+		resolve: () => new Promise(() => undefined),
+		owners: () => new Promise(() => undefined),
+		identities: () => new Promise(() => undefined),
+	} as unknown as typeof identity;
+	const { module } = connectorCommands(
+		commandGuard({
+			ownerId: OWNER,
+			identity: hanging,
+			root: "roundtable",
+			logger: silentLogger(),
+		}),
+		{} as ConnectorRegistry,
+		CONNECTOR_MESSAGES,
+	);
+	const add = fakeInteraction({ user: MEMBER, group: "connector", sub: "add" });
+	expect(await module.handle(add.interaction)).toBe(true);
+	expect(add.replies.modals).toHaveLength(1);
+	expect(JSON.stringify(add.replies.modals[0])).toContain(CONNECTOR_MODAL_ID);
+	expect(add.replies.edits).toEqual([]);
 });

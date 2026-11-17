@@ -2080,7 +2080,8 @@ Use `services.find(DISCORD)` if your plugin can work without Discord.
 When the service is absent, the rest of your plugin can run without commands.
 
 Build a feature's part of the root command with `ownerCommandModule(guard, handlers)` from `pi-roundtable/discord`; only the owners may use it, it defers interactions, and supplies a failure panel.
-That entry also exports `groupOption` for subcommand groups, the panel helpers (`ownerPanel`, `ownerPanels`, `ephemeralPanel`, `replyWithPanels`, `plain`, `OwnerFacingError`), and `agentPanel({ guard, agents })` for an agent's profile panel.
+A subcommand that opens a form gives it as `handlers.form(interaction)`, which returns a `ModalBuilder` or undefined: the form is shown as the interaction's first answer before the owner check, because Discord takes a form only first and within 3 seconds, and the check may ask `IDENTITY`. Anyone who runs the subcommand sees the form, so it must hold nothing private; its submit reaches `handlers.component`, which checks `guard.allows` and answers someone else with `ownerRefusal(guard.refusalHint)`.
+That entry also exports `groupOption` for subcommand groups, the panel helpers (`ownerRefusal`, `ownerPanel`, `ownerPanels`, `ephemeralPanel`, `replyWithPanels`, `plain`, `OwnerFacingError`), and `agentPanel({ guard, agents })` for an agent's profile panel.
 `DISCORD.guard` is the `CommandGuard`; `await guard.allows(actor)` is whether the actor is an owner now: the primary owner by user id, and every other owner principal by their Discord identity, checked through `IDENTITY` each time, so an owner granted or revoked with the CLI is seen at once and a stranger is never resolved. It accepts an interaction or anything with `user.id` (a `DiscordActor`), so a test needs no cast.
 `guard.isOwner(actor)` is deprecated until 1.0: it is the primary owner only, by user id, so a component handler that still asks it refuses the other owners.
 `commandGuard({ ownerId, identity?, root, logger, refusalHint? })` makes one; without `identity` the primary owner is the only owner.
@@ -2932,7 +2933,7 @@ Channel context and `InboundMessage.attachments` describe files; a plugin whose 
 `InboundMessage.attachments` (`AttachmentRef`) carry `id`, `messageId` (the message itself, the one a reply quotes in `reference.attachments`, or, for a forward, the forwarding message), `title?` and `description?` beside `url`, `name`, `contentType?` and `size`; channel context gives the same as an attachment line's `id` and `message`.
 The call fetches the message again from Discord in the channel the caller names, finds the file by its id, its own or a forwarded message's, and downloads it from the fresh address Discord gives (only `https` on Discord's CDN), so no URL a caller or a model supplies is ever fetched and an expired link does not matter.
 It resolves with `AttachmentBytes` (`id`, `name`, `contentType`, empty when Discord does not say, `size` as read, `bytes` a `Uint8Array`, `title?`, `description?`) and rejects with an `AttachmentReadError` whose `code` is `not-found` (no such channel or message the bot can read, a message of another channel, no such file on it, or an id that is no Discord id), `too-large` (over the cap, by Discord's size before any download or by what arrives), `gone` (the CDN answers 403, 404 or 410) or `unavailable` (Discord is not connected, the download failed or took over 30 seconds, or another answer); its message names the request, never the file's address.
-At most the host's `discord.attachmentRead.maxBytes` (default `ATTACHMENT_READ_MAX_BYTES`, 10 MiB; at most 100 MiB) is read, and a call's `maxBytes` may lower that, never raise it.
+At most the host's `discord.attachmentRead.maxBytes` (default `ATTACHMENT_READ_MAX_BYTES`, 10 MiB; at most 100 MiB) is read, and a call's `maxBytes` may lower that, never raise it; a `maxBytes` that is not a positive whole number rejects with the code `invalid`. `discordPlugin` throws a `ConfigError` for an `attachmentRead.maxBytes` outside 1 to 100 MiB, as the config file does.
 Nothing is parsed, stored or logged: what the bytes are for (text extraction, an image for the model, a file in the workspace) is the plugin's call.
 The core checks nothing about who may read which channel beyond what the bot can see: pass the channel of the conversation the file was posted in, such as the addressed message's channel, never one a model names in a tool call.
 
@@ -2951,9 +2952,21 @@ if (file?.id && file.messageId) {
 		// read.bytes is a Uint8Array of read.size bytes
 	} catch (error) {
 		if (!(error instanceof AttachmentReadError)) throw error;
-		// error.code: "not-found" | "too-large" | "gone" | "unavailable"
+		// error.code: "not-found" | "too-large" | "gone" | "unavailable" | "invalid"
 	}
 }
+```
+
+To give the model a file's text, pass the bytes to `readAttachmentText({ name, contentType?, bytes, offset?, limit? })` from the same entry; it reads as the core's `read_attachment` tool does.
+A text file (by its extension, a `text/*` or JSON, XML, YAML or TOML media type, or UTF-8 bytes with no NUL) is decoded; a PDF (by `.pdf`, `application/pdf` or its `%PDF-` start) has its text extracted, led by `[PDF, <n> pages]`.
+It resolves with `AttachmentText`: `kind` (`text` or `pdf`), `text` (at most `limit` characters from `offset`; default `ATTACHMENT_TEXT_LIMIT`, 60,000), `offset`, `nextOffset` when there is more, `total` characters and a PDF's `pages`.
+It rejects with an `AttachmentTextError` whose `code` is `unsupported` (an image, audio, an archive or other binary), `unreadable` (a PDF that cannot be parsed) or `invalid` (an `offset` or `limit` that is not a whole number, or a `limit` below 1); its message names the file only.
+
+```ts
+import { AttachmentTextError, readAttachmentText } from "pi-roundtable/discord";
+
+const piece = await readAttachmentText({ ...read, offset: 0 });
+// piece.nextOffset, when set, is the offset of the next piece
 ```
 
 ### Posting through `DISCORD.poster`
@@ -5195,6 +5208,11 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentReadError` | `pi-roundtable/discord` | value |
 | `AttachmentReadErrorCode` | `pi-roundtable/discord` | type |
 | `AttachmentReadRequest` | `pi-roundtable/discord` | type |
+| `ATTACHMENT_TEXT_LIMIT` | `pi-roundtable/discord` | value |
+| `AttachmentText` | `pi-roundtable/discord` | type |
+| `AttachmentTextError` | `pi-roundtable/discord` | value |
+| `AttachmentTextErrorCode` | `pi-roundtable/discord` | type |
+| `AttachmentTextRequest` | `pi-roundtable/discord` | type |
 | `CHANNEL_CONTEXT_DEFAULTS` | `pi-roundtable/discord` | value |
 | `CONTEXT_ATTACHMENT_LINES` | `pi-roundtable/discord` | value |
 | `CHANNEL_OPERATIONS` | `pi-roundtable/discord` | value |
@@ -5288,9 +5306,11 @@ Import from the entries listed below; source area files are internal.
 | `ownerCommandModule` | `pi-roundtable/discord` | value |
 | `ownerPanel` | `pi-roundtable/discord` | value |
 | `ownerPanels` | `pi-roundtable/discord` | value |
+| `ownerRefusal` | `pi-roundtable/discord` | value |
 | `ownerRootCommand` | `pi-roundtable/discord` | value |
 | `parseChannelTool` | `pi-roundtable/discord` | value |
 | `plain` | `pi-roundtable/discord` | value |
+| `readAttachmentText` | `pi-roundtable/discord` | value |
 | `replyWithPanels` | `pi-roundtable/discord` | value |
 | `withChannelContext` | `pi-roundtable/discord` | value |
 | `withChannelContextImages` | `pi-roundtable/discord` | value |

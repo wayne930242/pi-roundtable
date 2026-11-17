@@ -35,6 +35,17 @@ export interface Draft {
 export interface QuestionnaireForm {
 	questionnaire: Questionnaire;
 	draft: Draft;
+	/**
+	 * The text answers and note each user last wrote and was allowed to, by user id: their form
+	 * opens with these, never with the shared draft, which may hold someone else's unsent text.
+	 */
+	written: Map<string, Written>;
+}
+
+/** What one user wrote in the form. */
+export interface Written {
+	texts: (string | undefined)[];
+	note?: string;
 }
 
 export const newDraft = (questions: number): Draft => ({
@@ -188,8 +199,13 @@ export function questionnaireCard(args: {
 }
 
 /** The form for what the menus cannot take: each question's own answer, and the note. */
-export function questionnaireModal(id: string, form: QuestionnaireForm) {
+export function questionnaireModal(
+	id: string,
+	form: QuestionnaireForm,
+	userId: string,
+) {
 	const { questions } = form.questionnaire;
+	const own = form.written.get(userId);
 	const labelled = (
 		label: string,
 		field: string,
@@ -219,16 +235,11 @@ export function questionnaireModal(id: string, form: QuestionnaireForm) {
 			questions.length === 1
 				? messages().cardModalField
 				: `${i + 1}. ${question.header ?? messages().cardQuestionName(i + 1)}`;
-		const field = labelled(
-			label,
-			`t${i}`,
-			form.draft.texts[i],
-			question.question,
-		);
+		const field = labelled(label, `t${i}`, own?.texts[i], question.question);
 		modal.addLabelComponents(field);
 	}
 	return modal.addLabelComponents(
-		labelled(messages().cardNoteField, "note", form.draft.note),
+		labelled(messages().cardNoteField, "note", own?.note),
 	);
 }
 

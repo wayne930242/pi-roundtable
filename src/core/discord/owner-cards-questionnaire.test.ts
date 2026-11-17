@@ -247,6 +247,30 @@ describe("the Discord questionnaire card", () => {
 		void answer;
 	});
 
+	test("the form shows a user only what they wrote, never someone else's unsent text", async () => {
+		const { fake, cards, ask } = setup();
+		const answer = ask("Questions", set);
+		await tick();
+		const id = fake.cardId();
+		const owner = press("modal", custom(id, "qtext"), {
+			fields: { t0: "OWNER-SECRET-TEXT", note: "OWNER-PRIVATE-NOTE" },
+		});
+		await cards.handle(owner.interaction);
+		const stranger = press("button", custom(id, "notes"), { user: "1" });
+		await cards.handle(stranger.interaction);
+		expect(stranger.modals).toHaveLength(1);
+		const theirs = JSON.stringify(stranger.modals[0]);
+		expect(theirs).not.toContain("OWNER-SECRET-TEXT");
+		expect(theirs).not.toContain("OWNER-PRIVATE-NOTE");
+		// The owner's own form still opens with what they wrote.
+		const again = press("button", custom(id, "notes"));
+		await cards.handle(again.interaction);
+		const own = JSON.stringify(again.modals[0]);
+		expect(own).toContain("OWNER-SECRET-TEXT");
+		expect(own).toContain("OWNER-PRIVATE-NOTE");
+		void answer;
+	});
+
 	test("Previews open for anyone, answer nothing, and carry every preview", async () => {
 		const { fake, cards, ask } = setup();
 		const answer = ask("Questions", {

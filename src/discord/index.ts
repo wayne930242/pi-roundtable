@@ -84,6 +84,7 @@ export {
 	commandGuard,
 	groupOption,
 	ownerCommandModule,
+	ownerRefusal,
 	ownerRootCommand,
 } from "../core/discord/owner-command.ts";
 export type { PanelContent } from "../core/discord/owner-panel.ts";
@@ -144,3 +145,13 @@ export type {
 export { VOICE_PCM } from "../core/discord/voice/voice.ts";
 export type { OwnerOperations } from "../core/modules/discord-admin/discord-admin.ts";
 export { DISCORD_ADMIN_TOOLS } from "../core/modules/discord-admin/discord-admin.ts";
+export type {
+	AttachmentText,
+	AttachmentTextErrorCode,
+	AttachmentTextRequest,
+} from "../core/shared/attachment-text.ts";
+export {
+	ATTACHMENT_TEXT_LIMIT,
+	AttachmentTextError,
+	readAttachmentText,
+} from "../core/shared/attachment-text.ts";
