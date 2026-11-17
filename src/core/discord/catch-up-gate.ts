@@ -68,6 +68,7 @@ export function journalGate({
 }: GateOptions): JournalGate {
 	const told = { later: new Set<string>(), resend: new Set<string>() };
 	// Addressed messages passed during the drain without a record: routing decides whether they are left.
+	// One routing drops stays until the process exits; the drain bounds it, and the process ends after.
 	const unclaimed = new Set<string>();
 	const channelOf = (message: InboundMessage) =>
 		message.channel.slice("discord:".length);
