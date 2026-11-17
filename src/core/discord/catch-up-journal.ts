@@ -54,10 +54,6 @@ const migration: Migration = {
 	},
 };
 
-/**
- * The journal over the host's pool, built from closures rather than private fields, so a test
- * proxy can carry it. One insert that does nothing on a conflict decides who records a message.
- */
 /** Marks a message left by a stopping process, so the next one answers it whatever the channel shows. */
 const leftMigration: Migration = {
 	name: "discord-inbound-journal-left",
@@ -67,6 +63,10 @@ const leftMigration: Migration = {
 	},
 };
 
+/**
+ * The journal over the host's pool, built from closures rather than private fields, so a test
+ * proxy can carry it. One insert that does nothing on a conflict decides who records a message.
+ */
 export const PgInboundJournal = {
 	migrations: [migration, leftMigration],
 	attach(sql: SQL): InboundJournal {

@@ -23,12 +23,6 @@ export interface QueuedEntry {
 	cancelled: boolean;
 }
 
-/**
- * The messages waiting for their own turn, by channel and message id: the router adds one when
- * the running turn did not take it and takes it out when its turn starts, so a cancel or an edit
- * can only reach a message that has not started. Everything is synchronous, so no cancel or edit
- * races the start of a turn: whichever runs first wins.
- */
 /** How a refusal of every waiting message went, filled in as it goes; set `stopped` to start no more. */
 export interface RefuseTally {
 	refused: number;
@@ -36,6 +30,12 @@ export interface RefuseTally {
 	stopped: boolean;
 }
 
+/**
+ * The messages waiting for their own turn, by channel and message id: the router adds one when
+ * the running turn did not take it and takes it out when its turn starts, so a cancel or an edit
+ * can only reach a message that has not started. Everything is synchronous, so no cancel or edit
+ * races the start of a turn: whichever runs first wins.
+ */
 export class QueuedMessages {
 	readonly #entries = new Map<ChannelKey, Map<string, QueuedEntry>>();
 	readonly #logger: Logger;

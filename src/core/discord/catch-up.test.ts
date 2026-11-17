@@ -331,7 +331,7 @@ describeDb("catch-up over the journal", () => {
 		]);
 	});
 
-	test("the gate leaves a message recorded as the drain began to the next process, and tells its channel once, recording the notice", async () => {
+	test("a message recorded as the drain began, which routing refuses, is left to the next process, and the gate tells its channel once, recording the notice", async () => {
 		const bot = botOf();
 		const missed = posted(1, mention(bot));
 		const reader = readerOf(bot, [channelOf("700000000000000015", [missed])]);
@@ -356,10 +356,13 @@ describeDb("catch-up over the journal", () => {
 				return { id: notice.id, retract: async () => undefined };
 			},
 		});
-		expect(inbound && (await gate(inbound, bot))).toBe(false);
-		expect(inbound && (await gate({ ...inbound, messageId: "5" }, bot))).toBe(
-			false,
-		);
+		if (!inbound) throw new Error("no inbound message");
+		const other = { ...inbound, messageId: "5" };
+		// Each reaches routing, which refuses it as the host stops.
+		expect(await gate(inbound, bot)).toBe(true);
+		expect(await gate.refused(inbound, bot)).toBe(true);
+		expect(await gate(other, bot)).toBe(true);
+		expect(await gate.refused(other, bot)).toBe(true);
 		expect(notices).toEqual(["700000000000000000"]);
 		expect(await journal.recordedAmong(bot, [notice.id, missed.id])).toEqual(
 			new Set([notice.id, missed.id]),
@@ -451,7 +454,7 @@ describeDb("catch-up over the journal", () => {
 	});
 });
 
-test("a message not addressed to the bot passes the gate unrecorded; while the host drains, an addressed one is held back unrecorded", async () => {
+test("a message not addressed to the bot passes the gate unrecorded; while the host drains, an addressed one reaches routing unrecorded", async () => {
 	const claimed: string[] = [];
 	const journal: InboundJournal = {
 		claim: async ({ messageId }) => {
@@ -480,7 +483,7 @@ test("a message not addressed to the bot passes the gate unrecorded; while the h
 	expect(
 		await journalGate({ journal, logger: silentLogger() })(message, "9"),
 	).toBe(true);
-	// Once the host drains, an addressed message is not routed nor recorded, so the next process answers it.
+	// Once the host drains, an addressed message is not recorded; routing decides whether it is left for the next process.
 	const addressedMessage = { ...message, mentionsBot: true };
 	expect(
 		await journalGate({
@@ -488,7 +491,7 @@ test("a message not addressed to the bot passes the gate unrecorded; while the h
 			logger: silentLogger(),
 			draining: () => true,
 		})(addressedMessage, "9"),
-	).toBe(false);
+	).toBe(true);
 	expect(claimed).toEqual([]);
 	expect(
 		await journalGate({ journal, logger: silentLogger(), retryMs: 0 })(
