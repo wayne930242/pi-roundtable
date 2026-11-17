@@ -134,7 +134,9 @@ test("a message still waiting behind a turn when the drain ends is refused at on
 	await Bun.sleep(1);
 	queue.close();
 	queue.seal();
-	await routing.refuseWaiting();
+	const tally = { refused: 0, failed: 0, stopped: false };
+	await routing.refuseWaiting(tally);
+	expect(tally).toEqual({ refused: 1, failed: 0, stopped: false });
 	expect(refused).toEqual(["waiting"]);
 	expect(routing.queued("discord:1")).toEqual([]);
 	running.resolve();

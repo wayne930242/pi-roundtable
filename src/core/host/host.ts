@@ -110,15 +110,6 @@ export interface RoundtableOptions {
 /** The host running in this process; the text catalog, time zone and environment are process-wide. */
 let running: Roundtable | undefined;
 
-/**
- * The process around the plugins: it sets them all up, links what they add (session parts,
- * HTTP routes) and runs the preflight, then starts their services in order and the
- * HTTP listeners last, then runs the services' background starts. Nothing reaches Discord or a listener unless
- * every setup, link, and the preflight succeeded. On shutdown it starts no new work, waits for
- * what runs for at most the drain limit, then closes the listeners and stops the services in
- * reverse.
- */
-// pi-lens-ignore: large-class
 /** How long the messages still waiting after the drain are given to be refused, before the teardown. */
 const REFUSE_WAITING_MS = 15_000;
 
@@ -136,6 +127,15 @@ async function withinMs<T>(ms: number, work: Promise<T> | T): Promise<T> {
 	}
 }
 
+/**
+ * The process around the plugins: it sets them all up, links what they add (session parts,
+ * HTTP routes) and runs the preflight, then starts their services in order and the
+ * HTTP listeners last, then runs the services' background starts. Nothing reaches Discord or a listener unless
+ * every setup, link, and the preflight succeeded. On shutdown it starts no new work, waits for
+ * what runs for at most the drain limit, then closes the listeners and stops the services in
+ * reverse.
+ */
+// pi-lens-ignore: large-class
 export class Roundtable {
 	readonly #options: RoundtableOptions;
 	readonly #plugins: readonly RoundtablePlugin[];
@@ -323,19 +323,19 @@ export class Roundtable {
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
 		// A message still waiting behind a turn never starts: its channel is told while the services run.
-		let refused = 0;
-		const told = await attempt(async () => {
-			refused = await withinMs(
-				REFUSE_WAITING_MS,
-				this.#link.router?.refuseWaiting() ?? 0,
-			);
-		});
-		if (!told.ok)
+		// Counted as it goes, and told to start no more once the limit passes.
+		const tally = { refused: 0, failed: 0, stopped: false };
+		const told = await attempt(() =>
+			withinMs(REFUSE_WAITING_MS, this.#link.router?.refuseWaiting(tally)),
+		);
+		tally.stopped = true;
+		if (!told.ok || tally.failed > 0)
 			logger.error(
-				{ err: told.error },
+				{ err: told.ok ? undefined : told.error, ...tally },
 				"not every waiting message was refused; the rest are not answered",
 			);
-		else if (refused > 0) logger.info({ refused }, "waiting messages refused");
+		else if (tally.refused > 0)
+			logger.info({ refused: tally.refused }, "waiting messages refused");
 		// A turn that started during the abort grace, a report's, is stopped too, so the teardown does not wait for it.
 		if (left.length > 0) stopQueuedTurns();
 		if (left.length > 0) {

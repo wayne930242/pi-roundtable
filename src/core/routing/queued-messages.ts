@@ -29,6 +29,13 @@ export interface QueuedEntry {
  * can only reach a message that has not started. Everything is synchronous, so no cancel or edit
  * races the start of a turn: whichever runs first wins.
  */
+/** How a refusal of every waiting message went, filled in as it goes; set `stopped` to start no more. */
+export interface RefuseTally {
+	refused: number;
+	failed: number;
+	stopped: boolean;
+}
+
 export class QueuedMessages {
 	readonly #entries = new Map<ChannelKey, Map<string, QueuedEntry>>();
 	readonly #logger: Logger;
@@ -131,22 +138,30 @@ export class QueuedMessages {
 		return "done";
 	}
 
-	/** Takes every waiting entry off the list and refuses it, the channels in parallel, each in order; how many. */
+	/** Takes every waiting entry off the list and refuses it, the channels in parallel, each in order, until `tally.stopped`. */
 	async refuseAll(
 		refuse: (entry: QueuedEntry) => Promise<void>,
-	): Promise<number> {
-		let refused = 0;
+		tally: RefuseTally,
+	): Promise<void> {
 		await Promise.all(
 			[...this.#entries.values()].map(async (entries) => {
 				for (const entry of [...entries.values()]) {
+					if (tally.stopped) return;
 					if (!this.remove(entry)) continue;
 					this.unmark(entry);
-					await refuse(entry);
-					refused += 1;
+					try {
+						await refuse(entry);
+						tally.refused += 1;
+					} catch (error) {
+						tally.failed += 1;
+						this.#logger.warn(
+							{ channel: entry.message.channel, err: error },
+							"a waiting message could not be refused",
+						);
+					}
 				}
 			}),
 		);
-		return refused;
 	}
 
 	/** Removes the waiting mark; a failure is logged, since the message may be gone. */
