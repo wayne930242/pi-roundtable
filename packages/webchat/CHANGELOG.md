@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.52.3] - 2026-11-17
+
+- Release in lockstep with pi-roundtable 0.52.3 (a turn the shutdown cuts before it answers leaves its message; claims without stop are stopped through the runtime); no package-specific behavior changes.
+
 ## [0.52.2] - 2026-11-17
 
 - Release in lockstep with pi-roundtable 0.52.2 (catch-up promises only what routing refuses; every waiting message refused at shutdown; configurable abort grace and refusal cap); no package-specific behavior changes.
