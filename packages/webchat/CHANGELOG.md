@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-17
+
+- Release in lockstep with pi-roundtable 0.51.0 (card presses answer first; attachment metadata and DISCORD.readAttachment); no package-specific behavior changes.
+
 ## [0.50.2] - 2026-11-16
 
 - Release in lockstep with pi-roundtable 0.50.2 (late card answer keeps its thread); no package-specific behavior changes.
