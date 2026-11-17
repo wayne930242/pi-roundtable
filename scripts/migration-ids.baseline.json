@@ -15,6 +15,7 @@
 		"prompts/prompt-overrides",
 		"prompts/prompt-history",
 		"discord/discord-inbound-journal",
+		"discord/discord-inbound-journal-left",
 		"skills/skills",
 		"skills/skill-versions",
 		"skills/skills-guild",

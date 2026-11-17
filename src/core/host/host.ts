@@ -110,6 +110,23 @@ export interface RoundtableOptions {
 /** The host running in this process; the text catalog, time zone and environment are process-wide. */
 let running: Roundtable | undefined;
 
+/** How long the messages still waiting after the drain are given to be refused, before the teardown. */
+const REFUSE_WAITING_MS = 15_000;
+
+/** `work`, or a rejection once `ms` pass; the timer never keeps the process alive. */
+async function withinMs<T>(ms: number, work: Promise<T> | T): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const late = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error(`not done in ${ms} ms`)), ms);
+		timer.unref?.();
+	});
+	try {
+		return await Promise.race([work, late]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /**
  * The process around the plugins: it sets them all up, links what they add (session parts,
  * HTTP routes) and runs the preflight, then starts their services in order and the
@@ -305,6 +322,20 @@ export class Roundtable {
 		});
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
+		// A message still waiting behind a turn never starts: its channel is told while the services run.
+		// Counted as it goes, and told to start no more once the limit passes.
+		const tally = { refused: 0, failed: 0, stopped: false };
+		const told = await attempt(() =>
+			withinMs(REFUSE_WAITING_MS, this.#link.router?.refuseWaiting(tally)),
+		);
+		tally.stopped = true;
+		if (!told.ok || tally.failed > 0)
+			logger.error(
+				{ err: told.ok ? undefined : told.error, ...tally },
+				"not every waiting message was refused; the rest are not answered",
+			);
+		else if (tally.refused > 0)
+			logger.info({ refused: tally.refused }, "waiting messages refused");
 		// A turn that started during the abort grace, a report's, is stopped too, so the teardown does not wait for it.
 		if (left.length > 0) stopQueuedTurns();
 		if (left.length > 0) {

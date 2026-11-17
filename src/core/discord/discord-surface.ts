@@ -87,6 +87,8 @@ export interface DiscordSurfaceOptions {
 	intercomTexts?: IntercomTexts;
 	/** Decides whether each live message is handed on, such as catch-up's journal; without it every one is. */
 	inboundGate?: InboundGate;
+	/** `ChatSurface.refuseStopping`, such as catch-up's; without it routing tells the channel. */
+	refuseStopping?: (message: InboundMessage) => Promise<boolean>;
 	/** Reads the channel context of an addressed message; without it the surface has none. */
 	channelContext?: (
 		message: InboundMessage,
@@ -120,8 +122,11 @@ export class DiscordSurface
 	#interactions: ComposedCommands = { commands: [], modules: [] };
 	#onMessage: ((message: InboundMessage) => void) | undefined;
 
+	readonly refuseStopping?: (message: InboundMessage) => Promise<boolean>;
+
 	constructor(options: DiscordSurfaceOptions) {
 		this.#options = options;
+		if (options.refuseStopping) this.refuseStopping = options.refuseStopping;
 		this.#client = new Client({
 			intents: [
 				GatewayIntentBits.Guilds,

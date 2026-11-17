@@ -16,15 +16,17 @@ export type CatchUpSettings = Required<CatchUpOptions>;
 
 const DEFAULT_WINDOW_MINUTES = 10;
 const DEFAULT_MAX_MESSAGES = 20;
-/** How long a direct-message channel is remembered, to be looked into after a restart. */
-const DIRECT_MEMORY_DAYS = 30;
+/** How long a record is kept: a direct-message channel is remembered this long, to be looked into after a restart. */
+export const JOURNAL_DAYS = 30;
 /** The most remembered direct-message channels fetched to see whether they had a message lately. */
 const DIRECT_PROBES = 25;
 /** The most channels whose messages one catch-up reads, one request each. */
 const MAX_CHANNEL_READS = 50;
 /** The messages read before the ready time in each channel, one page. */
 const PAGE = 100;
-const DAY_MS = 86_400_000;
+export const DAY_MS = 86_400_000;
+/** How long a message a stopping process left is still answered by the next. */
+const LEFT_KEPT_MS = DAY_MS;
 const DISCORD_EPOCH = 1_420_070_400_000n;
 
 const whole = (value: number | undefined, low: number, high: number) =>
@@ -76,6 +78,12 @@ export interface ScannedMessage {
 		users: { has(id: string): boolean };
 		repliedUser: { id: string } | null;
 	};
+	/** Whether a thread was started from it, as the bot answers a mention in a thread. */
+	hasThread?: boolean;
+	/** Its reactions; one the bot added counts as an answer. */
+	reactions?: {
+		cache: { some(test: (reaction: { me: boolean }) => boolean): boolean };
+	};
 }
 
 /** A channel catch-up may read. */
@@ -98,6 +106,8 @@ export interface CatchUpReader<M extends ScannedMessage> {
 	channels(): CatchUpChannel<M>[];
 	/** A direct-message channel by its id; undefined when it is not one. */
 	direct(channelId: string): Promise<CatchUpChannel<M> | undefined>;
+	/** A message by its channel and id; undefined when it is gone. */
+	message(channelId: string, messageId: string): Promise<M | undefined>;
 	/** The message as the live gateway would deliver it. */
 	inbound(message: M): Promise<InboundMessage | undefined>;
 }
@@ -111,6 +121,10 @@ export interface CatchUpDeps<M extends ScannedMessage> {
 	logger: Logger;
 	/** True once the host shuts down: nothing more is delivered. */
 	stopping?: () => boolean;
+	/** Hears, before any is read, the channels catch-up may read, a few more than it does: those its cache shows active, and the remembered direct messages. */
+	planned?: (channelIds: string[]) => void;
+	/** Whether the live gateway delivered the message without recording it, in this process: it is not delivered again. */
+	passedLive?: (messageId: string) => boolean;
 	now?: () => number;
 }
 
@@ -134,6 +148,7 @@ async function channelsToRead<M extends ScannedMessage>(
 	deps: CatchUpDeps<M>,
 	since: number,
 	now: number,
+	leftIn: string[],
 ): Promise<CatchUpChannel<M>[]> {
 	const { reader, journal, logger } = deps;
 	const known = reader.channels();
@@ -141,13 +156,21 @@ async function channelsToRead<M extends ScannedMessage>(
 	const directs = await journal
 		.directChannels(
 			reader.botId,
-			new Date(now - DIRECT_MEMORY_DAYS * DAY_MS),
+			new Date(now - JOURNAL_DAYS * DAY_MS),
 			DIRECT_PROBES,
 		)
 		.catch((error: unknown) => {
 			logger.warn({ err: error }, "catch-up could not list direct messages");
 			return [];
 		});
+	// Live messages wait for this, not for the direct messages to be fetched.
+	deps.planned?.([
+		...known
+			.filter((channel) => (channel.lastMessageAt ?? 0) >= since)
+			.map((channel) => channel.id),
+		...directs,
+		...leftIn,
+	]);
 	for (const id of directs) {
 		if (ids.has(id)) continue;
 		const channel = await reader.direct(id).catch(() => undefined);
@@ -157,6 +180,22 @@ async function channelsToRead<M extends ScannedMessage>(
 		.filter((channel) => (channel.lastMessageAt ?? 0) >= since)
 		.toSorted((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
 		.slice(0, MAX_CHANNEL_READS);
+}
+
+/** Which of the bot's posts are restart notices, recorded as it shut down; undefined when that cannot be read. */
+async function restartNotices<M extends ScannedMessage>(
+	{ journal, reader, logger }: CatchUpDeps<M>,
+	posts: M[],
+): Promise<Set<string> | undefined> {
+	return journal
+		.recordedAmong(
+			reader.botId,
+			posts.map((post) => post.id),
+		)
+		.catch((error: unknown) => {
+			logger.warn({ err: error }, "catch-up could not look up restart notices");
+			return undefined;
+		});
 }
 
 /**
@@ -184,17 +223,54 @@ export async function catchUp<M extends ScannedMessage>(
 		failed: 0,
 		delivered: 0,
 	};
-	await journal
-		.prune(new Date(now - DIRECT_MEMORY_DAYS * DAY_MS))
-		.catch((error: unknown) =>
-			logger.warn({ err: error }, "catch-up could not prune its journal"),
-		);
 	const own = reader.applicationId ?? botId;
 	const byBot = (message: M) =>
 		message.author.id === botId ||
 		(message.webhookId !== null && message.applicationId === own);
-	const missed: { message: M; channel: CatchUpChannel<M> }[] = [];
-	for (const channel of await channelsToRead(deps, since, now)) {
+	type Missed = {
+		message: M;
+		channel: Pick<CatchUpChannel<M>, "id" | "direct">;
+		left?: true;
+	};
+	const missed: Missed[] = [];
+	// What a stopping process left is answered whatever its channel shows since, outside the window and the cap.
+	const left = await journal
+		.left(botId, new Date(now - LEFT_KEPT_MS))
+		.catch((error: unknown) => {
+			logger.warn(
+				{ err: error },
+				"catch-up could not list the messages left to it",
+			);
+			return [];
+		});
+	// The left messages read, which the channel reads below leave alone.
+	const leftIds = new Set<string>();
+	const reading = await channelsToRead(
+		deps,
+		since,
+		now,
+		left.map((entry) => entry.channelId),
+	).catch((error: unknown) => {
+		logger.warn({ err: error }, "catch-up could not list its channels");
+		return [];
+	});
+	for (const entry of left) {
+		const channel = { id: entry.channelId, direct: entry.direct };
+		try {
+			const message = await reader.message(entry.channelId, entry.messageId);
+			if (message) {
+				missed.push({ message, channel, left: true });
+				leftIds.add(message.id);
+			}
+		} catch (error) {
+			report.failed += 1;
+			logger.warn(
+				{ ...channel, messageId: entry.messageId, err: error },
+				"catch-up could not read a message left to it",
+			);
+		}
+	}
+	for (const channel of reading) {
 		if (deps.stopping?.()) return report;
 		report.channels += 1;
 		let messages: M[];
@@ -208,13 +284,22 @@ export async function catchUp<M extends ScannedMessage>(
 			);
 			continue;
 		}
-		const answeredUpTo = messages.filter(byBot).reduce((latest, message) => {
-			const id = BigInt(message.id);
-			return id > latest ? id : latest;
-		}, 0n);
+		const notices = await restartNotices(deps, messages.filter(byBot));
+		// Not knowing which posts are notices, it could take one for an answer: the channel is left for a later restart.
+		if (!notices) {
+			report.unread += 1;
+			continue;
+		}
+		const answeredUpTo = messages
+			.filter((message) => byBot(message) && !notices.has(message.id))
+			.reduce((latest, message) => {
+				const id = BigInt(message.id);
+				return id > latest ? id : latest;
+			}, 0n);
 		for (const message of messages) {
 			const { author, mentions } = message;
 			if (
+				leftIds.has(message.id) ||
 				message.createdTimestamp < since ||
 				message.createdTimestamp >= readyAt ||
 				author.bot ||
@@ -227,16 +312,28 @@ export async function catchUp<M extends ScannedMessage>(
 				)
 			)
 				continue;
-			// The bot posted after it, so it was answered then, or told it was restarting.
-			if (BigInt(message.id) < answeredUpTo) report.replied += 1;
+			// The bot posted after it, so it was answered then; a notice that it restarts is no answer.
+			// A thread started from it or a reaction of the bot's is an answer the channel does not show.
+			if (
+				BigInt(message.id) < answeredUpTo ||
+				message.hasThread ||
+				message.reactions?.cache.some((reaction) => reaction.me)
+			)
+				report.replied += 1;
 			else missed.push({ message, channel });
 		}
 	}
 	missed.sort((a, b) => (BigInt(a.message.id) < BigInt(b.message.id) ? -1 : 1));
 	report.missed = missed.length;
-	report.overCap = Math.max(0, missed.length - settings.maxMessages);
-	for (const { message, channel } of missed.slice(report.overCap)) {
+	const found = missed.filter((item) => !item.left);
+	report.overCap = Math.max(0, found.length - settings.maxMessages);
+	const dropped = new Set(found.slice(0, report.overCap));
+	for (const { message, channel } of missed.filter((m) => !dropped.has(m))) {
 		if (deps.stopping?.()) break;
+		if (deps.passedLive?.(message.id)) {
+			report.handled += 1;
+			continue;
+		}
 		try {
 			const inbound = await reader.inbound(message);
 			if (!inbound) continue;
@@ -250,6 +347,23 @@ export async function catchUp<M extends ScannedMessage>(
 				report.handled += 1;
 				continue;
 			}
+			// Routing refuses it once the host shuts down; the next process takes it in instead.
+			if (deps.stopping?.()) {
+				await journal
+					.leave({
+						botId,
+						messageId: message.id,
+						channelId: channel.id,
+						direct: channel.direct,
+					})
+					.catch((error: unknown) =>
+						logger.warn(
+							{ channelId: channel.id, messageId: message.id, err: error },
+							"catch-up could not leave a message as the host stops; no process answers it",
+						),
+					);
+				break;
+			}
 			deps.deliver({ ...inbound, caughtUp: true });
 			report.delivered += 1;
 		} catch (error) {
@@ -261,44 +375,11 @@ export async function catchUp<M extends ScannedMessage>(
 			);
 		}
 	}
+	await journal
+		.prune(new Date(now - JOURNAL_DAYS * DAY_MS))
+		.catch((error: unknown) =>
+			logger.warn({ err: error }, "catch-up could not prune its journal"),
+		);
 	logger.info({ ...report }, "discord catch-up done");
 	return report;
-}
-
-/**
- * Records each addressed message the live gateway delivers before routing hears it, so catch-up
- * after a restart leaves it alone; false for one already recorded, which is not delivered again.
- * A message that cannot be recorded is still delivered, and logged. Once the host drains
- * (`draining`), nothing is recorded: routing refuses those messages, and the next process answers
- * those its restart notice did not.
- */
-export function journalGate(
-	journal: InboundJournal,
-	logger: Logger,
-	draining: () => boolean = () => false,
-): (message: InboundMessage, botId: string) => Promise<boolean> {
-	return async (message, botId) => {
-		if (!addressed(message) || draining()) return true;
-		const channelId = message.channel.slice("discord:".length);
-		try {
-			const first = await journal.claim({
-				botId,
-				messageId: message.messageId,
-				channelId,
-				direct: message.isDirect,
-			});
-			if (!first)
-				logger.info(
-					{ channelId, messageId: message.messageId },
-					"message already taken in; not delivered again",
-				);
-			return first;
-		} catch (error) {
-			logger.warn(
-				{ channelId, messageId: message.messageId, err: error },
-				"could not record an addressed message; delivered anyway",
-			);
-			return true;
-		}
-	};
 }

@@ -27,7 +27,11 @@ import { tellDeleted, tellEdited } from "./claim-events.ts";
 import { ForwardJoin } from "./forward-join.ts";
 import type { MessageObservers } from "./message-observers.ts";
 import { type PeerBots, peerFacts } from "./peer-bots.ts";
-import { type QueuedEntry, QueuedMessages } from "./queued-messages.ts";
+import {
+	type QueuedEntry,
+	QueuedMessages,
+	type RefuseTally,
+} from "./queued-messages.ts";
 
 export interface ChannelRouterOptions {
 	/** Claims in registration order; the router orders them by priority. */
@@ -248,16 +252,23 @@ export class ChannelRouter implements ConversationPort {
 				reason: new HostStoppingError().message,
 			});
 		logger.info({ channel }, "message not run: the host is shutting down");
-		if (message.authorIsBot || message.integration || this.#told.has(channel))
-			return;
-		this.#told.add(channel);
+		if (message.authorIsBot || message.integration) return;
 		try {
-			await surfaces?.sendReply?.(channel, {
-				chunks: [messages().restartingNotice],
-			});
+			// The surface may take it, and tell its channel itself.
+			if (await surfaces?.of(channel)?.refuseStopping?.(message)) return;
 		} catch (error) {
-			logger.warn({ channel, err: error }, "restart notice not posted");
+			logger.warn(
+				{ channel, err: error },
+				"surface did not take a refused message",
+			);
 		}
+		if (this.#told.has(channel)) return;
+		this.#told.add(channel);
+		await surfaces
+			?.sendReply?.(channel, { chunks: [messages().restartingNotice] })
+			.catch((error: unknown) =>
+				logger.warn({ channel, err: error }, "restart notice not posted"),
+			);
 	}
 
 	/**
@@ -311,6 +322,14 @@ export class ChannelRouter implements ConversationPort {
 				);
 			});
 		return { done };
+	}
+
+	/** Refuses each message still waiting behind a turn after the drain, counting in `tally`. */
+	refuseWaiting(tally: RefuseTally): Promise<void> {
+		return this.#queued.refuseAll(
+			(e) => this.#refuse(e.message, e.admission),
+			tally,
+		);
 	}
 
 	queued(channel: ChannelKey): readonly QueuedMessage[] {
