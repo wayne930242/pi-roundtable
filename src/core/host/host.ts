@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import type { Hex } from "../../characters/index.ts";
 import type { AttachmentRetention } from "../attachments/attachment-retention.ts";
+import { REFUSE_WAITING_MS } from "../config/limits.ts";
 import type { PeerBotsConfig } from "../config/peer-bots.ts";
 import { checkDatabase } from "../db/check-database.ts";
 import { openPool, runMigrations } from "../db/migrations.ts";
@@ -100,18 +101,16 @@ export interface RoundtableOptions {
 	/**
 	 * The shutdown drain: it waits up to `limitMs` (3 minutes by default) for the turns already
 	 * running, then stops them, gives them `abortGraceMs` (10 seconds) to end, and goes on without
-	 * them. Nothing new starts once it begins. Tests shorten the limits and the clock.
+	 * them. Nothing new starts once it begins. The messages still waiting behind a turn then get
+	 * `refuseWaitingMs` (15 seconds) to be refused. Tests shorten the limits and the clock.
 	 */
-	drain?: Omit<DrainOptions, "busy">;
+	drain?: Omit<DrainOptions, "busy"> & { refuseWaitingMs?: number };
 	/** What `listen()` calls with the shutdown's exit code; the process's own exit by default. */
 	exit?: (code: number) => void;
 }
 
 /** The host running in this process; the text catalog, time zone and environment are process-wide. */
 let running: Roundtable | undefined;
-
-/** How long the messages still waiting after the drain are given to be refused, before the teardown. */
-const REFUSE_WAITING_MS = 15_000;
 
 /** `work`, or a rejection once `ms` pass; the timer never keeps the process alive. */
 async function withinMs<T>(ms: number, work: Promise<T> | T): Promise<T> {
@@ -326,7 +325,10 @@ export class Roundtable {
 		// Counted as it goes, and told to start no more once the limit passes.
 		const tally = { refused: 0, failed: 0, stopped: false };
 		const told = await attempt(() =>
-			withinMs(REFUSE_WAITING_MS, this.#link.router?.refuseWaiting(tally)),
+			withinMs(
+				drain?.refuseWaitingMs ?? REFUSE_WAITING_MS,
+				this.#link.router?.refuseWaiting(tally),
+			),
 		);
 		tally.stopped = true;
 		if (!told.ok || tally.failed > 0)

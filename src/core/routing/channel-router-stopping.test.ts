@@ -90,58 +90,70 @@ test("without the surface taking it, or when it fails, routing tells the channel
 	expect(bot.refused).toEqual([]);
 });
 
-test("a message still waiting behind a turn when the drain ends is refused at once, through its surface, and never runs", async () => {
-	const ran: string[] = [];
-	const running = Promise.withResolvers<void>();
-	const claim: ChannelClaim = {
-		name: "owner",
-		priority: 0,
-		owns: () => true,
-		admit: (m) => ({
-			kind: "turn",
-			busy: { react: async () => undefined, unreact: async () => undefined },
-			run: async () => {
-				ran.push(m.messageId);
-				if (m.messageId === "first") await running.promise;
+for (const marked of [true, false])
+	test(`a message still waiting behind a turn when the drain ends is refused at once, through its surface, and never runs (${marked ? "a claim that marks it" : "a claim without a waiting mark"})`, async () => {
+		const ran: string[] = [];
+		const running = Promise.withResolvers<void>();
+		const claim: ChannelClaim = {
+			name: "owner",
+			priority: 0,
+			owns: () => true,
+			admit: (m) => ({
+				kind: "turn",
+				...(marked
+					? {
+							busy: {
+								react: async () => undefined,
+								unreact: async () => undefined,
+							},
+						}
+					: {}),
+				run: async () => {
+					ran.push(m.messageId);
+					if (m.messageId === "first") await running.promise;
+				},
+				failure: "failed",
+			}),
+			startFresh: async () => "owner",
+		};
+		const refused: string[] = [];
+		const queue = new ChannelQueue();
+		const routing = new ChannelRouter({
+			claims: [claim],
+			targets: () => undefined,
+			queue,
+			logger: silentLogger(),
+			contacts: IDENTITY,
+			principals: IDENTITY,
+			surfaces: {
+				of: () =>
+					({
+						refuseStopping: async (m: InboundMessage) => {
+							refused.push(m.messageId);
+							return true;
+						},
+					}) as ChatSurface,
+				sendReply: async () => undefined,
 			},
-			failure: "failed",
-		}),
-		startFresh: async () => "owner",
-	};
-	const refused: string[] = [];
-	const queue = new ChannelQueue();
-	const routing = new ChannelRouter({
-		claims: [claim],
-		targets: () => undefined,
-		queue,
-		logger: silentLogger(),
-		contacts: IDENTITY,
-		principals: IDENTITY,
-		surfaces: {
-			of: () =>
-				({
-					refuseStopping: async (m: InboundMessage) => {
-						refused.push(m.messageId);
-						return true;
-					},
-				}) as ChatSurface,
-			sendReply: async () => undefined,
-		},
+		});
+		const first = routing.handle(message("first"));
+		await Bun.sleep(1);
+		const waiting = routing.handle(message("waiting"));
+		await Bun.sleep(1);
+		// Only a marked message is listed for its author to cancel or edit.
+		expect(routing.queued("discord:1").map((q) => q.messageId)).toEqual(
+			marked ? ["waiting"] : [],
+		);
+		queue.close();
+		queue.seal();
+		const tally = { refused: 0, failed: 0, stopped: false };
+		await routing.refuseWaiting(tally);
+		expect(tally).toEqual({ refused: 1, failed: 0, stopped: false });
+		expect(refused).toEqual(["waiting"]);
+		expect(routing.queued("discord:1")).toEqual([]);
+		running.resolve();
+		await Promise.all([first, waiting]);
+		await Bun.sleep(1);
+		expect(ran).toEqual(["first"]);
+		expect(refused).toEqual(["waiting"]);
 	});
-	const first = routing.handle(message("first"));
-	await Bun.sleep(1);
-	const waiting = routing.handle(message("waiting"));
-	await Bun.sleep(1);
-	queue.close();
-	queue.seal();
-	const tally = { refused: 0, failed: 0, stopped: false };
-	await routing.refuseWaiting(tally);
-	expect(tally).toEqual({ refused: 1, failed: 0, stopped: false });
-	expect(refused).toEqual(["waiting"]);
-	expect(routing.queued("discord:1")).toEqual([]);
-	running.resolve();
-	await Promise.all([first, waiting]);
-	await Bun.sleep(1);
-	expect(ran).toEqual(["first"]);
-	expect(refused).toEqual(["waiting"]);
-});

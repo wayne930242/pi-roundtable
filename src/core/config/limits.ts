@@ -7,8 +7,20 @@ import {
 } from "../modes/autonomy.ts";
 import { integer, list, optional, shape, text } from "./schema.ts";
 
+/** How long work that was told to stop at the drain limit gets to end before the shutdown goes on. */
+export const ABORT_GRACE_MS = 10_000;
+/** How long the messages still waiting after the drain are given to be refused, before the teardown. */
+export const REFUSE_WAITING_MS = 15_000;
+
 /** The configuration's `turnLimits` and `autonomy`: how long a turn works, and what runs without a person. */
 export interface LimitsConfig {
+	/**
+	 * Seconds a shutdown gives the turns it stops at the drain limit to end; 1 to 600, default 10.
+	 * A service manager's kill timeout should exceed `drainSeconds` + this + `refuseWaitingSeconds`.
+	 */
+	abortGraceSeconds?: number;
+	/** Seconds a shutdown gives the refusal of the messages still waiting behind a turn; 1 to 600, default 15. */
+	refuseWaitingSeconds?: number;
 	/**
 	 * How long one turn may work before it asks the owner on a card whether to go on, or is
 	 * stopped when it cannot show a card. Time spent waiting on the owner's cards does not count.
@@ -51,8 +63,10 @@ export interface LimitsConfig {
 	};
 }
 
-/** The two keys' shapes, spread into the configuration's. */
+/** The keys' shapes, spread into the configuration's. */
 export const limitsShape = {
+	abortGraceSeconds: optional(integer(1, 600)),
+	refuseWaitingSeconds: optional(integer(1, 600)),
 	turnLimits: optional(
 		shape({
 			timeoutSeconds: optional(integer(60, 86_400)),
@@ -79,6 +93,8 @@ export const limitsShape = {
 
 /** The limits with their defaults, in ms; `maxMs` is never below `timeoutMs`. */
 export interface ResolvedLimits {
+	abortGraceMs: number;
+	refuseWaitingMs: number;
 	turnLimits: { timeoutMs: number; maxMs: number; cardMs: number };
 	autonomy: Autonomy;
 }
@@ -94,6 +110,8 @@ export function limitsOf(config: LimitsConfig): ResolvedLimits {
 		);
 	const longRunning = autonomy?.longRunning?.maxSeconds;
 	return {
+		abortGraceMs: secondsOr(config.abortGraceSeconds, ABORT_GRACE_MS),
+		refuseWaitingMs: secondsOr(config.refuseWaitingSeconds, REFUSE_WAITING_MS),
 		turnLimits: {
 			timeoutMs: timeoutSeconds * 1_000,
 			maxMs: maxSeconds * 1_000,
