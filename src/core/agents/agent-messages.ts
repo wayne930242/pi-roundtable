@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChannelKey, IntercomCard } from "../domain/conversation.ts";
 import { AgentError, IdentityError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
@@ -6,7 +7,11 @@ import { addressee, type Speaker } from "../identity/speakers.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
-import { currentRecord, underRecord } from "../routing/turn-records.ts";
+import {
+	currentRecord,
+	type TurnRecord,
+	underRecord,
+} from "../routing/turn-records.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
@@ -23,6 +28,18 @@ import {
 	MAX_CHAIN_MESSAGES,
 	type TurnHost,
 } from "./team-turn-types.ts";
+
+/**
+ * The turn record of the person's message an agent message goes back to, with its `answers` when
+ * it was sent: a shutdown that leaves that message drops what the exchange kept for the next start.
+ */
+interface Origin {
+	record: TurnRecord;
+	since: number;
+}
+
+/** The origin of the exchange a turn runs in, for the agent messages that turn sends in turn. */
+const hopOrigin = new AsyncLocalStorage<Origin | undefined>();
 
 /** Messages between agents: each runs the target's turn, then wakes the sender with the answer. */
 export class AgentMessages {
@@ -91,22 +108,25 @@ export class AgentMessages {
 			peer: this.#peer(target),
 			text,
 		});
-		// The person's message the chain started from: the exchange runs outside its record, so the
-		// target's answer is not taken for the sender's, and what any hop of the chain keeps for the
-		// next start is taken out again once a shutdown leaves that message, which is then asked again.
-		// Each send under the record counts its answers then; a later hop takes the chain's.
+		// The person's message this send goes back to: the exchange runs outside its record, so the
+		// target's answer is not taken for the sender's, and what any later hop keeps for the next
+		// start is taken out again once a shutdown leaves that message, which is then asked again.
+		// A send under the record counts its answers then; a later hop takes those of the send it follows.
 		const record = currentRecord();
-		chain.origin ??= record && { record, since: record.answers };
-		const origin = record ? { record, since: record.answers } : chain.origin;
+		const origin = record
+			? { record, since: record.answers }
+			: hopOrigin.getStore();
 		void underRecord(undefined, () =>
-			queue.run(targetChannel, async () =>
-				this.#exchange(
-					sender,
-					target,
-					text,
-					chain,
-					{ targetChannel, senderChannel: parent },
-					origin,
+			hopOrigin.run(origin, () =>
+				queue.run(targetChannel, async () =>
+					this.#exchange(
+						sender,
+						target,
+						text,
+						chain,
+						{ targetChannel, senderChannel: parent },
+						origin,
+					),
 				),
 			),
 		)
@@ -176,7 +196,7 @@ export class AgentMessages {
 			targetChannel,
 			senderChannel,
 		}: { targetChannel: ChannelKey; senderChannel: ChannelKey },
-		origin: Chain["origin"],
+		origin: Origin | undefined,
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
 		await this.#host.post(targetChannel, this.#host.current(sender), {
@@ -265,7 +285,7 @@ export class AgentMessages {
 	 * again, or not written at all: the next process answers that message anew, or its author is
 	 * asked to send it again, and the turn sends it again then.
 	 */
-	#keep(origin: Chain["origin"], entry: OutboxEntry): void {
+	#keep(origin: Origin | undefined, entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
 		const about = { kind: entry.kind, from: entry.sender, to: entry.target };
 		if (origin?.record.droppedSince(origin.since)) {

@@ -21,11 +21,13 @@ export async function settleTurn<R>(
 	try {
 		result = await run();
 	} catch (error) {
-		// A turn refused because the host stops leaves its message, as a cut one does.
-		if (error instanceof HostStoppingError) record?.refusedByHost();
+		// A turn refused because the host stops leaves its message, as a cut one does, and is no crash.
+		const refused = record !== undefined && error instanceof HostStoppingError;
 		result = {
 			ok: false,
-			error: new AgentRunError(`${what} crashed: ${String(error)}`),
+			error: new AgentRunError(
+				refused ? error.message : `${what} crashed: ${String(error)}`,
+			),
 		};
 	}
 	if (!record) return result;

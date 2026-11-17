@@ -209,7 +209,8 @@ export class RunningTurns {
 		try {
 			await underRecord(record, task);
 		} catch (error) {
-			// A turn it asked for was refused as the host stops: left with the cut, once its grace is over.
+			// A turn it asked for was refused as the host stops: its unanswered messages are told with
+			// the cut turns once the abort grace is over, within the refusal's time, not at once.
 			if (!(error instanceof HostStoppingError)) throw error;
 			record.refusedByHost();
 		} finally {

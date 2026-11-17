@@ -398,7 +398,7 @@ test("a turn the stopping host refuses before it ran leaves its message once, wh
 		// Not running at the drain limit: no cut is needed.
 		await routing.leaveCut(tally());
 		expect(left).toEqual(["a"]);
-		if (refuse === "result")
+		if (refuse !== "throw")
 			expect(results).toEqual([expect.objectContaining({ stopped: true })]);
 	}
 });

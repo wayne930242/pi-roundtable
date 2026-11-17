@@ -321,8 +321,10 @@ export class Roundtable {
 				return turns || services;
 			},
 		});
-		// Only what ran before the drain ended finishes; nothing delivered later starts.
+		// Only what ran before the drain ended finishes; nothing delivered later starts. A message's
+		// turn still running now, such as one outside the queue the drain did not wait for, is cut too.
 		this.#link.queue.seal();
+		this.#link.router?.cutRunning();
 		// A cut turn that did not answer, then a message still waiting behind a turn, never answers:
 		// their channels are told while the services run, the cut first, as its message came first.
 		// Counted as it goes, and told to start no more once the limit passes.

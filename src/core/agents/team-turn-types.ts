@@ -15,7 +15,6 @@ import type { Speaker } from "../identity/speakers.ts";
 import type { Logger } from "../kernel/log.ts";
 import type { EventSink } from "../plugin-api/plugin.ts";
 import type { AvatarStudio } from "../plugin-api/services.ts";
-import type { TurnRecord } from "../routing/turn-records.ts";
 import type { ToolTiers } from "../runtime/tool-tiers.ts";
 import type { AgentTurnRunner } from "./agent-ports.ts";
 import type { Agent, PgAgentStore } from "./agent-store.ts";
@@ -33,11 +32,6 @@ export interface Chain {
 	messages: number;
 	/** Whoever started the run; the agents it wakes work for the same person. */
 	speaker: Speaker;
-	/**
-	 * The turn record of the person's message the chain started from, and its `answers` when the
-	 * first agent message was sent: a shutdown that leaves that message drops what the chain kept.
-	 */
-	origin?: { record: TurnRecord; since: number };
 }
 
 export interface TeamTurnsOptions {

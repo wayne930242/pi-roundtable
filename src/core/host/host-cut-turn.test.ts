@@ -6,11 +6,12 @@ import type {
 } from "../contract/channels.ts";
 import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
+import type { ConversationRegistry } from "../conversations/conversation-registry.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
-import { RUNTIME } from "../plugin-api/services.ts";
+import { CONVERSATIONS, RUNTIME } from "../plugin-api/services.ts";
 import type { ConversationTurns } from "../routing/conversation-turns.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { Roundtable } from "./host.ts";
@@ -50,7 +51,12 @@ type Stopping = "obeys" | "told" | "deaf";
  * surface takes every refused message, as the Discord surface does with catch-up, and `log`
  * records what was left and when the services stopped.
  */
-function setup(stopping: Stopping, steers = false, graceMs = 40) {
+function setup(
+	stopping: Stopping,
+	steers = false,
+	graceMs = 40,
+	awaits = true,
+) {
 	const log: string[] = [];
 	const replies: string[] = [];
 	const stops: string[] = [];
@@ -82,12 +88,14 @@ function setup(stopping: Stopping, steers = false, graceMs = 40) {
 				unreact: async () => undefined,
 			},
 			run: async () => {
-				await taken.turns?.run({
+				const turn = taken.turns?.run({
 					channel: m.channel,
 					kind: "plain",
 					text: m.text,
 					speaker: OWNER_SPEAKER,
 				});
+				if (awaits) await turn;
+				else void turn?.catch(() => undefined);
 			},
 			failure: "failed",
 		}),
@@ -106,9 +114,16 @@ function setup(stopping: Stopping, steers = false, graceMs = 40) {
 	const plugins: RoundtablePlugin[] = [
 		{
 			name: "runtime",
-			provides: [RUNTIME],
+			provides: [RUNTIME, CONVERSATIONS],
 			setup: (context) => {
 				context.services.provide(RUNTIME, runtime);
+				// Recording a conversation takes a moment, as the database does, before its turn starts.
+				context.services.provide(CONVERSATIONS, {
+					register: async (entry: { key: string; kind: string }) => {
+						await Bun.sleep(5);
+						return { ...entry, visibility: "shared" };
+					},
+				} as unknown as ConversationRegistry);
 				return {
 					services: [
 						{ name: "runtime", stop: () => void log.push("stop runtime") },
@@ -196,5 +211,14 @@ describe("a turn the shutdown cuts", () => {
 		await until(() => waiting.taken.conversations?.queued?.(ROOM).length === 1);
 		expect(await waiting.roundtable.shutdown("SIGTERM")).toBe(0);
 		expect(waiting.log).toEqual(["left first", "left waiting", "stop runtime"]);
+	});
+	test("that its admission started without waiting for it, outside the queue the drain waits for, is left as well, and its late answer is not posted", async () => {
+		const s = setup("obeys", false, 40, false);
+		await holdATurn(s);
+		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
+		expect(s.log).toEqual(["left first", "stop runtime"]);
+		s.turns[0]?.resolve({ ok: true, text: "the answer" });
+		await until(() => s.replies.length > 0);
+		expect(s.replies).toEqual(["-# Stopped."]);
 	});
 });
