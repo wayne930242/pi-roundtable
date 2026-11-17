@@ -194,6 +194,16 @@ The owner manages connectors on Discord with `/<root> connector`, where `<root>`
 | `resync` | Reads the tools of one connector (or of every connector when none is named) from its server again and makes the virtual server serve them, so a tool the server renamed is attached without adding the connector again |
 | `remove` | Deletes the connector, its virtual server, and the upstream server with its token |
 
+The agents get three tools for the owner's connectors, none of which takes or shows a connector's URL (it may carry a token):
+
+| Tool | Tier | What it does |
+| --- | --- | --- |
+| `connector_list` | member | Each connector's name, scheme and host (`displayUrl`), whether its tools can be read and how many, and its purpose |
+| `connector_add({ name, description? })` | owner | Takes no URL and no other field. With pi-roundtable-web serving the connectors page, it makes a one-time add request (an hour, single use; it stores the name, purpose and conversation, never a URL) and returns a link to the page's add form filled in; the owner pastes the URL there, submitting is the approval, and the asking conversation gets a follow-up with the name, host and tool count, or the failure. Elsewhere, such as a conversation on Discord, it makes nothing and sends the owner to `/<root> connector add`. Its description tells the agent never to ask for a URL in the chat |
+| `connector_remove({ name })` | owner | Removes the connector as `remove` does, once the owner approves the card. It is held under the rule `connector` (`yolo: "never"`), whose card names the connector and its host only; an unknown name is refused with the names there are |
+
+pi-roundtable-web provides the add requests under the service id `pi-roundtable-web.connector-add-requests`; the plugin reads it at each call, so neither package imports the other. The new wording is under `removeHold`, `toolUnknownConnector`, `toolRemoved`, `toolListEmpty`, `toolListLine`, `toolAddLink`, `toolAddElsewhere` and `toolOwnerOnly` in `messages`.
+
 ### `remoteMcp(options)`
 
 | Option | Type | Default | What it is |

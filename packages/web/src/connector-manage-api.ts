@@ -47,7 +47,9 @@ export function displayUrl(url: string): string | undefined {
 }
 
 /** Only the fields the page shows, so nothing else the port's object holds can reach a response. */
-function connectorView(connector: ManagedConnector): ManagedConnectorView {
+export function connectorView(
+	connector: ManagedConnector,
+): ManagedConnectorView {
 	const shown = displayUrl(connector.url);
 	return {
 		name: connector.name,
@@ -61,7 +63,7 @@ function connectorView(connector: ManagedConnector): ManagedConnectorView {
  * A port's refusal reaches the owner as its message, already in the host's wording; anything
  * else is logged without the request and answered as the service being down.
  */
-async function guarded<T>(
+export async function guarded<T>(
 	context: ManageContext,
 	service: "connectors" | "grants",
 	call: () => Promise<T> | T,
@@ -81,20 +83,20 @@ async function guarded<T>(
 	}
 }
 
-const optional = (value: unknown, max: number): string | undefined => {
+export const optional = (value: unknown, max: number): string | undefined => {
 	if (value === undefined || value === null || value === "") return undefined;
 	if (typeof value !== "string" || value.length > max)
 		throw new HttpError(400, "The body is not valid.");
 	return value;
 };
 
-const required = (value: unknown, max: number): string => {
+export const required = (value: unknown, max: number): string => {
 	if (typeof value !== "string" || value.length > max)
 		throw new HttpError(400, "The body is not valid.");
 	return value;
 };
 
-async function objectBody(
+export async function objectBody(
 	context: ManageContext,
 ): Promise<Record<string, unknown>> {
 	const body = await context.body();

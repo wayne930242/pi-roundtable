@@ -178,7 +178,7 @@ export class ConsoleApi {
 		}
 		if (
 			head === "connectors" &&
-			(id === "managed" || id === "grants") &&
+			(id === "managed" || id === "grants" || id === "requests") &&
 			parts.length >= 2
 		)
 			return this.#manage(request, parts.slice(1), visitor);
@@ -216,6 +216,9 @@ export class ConsoleApi {
 		const manage = features?.connectors?.manage;
 		if (area === "managed" && manage && rest.length <= 1)
 			return connectorRoutes(manage, request.method, rest[0], context);
+		const requests = this.#ports.connectorRequests;
+		if (area === "requests" && requests && rest.length === 1 && rest[0])
+			return requests.route(request.method, rest[0], context);
 		const grants = features?.mcpGrants;
 		if (area === "grants" && grants && rest.length <= 2)
 			return grantRoutes(grants, request.method, rest, context);

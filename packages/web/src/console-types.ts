@@ -216,6 +216,14 @@ export interface ConnectorInput {
 	token?: string;
 }
 
+/** An agent's one-time request to add a connector, which opens the add form filled in; it holds no URL. */
+export interface ConnectorAddRequestView {
+	id: string;
+	name: string;
+	description: string;
+	expiresAt: string;
+}
+
 export interface ConnectorAddedView {
 	connector: ManagedConnectorView;
 	skipped: string[];

@@ -1,5 +1,6 @@
 import { ZH_TW_APP } from "./zh-tw-app.ts";
 import { ZH_TW_BATCH } from "./zh-tw-batch.ts";
+import { ZH_TW_CONNECTORS } from "./zh-tw-connectors.ts";
 import { ZH_TW_KNIGHTS } from "./zh-tw-knights.ts";
 import { ZH_TW_PEOPLE } from "./zh-tw-people.ts";
 import { ZH_TW_SETTINGS } from "./zh-tw-settings.ts";
@@ -13,4 +14,5 @@ export const ZH_TW: Readonly<Record<string, string>> = {
 	...ZH_TW_KNIGHTS,
 	...ZH_TW_SETTINGS,
 	...ZH_TW_PEOPLE,
+	...ZH_TW_CONNECTORS,
 };

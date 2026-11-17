@@ -1,5 +1,6 @@
 import type {
 	ConnectorAddedView,
+	ConnectorAddRequestView,
 	ConnectorInput,
 	ManagedConnectorView,
 	McpAuthorizeInput,
@@ -21,6 +22,15 @@ export const connectorsApi = {
 	/** The token is sent this once; the answer never holds it. */
 	add: (input: ConnectorInput) =>
 		request<ConnectorAddedView>("connectors/managed", json("POST", input)),
+	/** An agent's one-time add request, which fills the add form; a used or expired one is a 404. */
+	addRequest: (id: string) =>
+		request<ConnectorAddRequestView>(`connectors/requests/${part(id)}`),
+	/** Adds the connector an agent asked for; the request is used up whatever the answer. */
+	addRequested: (id: string, input: ConnectorInput) =>
+		request<ConnectorAddedView>(
+			`connectors/requests/${part(id)}`,
+			json("POST", input),
+		),
 	describe: (name: string, description: string) =>
 		request<unknown>(
 			`connectors/managed/${part(name)}`,

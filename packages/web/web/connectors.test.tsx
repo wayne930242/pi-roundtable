@@ -371,3 +371,55 @@ test("a section whose port the host does not serve is hidden", async () => {
 	expect(button("Authorize a channel")).toBeNull();
 	expect(button("Add connector")).not.toBeNull();
 });
+
+test("an agent's link opens the add form filled in, adds through the request, and leaves the address", async () => {
+	const requested: unknown[] = [];
+	spies.push(
+		spyOn(connectorsApi, "addRequest").mockImplementation(async (id) => ({
+			id,
+			name: "drive",
+			description: "The owner's files",
+			expiresAt: AT,
+		})),
+		spyOn(connectorsApi, "addRequested").mockImplementation(
+			async (id, input) => {
+				requested.push({ id, ...input });
+				return {
+					connector: { name: input.name, description: input.description },
+					skipped: [],
+				};
+			},
+		),
+	);
+	window.location.hash = "#/connectors?add=r1";
+	await show();
+	expect(connectorsApi.addRequest).toHaveBeenCalledWith("r1");
+	expect(openDialog()?.textContent).toContain("A knight asked to add");
+	expect(field<HTMLInputElement>("Name").value).toBe("drive");
+	await typeInto(field("MCP URL"), "https://drive.example.test/mcp/k");
+	await submit(openDialog()?.querySelector("form"));
+	await page.act(() => settle(300));
+	expect(requested).toEqual([
+		{
+			id: "r1",
+			name: "drive",
+			url: "https://drive.example.test/mcp/k",
+			description: "The owner's files",
+		},
+	]);
+	expect(added).toHaveLength(0);
+	expect(window.location.hash).toBe("#/connectors");
+});
+
+test("a used or expired link says so and opens no form", async () => {
+	spies.push(
+		spyOn(connectorsApi, "addRequest").mockImplementation(async () => {
+			throw new ApiFailure("There is no such add request.", undefined, 404);
+		}),
+	);
+	window.location.hash = "#/connectors?add=old";
+	await show();
+	expect(openDialog()).toBeNull();
+	expect(document.body.textContent).toContain("There is no such add request.");
+	expect(window.location.hash).toBe("#/connectors");
+});

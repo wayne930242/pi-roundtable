@@ -18,6 +18,11 @@ import {
 	type ResyncOutcome,
 } from "./connector-registry.ts";
 import {
+	CONNECTOR_ADD_REQUESTS,
+	connectorHoldRule,
+	connectorTools,
+} from "./connector-tools.ts";
+import {
 	ContextForgeAdmin,
 	contextForgeToken,
 	resolveVirtualServer,
@@ -157,7 +162,10 @@ function checkOptions({ contextForge }: McpConnectorsOptions): string {
  * holds what the host needs to route to it, and `/<root> connector` adds, resyncs and removes them.
  * Provides `CONNECTORS`. Holds a call to a tool its server marks `destructiveHint: true` or
  * `readOnlyHint: false` (rule `mcp-hints`, which yolo mode never approves); a tool that declares
- * neither runs unasked.
+ * neither runs unasked. Gives the agents `connector_list`, `connector_add` (a one-time link to the
+ * web console's add form, where the owner pastes the URL; on a host without it, the owner is sent
+ * to `/<root> connector add`) and `connector_remove`, held under rule `connector`, which yolo mode
+ * never approves. No tool takes or shows a connector's URL.
  */
 export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 	const url = checkOptions(options);
@@ -221,8 +229,19 @@ export function mcpConnectors(options: McpConnectorsOptions): RoundtablePlugin {
 				await registry.load();
 				await registry.resyncAll();
 			};
+			const connectors = () => registry.list();
 			return {
+				tools: connectorTools({
+					connectors,
+					remove: (name) => registry.remove(name),
+					// Read at each call: the web console sets up after this plugin, or not at all.
+					requests: () => services.find(CONNECTOR_ADD_REQUESTS),
+					command: () =>
+						discord ? `/${discord.guard.root} connector add` : undefined,
+					text,
+				}),
 				holdRules: [
+					connectorHoldRule({ connectors, text }),
 					toolHintsHoldRule({
 						servers: () => [...registry.servers(), ...resolved.values()],
 						messages: text,

@@ -1,10 +1,14 @@
-import { type SyntheticEvent, useState } from "react";
-import type { ManagedConnectorView } from "../../src/api-types.ts";
+import { type SyntheticEvent, useEffect, useState } from "react";
+import type {
+	ConnectorAddRequestView,
+	ManagedConnectorView,
+} from "../../src/api-types.ts";
 import { messageOf } from "../lib/api.ts";
 import { connectorsApi } from "../lib/connectors-api.ts";
 import { translate as t } from "../lib/messages.ts";
 import { toast } from "../lib/toast.ts";
 import { useReloadable } from "../lib/use-reloadable.ts";
+import { currentQuery } from "../lib/where.ts";
 import { Confirm } from "./confirm.tsx";
 import { Dialog } from "./dialog.tsx";
 import { TextArea, TextField } from "./fields.tsx";
@@ -12,9 +16,32 @@ import { Badge, Empty, Failure, Loading } from "./states.tsx";
 
 const EMPTY = { name: "", url: "", description: "", header: "", token: "" };
 
-/** The add form. The token field is write-only: it is sent once and the form forgets it. */
-function AddForm(props: { onDone(): void; onCancel(): void }) {
-	const [fields, setFields] = useState(EMPTY);
+/** Drops `?add=<id>` from the address, so a reload does not open a used request again. */
+function forgetRequest(): void {
+	const url = new URL(window.location.href);
+	url.search = url.search
+		.replace(/([?&])add=[^&]*&?/, "$1")
+		.replace(/[?&]$/, "");
+	url.hash = url.hash.replace(/([?&])add=[^&]*&?/, "$1").replace(/[?&]$/, "");
+	window.history.replaceState(window.history.state, "", url);
+}
+
+/**
+ * The add form. The token field is write-only: it is sent once and the form forgets it. With an
+ * agent's `request` it starts from the name and purpose the agent gave, and submitting it is the
+ * owner's approval of that request.
+ */
+function AddForm(props: {
+	request?: ConnectorAddRequestView;
+	onDone(): void;
+	onCancel(): void;
+}) {
+	const { request } = props;
+	const [fields, setFields] = useState(
+		request
+			? { ...EMPTY, name: request.name, description: request.description }
+			: EMPTY,
+	);
 	const [error, setError] = useState<string>();
 	const [busy, setBusy] = useState(false);
 	const set = (key: keyof typeof EMPTY) => (value: string) =>
@@ -24,13 +51,16 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 		setBusy(true);
 		setError(undefined);
 		try {
-			const { connector, skipped } = await connectorsApi.add({
+			const input = {
 				name: fields.name,
 				url: fields.url,
 				description: fields.description,
 				...(fields.header.trim() ? { header: fields.header } : {}),
 				...(fields.token ? { token: fields.token } : {}),
-			});
+			};
+			const { connector, skipped } = request
+				? await connectorsApi.addRequested(request.id, input)
+				: await connectorsApi.add(input);
 			setFields(EMPTY);
 			toast(
 				skipped.length
@@ -49,6 +79,13 @@ function AddForm(props: { onDone(): void; onCancel(): void }) {
 	};
 	return (
 		<form className="stack" onSubmit={submit} autoComplete="off">
+			{request ? (
+				<p className="hint">
+					{t(
+						"A knight asked to add this connector. Paste its URL here, never in a chat; adding it is your approval, and the link works once.",
+					)}
+				</p>
+			) : null}
 			<label>
 				{t("Name")}
 				<TextField
@@ -199,6 +236,30 @@ function PurposeForm(props: {
 export function ConnectorManage() {
 	const { data, error, reload } = useReloadable(() => connectorsApi.list());
 	const [adding, setAdding] = useState(false);
+	// An agent's link opens the form at its request: `#/connectors?add=<id>`.
+	const [request, setRequest] = useState<ConnectorAddRequestView>();
+	const [requestError, setRequestError] = useState<string>();
+	useEffect(() => {
+		const id = currentQuery().get("add");
+		if (!id) return;
+		connectorsApi.addRequest(id).then(
+			(found) => {
+				setRequest(found);
+				setAdding(true);
+			},
+			(failure) => {
+				setRequestError(messageOf(failure));
+				forgetRequest();
+			},
+		);
+	}, []);
+	const closeAdd = () => {
+		setAdding(false);
+		if (request) {
+			setRequest(undefined);
+			forgetRequest();
+		}
+	};
 	const [editing, setEditing] = useState<ManagedConnectorView>();
 	const [removing, setRemoving] = useState<ManagedConnectorView>();
 	return (
@@ -210,6 +271,7 @@ export function ConnectorManage() {
 				</button>
 			</div>
 			{error ? <Failure message={error} /> : null}
+			{requestError ? <Failure message={requestError} /> : null}
 			{!data && !error ? <Loading /> : null}
 			{data?.length === 0 ? <Empty>{t("No connectors yet.")}</Empty> : null}
 			{data?.map((c) => (
@@ -247,13 +309,14 @@ export function ConnectorManage() {
 			<Dialog
 				open={adding}
 				title={t("Add an MCP connector")}
-				onClose={() => setAdding(false)}
+				onClose={closeAdd}
 			>
 				{adding ? (
 					<AddForm
-						onCancel={() => setAdding(false)}
+						{...(request ? { request } : {})}
+						onCancel={closeAdd}
 						onDone={() => {
-							setAdding(false);
+							closeAdd();
 							reload();
 						}}
 					/>

@@ -95,6 +95,28 @@ export interface ConnectorMessages {
 		server: string,
 		why: "destructive" | "writes",
 	): string;
+
+	/** The approval card of `connector_remove`; `host` is the connector's scheme and host only. */
+	removeHold(name: string, host: string): string;
+	/** `connector_remove` or `connector_add` was asked for a name; `names` are the existing connectors, comma-separated, empty when none. */
+	toolUnknownConnector(name: string, names: string): string;
+	/** `connector_remove` finished. */
+	toolRemoved(name: string): string;
+	/** `connector_list` found none. */
+	toolListEmpty: string;
+	/** One connector of `connector_list`: `tools` is its tool count, or undefined when its tools cannot be read. */
+	toolListLine(
+		name: string,
+		host: string,
+		tools: number | undefined,
+		description: string,
+	): string;
+	/** `connector_add` made a one-time link the owner opens to paste the URL; `minutes` is how long it lasts. */
+	toolAddLink(name: string, link: string, minutes: number): string;
+	/** `connector_add` where no add form reaches this conversation; `command` is the Discord command, undefined without Discord. */
+	toolAddElsewhere(command: string | undefined): string;
+	/** A connector tool refused for a speaker who is not an owner. */
+	toolOwnerOnly: string;
 }
 
 export const CONNECTOR_MESSAGES: ConnectorMessages = {
@@ -193,6 +215,23 @@ export const CONNECTOR_MESSAGES: ConnectorMessages = {
 	virtualServerNoTools: (name) => `virtual server ${name} serves no tools`,
 	toolHintHold: (tool, server, why) =>
 		`call ${tool} on ${server}, which its server marks ${why === "destructive" ? "destructive" : "not read-only"}`,
+
+	removeHold: (name, host) =>
+		`remove connector ${name} (${host}), its token and its tools`,
+	toolUnknownConnector: (name, names) =>
+		`There is no connector named ${name}. ${names ? `The connectors are: ${names}.` : "There are no connectors."}`,
+	toolRemoved: (name) =>
+		`Removed connector ${name} and its token; from the next message on, its tools are gone.`,
+	toolListEmpty: "The owner has no connectors.",
+	toolListLine: (name, host, tools, description) =>
+		`${name} (${host}), ${tools === undefined ? "tools unreadable, so not usable now" : `reachable, ${tools} tools`}: ${description}`,
+	toolAddLink: (name, link, minutes) =>
+		`Give the owner this link to add connector ${name}: ${link}\nIt opens the add form with the name and purpose filled in; the owner pastes the MCP URL there, never in this chat. It works once, for ${minutes} minutes. You get a message here when the add finishes.`,
+	toolAddElsewhere: (command) =>
+		command
+			? `No add form reaches this conversation. Ask the owner to run \`${command}\`, which opens a private form for the URL; never ask for the URL in the chat.`
+			: "No add form reaches this conversation. The owner adds connectors where the host's configuration allows it; never ask for the URL in the chat.",
+	toolOwnerOnly: "Only an owner may add or remove connectors.",
 };
 
 /** The English text with the host's own wording laid over it. */

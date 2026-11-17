@@ -16,6 +16,7 @@ import type {
 	PageLinkView,
 	PaneName,
 } from "./api-types.ts";
+import type { ConnectorAddRequests } from "./connector-requests/requests.ts";
 import type { ConsoleFeatures, ConsolePresentation } from "./features.ts";
 import type { Visitor } from "./visitors.ts";
 
@@ -76,6 +77,8 @@ export interface ConsolePorts {
 	changed(): void;
 	logger: Logger;
 	features?: ConsoleFeatures;
+	/** The agents' one-time connector add requests, when the app and the connector management are served. */
+	connectorRequests?: Pick<ConnectorAddRequests, "route">;
 	presentation?: ConsolePresentation;
 	mountPath?: string;
 	look?: "modern" | "camelot";

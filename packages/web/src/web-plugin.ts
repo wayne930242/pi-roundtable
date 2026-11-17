@@ -27,6 +27,9 @@ import {
 } from "./auth/authenticator.ts";
 import { WebSessions } from "./auth/sessions.ts";
 import { startOidc } from "./auth/start-oidc.ts";
+import { mountConnectorRequests } from "./connector-requests/mount.ts";
+import { CONNECTOR_ADD_REQUESTS } from "./connector-requests/requests.ts";
+import { ConnectorAddRequestStore } from "./connector-requests/store.ts";
 import { ConsoleApi } from "./console-api.ts";
 import { ConsoleServer } from "./console-server.ts";
 import { Gate } from "./gate.ts";
@@ -67,7 +70,13 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	// The agents' webhook tools are defined with the plugin; they reach the webhooks once it is set up.
 	const slot: WebhooksSlot = {};
 	const migrations = [
-		...(rooms ? [...APP_MIGRATIONS, WebhookStore.migration] : []),
+		...(rooms
+			? [
+					...APP_MIGRATIONS,
+					WebhookStore.migration,
+					ConnectorAddRequestStore.migration,
+				]
+			: []),
 		...(auth.mode === "oidc"
 			? [WebSessions.migration, WebSessions.jsonValuesMigration]
 			: []),
@@ -75,7 +84,9 @@ export function webConsole(options: WebConsoleOptions): RoundtablePlugin {
 	return definePlugin({
 		name: "web-console",
 		...(migrations.length > 0 ? { migrations } : {}),
-		provides: rooms ? [WEB_APP, ROOM_LAYOUT] : [WEB_APP],
+		provides: rooms
+			? [WEB_APP, ROOM_LAYOUT, CONNECTOR_ADD_REQUESTS]
+			: [WEB_APP],
 		...(rooms ? { tools: webhookTools(slot) } : {}),
 		// `none` and `password` speak for one principal through this identity; a verifier or a sign-in brings its own.
 		...(auth.mode !== "none" && auth.mode !== "password"
@@ -222,6 +233,20 @@ async function build(
 	const gate = new Gate({ registry: webApp });
 	const hosted = hostedLinks(webApp, logger);
 	const access = accessViewOf(settings, gate);
+	// An agent's `connector_add` opens the add form here; the follow-up goes through the app's surface.
+	const connectorRequests = rooms
+		? mountConnectorRequests({
+				database: context.database(),
+				services,
+				manage: features?.connectors?.manage,
+				surface: () => app?.surface,
+				surfaceName: settings.surface,
+				origin: settings.origin,
+				mount: settings.mount,
+				routing: settings.routing,
+				logger,
+			})
+		: undefined;
 	const api = new ConsoleApi({
 		title: settings.title,
 		timeZone: env.timeZone,
@@ -246,6 +271,7 @@ async function build(
 		changed,
 		logger,
 		...(features ? { features } : {}),
+		...(connectorRequests ? { connectorRequests } : {}),
 		look: settings.look,
 		characterSkins: env.characterSkins,
 		...(settings.routing === "path" ? { mountPath: settings.mount } : {}),

@@ -76,6 +76,7 @@
 		"web-console/web-push-prefs",
 		"web-console/web-onboarding",
 		"web-console/web-webhooks",
+		"web-console/web-connector-add-requests",
 		"web-console/web-sessions",
 		"web-console/web-sessions-json-values",
 		"webchat/notices"
