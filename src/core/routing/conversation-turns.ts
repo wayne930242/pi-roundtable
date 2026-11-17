@@ -22,7 +22,8 @@ import type { Logger } from "../kernel/log.ts";
 import type { EventSink } from "../plugin-api/plugin.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
 import { withReplyFiles } from "../shared/reply-files.ts";
-import { endOf, settleTurn } from "./settle-turn.ts";
+import { endOf, settleTurnIn } from "./settle-turn.ts";
+import { currentRecord } from "./turn-records.ts";
 
 /** One turn of a conversation, as a claim asks for it. */
 export interface ConversationTurnInput {
@@ -169,99 +170,108 @@ export function conversationTurns(
 	options: ConversationTurnsOptions,
 ): ConversationTurns {
 	const { surfaces, events, logger } = options;
-	return {
-		async run(input) {
-			const { channel, kind, speaker } = input;
-			options.linked();
-			// Refused before anything is shown or recorded, like a turn the host cannot run.
-			if (options.stopping?.()) throw new HostStoppingError();
-			// A host without a runtime is a setup mistake, so it is refused before anything is shown.
-			const runtime = options.runtime();
-			// A conversation that cannot be recorded runs no turn: who it belongs to would be lost.
-			const conversation = await record(options.registry?.(), input);
-			const stopTyping = surfaces.startTyping(channel);
-			const hideStop = surfaces.showStop(channel);
-			const turn = { kind, channel, speaker };
-			events.turnStarted(turn);
-			// A claim that posts its own reply formats its own text, so only the default reply posts as it goes.
-			const interim = input.reply ? undefined : surfaces.interim(channel);
-			// What the runtime reports as it goes reaches the surface and the handlers until the turn ends.
-			let live = true;
-			const progress = (event: TurnProgress) => {
-				if (!live) return;
-				events.turnProgress?.({ ...turn, progress: event });
-				// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
-				surfaces
-					.progress?.(channel, event)
-					?.catch((error: unknown) =>
-						logger.warn({ channel, kind, err: error }, "progress not shown"),
-					);
-			};
-			let result: TurnResult;
-			try {
-				result = await settleTurn(
-					() =>
-						withReplyFiles(surfaces.of(channel)?.supportsFiles === true, () =>
-							runtime.runTurn({
-								channel,
-								kind,
-								selection: input.selection ?? {
-									id: DEFAULT_SELECTION,
-									...options.selection(),
-								},
-								text: input.text,
-								speaker,
-								...(input.origin === undefined ? {} : { origin: input.origin }),
-								...(input.client === undefined ? {} : { client: input.client }),
-								...(conversation ? { conversation } : {}),
-								...(input.attachments
-									? { attachments: input.attachments }
-									: {}),
-								...(input.confirmed ? { confirmed: true } : {}),
-								...(input.steerable ? { steerable: true } : {}),
-								...(input.byMessage ? { byMessage: true } : {}),
-								...(input.interactive ? { interactive: true } : {}),
-								...(input.unattended ? { unattended: true } : {}),
-								...(input.timeLimitMs === undefined
-									? {}
-									: { timeLimitMs: input.timeLimitMs }),
-								...(interim ? { interim } : {}),
-								progress,
-							}),
-						),
-					"conversation turn",
+	const runOne = async (input: ConversationTurnInput): Promise<TurnResult> => {
+		const { channel, kind, speaker } = input;
+		options.linked();
+		// Refused before anything is shown or recorded, like a turn the host cannot run.
+		if (options.stopping?.()) {
+			// The message whose admission asked for it is left with the cut turns.
+			currentRecord()?.refusedByHost();
+			throw new HostStoppingError();
+		}
+		// A host without a runtime is a setup mistake, so it is refused before anything is shown.
+		const runtime = options.runtime();
+		// A conversation that cannot be recorded runs no turn: who it belongs to would be lost.
+		const conversation = await record(options.registry?.(), input);
+		const stopTyping = surfaces.startTyping(channel);
+		const hideStop = surfaces.showStop(channel);
+		const turn = { kind, channel, speaker };
+		events.turnStarted(turn);
+		// A claim that posts its own reply formats its own text, so only the default reply posts as it goes.
+		const interim = input.reply ? undefined : surfaces.interim(channel);
+		// What the runtime reports as it goes reaches the surface and the handlers until the turn ends.
+		let live = true;
+		const progress = (event: TurnProgress) => {
+			if (!live) return;
+			events.turnProgress?.({ ...turn, progress: event });
+			// pi-lens-ignore: no-unknown-parameters — a rejection reason is unknown; it only reaches the logger
+			surfaces
+				.progress?.(channel, event)
+				?.catch((error: unknown) =>
+					logger.warn({ channel, kind, err: error }, "progress not shown"),
 				);
-			} finally {
-				live = false;
-				hideStop();
-			}
-			events.turnEnded({
-				...turn,
-				result: endOf(result),
-			});
-			try {
-				if (!result.ok && !result.stopped)
-					logger.error({ channel, kind, err: result.error }, "turn failed");
-				if (isQuiet(result))
-					logger.info(
-						{ channel, kind },
-						"unattended turn had nothing to say; nothing posted",
-					);
-				else if (input.reply) await input.reply(result);
-				else
-					await surfaces.sendReply(
-						channel,
-						replyBody(
-							result,
-							supportOf(surfaces.of(channel), channel, surfaces.lang),
-						),
-					);
-			} catch (error) {
-				logger.error({ channel, kind, err: error }, "reply not posted");
-			} finally {
-				stopTyping();
-			}
-			return result;
+		};
+		let result: TurnResult;
+		try {
+			result = await settleTurnIn(
+				channel,
+				() =>
+					withReplyFiles(surfaces.of(channel)?.supportsFiles === true, () =>
+						runtime.runTurn({
+							channel,
+							kind,
+							selection: input.selection ?? {
+								id: DEFAULT_SELECTION,
+								...options.selection(),
+							},
+							text: input.text,
+							speaker,
+							...(input.origin === undefined ? {} : { origin: input.origin }),
+							...(input.client === undefined ? {} : { client: input.client }),
+							...(conversation ? { conversation } : {}),
+							...(input.attachments ? { attachments: input.attachments } : {}),
+							...(input.confirmed ? { confirmed: true } : {}),
+							...(input.steerable ? { steerable: true } : {}),
+							...(input.byMessage ? { byMessage: true } : {}),
+							...(input.interactive ? { interactive: true } : {}),
+							...(input.unattended ? { unattended: true } : {}),
+							...(input.timeLimitMs === undefined
+								? {}
+								: { timeLimitMs: input.timeLimitMs }),
+							...(interim ? { interim } : {}),
+							progress,
+						}),
+					),
+				"conversation turn",
+			);
+		} finally {
+			live = false;
+			hideStop();
+		}
+		events.turnEnded({
+			...turn,
+			result: endOf(result),
+		});
+		try {
+			if (!result.ok && !result.stopped)
+				logger.error({ channel, kind, err: result.error }, "turn failed");
+			if (isQuiet(result))
+				logger.info(
+					{ channel, kind },
+					"unattended turn had nothing to say; nothing posted",
+				);
+			else if (input.reply) await input.reply(result);
+			else
+				await surfaces.sendReply(
+					channel,
+					replyBody(
+						result,
+						supportOf(surfaces.of(channel), channel, surfaces.lang),
+					),
+				);
+		} catch (error) {
+			logger.error({ channel, kind, err: error }, "reply not posted");
+		} finally {
+			stopTyping();
+		}
+		return result;
+	};
+	return {
+		run(input) {
+			// Asked for from a message's admission, awaited or not, it keeps that admission's work open.
+			const record = currentRecord();
+			record?.begin(input.channel);
+			return runOne(input).finally(() => record?.end(input.channel));
 		},
 	};
 }

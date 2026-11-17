@@ -8,7 +8,7 @@ import { AgentError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
 import type { Speaker } from "../identity/speakers.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
-import { endOf, settleTurn } from "../routing/settle-turn.ts";
+import { endOf, settleTurnIn } from "../routing/settle-turn.ts";
 import { toolTiers } from "../runtime/tool-tiers.ts";
 import { withReplyFiles } from "../shared/reply-files.ts";
 import { AgentMessages } from "./agent-messages.ts";
@@ -205,7 +205,9 @@ export class TeamTurns {
 		const progress = roomProgress(this.#options, postTo);
 		let result: TurnResult;
 		try {
-			result = await settleTurn(
+			// Named for a turn outside a queue task too; inside one, the task's channel is the same.
+			result = await settleTurnIn(
+				postTo,
 				() =>
 					withReplyFiles(this.#posts.carriesFiles(postTo), () =>
 						this.#options.runtime().runTurn({

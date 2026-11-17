@@ -1,0 +1,341 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { InboundMessage } from "../contract/channels.ts";
+import type { TurnResult } from "../domain/conversation.ts";
+import { AgentRunError } from "../domain/errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
+import { HostStoppingError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { RefuseTally } from "./queued-messages.ts";
+
+/** What a record tells its `RunningTurns`. */
+interface RecordHooks {
+	/** The admission and every turn and queue task under it have ended. */
+	closed(): void;
+	/** The stopping host refused a turn or queue task under it while it was open. */
+	refused(): void;
+}
+
+/**
+ * The person's messages one admitted turn answers, as the router runs it: the message that started
+ * it and those steered into it, and which of them it answered. When a turn run under the admission
+ * through `settleTurn` ends with `ok`, whose pipeline then posts the answer, every message the
+ * record holds by then counts as answered; a stopped or failed turn answers none, and a message
+ * steered in later waits for the next `ok`. A turn runs under the admission when it runs in the
+ * admission's work while that is open: its `run`, and what that starts, awaited or not, such as a
+ * queue task for a thread it opens, which keeps it open until it ends; a background turn, an
+ * agent's message to another agent and a new agent's opening task run outside it, and once the
+ * admission's work has ended, later work it set up, such as a timer, no longer counts. A shutdown
+ * that cuts it before an answer leaves the
+ * messages still unanswered for the next process, drops what its turn handed on for later
+ * (`onLeave`), and a turn under it that ends later gives a stopped result instead, so its answer is
+ * not posted as well.
+ */
+export class TurnRecord {
+	readonly #messages: InboundMessage[];
+	readonly #answered = new Set<InboundMessage>();
+	/** How many turns under it ended `ok`. */
+	#answers = 0;
+	#left = false;
+	readonly #onLeave: { task: () => Promise<void>; since: number }[] = [];
+	/** The admission while it runs, plus each turn and queue task running under it. */
+	#open = 1;
+	/** The channels of the turns and queue tasks running under it, each with how many. */
+	readonly #channels = new Map<ChannelKey, number>();
+	/** Its admission's work has ended: what runs under it later changes nothing but a left one's late answer. */
+	#done = false;
+	readonly #hooks: RecordHooks;
+
+	constructor(message: InboundMessage, hooks: Partial<RecordHooks> = {}) {
+		this.#messages = [message];
+		const none = () => undefined;
+		this.#hooks = {
+			closed: hooks.closed ?? none,
+			refused: hooks.refused ?? none,
+		};
+	}
+
+	/** Its messages, the one that started it first. */
+	get messages(): readonly InboundMessage[] {
+		return this.#messages;
+	}
+
+	/** Adds a message steered into its turn. */
+	add(message: InboundMessage): void {
+		this.#messages.push(message);
+	}
+
+	/** Takes back a message its turn did not take after all. */
+	remove(message: InboundMessage): void {
+		const at = this.#messages.indexOf(message);
+		if (at > 0) this.#messages.splice(at, 1);
+		this.#answered.delete(message);
+	}
+
+	/** A turn or queue task under it starts, in `channel` when it says; it keeps it open while its admission's work is. */
+	begin(channel?: ChannelKey): void {
+		if (this.#done) return;
+		this.#open += 1;
+		if (channel)
+			this.#channels.set(channel, (this.#channels.get(channel) ?? 0) + 1);
+	}
+
+	/** The admission, or a turn or queue task under it, ended; `channel` as it began. */
+	end(channel?: ChannelKey): void {
+		if (this.#done) return;
+		const left = (channel && this.#channels.get(channel)) || 0;
+		if (channel && left <= 1) this.#channels.delete(channel);
+		else if (channel) this.#channels.set(channel, left - 1);
+		this.#open -= 1;
+		if (this.#open > 0) return;
+		this.#done = true;
+		this.#hooks.closed();
+	}
+
+	/**
+	 * The channels its turns and queue tasks run in now; while work runs under it that names none,
+	 * its admission or a bare `settleTurn` outside any queue task (`context.turns`, the agent team
+	 * and a queue task name theirs), its first message's channel too.
+	 */
+	channels(): ChannelKey[] {
+		let named = 0;
+		for (const count of this.#channels.values()) named += count;
+		const channels = [...this.#channels.keys()];
+		const first = this.#messages[0];
+		if (!this.#done && this.#open > named && first)
+			channels.push(first.channel);
+		return [...new Set(channels)];
+	}
+
+	/** Its messages no `ok` turn answered yet. */
+	unanswered(): InboundMessage[] {
+		return this.#messages.filter((message) => !this.#answered.has(message));
+	}
+
+	/** How many turns under it ended `ok` so far; `onLeave` takes it as the point a task was asked for. */
+	get answers(): number {
+		return this.#answers;
+	}
+
+	/** Whether its messages were left for the next process. */
+	get left(): boolean {
+		return this.#left;
+	}
+
+	/**
+	 * Runs `task` when its messages are left, unless a turn under it ended `ok` after `since` (its
+	 * `answers` when the work that asked began): such as removing an agent message kept for the next
+	 * start, which the next process sends again when it answers the message anew. An agent message a
+	 * turn sent before it answered belongs to that answer and stays.
+	 */
+	onLeave(task: () => Promise<void>, since = this.#answers): void {
+		this.#onLeave.push({ task, since });
+	}
+
+	/**
+	 * Marks its messages left for the next process at once, then runs what `onLeave` asked, each
+	 * failure its own; the returned promise ends when they have.
+	 */
+	async leave(): Promise<void> {
+		this.#left = true;
+		const due = this.#onLeave
+			.splice(0)
+			.filter(({ since }) => since === this.#answers);
+		await Promise.allSettled(due.map(({ task }) => task()));
+	}
+
+	/** The stopping host refused a turn or queue task under it before it ran. */
+	refusedByHost(): void {
+		if (!this.#done) this.#hooks.refused();
+	}
+
+	/** Whether `onLeave` asked at `since` would run by now: its messages were left and no `ok` came since. */
+	droppedSince(since: number): boolean {
+		return this.#left && since === this.#answers;
+	}
+
+	/**
+	 * What a turn that ended under it gives its pipeline: an answer once its messages were left is
+	 * stopped, and so is the runtime's refusal of a turn asked for once the host stops, so its person
+	 * is told only that their message is answered after the restart, not to try again.
+	 */
+	settle<R>(result: R): R | StoppedResult {
+		if (!isTurnResult(result)) return result;
+		if (this.#left) return stoppedByHost();
+		if (result.ok) {
+			if (this.#done) return result;
+			this.#answers += 1;
+			for (const message of this.#messages) this.#answered.add(message);
+		} else if (
+			!result.stopped &&
+			result.error.message === STOPPING &&
+			!this.#done
+		) {
+			// Left with the cut, its person hears only that; work after the admission's keeps "try again".
+			this.refusedByHost();
+			return stoppedByHost();
+		}
+		return result;
+	}
+}
+
+const STOPPING = new HostStoppingError().message;
+
+type StoppedResult = { ok: false; error: AgentRunError; stopped: true };
+
+const stoppedByHost = (): StoppedResult => ({
+	ok: false,
+	error: new AgentRunError(STOPPING),
+	stopped: true,
+});
+
+function isTurnResult(value: unknown): value is TurnResult {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as { ok?: unknown }).ok === "boolean"
+	);
+}
+
+/**
+ * Where a turn outside any record goes back to: the record of the person's message a chain of agent
+ * messages started from, and its `answers` when the send that led here was made.
+ */
+export interface RecordOrigin {
+	record: TurnRecord;
+	since: number;
+}
+
+const current = new AsyncLocalStorage<
+	{ record?: TurnRecord; hop?: RecordOrigin; channel?: ChannelKey } | undefined
+>();
+
+/** Runs `task` with `record` as the turn record of everything it starts; undefined runs it outside any. */
+export function underRecord<T>(
+	record: TurnRecord | undefined,
+	task: () => T,
+): T {
+	return current.run(record && { record }, task);
+}
+
+/** The turn record of the admission the caller runs under, if any. */
+export function currentRecord(): TurnRecord | undefined {
+	return current.getStore()?.record;
+}
+
+/**
+ * Runs `task` outside any record, as an agent message's exchange: what it starts that goes back to
+ * the person's message, such as the next agent message, reads `hop` with `currentHop`. Leaving
+ * the exchange the way a record is left, through `underRecord(undefined, …)`, clears it too.
+ */
+export function underHop<T>(hop: RecordOrigin | undefined, task: () => T): T {
+	return current.run(hop && { hop }, task);
+}
+
+/** The origin of the exchange the caller runs in, if any. */
+export function currentHop(): RecordOrigin | undefined {
+	return current.getStore()?.hop;
+}
+
+/** Runs a queue task of `channel` as it is, telling a turn it runs, such as a bare `settleTurn`, its channel. */
+export function inChannel<T>(channel: ChannelKey, task: () => T): T {
+	const store = current.getStore();
+	return store ? current.run({ ...store, channel }, task) : task();
+}
+
+/** The channel of the queue task the caller runs in, when it runs under a record or an exchange. */
+export function currentChannel(): ChannelKey | undefined {
+	return current.getStore()?.channel;
+}
+
+/**
+ * The records of the admitted turns still running, or with a turn or queue task running under
+ * them: the router runs each turn admission through `run`, and the host marks the ones the drain
+ * limit finds with `cut`, to leave those that did not answer once the abort grace is over. A record
+ * whose turn the runtime refused as the host stopped, before or after the drain limit, is cut as
+ * well.
+ */
+export class RunningTurns {
+	readonly #live = new Set<TurnRecord>();
+	/** Each channel's admission running in its queue, which a steered message joins. */
+	readonly #running = new Map<ChannelKey, TurnRecord>();
+	#cut: TurnRecord[] = [];
+
+	/** Runs the admission of `message` under a new record, as its channel's running turn. */
+	async run(
+		message: InboundMessage,
+		task: () => Promise<unknown>,
+	): Promise<void> {
+		const { channel } = message;
+		const record: TurnRecord = new TurnRecord(message, {
+			closed: () => this.#live.delete(record),
+			refused: () => this.#cut.push(record),
+		});
+		this.#live.add(record);
+		this.#running.set(channel, record);
+		try {
+			await underRecord(record, task);
+		} catch (error) {
+			// A turn it asked for was refused as the host stops: its unanswered messages are told with
+			// the cut turns once the abort grace is over, within the refusal's time, not at once.
+			if (!(error instanceof HostStoppingError)) throw error;
+			record.refusedByHost();
+		} finally {
+			if (this.#running.get(channel) === record) this.#running.delete(channel);
+			record.end();
+		}
+	}
+
+	/** The channel's running turn, to add a message steered into it; undefined when none runs. */
+	running(channel: ChannelKey): TurnRecord | undefined {
+		return this.#running.get(channel);
+	}
+
+	/** The channels the open records' turns and queue tasks run in, such as a turn asked for without waiting. */
+	busy(): ChannelKey[] {
+		return [...new Set([...this.#live].flatMap((record) => record.channels()))];
+	}
+
+	/** Marks every record still open as cut: the drain limit found its turn running. */
+	cut(): void {
+		this.#cut.push(...this.#live);
+	}
+
+	/** The records marked cut, each once. */
+	takeCut(): TurnRecord[] {
+		return [...new Set(this.#cut.splice(0))];
+	}
+
+	/**
+	 * Leaves each cut record's unanswered messages of a person and `tell`s each, counting in `tally`
+	 * and starting no record once it is `stopped`; `dropping` ends once what they handed on is dropped.
+	 */
+	async leaveCut(
+		tally: RefuseTally,
+		logger: Logger,
+		tell: (message: InboundMessage) => Promise<void>,
+	): Promise<{ dropping: Promise<unknown> }> {
+		const dropping: Promise<void>[] = [];
+		for (const record of this.takeCut()) {
+			// A bot's or an integration's message is told nothing, so its turn's late answer stays.
+			const people = record
+				.unanswered()
+				.filter((message) => !message.authorIsBot && !message.integration);
+			// Left only as its channel is told, so one the limit stops before keeps its late answer.
+			if (tally.stopped) break;
+			if (people.length === 0) continue;
+			logger.info(
+				{ channel: record.messages[0]?.channel },
+				"turn cut by the shutdown before it answered; its messages are refused",
+			);
+			// Left at once; what it handed on is dropped meanwhile, not before its channel is told.
+			dropping.push(record.leave());
+			for (const message of people) {
+				// A message the limit stops before is neither told nor answered (docs/plugins.md).
+				if (tally.stopped) break;
+				await tell(message);
+				tally.refused += 1;
+			}
+		}
+		return { dropping: Promise.all(dropping) };
+	}
+}

@@ -64,10 +64,13 @@ export class AgentOutbox {
 		this.#guild = guildId;
 	}
 
-	async keep(entry: OutboxEntry): Promise<void> {
-		await this.#sql`
+	/** Keeps the entry, returning its id. */
+	async keep(entry: OutboxEntry): Promise<number> {
+		const rows: { id: string | number }[] = await this.#sql`
 			INSERT INTO agent_outbox (guild_id, channel, payload)
-			VALUES (${this.#guild}, ${entry.channel}, ${JSON.stringify(entry)}::jsonb)`;
+			VALUES (${this.#guild}, ${entry.channel}, ${JSON.stringify(entry)}::jsonb)
+			RETURNING id`;
+		return Number(rows[0]?.id);
 	}
 
 	/** Every kept entry, oldest first. */

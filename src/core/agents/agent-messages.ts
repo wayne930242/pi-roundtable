@@ -6,6 +6,12 @@ import { addressee, type Speaker } from "../identity/speakers.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
+import {
+	currentHop,
+	currentRecord,
+	type RecordOrigin,
+	underHop,
+} from "../routing/turn-records.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
@@ -90,13 +96,27 @@ export class AgentMessages {
 			peer: this.#peer(target),
 			text,
 		});
-		void queue
-			.run(targetChannel, async () =>
-				this.#exchange(sender, target, text, chain, targetChannel, parent),
-			)
+		// The person's message this send goes back to: the exchange runs outside its record, so the
+		// target's answer is not taken for the sender's, and what any later hop keeps for the next
+		// start is taken out again once a shutdown leaves that message, which is then asked again.
+		// A send under the record counts its answers then; a later hop takes those of the send it follows.
+		const record = currentRecord();
+		const origin = record ? { record, since: record.answers } : currentHop();
+		void underHop(origin, () =>
+			queue.run(targetChannel, async () =>
+				this.#exchange(
+					sender,
+					target,
+					text,
+					chain,
+					{ targetChannel, senderChannel: parent },
+					origin,
+				),
+			),
+		)
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
-					this.#keep({
+					this.#keep(origin, {
 						kind: "message",
 						sender: sender.name,
 						target: target.name,
@@ -156,8 +176,11 @@ export class AgentMessages {
 		target: Agent,
 		text: string,
 		chain: Chain,
-		targetChannel: ChannelKey,
-		senderChannel: ChannelKey,
+		{
+			targetChannel,
+			senderChannel,
+		}: { targetChannel: ChannelKey; senderChannel: ChannelKey },
+		origin: RecordOrigin | undefined,
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
 		await this.#host.post(targetChannel, this.#host.current(sender), {
@@ -213,7 +236,7 @@ export class AgentMessages {
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
 					// The sender would wait for this answer forever, so it waits in the outbox for the next start.
-					this.#keep({
+					this.#keep(origin, {
 						kind: "reply",
 						sender: current.name,
 						target: target.name,
@@ -240,31 +263,59 @@ export class AgentMessages {
 		);
 	}
 
-	/** Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. */
-	#keep(entry: OutboxEntry): void {
+	/**
+	 * Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. When
+	 * the shutdown leaves the person's message of the turn that sent it, the entry is taken out
+	 * again, or not written at all: the next process answers that message anew, or its author is
+	 * asked to send it again, and the turn sends it again then.
+	 */
+	#keep(origin: RecordOrigin | undefined, entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
+		const about = { kind: entry.kind, from: entry.sender, to: entry.target };
+		if (origin?.record.droppedSince(origin.since)) {
+			logger.info(
+				about,
+				"agent message dropped: its person's message is asked again after the restart",
+			);
+			return;
+		}
 		const write = this.#lastKept
 			.then(() => store.outbox.keep(entry))
 			.then(
-				() =>
-					logger.info(
-						{ kind: entry.kind, from: entry.sender, to: entry.target },
-						"agent message kept for the next start",
-					),
-				(error: unknown) =>
+				(id) => {
+					logger.info(about, "agent message kept for the next start");
+					return id;
+				},
+				(error: unknown) => {
 					logger.error(
-						{
-							kind: entry.kind,
-							from: entry.sender,
-							to: entry.target,
-							err: error,
-						},
+						{ ...about, err: error },
 						"agent message lost: not kept for the next start",
-					),
+					);
+					return undefined;
+				},
 			);
-		this.#lastKept = write;
-		this.#keeping.add(write);
-		void write.finally(() => this.#keeping.delete(write));
+		this.#lastKept = write.then(() => undefined);
+		const kept = write.then(() => undefined);
+		this.#keeping.add(kept);
+		void kept.finally(() => this.#keeping.delete(kept));
+		origin?.record.onLeave(async () => {
+			const id = await write;
+			if (id === undefined) return;
+			try {
+				const taken = await store.outbox.claim(id);
+				logger.info(
+					about,
+					taken
+						? "kept agent message dropped: its person's message is asked again after the restart"
+						: "kept agent message already taken",
+				);
+			} catch (error) {
+				logger.warn(
+					{ ...about, err: error },
+					"kept agent message not dropped; it is replayed after the restart",
+				);
+			}
+		}, origin.since);
 	}
 
 	/**
@@ -361,8 +412,8 @@ export class AgentMessages {
 				target,
 				entry.text,
 				chain,
-				entry.channel,
-				origin,
+				{ targetChannel: entry.channel, senderChannel: origin },
+				undefined,
 			);
 		} finally {
 			this.#host.helpers.end(target.name);

@@ -277,3 +277,25 @@ test("a message the retry took but could not deliver is left again for a later p
 	await Bun.sleep(20);
 	expect(left.has("m1")).toBe(true);
 });
+
+test("a message recorded before the drain, whose turn the shutdown cut, is left once its routing refuses it, and the next process takes it once", async () => {
+	const { journal, left } = memoryJournal();
+	const told = notices();
+	let draining = false;
+	const gate = journalGate({
+		journal,
+		logger: silentLogger(),
+		draining: () => draining,
+		notify: told.notify,
+	});
+	// Recorded as it reached routing, and its turn started.
+	expect(await gate(message("m1"), "9")).toBe(true);
+	draining = true;
+	// The turn was cut before it answered: routing refuses its message.
+	expect(await gate.refused(message("m1"), "9")).toBe(true);
+	expect([...left]).toEqual(["m1"]);
+	expect(told.posted).toEqual([["notice-1", "later"]]);
+	const entry = { botId: "9", messageId: "m1", channelId: "5", direct: false };
+	expect(await journal.claim(entry)).toBe(true);
+	expect(await journal.claim(entry)).toBe(false);
+});
