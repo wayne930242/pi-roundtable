@@ -64,7 +64,7 @@ describe("two members of one tier on Discord", () => {
 				user,
 			});
 			await cards.handle(pressed.interaction);
-			return pressed.replies;
+			return pressed.notices;
 		};
 		expect(await pressAs(B)).toEqual([messages().cardApproversRefusal]);
 		expect(await pressAs(A)).toEqual([]);
