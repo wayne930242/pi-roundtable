@@ -21,6 +21,15 @@ export interface QueuedEntry {
 	readonly queuedAt: number;
 	/** Cancelled while it waited: its turn does not run. */
 	cancelled: boolean;
+	/** Marked as waiting, so its author may see, cancel, or edit it; an unmarked one is only refused at shutdown. */
+	readonly listed: boolean;
+}
+
+/** How a refusal of every waiting message went, filled in as it goes; set `stopped` to start no more. */
+export interface RefuseTally {
+	refused: number;
+	failed: number;
+	stopped: boolean;
 }
 
 /**
@@ -29,13 +38,6 @@ export interface QueuedEntry {
  * can only reach a message that has not started. Everything is synchronous, so no cancel or edit
  * races the start of a turn: whichever runs first wins.
  */
-/** How a refusal of every waiting message went, filled in as it goes; set `stopped` to start no more. */
-export interface RefuseTally {
-	refused: number;
-	failed: number;
-	stopped: boolean;
-}
-
 export class QueuedMessages {
 	readonly #entries = new Map<ChannelKey, Map<string, QueuedEntry>>();
 	readonly #logger: Logger;
@@ -50,6 +52,7 @@ export class QueuedMessages {
 		claim: ChannelClaim,
 		message: InboundMessage,
 		admission: TurnAdmission,
+		listed = true,
 	): QueuedEntry {
 		const entry: QueuedEntry = {
 			claim,
@@ -57,6 +60,7 @@ export class QueuedMessages {
 			admission,
 			queuedAt: this.#now(),
 			cancelled: false,
+			listed,
 		};
 		const channel = this.#entries.get(message.channel) ?? new Map();
 		channel.set(message.messageId, entry);
@@ -75,14 +79,16 @@ export class QueuedMessages {
 	}
 
 	list(channel: ChannelKey): readonly QueuedMessage[] {
-		return [...(this.#entries.get(channel)?.values() ?? [])].map((entry) => ({
-			messageId: entry.message.messageId,
-			...(entry.message.speaker
-				? { principalId: entry.message.speaker.principalId }
-				: {}),
-			text: entry.message.text,
-			queuedAt: entry.queuedAt,
-		}));
+		return [...(this.#entries.get(channel)?.values() ?? [])]
+			.filter((entry) => entry.listed)
+			.map((entry) => ({
+				messageId: entry.message.messageId,
+				...(entry.message.speaker
+					? { principalId: entry.message.speaker.principalId }
+					: {}),
+				text: entry.message.text,
+				queuedAt: entry.queuedAt,
+			}));
 	}
 
 	/**
@@ -96,7 +102,7 @@ export class QueuedMessages {
 		by: QueuedBy | undefined,
 		unmark: boolean,
 	): QueuedChange {
-		const entry = this.#entries.get(channel)?.get(messageId);
+		const entry = this.#listed(channel, messageId);
 		if (!entry) return "unknown";
 		if (by && !this.#authored(entry, by)) return "forbidden";
 		this.remove(entry);
@@ -116,7 +122,7 @@ export class QueuedMessages {
 		by: QueuedBy | undefined,
 		text: string,
 	): QueuedChange {
-		const entry = this.#entries.get(channel)?.get(messageId);
+		const entry = this.#listed(channel, messageId);
 		if (!entry) return "unknown";
 		if (by && !this.#authored(entry, by)) return "forbidden";
 		if (entry.message.text === text) return "done";
@@ -175,6 +181,11 @@ export class QueuedMessages {
 					"the waiting mark of a queued message was not removed",
 				),
 			);
+	}
+
+	#listed(channel: ChannelKey, messageId: string): QueuedEntry | undefined {
+		const entry = this.#entries.get(channel)?.get(messageId);
+		return entry?.listed ? entry : undefined;
 	}
 
 	#authored(entry: QueuedEntry, by: QueuedBy): boolean {

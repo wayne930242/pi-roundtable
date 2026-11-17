@@ -49,9 +49,11 @@ const DEFAULT_RETRY_MS = 2000;
  * Records each addressed message the live gateway delivers before routing hears it, so catch-up
  * after a restart leaves it alone; false for one already recorded, which is not delivered again.
  * A message that cannot be recorded is still delivered, logged, and kept in `unrecorded`.
- * Once the host drains, an addressed message that has not run is recorded as left, and the next
- * process answers it whatever its channel shows since; its channel is told so once. Any other message
- * routing refuses then tells its channel once to send it again. Each notice is recorded, so
+ * Once the host drains, an addressed message still reaches routing unrecorded, so only one routing
+ * refuses as the host stops, one a claim would have answered, is recorded as left: the next process
+ * answers it whatever its channel shows since, and its channel is told so once. One that cannot be
+ * left gets no notice, as catch-up finds it unrecorded in its window. Any other message routing
+ * refuses then tells its channel once to send it again. Each notice is recorded, so
  * catch-up does not take it for an answer, and deleted again when it cannot be.
  */
 export function journalGate({
@@ -65,6 +67,9 @@ export function journalGate({
 	redeliver,
 }: GateOptions): JournalGate {
 	const told = { later: new Set<string>(), resend: new Set<string>() };
+	// Addressed messages passed during the drain without a record: routing decides whether they are left.
+	// An entry routing never refuses stays until the process exits; the drain bounds the set, and the process ends after it.
+	const unclaimed = new Set<string>();
 	const channelOf = (message: InboundMessage) =>
 		message.channel.slice("discord:".length);
 	const tell = async (
@@ -111,7 +116,8 @@ export function journalGate({
 		channelId: channelOf(message),
 		direct: message.isDirect,
 	});
-	// Left in the journal, the next process answers it whatever its channel shows; unrecorded, the channel is told to send it again.
+	// Left in the journal, the next process answers it whatever its channel shows. A recorded one that
+	// cannot be left is told to be sent again; an unrecorded one is told nothing, as catch-up answers it.
 	const leave = async (
 		message: InboundMessage,
 		botId: string,
@@ -132,6 +138,13 @@ export function journalGate({
 				return;
 			}
 		} catch (error) {
+			if (!taken) {
+				logger.warn(
+					{ ...where, err: error },
+					"could not leave a message for the next process; unrecorded, catch-up answers it",
+				);
+				return;
+			}
 			logger.warn(
 				{ ...where, err: error },
 				"could not leave a message for the next process; its channel is told to send it again",
@@ -169,8 +182,9 @@ export function journalGate({
 	const pass = async (message: InboundMessage, botId: string) => {
 		if (!addressed(message)) return true;
 		if (draining()) {
-			await leave(message, botId, false);
-			return false;
+			// Routing refuses it, through `refused`, only when a claim would have answered it.
+			unclaimed.add(message.messageId);
+			return true;
 		}
 		const channelId = channelOf(message);
 		const { messageId } = message;
@@ -184,10 +198,8 @@ export function journalGate({
 				return false;
 			}
 			await wait?.(channelId);
-			if (!draining()) return true;
-			// The drain began while it was recorded: routing would refuse it, so the next process takes it.
-			await leave(message, botId);
-			return false;
+			// Should the drain have begun meanwhile, routing refuses it, and `refused` leaves it.
+			return true;
 		} catch (error) {
 			unrecorded?.add(messageId);
 			logger.warn(
@@ -199,7 +211,8 @@ export function journalGate({
 	};
 	const refused = async (message: InboundMessage, botId: string) => {
 		if (!notify || message.authorIsBot || message.integration) return false;
-		if (addressed(message)) await leave(message, botId);
+		if (addressed(message))
+			await leave(message, botId, !unclaimed.delete(message.messageId));
 		else await tell("resend", message, botId);
 		return true;
 	};

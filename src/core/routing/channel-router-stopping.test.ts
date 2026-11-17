@@ -90,7 +90,8 @@ test("without the surface taking it, or when it fails, routing tells the channel
 	expect(bot.refused).toEqual([]);
 });
 
-test("a message still waiting behind a turn when the drain ends is refused at once, through its surface, and never runs", async () => {
+/** A router whose first message holds its channel, and whose surface takes every refused message. */
+function waitingWorld(marked: boolean) {
 	const ran: string[] = [];
 	const running = Promise.withResolvers<void>();
 	const claim: ChannelClaim = {
@@ -99,7 +100,14 @@ test("a message still waiting behind a turn when the drain ends is refused at on
 		owns: () => true,
 		admit: (m) => ({
 			kind: "turn",
-			busy: { react: async () => undefined, unreact: async () => undefined },
+			...(marked
+				? {
+						busy: {
+							react: async () => undefined,
+							unreact: async () => undefined,
+						},
+					}
+				: {}),
 			run: async () => {
 				ran.push(m.messageId);
 				if (m.messageId === "first") await running.promise;
@@ -129,19 +137,46 @@ test("a message still waiting behind a turn when the drain ends is refused at on
 		},
 	});
 	const first = routing.handle(message("first"));
+	return { routing, queue, ran, refused, running, first };
+}
+
+for (const marked of [true, false])
+	test(`a message still waiting behind a turn when the drain ends is refused at once, through its surface, and never runs (${marked ? "a claim that marks it" : "a claim without a waiting mark"})`, async () => {
+		const { routing, queue, ran, refused, running, first } =
+			waitingWorld(marked);
+		await Bun.sleep(1);
+		const waiting = routing.handle(message("waiting"));
+		await Bun.sleep(1);
+		// Only a marked message is listed for its author to cancel or edit.
+		expect(routing.queued("discord:1").map((q) => q.messageId)).toEqual(
+			marked ? ["waiting"] : [],
+		);
+		queue.close();
+		queue.seal();
+		const tally = { refused: 0, failed: 0, stopped: false };
+		await routing.refuseWaiting(tally);
+		expect(tally).toEqual({ refused: 1, failed: 0, stopped: false });
+		expect(refused).toEqual(["waiting"]);
+		expect(routing.queued("discord:1")).toEqual([]);
+		running.resolve();
+		await Promise.all([first, waiting]);
+		await Bun.sleep(1);
+		expect(ran).toEqual(["first"]);
+		expect(refused).toEqual(["waiting"]);
+	});
+
+test("a message waiting unmarked behind a turn that ends after the drain began is refused once, by its own task", async () => {
+	const { routing, queue, ran, refused, running, first } = waitingWorld(false);
 	await Bun.sleep(1);
 	const waiting = routing.handle(message("waiting"));
 	await Bun.sleep(1);
 	queue.close();
 	queue.seal();
-	const tally = { refused: 0, failed: 0, stopped: false };
-	await routing.refuseWaiting(tally);
-	expect(tally).toEqual({ refused: 1, failed: 0, stopped: false });
-	expect(refused).toEqual(["waiting"]);
-	expect(routing.queued("discord:1")).toEqual([]);
 	running.resolve();
 	await Promise.all([first, waiting]);
-	await Bun.sleep(1);
+	const tally = { refused: 0, failed: 0, stopped: false };
+	await routing.refuseWaiting(tally);
+	expect(tally.refused).toBe(0);
 	expect(ran).toEqual(["first"]);
 	expect(refused).toEqual(["waiting"]);
 });

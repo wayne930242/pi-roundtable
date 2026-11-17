@@ -102,7 +102,28 @@ test("a recorded message routing refuses as the host stops is left for the next 
 	expect([...rows].toSorted()).toEqual(["m1", "m2", "notice-1", "notice-2"]);
 });
 
-test("a message that cannot be left for the next process gets the notice to send it again instead", async () => {
+test("a drain-time message routing never refuses is promised nothing and not left, as nothing would answer it", async () => {
+	const { journal, rows, left } = memoryJournal();
+	const told = notices();
+	const gate = journalGate({
+		journal,
+		logger: silentLogger(),
+		draining: () => true,
+		notify: told.notify,
+	});
+	// Routing hears it, and drops it in a channel no claim serves.
+	expect(await gate(message("m1"), "9")).toBe(true);
+	expect([...left]).toEqual([]);
+	expect([...rows]).toEqual([]);
+	expect(told.posted).toEqual([]);
+	// One routing refuses because the host stops is left, and its channel told so.
+	expect(await gate(message("m2"), "9")).toBe(true);
+	expect(await gate.refused(message("m2"), "9")).toBe(true);
+	expect([...left]).toEqual(["m2"]);
+	expect(told.posted).toEqual([["notice-1", "later"]]);
+});
+
+test("a drain-time message that cannot be left gets no notice, since catch-up answers it from its unrecorded place in the window", async () => {
 	const { journal } = memoryJournal();
 	const told = notices();
 	const gate = journalGate({
@@ -116,8 +137,9 @@ test("a message that cannot be left for the next process gets the notice to send
 		draining: () => true,
 		notify: told.notify,
 	});
-	expect(await gate(message("m1"), "9")).toBe(false);
-	expect(told.posted).toEqual([["notice-1", "resend"]]);
+	expect(await gate(message("m1"), "9")).toBe(true);
+	expect(await gate.refused(message("m1"), "9")).toBe(true);
+	expect(told.posted).toEqual([]);
 });
 
 test("a notice that cannot be recorded is deleted again, so catch-up never takes it for an answer", async () => {
@@ -130,7 +152,8 @@ test("a notice that cannot be recorded is deleted again, so catch-up never takes
 		notify: told.notify,
 	});
 	state.failClaims = true;
-	expect(await gate(message("m1"), "9")).toBe(false);
+	expect(await gate(message("m1"), "9")).toBe(true);
+	expect(await gate.refused(message("m1"), "9")).toBe(true);
 	expect(told.retracted).toEqual(["notice-1"]);
 });
 
@@ -228,10 +251,12 @@ test("a draining process leaves alone a message another process already took in,
 		draining: () => true,
 		notify: told.notify,
 	});
-	expect(await gate(message("m1"), "9")).toBe(false);
+	expect(await gate(message("m1"), "9")).toBe(true);
+	expect(await gate.refused(message("m1"), "9")).toBe(true);
 	expect(left.has("m1")).toBe(false);
 	expect(told.posted).toEqual([]);
-	expect(await gate(message("m2"), "9")).toBe(false);
+	expect(await gate(message("m2"), "9")).toBe(true);
+	expect(await gate.refused(message("m2"), "9")).toBe(true);
 	expect(left.has("m2")).toBe(true);
 	expect(told.posted).toEqual([["notice-1", "later"]]);
 });

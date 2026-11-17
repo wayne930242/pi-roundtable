@@ -289,14 +289,15 @@ export class ChannelRouter implements ConversationPort {
 		}
 		const { busy } = admission;
 		let waiting: QueuedEntry | undefined;
-		// A message during a turn is added to it when the turn takes it, otherwise marked as waiting.
+		// During a turn a message joins it or is marked waiting; unmarkable, it is kept so a shutdown refuses it.
 		if (busy && queue.size(message.channel) > 0) {
 			if (await busy.steer?.()) return { done: busy.react(STEERED_MARK) };
 			// Listed before the mark is placed, so a delete or cancel during that wait reaches it.
 			waiting = this.#queued.add(claim, message, admission);
 			await busy.react(QUEUED_MARK);
 			if (waiting.cancelled) return { done: Promise.resolve() };
-		}
+		} else if (queue.size(message.channel) > 0)
+			waiting = this.#queued.add(claim, message, admission, false);
 		const done = queue
 			.run(message.channel, () => {
 				if (!waiting) return admission.run();
@@ -359,7 +360,7 @@ export class ChannelRouter implements ConversationPort {
 		messageId: string,
 		space?: string,
 	): Promise<void> {
-		// The surface says it is gone: no author check, and no mark to remove from a deleted message.
+		// The surface says it is gone: no author check, no mark to remove; an unmarked one still runs, as ever.
 		this.#queued.cancel(channel, messageId, undefined, false);
 		return tellDeleted(
 			this.#owner(channel, space),

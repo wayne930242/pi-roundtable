@@ -1,9 +1,7 @@
 import { DRAIN_LIMIT_MS } from "../config/config-schema.ts";
+import { ABORT_GRACE_MS } from "../config/limits.ts";
 import type { Logger } from "../kernel/log.ts";
 import type { Service } from "../plugin-api/plugin.ts";
-
-/** How long work that was told to stop gets to end before the shutdown goes on without it. */
-const ABORT_GRACE_MS = 10_000;
 
 export interface DrainOptions {
 	/** What still runs or waits, one entry per piece of work; empty when idle. */

@@ -14,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `discord.catchUp`: a message the live connection delivered without a record, because the database was down at startup, is not caught up a second time by the same process.
 - `discord.catchUp`: the inbound journal is pruned to 30 days every six hours while the host runs, not only at restart. The docs now say what happens when `catchUp` is turned off later.
 - `discord.catchUp`: a mention that has a thread started from it, or a reaction from the bot, counts as answered. Before this fix, the first restart after catch-up was enabled re-delivered mentions answered in a thread, and the bot then posted a false "could not open a thread" notice.
-- `discord.catchUp`: caught-up messages reach routing before the newer live messages in the same channel. A live message waits until catch-up has listed the channels it may read (one database query). In one of those channels, it also waits until catch-up is done.
+- `discord.catchUp`: caught-up messages reach routing before the newer live messages in the same channel. A live message waits until catch-up has listed the channels it may read (two database queries). In one of those channels, it also waits until catch-up is done.
 
 ## [0.52.0] - 2026-11-17
 
