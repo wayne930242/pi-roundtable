@@ -406,18 +406,23 @@ test("a turn the stopping host refuses before it ran leaves its message once, wh
 test("work an admission set up that runs after its work ended changes nothing, such as a timer's turn", async () => {
 	const queue = new ChannelQueue();
 	const timer = Promise.withResolvers<void>();
-	const fired = Promise.withResolvers<void>();
+	const fired = Promise.withResolvers<unknown>();
 	const { routing, left } = plainRouter(queue, async () => {
 		void timer.promise.then(async () => {
-			await settleTurn(async () => {
-				throw new HostStoppingError();
-			}, "turn");
-			fired.resolve();
+			fired.resolve(
+				await settleTurn(async () => {
+					throw new HostStoppingError();
+				}, "turn"),
+			);
 		});
 	});
 	await routing.handle(message("a"));
 	timer.resolve();
-	await fired.promise;
+	// Its refusal stays a failure that asks to try again: nothing promises an answer after the restart.
+	expect(await fired.promise).toEqual({
+		ok: false,
+		error: new AgentRunError(new HostStoppingError().message),
+	});
 	routing.cutRunning();
 	await routing.leaveCut(tally());
 	expect(left).toEqual([]);

@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChannelKey, IntercomCard } from "../domain/conversation.ts";
 import { AgentError, IdentityError } from "../domain/errors.ts";
 import type { AgentTurnScope } from "../domain/ports.ts";
@@ -8,9 +7,10 @@ import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
 import {
+	currentHop,
 	currentRecord,
-	type TurnRecord,
-	underRecord,
+	type RecordOrigin,
+	underHop,
 } from "../routing/turn-records.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
@@ -28,18 +28,6 @@ import {
 	MAX_CHAIN_MESSAGES,
 	type TurnHost,
 } from "./team-turn-types.ts";
-
-/**
- * The turn record of the person's message an agent message goes back to, with its `answers` when
- * it was sent: a shutdown that leaves that message drops what the exchange kept for the next start.
- */
-interface Origin {
-	record: TurnRecord;
-	since: number;
-}
-
-/** The origin of the exchange a turn runs in, for the agent messages that turn sends in turn. */
-const hopOrigin = new AsyncLocalStorage<Origin | undefined>();
 
 /** Messages between agents: each runs the target's turn, then wakes the sender with the answer. */
 export class AgentMessages {
@@ -113,20 +101,16 @@ export class AgentMessages {
 		// start is taken out again once a shutdown leaves that message, which is then asked again.
 		// A send under the record counts its answers then; a later hop takes those of the send it follows.
 		const record = currentRecord();
-		const origin = record
-			? { record, since: record.answers }
-			: hopOrigin.getStore();
-		void underRecord(undefined, () =>
-			hopOrigin.run(origin, () =>
-				queue.run(targetChannel, async () =>
-					this.#exchange(
-						sender,
-						target,
-						text,
-						chain,
-						{ targetChannel, senderChannel: parent },
-						origin,
-					),
+		const origin = record ? { record, since: record.answers } : currentHop();
+		void underHop(origin, () =>
+			queue.run(targetChannel, async () =>
+				this.#exchange(
+					sender,
+					target,
+					text,
+					chain,
+					{ targetChannel, senderChannel: parent },
+					origin,
 				),
 			),
 		)
@@ -196,7 +180,7 @@ export class AgentMessages {
 			targetChannel,
 			senderChannel,
 		}: { targetChannel: ChannelKey; senderChannel: ChannelKey },
-		origin: Origin | undefined,
+		origin: RecordOrigin | undefined,
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
 		await this.#host.post(targetChannel, this.#host.current(sender), {
@@ -285,7 +269,7 @@ export class AgentMessages {
 	 * again, or not written at all: the next process answers that message anew, or its author is
 	 * asked to send it again, and the turn sends it again then.
 	 */
-	#keep(origin: Origin | undefined, entry: OutboxEntry): void {
+	#keep(origin: RecordOrigin | undefined, entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
 		const about = { kind: entry.kind, from: entry.sender, to: entry.target };
 		if (origin?.record.droppedSince(origin.since)) {

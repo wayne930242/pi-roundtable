@@ -4,6 +4,8 @@ import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
+import type { Logger } from "../kernel/log.ts";
+import type { RefuseTally } from "./queued-messages.ts";
 
 /** What a record tells its `RunningTurns`. */
 interface RecordHooks {
@@ -37,6 +39,8 @@ export class TurnRecord {
 	readonly #onLeave: { task: () => Promise<void>; since: number }[] = [];
 	/** The admission while it runs, plus each turn and queue task running under it. */
 	#open = 1;
+	/** The channels of the turns and queue tasks running under it, each with how many. */
+	readonly #channels = new Map<ChannelKey, number>();
 	/** Its admission's work has ended: what runs under it later changes nothing but a left one's late answer. */
 	#done = false;
 	readonly #hooks: RecordHooks;
@@ -67,18 +71,29 @@ export class TurnRecord {
 		this.#answered.delete(message);
 	}
 
-	/** A turn or queue task under it starts; it keeps it open while its admission's work is. */
-	begin(): void {
-		if (!this.#done) this.#open += 1;
+	/** A turn or queue task under it starts, in `channel` when it says; it keeps it open while its admission's work is. */
+	begin(channel?: ChannelKey): void {
+		if (this.#done) return;
+		this.#open += 1;
+		if (channel)
+			this.#channels.set(channel, (this.#channels.get(channel) ?? 0) + 1);
 	}
 
-	/** The admission, or a turn or queue task under it, ended. */
-	end(): void {
+	/** The admission, or a turn or queue task under it, ended; `channel` as it began. */
+	end(channel?: ChannelKey): void {
 		if (this.#done) return;
+		const left = (channel && this.#channels.get(channel)) || 0;
+		if (channel && left <= 1) this.#channels.delete(channel);
+		else if (channel) this.#channels.set(channel, left - 1);
 		this.#open -= 1;
 		if (this.#open > 0) return;
 		this.#done = true;
 		this.#hooks.closed();
+	}
+
+	/** The channels its turns and queue tasks run in now. */
+	channels(): ChannelKey[] {
+		return [...this.#channels.keys()];
 	}
 
 	/** Its messages no `ok` turn answered yet. */
@@ -140,7 +155,12 @@ export class TurnRecord {
 			if (this.#done) return result;
 			this.#answers += 1;
 			for (const message of this.#messages) this.#answered.add(message);
-		} else if (!result.stopped && result.error.message === STOPPING) {
+		} else if (
+			!result.stopped &&
+			result.error.message === STOPPING &&
+			!this.#done
+		) {
+			// Left with the cut, its person hears only that; work after the admission's keeps "try again".
 			this.refusedByHost();
 			return stoppedByHost();
 		}
@@ -166,19 +186,44 @@ function isTurnResult(value: unknown): value is TurnResult {
 	);
 }
 
-const current = new AsyncLocalStorage<TurnRecord | undefined>();
+/**
+ * Where a turn outside any record goes back to: the record of the person's message a chain of agent
+ * messages started from, and its `answers` when the send that led here was made.
+ */
+export interface RecordOrigin {
+	record: TurnRecord;
+	since: number;
+}
+
+const current = new AsyncLocalStorage<
+	{ record?: TurnRecord; hop?: RecordOrigin } | undefined
+>();
 
 /** Runs `task` with `record` as the turn record of everything it starts; undefined runs it outside any. */
 export function underRecord<T>(
 	record: TurnRecord | undefined,
 	task: () => T,
 ): T {
-	return current.run(record, task);
+	return current.run(record && { record }, task);
 }
 
 /** The turn record of the admission the caller runs under, if any. */
 export function currentRecord(): TurnRecord | undefined {
-	return current.getStore();
+	return current.getStore()?.record;
+}
+
+/**
+ * Runs `task` outside any record, as an agent message's exchange: what it starts that goes back to
+ * the person's message, such as the next agent message, reads `hop` with `currentHop`. Leaving
+ * the exchange the way a record is left, through `underRecord(undefined, …)`, clears it too.
+ */
+export function underHop<T>(hop: RecordOrigin | undefined, task: () => T): T {
+	return current.run(hop && { hop }, task);
+}
+
+/** The origin of the exchange the caller runs in, if any. */
+export function currentHop(): RecordOrigin | undefined {
+	return current.getStore()?.hop;
 }
 
 /**
@@ -224,6 +269,11 @@ export class RunningTurns {
 		return this.#running.get(channel);
 	}
 
+	/** The channels the open records' turns and queue tasks run in, such as a turn asked for without waiting. */
+	busy(): ChannelKey[] {
+		return [...new Set([...this.#live].flatMap((record) => record.channels()))];
+	}
+
 	/** Marks every record still open as cut: the drain limit found its turn running. */
 	cut(): void {
 		this.#cut.push(...this.#live);
@@ -232,5 +282,39 @@ export class RunningTurns {
 	/** The records marked cut, each once. */
 	takeCut(): TurnRecord[] {
 		return [...new Set(this.#cut.splice(0))];
+	}
+
+	/**
+	 * Leaves each cut record's unanswered messages of a person and `tell`s each, counting in `tally`
+	 * and starting no record once it is `stopped`; `dropping` ends once what they handed on is dropped.
+	 */
+	async leaveCut(
+		tally: RefuseTally,
+		logger: Logger,
+		tell: (message: InboundMessage) => Promise<void>,
+	): Promise<{ dropping: Promise<unknown> }> {
+		const dropping: Promise<void>[] = [];
+		for (const record of this.takeCut()) {
+			// A bot's or an integration's message is told nothing, so its turn's late answer stays.
+			const people = record
+				.unanswered()
+				.filter((message) => !message.authorIsBot && !message.integration);
+			// Left only as its channel is told, so one the limit stops before keeps its late answer.
+			if (tally.stopped) break;
+			if (people.length === 0) continue;
+			logger.info(
+				{ channel: record.messages[0]?.channel },
+				"turn cut by the shutdown before it answered; its messages are refused",
+			);
+			// Left at once; what it handed on is dropped meanwhile, not before its channel is told.
+			dropping.push(record.leave());
+			for (const message of people) {
+				// A message the limit stops before is neither told nor answered (docs/plugins.md).
+				if (tally.stopped) break;
+				await tell(message);
+				tally.refused += 1;
+			}
+		}
+		return { dropping: Promise.all(dropping) };
 	}
 }

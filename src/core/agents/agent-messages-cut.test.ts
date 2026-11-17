@@ -182,4 +182,22 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 			kind: "reply",
 		});
 	});
+	test("a later hop takes the answers of the send it follows: one after an answer of the record is dropped when a later message is left", async () => {
+		const record = await underPerson(
+			async (record) => {
+				record.settle({ ok: true, text: "answered" });
+				record.add({ ...person, messageId: "m2" });
+				fx.team.message(coordinator(), "infra", "check the disk");
+				fx.runtime.stopNext = true;
+			},
+			(request) => {
+				if (request.agent?.name !== "infra") return;
+				fx.queue.close();
+				fx.team.message(request.agent, "doctor", "and the patient");
+			},
+		);
+		await keptCount(2);
+		await record.leave();
+		expect(await fx.store.outbox.pending()).toEqual([]);
+	});
 });

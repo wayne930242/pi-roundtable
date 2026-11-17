@@ -276,34 +276,21 @@ export class ChannelRouter implements ConversationPort {
 		this.#turns.cut();
 	}
 
+	/** The channels where turns of admitted messages run outside their queue, which the drain waits for too. */
+	busy(): ChannelKey[] {
+		return this.#turns.busy();
+	}
+
 	/**
 	 * Leaves each person's message of every turn cut at the drain limit, or refused as the host
 	 * stopped, that did not answer, through its surface as a refused one is, counting in `tally`;
 	 * call it once the abort grace is over. `dropping` ends once what the turns handed on is dropped.
 	 */
-	async leaveCut(tally: RefuseTally): Promise<{ dropping: Promise<unknown> }> {
+	leaveCut(tally: RefuseTally): Promise<{ dropping: Promise<unknown> }> {
 		const { logger, surfaces } = this.#options;
-		const dropping: Promise<void>[] = [];
-		for (const record of this.#turns.takeCut()) {
-			// A bot's or an integration's message is told nothing, so its turn's late answer stays.
-			const people = record
-				.unanswered()
-				.filter((message) => !message.authorIsBot && !message.integration);
-			// Left only as its channel is told, so one the limit stops before keeps its late answer.
-			if (tally.stopped) break;
-			if (people.length === 0) continue;
-			logger.info(
-				{ channel: record.messages[0]?.channel },
-				"turn cut by the shutdown before it answered; its messages are refused",
-			);
-			dropping.push(record.leave()); // left at once; what it handed on is dropped meanwhile
-			for (const message of people) {
-				if (tally.stopped) break; // neither told nor answered (docs/plugins.md)
-				await tellStopping(message, surfaces, this.#told, logger);
-				tally.refused += 1;
-			}
-		}
-		return { dropping: Promise.all(dropping) };
+		return this.#turns.leaveCut(tally, logger, (message) =>
+			tellStopping(message, surfaces, this.#told, logger),
+		);
 	}
 
 	/** Refuses each message still waiting behind a turn after the drain, counting in `tally`. */

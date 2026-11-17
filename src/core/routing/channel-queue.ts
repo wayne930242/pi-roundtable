@@ -80,7 +80,7 @@ export class ChannelQueue {
 		// Queued from a message's admission, it keeps that admission's turn record open until it ends,
 		// so a turn it runs after the admission returned still answers or leaves that message.
 		const record = currentRecord();
-		record?.begin();
+		record?.begin(channel);
 		const admitted = this.#admitted();
 		const start = () => {
 			if (this.#closed && !(admitted && !this.#sealed)) {
@@ -101,7 +101,7 @@ export class ChannelQueue {
 			else this.#sizes.delete(channel);
 			if (this.#tails.get(channel) === tail) this.#tails.delete(channel);
 			this.#changed(channel);
-			record?.end();
+			record?.end(channel);
 		});
 		return result;
 	}

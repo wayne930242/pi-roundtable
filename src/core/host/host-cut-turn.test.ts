@@ -212,13 +212,11 @@ describe("a turn the shutdown cuts", () => {
 		expect(await waiting.roundtable.shutdown("SIGTERM")).toBe(0);
 		expect(waiting.log).toEqual(["left first", "left waiting", "stop runtime"]);
 	});
-	test("that its admission started without waiting for it, outside the queue the drain waits for, is left as well, and its late answer is not posted", async () => {
+	test("that its admission started without waiting for it is waited for, then stopped and left as well", async () => {
 		const s = setup("obeys", false, 40, false);
 		await holdATurn(s);
 		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
+		expect(s.stops[0]).toBe(ROOM);
 		expect(s.log).toEqual(["left first", "stop runtime"]);
-		s.turns[0]?.resolve({ ok: true, text: "the answer" });
-		await until(() => s.replies.length > 0);
-		expect(s.replies).toEqual(["-# Stopped."]);
 	});
 });

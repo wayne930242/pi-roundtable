@@ -269,8 +269,8 @@ export function conversationTurns(
 		run(input) {
 			// Asked for from a message's admission, awaited or not, it keeps that admission's work open.
 			const record = currentRecord();
-			record?.begin();
-			return runOne(input).finally(() => record?.end());
+			record?.begin(input.channel);
+			return runOne(input).finally(() => record?.end(input.channel));
 		},
 	};
 }
