@@ -2946,7 +2946,7 @@ A message counts when a person wrote it (not a bot, a webhook or Discord itself)
 It is left alone when it is older than the window, when it was already taken in, or when it shows an answer: the bot or one of its own webhooks posted in that channel after it, a thread was started from it (by anyone, as the bot answers a mention in a thread), or the bot reacted to it.
 The thread and the reaction matter at the first restart after `catchUp` is turned on, when nothing was recorded yet; a mention a person started a thread from is therefore not answered, since one missed answer is preferred to two.
 Of what is left, the newest `maxMessages` (default 20, at most 100) go to routing oldest first.
-They go once every service has started; a live message that came after the connection became ready waits until catch-up knows which channels it reads, and, in one of those, until catch-up is done, so the caught-up messages of a channel reach routing before its newer live ones.
+They go once every service has started; a live message that came after the connection became ready waits until catch-up has listed the channels it may read (one database query, before any request), and, in one of those, until catch-up is done, so the caught-up messages of a channel reach routing before its newer live ones.
 Each one passes through the same claims, identity resolution and gates as a live message, with `InboundMessage.caughtUp` set, so a claim may say its answer comes late, for example that the assistant just restarted.
 The log carries only counts and ids, never text.
 
@@ -2956,9 +2956,10 @@ Whichever records a message first delivers it; the other drops it, so a second r
 A message that catch-up cannot record is skipped, and a crash after the record but before the turn leaves it unanswered: one missed answer is preferred to two.
 The live connection still delivers a message it cannot record, such as while the database is down, and logs it; catch-up in the same process leaves it alone, so only a later restart that finds no answer to it in its channel could answer it again.
 Catch-up reads the author of a server message as a member first; when that fails for any reason but the author having left the server, the message is skipped unrecorded, so a later restart may still answer it with the author's roles.
-Once the old process begins to shut down it records nothing and hands no addressed message to routing; instead it posts, once per channel, a notice that the message will be answered after the restart, and holds back the rest of that channel's messages until it exits.
-The notice is recorded in the journal, so the next process does not take it for an answer, and catches up every addressed message that came while the old one shut down.
-A message recorded just as the shutdown began is released again, by the live connection or by catch-up, for the next process to take in.
+Once the old process begins to shut down it runs no new turn, and an addressed message it has not started, whether it arrives then or already waits behind a running turn, is left for the next process: its record is released (or never made), and the channel is told once that the message will be answered after the restart.
+Any other person's message that routing refuses then tells its channel once to send it again, as without catch-up.
+Each notice is recorded in the journal, so the next process does not take it for an answer; a notice that cannot be recorded is deleted again, and when catch-up cannot look the notices up it leaves that channel unread rather than guess.
+A process that finds a message already recorded by another, as when two processes overlap during a deploy, claims it once more two seconds later, so one the other released as it began to shut down is still answered; a release later than that, such as for a message that waited behind a long turn, is answered by neither, and is logged.
 A person who sends the message again anyway gets both answered, the copy live and the original by catch-up, since nothing tells the two apart.
 Records are kept 30 days: the plugin forgets older ones every six hours while it runs and as catch-up starts.
 Turning `catchUp` off later leaves the `discord_inbound_journal` table and its rows as they are, with nothing pruning them; turning it on again finds them and prunes them as usual, or a host may drop the table by hand.

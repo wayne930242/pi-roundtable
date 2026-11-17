@@ -179,6 +179,13 @@ export interface ChatSurface {
 	): Promise<void>;
 	/** Runs when the host stops, after the services started later have stopped. */
 	stop?(): Promise<void>;
+	/**
+	 * A person's message routing does not run because the host is shutting down: the surface may
+	 * take care of it, for example leave it for the next process to answer, and tell its channel
+	 * itself. True = it did, and routing posts no restart notice. Absent, false, or a rejection
+	 * (logged) = routing tells the channel once to send it again.
+	 */
+	refuseStopping?(message: InboundMessage): Promise<boolean>;
 	sendReply(channel: ChannelKey, reply: OutboundReply): Promise<void>;
 	/** Shows a typing indicator until the returned function is called; absent = none shown. */
 	startTyping?(channel: ChannelKey): () => void;

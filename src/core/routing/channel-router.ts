@@ -248,8 +248,18 @@ export class ChannelRouter implements ConversationPort {
 				reason: new HostStoppingError().message,
 			});
 		logger.info({ channel }, "message not run: the host is shutting down");
-		if (message.authorIsBot || message.integration || this.#told.has(channel))
-			return;
+		if (message.authorIsBot || message.integration) return;
+		const took = await surfaces
+			?.of(channel)
+			?.refuseStopping?.(message)
+			.catch((error: unknown) => {
+				logger.warn(
+					{ channel, err: error },
+					"surface did not take a refused message",
+				);
+				return false;
+			});
+		if (took || this.#told.has(channel)) return;
 		this.#told.add(channel);
 		try {
 			await surfaces?.sendReply?.(channel, {

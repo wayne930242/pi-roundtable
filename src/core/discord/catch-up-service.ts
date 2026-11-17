@@ -8,8 +8,8 @@ import {
 	catchUp,
 	DAY_MS,
 	JOURNAL_DAYS,
-	journalGate,
 } from "./catch-up.ts";
+import { type JournalGate, journalGate } from "./catch-up-gate.ts";
 import type { InboundJournal } from "./catch-up-journal.ts";
 import { clientCatchUpReader, postNotice } from "./catch-up-reader.ts";
 
@@ -40,7 +40,9 @@ const interval = (run: () => void, ms: number) => {
  * then while it runs, so a host that is never restarted keeps only `JOURNAL_DAYS` of records.
  */
 export function catchUpWiring(options: CatchUpWiringOptions): {
-	gate: ReturnType<typeof journalGate>;
+	gate: JournalGate;
+	/** For a message routing refuses as the host stops; true when the gate took care of it. */
+	refused(message: InboundMessage): Promise<boolean>;
 	service: Service;
 } {
 	const { journal, logger } = options;
@@ -73,22 +75,29 @@ export function catchUpWiring(options: CatchUpWiringOptions): {
 			.catch((error: unknown) =>
 				logger.warn({ err: error }, "could not prune the inbound journal"),
 			);
+	const gate = journalGate({
+		journal,
+		logger,
+		draining: () => draining,
+		notify: (channelId, kind) =>
+			postNotice(
+				options.client(),
+				channelId,
+				kind === "later"
+					? messages().restartingAnswerLater
+					: messages().restartingNotice,
+			),
+		wait,
+		unrecorded: {
+			add: (id) => (caughtUp ? unrecorded : unrecorded.add(id)),
+		},
+	});
 	return {
-		gate: journalGate({
-			journal,
-			logger,
-			draining: () => draining,
-			notify: (channelId) =>
-				postNotice(
-					options.client(),
-					channelId,
-					messages().restartingAnswerLater,
-				),
-			wait,
-			unrecorded: {
-				add: (id) => (caughtUp ? unrecorded : unrecorded.add(id)),
-			},
-		}),
+		gate,
+		refused: async (message) => {
+			const botId = options.client().user?.id;
+			return botId !== undefined && gate.refused(message, botId);
+		},
 		service: {
 			name: "discord-catch-up",
 			start: () => {

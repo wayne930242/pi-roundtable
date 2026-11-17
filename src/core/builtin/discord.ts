@@ -308,7 +308,12 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					: { formatting: options.formatting }),
 				...(options.memberEvents ? { memberEvents: true } : {}),
 				...(options.voice ? { voice: true } : {}),
-				...(caughtUp ? { inboundGate: caughtUp.gate } : {}),
+				...(caughtUp
+					? {
+							inboundGate: caughtUp.gate,
+							refuseStopping: caughtUp.refused,
+						}
+					: {}),
 			});
 			surface = connected;
 			// Voice sessions over the same client; nothing of the voice packages is loaded before its service starts.

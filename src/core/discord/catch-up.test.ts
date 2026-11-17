@@ -9,10 +9,10 @@ import {
 	type CatchUpReader,
 	catchUp,
 	catchUpSettings,
-	journalGate,
 	type ScannedMessage,
 	snowflakeAt,
 } from "./catch-up.ts";
+import { journalGate } from "./catch-up-gate.ts";
 import { type InboundJournal, PgInboundJournal } from "./catch-up-journal.ts";
 
 const MINUTE = 60_000;
@@ -346,7 +346,7 @@ describeDb("catch-up over the journal", () => {
 			draining: () => draining,
 			notify: async (channelId) => {
 				notices.push(channelId);
-				return notice.id;
+				return { id: notice.id, retract: async () => undefined };
 			},
 		});
 		expect(inbound && (await gate(inbound, bot))).toBe(false);
@@ -464,7 +464,7 @@ test("a message not addressed to the bot passes the gate unrecorded; while the h
 	).toBe(false);
 	expect(claimed).toEqual([]);
 	expect(
-		await journalGate({ journal, logger: silentLogger() })(
+		await journalGate({ journal, logger: silentLogger(), retryMs: 0 })(
 			addressedMessage,
 			"9",
 		),

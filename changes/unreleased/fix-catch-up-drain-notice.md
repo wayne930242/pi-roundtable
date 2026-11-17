@@ -2,7 +2,7 @@
 type: Fixed
 packages: [core]
 ---
-`discord.catchUp`: a message addressed to the bot while the old process shuts down is no longer refused with "please send this again". The process records nothing, posts once per channel a notice that it will answer after the restart, and the next process answers the message. The notice is recorded in the journal, so catch-up does not take it for an answer. A message recorded just as the shutdown begins is released again for the next process.
+`discord.catchUp`: a message addressed to the bot that the old process does not run as it shuts down, whether it arrives during the shutdown or waits behind a running turn, is no longer refused with "please send this again". Its record is released, the channel is told once that it will be answered after the restart, and the next process answers it. Restart notices are recorded in the journal, so catch-up does not take one for an answer. A process that loses a claim to another tries once more two seconds later. A chat surface takes such a message through the new optional `ChatSurface.refuseStopping`.
 
 `discord.catchUp`: when the member fetch for a caught-up message fails for any reason other than the author having left (Discord code 10007), catch-up skips the message without recording it, so a later restart can retry it. Before this fix, the message was answered without the author's roles and was never retried.
 
@@ -12,4 +12,4 @@ packages: [core]
 
 `discord.catchUp`: a mention that has a thread started from it, or a reaction from the bot, counts as answered. Before this fix, the first restart after catch-up was enabled re-delivered mentions answered in a thread, and the bot then posted a false "could not open a thread" notice.
 
-`discord.catchUp`: caught-up messages reach routing before the newer live messages in the same channel. A live message waits until catch-up has listed the channels it reads. In one of those channels, it also waits until catch-up is done.
+`discord.catchUp`: caught-up messages reach routing before the newer live messages in the same channel. A live message waits until catch-up has listed the channels it may read (one database query). In one of those channels, it also waits until catch-up is done.

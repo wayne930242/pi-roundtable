@@ -10,6 +10,7 @@ import type {
 	ScannedMessage,
 } from "./catch-up.ts";
 import { timeOf } from "./catch-up.ts";
+import type { PostedNotice } from "./catch-up-gate.ts";
 import { toInbound } from "./inbound-message.ts";
 
 /** What the bot needs in a server channel to read what was said there before. */
@@ -86,12 +87,12 @@ export function clientCatchUpReader(
 	};
 }
 
-/** Posts `text` in a channel with no mention, as a notice; the posted message's id. */
+/** Posts `text` in a channel with no mention, as a notice. */
 export async function postNotice(
 	client: Client,
 	channelId: string,
 	text: string,
-): Promise<string> {
+): Promise<PostedNotice> {
 	const channel = await client.channels.fetch(channelId);
 	if (!channel?.isSendable())
 		throw new Error(`channel ${channelId} takes no message`);
@@ -99,5 +100,10 @@ export async function postNotice(
 		content: text,
 		allowedMentions: { parse: [] },
 	});
-	return posted.id;
+	return {
+		id: posted.id,
+		retract: async () => {
+			await posted.delete();
+		},
+	};
 }
