@@ -18,14 +18,20 @@ export interface BotIdentity {
 	applicationId: string | undefined;
 }
 
+/** The files of `message`, carried by the message `carrier` (a forward's by the forwarding message). */
 function attachmentRefs(
 	message: Pick<Message, "attachments">,
+	carrier: string,
 ): AttachmentRef[] {
 	return [...message.attachments.values()].map((attachment) => ({
 		url: attachment.url,
 		name: attachment.name,
 		...(attachment.contentType ? { contentType: attachment.contentType } : {}),
 		size: attachment.size,
+		id: attachment.id,
+		messageId: carrier,
+		...(attachment.title ? { title: attachment.title } : {}),
+		...(attachment.description ? { description: attachment.description } : {}),
 	}));
 }
 
@@ -34,7 +40,7 @@ function referenceOf(referenced: Message, mention: RegExp) {
 		text: withEmbeds(referenced.content, referenced.embeds)
 			.replace(mention, "")
 			.trim(),
-		attachments: attachmentRefs(referenced),
+		attachments: attachmentRefs(referenced, referenced.id),
 		authorId: referenced.author.id,
 		...(referenced.webhookId
 			? { webhookName: referenced.author.username }
@@ -150,8 +156,8 @@ export async function toInbound(
 			.replace(mention, "")
 			.trim(),
 		attachments: [
-			...attachmentRefs(message),
-			...(forward ? attachmentRefs(forward) : []),
+			...attachmentRefs(message, message.id),
+			...(forward ? attachmentRefs(forward, message.id) : []),
 		],
 		...(forward && reference?.channelId
 			? {
