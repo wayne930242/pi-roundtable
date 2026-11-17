@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-17
+
+### Added
+
+- Channel context lists each message's files after its text, one `<attachment id="…" message="…" name="…" title="…" description="…" type="…" size="…"/>` line per file, which the message's character limit no longer cuts; at most `CONTEXT_ATTACHMENT_LINES` (10) per message, then `<more-attachments count="N"/>`. A file's link is no longer in the block (it expired anyway), a message with only files is kept, and two posts with different files are no longer merged as near repeats. `ChannelContextAttachment` and `ChannelContextSourceAttachment` gain `id`, `title` and `description`.
+- `InboundMessage.attachments` (`AttachmentRef`) carry the file's `id`, the `messageId` of the message that carries it, and its `title` and `description` when the uploader gave them, for the addressed message, the one it replies to, and a forward.
+- `DISCORD.readAttachment({ channelId, messageId, attachmentId, maxBytes? })` reads one file's bytes: it fetches the message again in the channel the caller names and downloads from the fresh address Discord gives, never from a URL a caller or a model supplies, and resolves with `AttachmentBytes` (`id`, `name`, `contentType`, `size`, `bytes`, `title?`, `description?`) or rejects with an `AttachmentReadError` whose `code` is `not-found`, `too-large`, `gone` or `unavailable`. The cap is the host's new `discord.attachmentRead.maxBytes` (default `ATTACHMENT_READ_MAX_BYTES`, 10 MiB; at most 100 MiB), which a call may lower. `AttachmentReadRequest` and `AttachmentReadErrorCode` are its types, from `pi-roundtable/discord`.
+- `fakeDiscord({ attachments, attachmentMaxBytes })` serves files (`FakeDiscordAttachment`) through `DISCORD.readAttachment` with the real checks and errors.
+
+### Fixed
+
+- Pressing "Write answer…", "Other…" or a questionnaire's "Write answers / note…" on a Discord card shows its form at once again: since 0.50.2 the press first read the thread's parent and who may answer, and when either took longer than Discord's three seconds the presser saw "This interaction failed" and nothing was logged. Nothing is read before a form is shown now; the thread comes from when the card was posted, and whoever submits the form is checked then: someone the card is not for may open it, but their answer is refused and changes nothing. Approve, Decline, Cancel and a menu pick are acknowledged before anything is read, and each press logs a debug line (`card press`) with the card, the control and the milliseconds to its first response, never what was answered.
+
 ## [0.50.2] - 2026-11-16
 
 ### Fixed
