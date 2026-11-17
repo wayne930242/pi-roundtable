@@ -93,8 +93,8 @@ export class TurnRecord {
 
 	/**
 	 * The channels its turns and queue tasks run in now; while work runs under it that names none,
-	 * its admission or a bare `settleTurn` (`context.turns` and the agent team name theirs), its
-	 * first message's channel too.
+	 * its admission or a bare `settleTurn` outside any queue task (`context.turns`, the agent team
+	 * and a queue task name theirs), its first message's channel too.
 	 */
 	channels(): ChannelKey[] {
 		let named = 0;
@@ -206,7 +206,7 @@ export interface RecordOrigin {
 }
 
 const current = new AsyncLocalStorage<
-	{ record?: TurnRecord; hop?: RecordOrigin } | undefined
+	{ record?: TurnRecord; hop?: RecordOrigin; channel?: ChannelKey } | undefined
 >();
 
 /** Runs `task` with `record` as the turn record of everything it starts; undefined runs it outside any. */
@@ -234,6 +234,17 @@ export function underHop<T>(hop: RecordOrigin | undefined, task: () => T): T {
 /** The origin of the exchange the caller runs in, if any. */
 export function currentHop(): RecordOrigin | undefined {
 	return current.getStore()?.hop;
+}
+
+/** Runs a queue task of `channel` as it is, telling a turn it runs, such as a bare `settleTurn`, its channel. */
+export function inChannel<T>(channel: ChannelKey, task: () => T): T {
+	const store = current.getStore();
+	return store ? current.run({ ...store, channel }, task) : task();
+}
+
+/** The channel of the queue task the caller runs in, when it runs under a record or an exchange. */
+export function currentChannel(): ChannelKey | undefined {
+	return current.getStore()?.channel;
 }
 
 /**

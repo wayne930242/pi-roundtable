@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
+import { settleTurn, settleTurnIn } from "./settle-turn.ts";
 import {
 	currentHop,
 	currentRecord,
@@ -51,12 +52,23 @@ test("a record counts the channels its turns run in until each ends", () => {
 	expect(open.channels()).toEqual([]);
 });
 
-test("a context.turns turn names its channel, so a thread's answering turn does not report the parent channel", () => {
+test("a turn settled in a channel, as context.turns and the agent team settle theirs, names it, so a thread's turn does not report the first message's channel", async () => {
 	const open = new TurnRecord(message);
-	// A queue task in the thread, a turn through it, the settled turn inside, then the admission ends.
-	open.begin("discord:thread");
-	open.begin("discord:thread");
-	open.begin("discord:thread");
+	const turn = Promise.withResolvers<{ ok: true; text: string }>();
+	const named = underRecord(open, () =>
+		settleTurnIn("discord:thread", () => turn.promise, "turn"),
+	);
+	const bare = Promise.withResolvers<{ ok: true; text: string }>();
+	// The admission ends; the turn still runs.
 	open.end();
 	expect(open.channels()).toEqual(["discord:thread"]);
+	// A bare one, outside any queue task, is waited for in the first message's channel.
+	const unnamed = underRecord(open, () =>
+		settleTurn(() => bare.promise, "turn"),
+	);
+	expect(open.channels()).toEqual(["discord:thread", "discord:1"]);
+	turn.resolve({ ok: true, text: "a" });
+	bare.resolve({ ok: true, text: "b" });
+	await Promise.all([named, unnamed]);
+	expect(open.channels()).toEqual([]);
 });

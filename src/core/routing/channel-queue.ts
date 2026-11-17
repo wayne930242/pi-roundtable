@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
-import { currentRecord } from "./turn-records.ts";
+import { currentRecord, inChannel } from "./turn-records.ts";
 
 /** Runs tasks one at a time per channel, in arrival order; different channels run independently. */
 export class ChannelQueue {
@@ -87,7 +87,8 @@ export class ChannelQueue {
 				record?.refusedByHost();
 				return Promise.reject(new HostStoppingError());
 			}
-			return admitted ? this.#finishing.run(1, task) : task();
+			const inQueue = () => inChannel(channel, task);
+			return admitted ? this.#finishing.run(1, inQueue) : inQueue();
 		};
 		this.#sizes.set(channel, this.size(channel) + 1);
 		this.#changed(channel);

@@ -495,3 +495,16 @@ test("telling a cut turn's channel does not wait for what it handed on to be dro
 	turn.resolve(answered("late"));
 	await done;
 });
+
+test("a bare settleTurn in a queue task the admission started is waited for in that task's channel only", async () => {
+	const queue = new ChannelQueue();
+	const turn = Promise.withResolvers<TurnResult>();
+	const { routing } = plainRouter(queue, async () => {
+		void queue.run("discord:9", () => settleTurn(() => turn.promise, "turn"));
+	});
+	await routing.handle(message("a"));
+	await Bun.sleep(0);
+	expect(routing.busy()).toEqual(["discord:9"]);
+	turn.resolve(answered("done"));
+	await until(() => routing.busy().length === 0);
+});

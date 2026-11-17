@@ -4,22 +4,21 @@ import { AgentRunError } from "../domain/errors.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import type { TurnEndEvent } from "../plugin-api/plugin.ts";
-import { currentRecord } from "./turn-records.ts";
+import { currentChannel, currentRecord } from "./turn-records.ts";
 
 /**
  * Runs a turn; a thrown error becomes its failed result, labelled `<what> crashed`. Run in the
  * work of a message's admission while that is open, its `run` or what it started, awaited or not,
  * such as a queue task, an `ok` result counts as the answer to that message, and a turn that ends
  * after a shutdown left the message for the next process gives a stopped result instead. Started
- * without waiting and outside any channel queue's task and `context.turns.run`, the drain still
- * waits for it in the channel of the admission's first message, and asks that channel's turn to
- * stop at its limit.
+ * without waiting, the drain waits for it in the channel of the queue task it runs in, or, outside
+ * any, in that of the admission's first message, and asks that channel's turn to stop at its limit.
  */
 export function settleTurn<R>(
 	run: () => Promise<R>,
 	what: string,
 ): Promise<R | { ok: false; error: AgentRunError }> {
-	return settleTurnIn(undefined, run, what);
+	return settleTurnIn(currentChannel(), run, what);
 }
 
 /**
