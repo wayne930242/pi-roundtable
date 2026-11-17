@@ -173,6 +173,9 @@ function discordAssembly(
 			...(discord.voice ? { voice: true } : {}),
 			cardGraceMs: discord.cardGraceSeconds * 1_000,
 			cardCopies: discord.cardCopies,
+			...(discord.attachmentRead
+				? { attachmentRead: discord.attachmentRead }
+				: {}),
 		}),
 		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
 	};

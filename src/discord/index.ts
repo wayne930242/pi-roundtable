@@ -12,6 +12,7 @@ export type {
 	ChannelContextOptions,
 } from "../core/contract/channel-context.ts";
 export {
+	CONTEXT_ATTACHMENT_LINES,
 	withChannelContext,
 	withChannelContextImages,
 } from "../core/contract/channel-context.ts";
@@ -28,6 +29,15 @@ export type {
 export { agentPanel } from "../core/discord/agent-panel.ts";
 export type { DiscordPlaceProviderOptions } from "../core/discord/agent-places.ts";
 export { discordPlaceProvider } from "../core/discord/agent-places.ts";
+export type {
+	AttachmentBytes,
+	AttachmentReadErrorCode,
+	AttachmentReadRequest,
+} from "../core/discord/attachment-read.ts";
+export {
+	ATTACHMENT_READ_MAX_BYTES,
+	AttachmentReadError,
+} from "../core/discord/attachment-read.ts";
 export {
 	CHANNEL_CONTEXT_DEFAULTS,
 	formatChannelContext,

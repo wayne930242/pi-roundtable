@@ -85,7 +85,10 @@ export {
 	testDatabaseUrl,
 } from "./core/testing/database.ts";
 export { eagerText, useEagerCatalog } from "./core/testing/eager-catalog.ts";
-export type { FakeDiscord } from "./core/testing/fake-discord.ts";
+export type {
+	FakeDiscord,
+	FakeDiscordAttachment,
+} from "./core/testing/fake-discord.ts";
 export { fakeDiscord } from "./core/testing/fake-discord.ts";
 export type {
 	FakeDiscordPoster,

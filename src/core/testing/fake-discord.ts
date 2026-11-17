@@ -1,4 +1,9 @@
 import { DISCORD, type DiscordServices } from "../builtin/discord.ts";
+import {
+	ATTACHMENT_READ_MAX_BYTES,
+	type AttachmentFacts,
+	readAttachment,
+} from "../discord/attachment-read.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { ComposedCommands } from "../discord/compose-commands.ts";
 import type {
@@ -30,13 +35,81 @@ export interface FakeDiscord {
 }
 
 /**
+ * A file `fakeDiscord`'s `readAttachment` serves, as if posted with a message in a channel. Its
+ * `channelId`, `messageId` and `id` are Discord ids, digits only, as the real call requires.
+ */
+export interface FakeDiscordAttachment {
+	channelId: string;
+	messageId: string;
+	/** The file's id, as `AttachmentRef.id` gives it. */
+	id: string;
+	name: string;
+	contentType?: string;
+	/** Its bytes; a string is UTF-8. */
+	bytes: Uint8Array | string;
+	title?: string;
+	description?: string;
+	/** Discord's CDN no longer serves it: a read rejects as `gone`. */
+	gone?: boolean;
+}
+
+/**
+ * `DISCORD.readAttachment` over `files`, with the real one's checks and errors (an id that is no
+ * Discord id, a file not on its message, a message of another channel, over `maxBytes`, gone),
+ * downloading from a stand-in CDN.
+ */
+function fakeAttachmentReader(
+	files: readonly FakeDiscordAttachment[],
+	maxBytes: number,
+): DiscordServices["readAttachment"] {
+	const bytesOf = (file: FakeDiscordAttachment) =>
+		typeof file.bytes === "string"
+			? new TextEncoder().encode(file.bytes)
+			: file.bytes;
+	const url = (file: FakeDiscordAttachment) =>
+		`https://cdn.discordapp.com/attachments/${file.channelId}/${file.id}/${encodeURIComponent(file.name)}`;
+	const fetchImpl = (async (address: string) => {
+		const file = files.find((f) => url(f) === address);
+		return file && !file.gone
+			? new Response(bytesOf(file))
+			: new Response(null, { status: 404 });
+	}) as unknown as typeof fetch;
+	return (request) =>
+		readAttachment(
+			{
+				files: async (channelId, messageId) => {
+					const on = files.filter(
+						(f) => f.channelId === channelId && f.messageId === messageId,
+					);
+					if (on.length === 0) return undefined;
+					return on.map(
+						(f): AttachmentFacts => ({
+							id: f.id,
+							name: f.name,
+							contentType: f.contentType ?? null,
+							size: bytesOf(f).byteLength,
+							url: url(f),
+							title: f.title ?? null,
+							description: f.description ?? null,
+						}),
+					);
+				},
+			},
+			request,
+			{ maxBytes, fetchImpl },
+		);
+}
+
+/**
  * A `DISCORD` service for a plugin that adds slash commands, without a Discord connection: the
  * plugin's `commands.add` calls are recorded, and `compose()` shows the tree Discord would get.
  * `rootCommand` is the root command's name, `roundtable` by default. `channelContext` is what
  * `DISCORD.channelContext` answers, by default no context, as on a host with it off. `voice` is
  * what `DISCORD.voice` is, such as a `fakeDiscordVoice()`; without it the plugin reads none, as on
- * a host with `discord.voice` off. Only `commands`, `guard`, `poster`, `channelContext`, and
- * `voice` are given; reading another member throws.
+ * a host with `discord.voice` off. `attachments` are the files `DISCORD.readAttachment` serves,
+ * none by default, read at most `attachmentMaxBytes` (default 10 MiB) as the host's
+ * `discord.attachmentRead.maxBytes` caps them. Only `commands`, `guard`, `poster`,
+ * `channelContext`, `readAttachment` and `voice` are given; reading another member throws.
  */
 export function fakeDiscord(
 	options: {
@@ -45,6 +118,8 @@ export function fakeDiscord(
 		channelContext?: DiscordServices["channelContext"];
 		poster?: DiscordPoster;
 		voice?: DiscordVoice;
+		attachments?: readonly FakeDiscordAttachment[];
+		attachmentMaxBytes?: number;
 	} = {},
 ): FakeDiscord {
 	const collection = new CommandCollection();
@@ -61,6 +136,10 @@ export function fakeDiscord(
 			guard,
 			poster,
 			channelContext: options.channelContext ?? (async () => undefined),
+			readAttachment: fakeAttachmentReader(
+				options.attachments ?? [],
+				options.attachmentMaxBytes ?? ATTACHMENT_READ_MAX_BYTES,
+			),
 			voice: options.voice,
 		}),
 		poster,
