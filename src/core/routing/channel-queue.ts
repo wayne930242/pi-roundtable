@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
+import { currentRecord } from "./turn-records.ts";
 
 /** Runs tasks one at a time per channel, in arrival order; different channels run independently. */
 export class ChannelQueue {
@@ -76,6 +77,10 @@ export class ChannelQueue {
 	}
 
 	run<T>(channel: ChannelKey, task: () => Promise<T>): Promise<T> {
+		// Queued from a message's admission, it keeps that admission's turn record open until it ends,
+		// so a turn it runs after the admission returned still answers or leaves that message.
+		const record = currentRecord();
+		record?.begin();
 		const admitted = this.#admitted();
 		const start = () => {
 			if (this.#closed && !(admitted && !this.#sealed))
@@ -94,6 +99,7 @@ export class ChannelQueue {
 			else this.#sizes.delete(channel);
 			if (this.#tails.get(channel) === tail) this.#tails.delete(channel);
 			this.#changed(channel);
+			record?.end();
 		});
 		return result;
 	}

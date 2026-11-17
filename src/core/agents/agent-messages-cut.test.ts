@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { InboundMessage } from "../contract/channels.ts";
 import { discordKey } from "../contract/discord-key.ts";
 import { NO_ATTACHMENTS } from "../domain/attachment.ts";
+import type { TurnRequest } from "../domain/ports.ts";
 import { RunningTurns, type TurnRecord } from "../routing/turn-records.ts";
 import { describeDb } from "../testing/database.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
@@ -29,12 +30,15 @@ const coordinator = () => ({
 /** The coordinator's turn for the person's message, run as routing runs it; `during` acts as its tool call. */
 async function underPerson(
 	during: (record: TurnRecord, turns: RunningTurns) => Promise<void>,
+	others?: (request: TurnRequest) => void,
 ): Promise<TurnRecord> {
 	const turns = new RunningTurns();
 	let record: TurnRecord | undefined;
 	fx.runtime.during = async (request) => {
-		if (request.agent?.name !== "coordinator") return;
-		fx.runtime.during = undefined;
+		if (request.agent?.name !== "coordinator" || record) {
+			others?.(request);
+			return;
+		}
 		record = turns.running(person.channel);
 		if (record) await during(record, turns);
 	};
@@ -82,12 +86,12 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 		expect(await fx.store.outbox.pending()).toHaveLength(count);
 	}
 
-	/** The coordinator's turn messages infra while the host stops, so the message is kept. */
-	const sendWhileStopping = () =>
+	/** The coordinator's turn messages infra while the host stops, so the message is kept; it then is stopped, or answers. */
+	const sendWhileStopping = (answers = false) =>
 		underPerson(async () => {
 			fx.queue.close();
 			fx.team.message(coordinator(), "infra", "check the disk");
-			fx.runtime.stopNext = true;
+			fx.runtime.stopNext = !answers;
 		});
 
 	test("a message its turn sent is kept until the shutdown leaves the person's message, then taken out, since the next process asks it again", async () => {
@@ -98,8 +102,9 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 		expect(fx.runtime.turns.map((t) => t.agent?.name)).toEqual(["coordinator"]);
 	});
 
-	test("a message its turn sent stays kept when the person's message is not left, as when the turn answered in the grace", async () => {
-		await sendWhileStopping();
+	test("a message its turn sent stays kept when its turn answers, so the person's message is not left", async () => {
+		const record = await sendWhileStopping(true);
+		expect(record.unanswered()).toEqual([]);
 		await keptCount(1);
 	});
 
@@ -110,6 +115,36 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 			fx.team.message(coordinator(), "infra", "check the disk");
 		});
 		expect(fx.team.busy()).toEqual([]);
+		expect(await fx.store.outbox.pending()).toEqual([]);
+	});
+	test("a message its turn sent before it answered stays kept when a message steered in later is left", async () => {
+		const record = await underPerson(async () => {
+			fx.queue.close();
+			fx.team.message(coordinator(), "infra", "check the disk");
+		});
+		await keptCount(1);
+		// The coordinator answered; a message steered in afterwards is cut and left.
+		expect(record.unanswered()).toEqual([]);
+		record.add({ ...person, messageId: "m2" });
+		await record.leave();
+		await keptCount(1);
+	});
+
+	test("what a later hop of the chain keeps is taken out too when the person's message is left", async () => {
+		const record = await underPerson(
+			async () => {
+				fx.team.message(coordinator(), "infra", "check the disk");
+				fx.runtime.stopNext = true;
+			},
+			(request) => {
+				// The target passes it on while the host stops: kept, as is the target's answer.
+				if (request.agent?.name !== "infra") return;
+				fx.queue.close();
+				fx.team.message(request.agent, "doctor", "and the patient");
+			},
+		);
+		await keptCount(2);
+		await record.leave();
 		expect(await fx.store.outbox.pending()).toEqual([]);
 	});
 });

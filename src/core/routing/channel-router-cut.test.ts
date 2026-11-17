@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import type { ChannelClaim, InboundMessage } from "../contract/channels.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { TurnResult } from "../domain/conversation.ts";
+import { AgentRunError } from "../domain/errors.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
+import { HostStoppingError } from "../kernel/errors.ts";
 import { silentLogger } from "../kernel/log.ts";
 import { PERSONAL_TARGET } from "../shared/personal-target.ts";
 import { mapIdentity } from "../testing/map-identity.ts";
@@ -151,7 +153,7 @@ test("only turns running when the drain limit passes are cut, each left once, an
 	expect(results.get("a")).toMatchObject({ ok: false, stopped: true });
 });
 
-test("a turn that failed or was stopped before the cut leaves its message; one that answered does not", async () => {
+test("a turn that fails or is stopped during the grace leaves its message; one that answers does not", async () => {
 	for (const [result, expected] of [
 		[{ ok: false, error: new Error("boom") }, ["a"]],
 		[{ ok: false, error: new Error("stopped"), stopped: true }, ["a"]],
@@ -277,4 +279,117 @@ test("a message steered into a turn after an earlier turn of it answered is left
 	second.resolve(answered("two"));
 	await done;
 	expect(results.get("a")).toMatchObject({ stopped: true });
+});
+
+/** A router over `queue` whose one claim runs `run` for every message and steers when `steers`. */
+function plainRouter(
+	queue: ChannelQueue,
+	run: (m: InboundMessage) => Promise<void>,
+	options: { steers?: boolean; warned?: string[] } = {},
+) {
+	const left: string[] = [];
+	const logger = silentLogger();
+	if (options.warned) {
+		const warned = options.warned;
+		logger.warn = ((...args: unknown[]) => {
+			warned.push(String(args.at(-1)));
+		}) as typeof logger.warn;
+	}
+	const routing = new ChannelRouter({
+		claims: [
+			{
+				name: "plain",
+				priority: 0,
+				owns: () => true,
+				admit: (m) => ({
+					kind: "turn",
+					busy: {
+						steer: async () => options.steers === true,
+						react: async () => undefined,
+						unreact: async () => undefined,
+					},
+					run: () => run(m),
+					failure: "failed",
+				}),
+				startFresh: async () => "plain",
+			},
+		],
+		targets: () => undefined,
+		queue,
+		logger,
+		contacts: IDENTITY,
+		principals: IDENTITY,
+		surfaces: {
+			of: () =>
+				({
+					refuseStopping: async (m: InboundMessage) => {
+						left.push(m.messageId);
+						return true;
+					},
+				}) as ChatSurface,
+			sendReply: async () => undefined,
+		},
+	});
+	return { routing, left };
+}
+
+test("a turn queued from the admission keeps the message's record open until it starts, so a cut between the two still leaves it", async () => {
+	const queue = new ChannelQueue();
+	const gate = Promise.withResolvers<void>();
+	const turn = Promise.withResolvers<TurnResult>();
+	let admitted = false;
+	const { routing, left } = plainRouter(queue, async () => {
+		void queue.run("discord:9", async () => {
+			await gate.promise;
+			await settleTurn(() => turn.promise, "turn");
+		});
+		admitted = true;
+	});
+	const done = routing.handle(message("a"));
+	await until(() => admitted);
+	await done;
+	// The admission has returned and its queued turn has not started.
+	routing.cutRunning();
+	await routing.leaveCut(tally());
+	expect(left).toEqual(["a"]);
+	gate.resolve();
+	turn.resolve(answered("late"));
+});
+
+test("a turn the stopping host refuses before it ran leaves its message once, whenever that was", async () => {
+	for (const refuse of ["result", "throw"] as const) {
+		const queue = new ChannelQueue();
+		const { routing, left } = plainRouter(queue, async () => {
+			if (refuse === "throw") throw new HostStoppingError();
+			// As the runtime answers a turn asked for once the host stops.
+			await settleTurn(
+				async () => ({
+					ok: false,
+					error: new AgentRunError(new HostStoppingError().message),
+				}),
+				"turn",
+			);
+		});
+		await routing.handle(message("a"));
+		// Not running at the drain limit: no cut is needed. A thrown refusal the router refuses itself.
+		await routing.leaveCut(tally());
+		expect(left).toEqual(["a"]);
+	}
+});
+
+test("a message steered into a turn routing did not start is logged as one a shutdown cannot refuse", async () => {
+	const queue = new ChannelQueue();
+	const warned: string[] = [];
+	const hold = Promise.withResolvers<void>();
+	const { routing } = plainRouter(queue, async () => undefined, {
+		steers: true,
+		warned,
+	});
+	const plugin = queue.run("discord:1", () => hold.promise);
+	await routing.handle(message("a"));
+	expect(warned).toContain(
+		"message steered into a turn routing did not start; a shutdown that cuts that turn does not refuse it",
+	);
+	hold.resolve();
+	await plugin;
 });

@@ -6,11 +6,7 @@ import { addressee, type Speaker } from "../identity/speakers.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
-import {
-	currentRecord,
-	type TurnRecord,
-	underRecord,
-} from "../routing/turn-records.ts";
+import { currentRecord, underRecord } from "../routing/turn-records.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
@@ -95,10 +91,12 @@ export class AgentMessages {
 			peer: this.#peer(target),
 			text,
 		});
-		// The person's message the sender's turn answers: the exchange runs outside it, so the
-		// target's answer is not taken for the sender's, and what it keeps for the next start is
-		// taken out again once a shutdown leaves that message, which is then asked again.
+		// The person's message the chain started from: the exchange runs outside its record, so the
+		// target's answer is not taken for the sender's, and what any hop of the chain keeps for the
+		// next start is taken out again once a shutdown leaves that message, which is then asked again.
 		const record = currentRecord();
+		chain.origin ??= record && { record, since: record.answers };
+		const { origin } = chain;
 		void underRecord(undefined, () =>
 			queue.run(targetChannel, async () =>
 				this.#exchange(
@@ -107,13 +105,13 @@ export class AgentMessages {
 					text,
 					chain,
 					{ targetChannel, senderChannel: parent },
-					record,
+					origin,
 				),
 			),
 		)
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
-					this.#keep(record, {
+					this.#keep(origin, {
 						kind: "message",
 						sender: sender.name,
 						target: target.name,
@@ -177,7 +175,7 @@ export class AgentMessages {
 			targetChannel,
 			senderChannel,
 		}: { targetChannel: ChannelKey; senderChannel: ChannelKey },
-		record: TurnRecord | undefined,
+		origin: Chain["origin"],
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
 		await this.#host.post(targetChannel, this.#host.current(sender), {
@@ -233,7 +231,7 @@ export class AgentMessages {
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
 					// The sender would wait for this answer forever, so it waits in the outbox for the next start.
-					this.#keep(record, {
+					this.#keep(origin, {
 						kind: "reply",
 						sender: current.name,
 						target: target.name,
@@ -266,10 +264,10 @@ export class AgentMessages {
 	 * again, or not written at all: the next process answers that message anew, or its author is
 	 * asked to send it again, and the turn sends it again then.
 	 */
-	#keep(record: TurnRecord | undefined, entry: OutboxEntry): void {
+	#keep(origin: Chain["origin"], entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
 		const about = { kind: entry.kind, from: entry.sender, to: entry.target };
-		if (record?.left) {
+		if (origin?.record.left) {
 			logger.info(
 				about,
 				"agent message dropped: its person's message is asked again after the restart",
@@ -295,14 +293,16 @@ export class AgentMessages {
 		const kept = write.then(() => undefined);
 		this.#keeping.add(kept);
 		void kept.finally(() => this.#keeping.delete(kept));
-		record?.onLeave(async () => {
+		origin?.record.onLeave(async () => {
 			const id = await write;
 			if (id === undefined) return;
 			try {
-				await store.outbox.claim(id);
+				const taken = await store.outbox.claim(id);
 				logger.info(
 					about,
-					"kept agent message dropped: its person's message is asked again after the restart",
+					taken
+						? "kept agent message dropped: its person's message is asked again after the restart"
+						: "kept agent message already taken",
 				);
 			} catch (error) {
 				logger.warn(
@@ -310,7 +310,7 @@ export class AgentMessages {
 					"kept agent message not dropped; it is replayed after the restart",
 				);
 			}
-		});
+		}, origin.since);
 	}
 
 	/**

@@ -145,7 +145,7 @@ describe("the opening task's place (R8)", () => {
 test("the opening task runs outside the turn that made the agent, so it does not answer that turn's message", async () => {
 	const f = editing("discord:ch-coordinator");
 	const message = { channel: "discord:ch-coordinator", messageId: "m1" };
-	const record = new TurnRecord(message as InboundMessage, () => undefined);
+	const record = new TurnRecord(message as InboundMessage);
 	await underRecord(record, () => f.editing.create(SCOPE, NEW_AGENT));
 	await Bun.sleep(5);
 	expect(f.opened).toEqual(["discord:ch-scout"]);

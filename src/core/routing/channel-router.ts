@@ -116,7 +116,10 @@ export class ChannelRouter implements ConversationPort {
 	 * one turn.
 	 */
 	handle(message: InboundMessage): Promise<void> {
-		return this.#forwards.handle(message, (m) => this.#route(m));
+		// Its own turn, never part of the one that delivered it, such as a plugin's turn passing it on.
+		return underRecord(undefined, () =>
+			this.#forwards.handle(message, (m) => this.#route(m)),
+		);
 	}
 
 	async #route(given: InboundMessage): Promise<void> {
@@ -224,17 +227,19 @@ export class ChannelRouter implements ConversationPort {
 		let waiting: QueuedEntry | undefined;
 		// During a turn a message joins it or is marked waiting; unmarkable, it is kept so a shutdown refuses it.
 		if (busy && queue.size(message.channel) > 0) {
+			// Joins the running turn's record first, so an answer that ends that turn as it takes the
+			// message counts for it; taken back when the turn does not take it.
 			const running = this.#turns.running(message.channel);
+			running?.add(message);
 			if (await busy.steer?.()) {
-				// It is answered with that turn, or left with it when a shutdown cuts it.
-				if (running) running.messages.push(message);
-				else
+				if (!running)
 					logger.warn(
 						{ channel: message.channel },
 						"message steered into a turn routing did not start; a shutdown that cuts that turn does not refuse it",
 					);
 				return { done: busy.react(STEERED_MARK) };
 			}
+			running?.remove(message);
 			// Listed before the mark is placed, so a delete or cancel during that wait reaches it.
 			waiting = this.#queued.add(claim, message, admission);
 			await busy.react(QUEUED_MARK);
@@ -280,26 +285,27 @@ export class ChannelRouter implements ConversationPort {
 	 */
 	async leaveCut(tally: RefuseTally): Promise<void> {
 		const { logger, surfaces } = this.#options;
+		const dropping: Promise<void>[] = [];
 		for (const record of this.#turns.takeCut()) {
 			// A bot's or an integration's message is told nothing, so its turn's late answer stays.
 			const people = record
 				.unanswered()
 				.filter((message) => !message.authorIsBot && !message.integration);
 			// Left only as its channel is told, so one the limit stops before keeps its late answer.
-			if (tally.stopped) return;
+			if (tally.stopped) break;
 			if (people.length === 0) continue;
 			logger.info(
 				{ channel: record.messages[0]?.channel },
 				"turn cut by the shutdown before it answered; its messages are refused",
 			);
-			await record.leave();
+			dropping.push(record.leave()); // left at once; what it handed on is dropped meanwhile
 			for (const message of people) {
-				// A message the limit stops before is neither told nor answered (see docs/plugins.md).
-				if (tally.stopped) return;
+				if (tally.stopped) break; // neither told nor answered (docs/plugins.md)
 				await tellStopping(message, surfaces, this.#told, logger);
 				tally.refused += 1;
 			}
 		}
+		await Promise.all(dropping);
 	}
 
 	/** Refuses each message still waiting behind a turn after the drain, counting in `tally`. */
