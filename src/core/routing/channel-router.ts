@@ -15,12 +15,11 @@ import {
 } from "../contract/channels.ts";
 import type { SurfacePort } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
-import { messages } from "../i18n/index.ts";
-import type { Contact, ContactAssessor } from "../identity/contact.ts";
+import type { ContactAssessor } from "../identity/contact.ts";
 import type { IdentityService } from "../identity/identity-service.ts";
 import { HostStoppingError, PluginError } from "../kernel/errors.ts";
 import type { Logger } from "../kernel/log.ts";
-import { actorOf } from "./actor-of.ts";
+import { admitMessage } from "./admit-message.ts";
 import { speakerOf } from "./background-speaker.ts";
 import type { ChannelQueue } from "./channel-queue.ts";
 import { tellDeleted, tellEdited } from "./claim-events.ts";
@@ -32,6 +31,8 @@ import {
 	QueuedMessages,
 	type RefuseTally,
 } from "./queued-messages.ts";
+import { tellStopping } from "./stopping-notice.ts";
+import { RunningTurns, underRecord } from "./turn-records.ts";
 
 export interface ChannelRouterOptions {
 	/** Claims in registration order; the router orders them by priority. */
@@ -55,6 +56,8 @@ export interface ChannelRouterOptions {
 	peerBots?: PeerBots;
 	/** The plugins' passive listeners; each message that reaches routing in an owned channel is handed to them. */
 	observers?: MessageObservers;
+	/** The runtime's stop, with which `abort` stops a turn in a channel whose claim has no `stop`. */
+	stopTurn?: (channel: ChannelKey) => boolean;
 }
 
 /** Claims by descending priority, keeping registration order among equals; refuses a repeated name. */
@@ -93,6 +96,8 @@ export class ChannelRouter implements ConversationPort {
 	readonly #warned = new Set<string>();
 	/** The channels already told that the host is restarting, so a burst of messages gets one notice. */
 	readonly #told = new Set<ChannelKey>();
+	/** The admitted turns running, so a shutdown that cuts one leaves its messages for the next process. */
+	readonly #turns = new RunningTurns();
 
 	constructor(options: ChannelRouterOptions) {
 		this.#options = options;
@@ -151,7 +156,11 @@ export class ChannelRouter implements ConversationPort {
 				);
 				return undefined;
 			}
-			const admitted = await this.#admit(claim, message);
+			const admitted = await admitMessage(claim, message, {
+				logger: this.#options.logger,
+				warned: this.#warned,
+				...(this.#options.contacts ? { contacts: this.#options.contacts } : {}),
+			});
 			if (!admitted) return undefined;
 			const { admission } = admitted;
 			if (listed) peers?.answered(message.channel);
@@ -179,68 +188,8 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	/**
-	 * The claim's admission of the message, which carries the speaker its author resolves to; one
-	 * who cannot be resolved, such as while the database is down, reaches the claim as no one. The
-	 * author's contact is recorded, such as their first contact linked, only once the claim takes
-	 * the message, so a message nobody serves links or makes no one. A linked author the rules
-	 * refuse is still recorded as seen at no tier as the message is assessed, whether or not a
-	 * claim then takes it, at most once in a while. When that record fails, or finds them someone
-	 * else or no one now, such as linked elsewhere meanwhile, the message is dropped: it would run
-	 * as a principal that may not exist, such as one only assessed at a first contact. The claim
-	 * hears it through the admission's `dropped` or `unanswered`.
-	 */
-	async #admit(
-		claim: ChannelClaim,
-		message: InboundMessage,
-	): Promise<{ admission: Admission; message: InboundMessage } | undefined> {
-		const { logger, contacts } = this.#options;
-		const { speaker: _given, ...facts } = message;
-		const actor = actorOf(message, this.#warned, logger);
-		let contact: Contact | undefined;
-		if (actor && contacts)
-			try {
-				contact = await contacts.assess(actor, {
-					conversation: message.channel,
-				});
-			} catch (error) {
-				logger.error(
-					{ channel: message.channel, err: error },
-					"could not resolve who wrote a message; it reaches its claim as no one",
-				);
-			}
-		const admittedAs: InboundMessage = contact
-			? { ...facts, speaker: Object.freeze({ ...contact.speaker }) }
-			: facts;
-		const admission = claim.admit(admittedAs);
-		if (!admission) return undefined;
-		if (!contact) return { admission, message: admittedAs };
-		try {
-			const taken = await contact.take();
-			if (taken?.principalId === contact.speaker.principalId)
-				return { admission, message: admittedAs };
-			logger.warn(
-				{ channel: message.channel },
-				"the author of a message was linked elsewhere, or refused, while it was admitted; it does not run",
-			);
-		} catch (error) {
-			logger.error(
-				{ channel: message.channel, err: error },
-				"could not record who wrote a message; it does not run",
-			);
-		}
-		if (admission.kind === "turn") admission.dropped?.();
-		else
-			admission.unanswered({
-				status: "skipped",
-				reason: "its author was not who they were when it was admitted",
-			});
-		return undefined;
-	}
-
-	/**
 	 * Drops a message the host no longer starts a turn for because it is shutting down, and tells
-	 * its channel once that it restarts; no one is told for a bot's or an integration's message, such
-	 * as a report, since a notice there would only start the next one.
+	 * its channel as `tellStopping` does.
 	 */
 	async #refuse(message: InboundMessage, admission: Admission): Promise<void> {
 		const { logger, surfaces } = this.#options;
@@ -252,23 +201,7 @@ export class ChannelRouter implements ConversationPort {
 				reason: new HostStoppingError().message,
 			});
 		logger.info({ channel }, "message not run: the host is shutting down");
-		if (message.authorIsBot || message.integration) return;
-		try {
-			// The surface may take it, and tell its channel itself.
-			if (await surfaces?.of(channel)?.refuseStopping?.(message)) return;
-		} catch (error) {
-			logger.warn(
-				{ channel, err: error },
-				"surface did not take a refused message",
-			);
-		}
-		if (this.#told.has(channel)) return;
-		this.#told.add(channel);
-		await surfaces
-			?.sendReply?.(channel, { chunks: [messages().restartingNotice] })
-			.catch((error: unknown) =>
-				logger.warn({ channel, err: error }, "restart notice not posted"),
-			);
+		await tellStopping(message, surfaces, this.#told, logger);
 	}
 
 	/**
@@ -291,7 +224,12 @@ export class ChannelRouter implements ConversationPort {
 		let waiting: QueuedEntry | undefined;
 		// During a turn a message joins it or is marked waiting; unmarkable, it is kept so a shutdown refuses it.
 		if (busy && queue.size(message.channel) > 0) {
-			if (await busy.steer?.()) return { done: busy.react(STEERED_MARK) };
+			const running = this.#turns.running(message.channel);
+			if (await busy.steer?.()) {
+				// It is answered with that turn, or left with it when a shutdown cuts it.
+				running?.messages.push(message);
+				return { done: busy.react(STEERED_MARK) };
+			}
 			// Listed before the mark is placed, so a delete or cancel during that wait reaches it.
 			waiting = this.#queued.add(claim, message, admission);
 			await busy.react(QUEUED_MARK);
@@ -300,11 +238,12 @@ export class ChannelRouter implements ConversationPort {
 			waiting = this.#queued.add(claim, message, admission, false);
 		const done = queue
 			.run(message.channel, () => {
-				if (!waiting) return admission.run();
+				if (!waiting) return this.#turns.run(message, () => admission.run());
 				// From here no cancel or edit reaches it: the turn has started or it was cancelled before.
 				if (!this.#queued.remove(waiting)) return Promise.resolve();
 				this.#queued.unmark(waiting);
-				return waiting.admission.run();
+				const { message: started, admission: admitted } = waiting;
+				return this.#turns.run(started, () => admitted.run());
 			})
 			// pi-lens-ignore: no-unknown-parameters
 			.catch(async (error: unknown) => {
@@ -323,6 +262,30 @@ export class ChannelRouter implements ConversationPort {
 				);
 			});
 		return { done };
+	}
+
+	/** Marks every admitted turn still running as cut, as the drain limit passes. */
+	cutRunning(): void {
+		this.#turns.cut();
+	}
+
+	/**
+	 * Leaves each person's message of every turn cut at the drain limit that did not answer, through
+	 * its surface as a refused one is, counting in `tally`; call it once the abort grace is over.
+	 */
+	async leaveCut(tally: RefuseTally): Promise<void> {
+		const { logger, surfaces } = this.#options;
+		const left = this.#turns.takeCut().filter((record) => record.leave());
+		for (const record of left)
+			for (const message of record.messages) {
+				if (tally.stopped) return;
+				logger.info(
+					{ channel: message.channel },
+					"turn cut by the shutdown before it answered",
+				);
+				await tellStopping(message, surfaces, this.#told, logger);
+				tally.refused += 1;
+			}
 	}
 
 	/** Refuses each message still waiting behind a turn after the drain, counting in `tally`. */
@@ -395,7 +358,12 @@ export class ChannelRouter implements ConversationPort {
 	 * is checked to be; never rejects. A turn whose target no plugin contributes is skipped, never
 	 * handed to another target's claim, and so is one whose author may not run it now.
 	 */
-	async background(turn: BackgroundTurn): Promise<ScheduledOutcome> {
+	background(turn: BackgroundTurn): Promise<ScheduledOutcome> {
+		// Not part of a message's turn, even when work that turn started asks for it.
+		return underRecord(undefined, () => this.#background(turn));
+	}
+
+	async #background(turn: BackgroundTurn): Promise<ScheduledOutcome> {
 		if (this.#options.queue.closed) return stopping();
 		if (!this.#options.targets(turn.target))
 			return {
@@ -479,6 +447,13 @@ export class ChannelRouter implements ConversationPort {
 	/** Asks only the claim that owns the channel; false when none does or it has no `stop`. */
 	stop(channel: ChannelKey): boolean {
 		return this.#owner(channel)?.stop?.(channel) ?? false;
+	}
+
+	/** Stops the channel's running turn as the host shuts down: its claim's `stop`, else the runtime's. */
+	abort(channel: ChannelKey): boolean {
+		const owner = this.#owner(channel);
+		if (owner?.stop) return owner.stop(channel);
+		return this.#options.stopTurn?.(channel) ?? false;
 	}
 
 	postsInPlace(channel: ChannelKey): boolean {

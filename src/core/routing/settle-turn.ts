@@ -2,20 +2,32 @@ import type { ScheduledOutcome } from "../contract/channels.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
 import type { TurnEndEvent } from "../plugin-api/plugin.ts";
+import { currentRecord } from "./turn-records.ts";
 
-/** Runs a turn; a thrown error becomes its failed result, labelled `<what> crashed`. */
+/**
+ * Runs a turn; a thrown error becomes its failed result, labelled `<what> crashed`. Run under a
+ * message's admission, an `ok` result counts as the answer to that message, and a turn that ends
+ * after a shutdown left the message for the next process gives a stopped result instead.
+ */
 export async function settleTurn<R>(
 	run: () => Promise<R>,
 	what: string,
 ): Promise<R | { ok: false; error: AgentRunError }> {
+	const record = currentRecord();
+	record?.begin();
+	let result: R | { ok: false; error: AgentRunError };
 	try {
-		return await run();
+		result = await run();
 	} catch (error) {
-		return {
+		result = {
 			ok: false,
 			error: new AgentRunError(`${what} crashed: ${String(error)}`),
 		};
 	}
+	if (!record) return result;
+	const settled = record.settle(result);
+	record.end();
+	return settled;
 }
 
 /** How a turn ended, as the `turnEnded` event reports it. */

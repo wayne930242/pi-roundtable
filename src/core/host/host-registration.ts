@@ -250,6 +250,8 @@ export class Linkage {
 			surfaces: this.#surfaces(),
 			logger,
 			observers: this.observers,
+			// A shutdown stops a turn of a claim without `stop` as the runtime would.
+			stopTurn: (channel) => services.find(RUNTIME)?.stop(channel) ?? false,
 			...(this.#options.peerBots
 				? { peerBots: new PeerBots(this.#options.peerBots) }
 				: {}),

@@ -322,7 +322,8 @@ export interface ChannelClaim {
 	startFresh(channel: ChannelKey): Promise<string>;
 	/**
 	 * Stops the channel's running turn; true when one was running. The router asks only the claim
-	 * that owns the channel, and a claim without `stop` has nothing to stop there.
+	 * that owns the channel, and a claim without `stop` has nothing to stop there, except at the
+	 * drain limit of a shutdown, when the host stops its turn with the runtime's `stop`.
 	 */
 	stop?(channel: ChannelKey): boolean;
 	/** Removes the channel's conversation for good; a claim without one refuses. */

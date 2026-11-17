@@ -302,7 +302,7 @@ export class Roundtable {
 		const stopQueuedTurns = () =>
 			stopTurns(
 				this.#link.queue.busy(),
-				(channel) => this.#link.router?.stop(channel as ChannelKey) ?? false,
+				(channel) => this.#link.router?.abort(channel as ChannelKey) ?? false,
 				logger,
 			);
 		const left = await drainWork({
@@ -314,6 +314,8 @@ export class Roundtable {
 			// A turn the limit finds still running is stopped, as the owner's stop would, and a
 			// service is told to stop its own work before it is stopped.
 			abort: () => {
+				// What still runs now was cut short: unless it answers in the grace, its messages are left.
+				this.#link.router?.cutRunning();
 				const turns = stopQueuedTurns();
 				const services = abortServices(this.#started, logger);
 				return turns || services;
@@ -321,23 +323,28 @@ export class Roundtable {
 		});
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
-		// A message still waiting behind a turn never starts: its channel is told while the services run.
+		// A cut turn that did not answer, then a message still waiting behind a turn, never answers:
+		// their channels are told while the services run, the cut first, as its message came first.
 		// Counted as it goes, and told to start no more once the limit passes.
 		const tally = { refused: 0, failed: 0, stopped: false };
+		const router = this.#link.router;
 		const told = await attempt(() =>
 			withinMs(
 				drain?.refuseWaitingMs ?? REFUSE_WAITING_MS,
-				this.#link.router?.refuseWaiting(tally),
+				router?.leaveCut(tally).then(() => router.refuseWaiting(tally)),
 			),
 		);
 		tally.stopped = true;
 		if (!told.ok || tally.failed > 0)
 			logger.error(
 				{ err: told.ok ? undefined : told.error, ...tally },
-				"not every waiting message was refused; the rest are not answered",
+				"not every cut or waiting message was refused; the rest are not answered",
 			);
 		else if (tally.refused > 0)
-			logger.info({ refused: tally.refused }, "waiting messages refused");
+			logger.info(
+				{ refused: tally.refused },
+				"cut and waiting messages refused",
+			);
 		// A turn that started during the abort grace, a report's, is stopped too, so the teardown does not wait for it.
 		if (left.length > 0) stopQueuedTurns();
 		if (left.length > 0) {
