@@ -16,7 +16,8 @@ export const REFUSE_WAITING_MS = 15_000;
 export interface LimitsConfig {
 	/**
 	 * Seconds a shutdown gives the turns it stops at the drain limit to end; 1 to 600, default 10.
-	 * A service manager's kill timeout should exceed `drainSeconds` + this + `refuseWaitingSeconds`.
+	 * A service manager's kill timeout should exceed `drainSeconds` + this + `refuseWaitingSeconds`,
+	 * plus a few seconds for the teardown.
 	 */
 	abortGraceSeconds?: number;
 	/** Seconds a shutdown gives the refusal of the messages still waiting behind a turn; 1 to 600, default 15. */

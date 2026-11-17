@@ -360,7 +360,7 @@ export class ChannelRouter implements ConversationPort {
 		messageId: string,
 		space?: string,
 	): Promise<void> {
-		// The surface says it is gone: no author check, and no mark to remove from a deleted message.
+		// The surface says it is gone: no author check, no mark to remove; an unmarked one still runs, as ever.
 		this.#queued.cancel(channel, messageId, undefined, false);
 		return tellDeleted(
 			this.#owner(channel, space),

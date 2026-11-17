@@ -90,53 +90,60 @@ test("without the surface taking it, or when it fails, routing tells the channel
 	expect(bot.refused).toEqual([]);
 });
 
+/** A router whose first message holds its channel, and whose surface takes every refused message. */
+function waitingWorld(marked: boolean) {
+	const ran: string[] = [];
+	const running = Promise.withResolvers<void>();
+	const claim: ChannelClaim = {
+		name: "owner",
+		priority: 0,
+		owns: () => true,
+		admit: (m) => ({
+			kind: "turn",
+			...(marked
+				? {
+						busy: {
+							react: async () => undefined,
+							unreact: async () => undefined,
+						},
+					}
+				: {}),
+			run: async () => {
+				ran.push(m.messageId);
+				if (m.messageId === "first") await running.promise;
+			},
+			failure: "failed",
+		}),
+		startFresh: async () => "owner",
+	};
+	const refused: string[] = [];
+	const queue = new ChannelQueue();
+	const routing = new ChannelRouter({
+		claims: [claim],
+		targets: () => undefined,
+		queue,
+		logger: silentLogger(),
+		contacts: IDENTITY,
+		principals: IDENTITY,
+		surfaces: {
+			of: () =>
+				({
+					refuseStopping: async (m: InboundMessage) => {
+						refused.push(m.messageId);
+						return true;
+					},
+				}) as ChatSurface,
+			sendReply: async () => undefined,
+		},
+	});
+	const first = routing.handle(message("first"));
+	return { routing, queue, ran, refused, running, first };
+}
+
 for (const marked of [true, false])
 	test(`a message still waiting behind a turn when the drain ends is refused at once, through its surface, and never runs (${marked ? "a claim that marks it" : "a claim without a waiting mark"})`, async () => {
-		const ran: string[] = [];
-		const running = Promise.withResolvers<void>();
-		const claim: ChannelClaim = {
-			name: "owner",
-			priority: 0,
-			owns: () => true,
-			admit: (m) => ({
-				kind: "turn",
-				...(marked
-					? {
-							busy: {
-								react: async () => undefined,
-								unreact: async () => undefined,
-							},
-						}
-					: {}),
-				run: async () => {
-					ran.push(m.messageId);
-					if (m.messageId === "first") await running.promise;
-				},
-				failure: "failed",
-			}),
-			startFresh: async () => "owner",
-		};
-		const refused: string[] = [];
-		const queue = new ChannelQueue();
-		const routing = new ChannelRouter({
-			claims: [claim],
-			targets: () => undefined,
-			queue,
-			logger: silentLogger(),
-			contacts: IDENTITY,
-			principals: IDENTITY,
-			surfaces: {
-				of: () =>
-					({
-						refuseStopping: async (m: InboundMessage) => {
-							refused.push(m.messageId);
-							return true;
-						},
-					}) as ChatSurface,
-				sendReply: async () => undefined,
-			},
-		});
-		const first = routing.handle(message("first"));
+		const { routing, queue, ran, refused, running, first } =
+			waitingWorld(marked);
 		await Bun.sleep(1);
 		const waiting = routing.handle(message("waiting"));
 		await Bun.sleep(1);
@@ -157,3 +164,19 @@ for (const marked of [true, false])
 		expect(ran).toEqual(["first"]);
 		expect(refused).toEqual(["waiting"]);
 	});
+
+test("a message waiting unmarked behind a turn that ends after the drain began is refused once, by its own task", async () => {
+	const { routing, queue, ran, refused, running, first } = waitingWorld(false);
+	await Bun.sleep(1);
+	const waiting = routing.handle(message("waiting"));
+	await Bun.sleep(1);
+	queue.close();
+	queue.seal();
+	running.resolve();
+	await Promise.all([first, waiting]);
+	const tally = { refused: 0, failed: 0, stopped: false };
+	await routing.refuseWaiting(tally);
+	expect(tally.refused).toBe(0);
+	expect(ran).toEqual(["first"]);
+	expect(refused).toEqual(["waiting"]);
+});
