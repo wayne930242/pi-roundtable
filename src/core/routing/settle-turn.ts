@@ -10,8 +10,8 @@ import { currentRecord } from "./turn-records.ts";
  * work of a message's admission while that is open, its `run` or what it started, awaited or not,
  * such as a queue task, an `ok` result counts as the answer to that message, and a turn that ends
  * after a shutdown left the message for the next process gives a stopped result instead. Started
- * without waiting and outside `context.queue.run` and `context.turns.run`, the drain does not wait
- * for it: a shutdown cuts it, unstopped, once the drain ends.
+ * without waiting and outside any channel queue's task and `context.turns.run`, the drain still
+ * waits for it in the channel of the admission's first message and stops it there at its limit.
  */
 export async function settleTurn<R>(
 	run: () => Promise<R>,

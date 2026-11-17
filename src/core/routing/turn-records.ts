@@ -91,9 +91,18 @@ export class TurnRecord {
 		this.#hooks.closed();
 	}
 
-	/** The channels its turns and queue tasks run in now. */
+	/**
+	 * The channels its turns and queue tasks run in now; while work runs under it that names none,
+	 * its admission or a bare `settleTurn`, its first message's channel too.
+	 */
 	channels(): ChannelKey[] {
-		return [...this.#channels.keys()];
+		let named = 0;
+		for (const count of this.#channels.values()) named += count;
+		const channels = [...this.#channels.keys()];
+		const first = this.#messages[0];
+		if (!this.#done && this.#open > named && first)
+			channels.push(first.channel);
+		return [...new Set(channels)];
 	}
 
 	/** Its messages no `ok` turn answered yet. */

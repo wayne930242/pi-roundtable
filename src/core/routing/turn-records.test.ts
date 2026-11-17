@@ -38,8 +38,15 @@ test("a record counts the channels its turns run in until each ends", () => {
 	open.begin("discord:2");
 	open.begin("discord:3");
 	open.end("discord:2");
-	expect(open.channels()).toEqual(["discord:2", "discord:3"]);
+	// The admission itself still runs, naming no channel: its message's counts.
+	expect(open.channels()).toEqual(["discord:2", "discord:3", "discord:1"]);
 	open.end("discord:2");
 	open.end("discord:3");
+	expect(open.channels()).toEqual(["discord:1"]);
+	// A bare turn keeps it open after the admission ended, in its message's channel.
+	open.begin();
+	open.end();
+	expect(open.channels()).toEqual(["discord:1"]);
+	open.end();
 	expect(open.channels()).toEqual([]);
 });

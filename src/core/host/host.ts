@@ -329,7 +329,7 @@ export class Roundtable {
 			},
 		});
 		// Only what ran before the drain ended finishes; nothing delivered later starts. A message's
-		// turn still running that the drain could not see, such as a bare `settleTurn`, is cut now.
+		// turn still running that the drain did not count, such as one a `finishing` delivery routed, is cut now.
 		this.#link.queue.seal();
 		this.#link.router?.cutRunning();
 		// A cut turn that did not answer, then a message still waiting behind a turn, never answers:

@@ -233,11 +233,11 @@ describe("a turn the shutdown cuts", () => {
 		expect(s.stops[0]).toBe(ROOM);
 		expect(s.log).toEqual(["left first", "stop runtime"]);
 	});
-	test("that its admission ran through a bare settleTurn without waiting for it, which the drain cannot see, is left once the drain ends", async () => {
-		const s = setup("deaf", false, 40, "bare");
+	test("that its admission ran through a bare settleTurn without waiting for it is waited for in its message's channel, stopped and left", async () => {
+		const s = setup("obeys", false, 40, "bare");
 		await holdATurn(s);
 		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
-		expect(s.stops).toEqual([]);
+		expect(s.stops[0]).toBe(ROOM);
 		expect(s.log).toEqual(["left first", "stop runtime"]);
 	});
 });
