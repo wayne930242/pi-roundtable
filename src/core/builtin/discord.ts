@@ -10,11 +10,13 @@ import { type ServiceKey, serviceKey } from "../contract/services.ts";
 import { discordAgentGuild } from "../discord/agent-guild.ts";
 import { discordChannelOps, discordTeamReads } from "../discord/agent-tools.ts";
 import {
+	ATTACHMENT_READ_LIMIT_BYTES,
 	ATTACHMENT_READ_MAX_BYTES,
 	type AttachmentBytes,
 	type AttachmentReadRequest,
 	discordAttachmentSource,
 	readAttachment,
+	validReadCap,
 } from "../discord/attachment-read.ts";
 import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
@@ -79,7 +81,8 @@ export interface DiscordServices {
 	 * line's `id` and `message` in channel context). At most the host's
 	 * `discord.attachmentRead.maxBytes` (default 10 MiB) is read, or less when `maxBytes` asks.
 	 * Nothing is parsed, stored or logged. Rejects with an `AttachmentReadError` whose `code` is
-	 * `not-found`, `too-large`, `gone` or `unavailable`. Which channels a plugin reads is its own
+	 * `not-found`, `too-large`, `gone`, `unavailable`, or `invalid` for a `maxBytes` that is not a
+	 * positive whole number. Which channels a plugin reads is its own
 	 * call: pass the channel of the conversation the file was posted in, not one a model names.
 	 */
 	readAttachment(request: AttachmentReadRequest): Promise<AttachmentBytes>;
@@ -160,7 +163,11 @@ export interface DiscordOptions {
 	 * loaded as the host starts, and only then. Default: off.
 	 */
 	voice?: boolean;
-	/** The most bytes `DISCORD.readAttachment` reads of one file; default `ATTACHMENT_READ_MAX_BYTES`, 10 MiB. */
+	/**
+	 * The most bytes `DISCORD.readAttachment` reads of one file: a whole number from 1 to
+	 * 100 MiB, else `discordPlugin` throws a `ConfigError`; default
+	 * `ATTACHMENT_READ_MAX_BYTES`, 10 MiB.
+	 */
 	attachmentRead?: { maxBytes?: number };
 	/** What the model is told about how replies render in Discord; `false` tells it nothing. Default: Markdown renders, except tables. */
 	formatting?: string | false;
@@ -191,6 +198,11 @@ const INTERCOM_KEEP = 300;
 export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 	if (options.entryChannel !== undefined && options.agentGuild === undefined)
 		throw new ConfigError(ENTRY_CHANNEL_WITHOUT_GUILD);
+	const readCap = options.attachmentRead?.maxBytes;
+	if (readCap !== undefined && !validReadCap(readCap))
+		throw new ConfigError(
+			`discord.attachmentRead.maxBytes must be a whole number from 1 to ${ATTACHMENT_READ_LIMIT_BYTES}`,
+		);
 	const collection = new CommandCollection();
 	let surface: DiscordSurface | undefined;
 	return {

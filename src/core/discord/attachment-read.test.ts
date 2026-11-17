@@ -137,6 +137,24 @@ describe("readAttachment", () => {
 		).toBe("too-large");
 	});
 
+	test("a call's maxBytes that is not a positive whole number is refused with the code invalid", async () => {
+		for (const maxBytes of [Number.NaN, 0, -5, 2.5]) {
+			const { fetchImpl, fetched } = cdn();
+			const { src, asked } = source();
+			expect(
+				await code(
+					readAttachment(
+						src,
+						{ ...request, maxBytes },
+						{ maxBytes: 100, fetchImpl },
+					),
+				),
+			).toBe("invalid");
+			expect(asked).toEqual([]);
+			expect(fetched).toEqual([]);
+		}
+	});
+
 	test("a file the CDN no longer serves is gone; another failure is unavailable", async () => {
 		for (const status of [403, 404, 410])
 			expect(

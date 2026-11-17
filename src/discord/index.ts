@@ -84,6 +84,7 @@ export {
 	commandGuard,
 	groupOption,
 	ownerCommandModule,
+	ownerRefusal,
 	ownerRootCommand,
 } from "../core/discord/owner-command.ts";
 export type { PanelContent } from "../core/discord/owner-panel.ts";

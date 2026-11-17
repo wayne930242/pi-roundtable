@@ -450,6 +450,6 @@ export class OwnerCards implements InteractionModule {
 		if (!card.form) return answerSingle(card, id, action, interaction, by);
 		if (action === "qpick" || action === "submit" || action === "qtext")
 			return answerDeferred(card, action, index, interaction, by);
-		return answerForm(card, id, action, interaction);
+		return answerForm(card, id, action, interaction, by);
 	}
 }

@@ -341,7 +341,7 @@ describeDb("mcpConnectors on a host", () => {
 		expect(cf.gateways.size).toBe(0);
 	});
 
-	test("a non-owner's form is ignored", async () => {
+	test("a non-owner's form is refused and adds nothing", async () => {
 		const host = await boot({});
 		const { interaction, replies } = fakeInteraction({
 			user: "someone-else",
@@ -350,7 +350,7 @@ describeDb("mcpConnectors on a host", () => {
 			modal: CONNECTOR_MODAL_ID,
 		});
 		await handle(host, interaction as never);
-		expect(replies.edits).toEqual([]);
+		expect(replies.edits).toHaveLength(1);
 		expect(cf.gateways.size).toBe(0);
 	});
 

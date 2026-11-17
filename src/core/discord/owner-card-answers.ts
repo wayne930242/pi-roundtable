@@ -9,6 +9,7 @@ import {
 	formFields,
 	previewReplies,
 	questionnaireModal,
+	type Written,
 } from "./owner-card-questionnaire.ts";
 import {
 	answeredLine,
@@ -167,9 +168,11 @@ export async function answerDeferred(
 		const { texts, note } = formFields(form, (field) =>
 			interaction.fields.getTextInputValue(field),
 		);
+		const own: Written = { texts: [] };
 		for (const [i, value] of texts)
-			form.draft.texts[i] = value.trim() || undefined;
-		form.draft.note = note.trim() || undefined;
+			form.draft.texts[i] = own.texts[i] = value.trim() || undefined;
+		form.draft.note = own.note = note.trim() || undefined;
+		form.written.set(by.user.id, own);
 	}
 	if (!submits) {
 		card.touch();
@@ -190,18 +193,20 @@ export async function answerDeferred(
 
 /**
  * "Write answers / note…": opens the form at once, since nothing may be awaited before a form is
- * shown; the audience is checked when it is submitted (`answerDeferred`).
+ * shown; the audience is checked when it is submitted (`answerDeferred`). The form holds only
+ * what this user wrote before, so it shows no one else's unsent text.
  */
 export async function answerForm(
 	card: OpenCard,
 	id: string,
 	action: string,
 	interaction: Interaction,
+	by: Answerer,
 ): Promise<void> {
 	if (!card.form || !interaction.isButton() || action !== "notes") return;
 	if (!card.isOpen()) {
 		await interaction.reply(ephemeral(messages().cardInactive));
 		return;
 	}
-	await interaction.showModal(questionnaireModal(id, card.form));
+	await interaction.showModal(questionnaireModal(id, card.form, by.user.id));
 }

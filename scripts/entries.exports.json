@@ -669,6 +669,7 @@
 			"ownerCommandModule",
 			"ownerPanel",
 			"ownerPanels",
+			"ownerRefusal",
 			"ownerRootCommand",
 			"parseChannelTool",
 			"plain",

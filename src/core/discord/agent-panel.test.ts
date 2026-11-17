@@ -76,16 +76,53 @@ describe("agentPanel", () => {
 		expect(() => panel().open("99")).toThrow("This channel has no agent");
 	});
 
-	test("answers its buttons for the owner only, and opens the form", async () => {
+	test("a button opens its form as the first answer, for anyone, since only the submit changes the agent", async () => {
 		const owner = interaction("button", OWNER, "roundtable:agent:edit:scout");
 		expect(await panel().handles(owner.value)).toBe(true);
 		expect(owner.log).toEqual(["form"]);
 		const stranger = interaction("button", "2", "roundtable:agent:edit:scout");
 		expect(await panel().handles(stranger.value)).toBe(true);
-		expect(stranger.log).toEqual([]);
+		expect(stranger.log).toEqual(["form"]);
 	});
 
-	test("answers a second owner's buttons and forms too, and a member's with nothing", async () => {
+	test("the model form opens with nothing awaited: not the owners, not the host's models", async () => {
+		const asked: string[] = [];
+		const slow = {
+			...agents,
+			team: {
+				...agents.team,
+				defaultModel: () => ({ model: "a/b", thinking: "auto" }),
+				usableModels: () => {
+					asked.push("models");
+					return new Promise<string[]>(() => undefined);
+				},
+			},
+		} as unknown as AgentServer;
+		const identity = mapIdentity({ owners: [OWNER] });
+		const lookups = {
+			...identity,
+			// The owners are never known: a check before the form would hang the press.
+			resolve: () => new Promise(() => undefined),
+			owners: () => new Promise(() => undefined),
+			identities: () => new Promise(() => undefined),
+		} as unknown as typeof identity;
+		const panelOf = agentPanel({
+			guard: commandGuard({
+				ownerId: OWNER,
+				identity: lookups,
+				root: "bot",
+				logger: silentLogger(),
+			}),
+			agents: slow,
+		});
+		const press = interaction("button", "2", "roundtable:agent:model:scout");
+		expect(await panelOf.handles(press.value)).toBe(true);
+		expect(press.log).toEqual(["form"]);
+		// The host is asked again in the background, for the next form.
+		expect(asked).toEqual(["models"]);
+	});
+
+	test("answers a second owner's buttons and forms too, and refuses a member's form", async () => {
 		const identity = mapIdentity({
 			owners: [OWNER, SECOND_OWNER],
 			members: { users: [MEMBER] },
@@ -104,12 +141,16 @@ describe("agentPanel", () => {
 		);
 		expect(await panel(identity).handles(submitted.value)).toBe(true);
 		expect(submitted.log[0]).toBe("defer");
-		const member = interaction("button", MEMBER, "roundtable:agent:edit:scout");
+		const member = interaction(
+			"modal",
+			MEMBER,
+			"roundtable:agent-modal:edit:scout",
+		);
 		expect(await panel(identity).handles(member.value)).toBe(true);
-		expect(member.log).toEqual([]);
+		expect(member.log).toEqual(["reply"]);
 	});
 
-	test("defers a submitted form before it works, and answers a stranger with nothing", async () => {
+	test("defers a submitted form before it works, and refuses a stranger's", async () => {
 		const owner = interaction(
 			"modal",
 			OWNER,
@@ -123,7 +164,7 @@ describe("agentPanel", () => {
 			"roundtable:agent-modal:edit:scout",
 		);
 		expect(await panel().handles(stranger.value)).toBe(true);
-		expect(stranger.log).toEqual([]);
+		expect(stranger.log).toEqual(["reply"]);
 	});
 
 	test("answers its selects for the owner only, deferred before the look is dressed", async () => {

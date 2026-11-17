@@ -117,6 +117,7 @@ export function askPrompts(args: {
 			const form: QuestionnaireForm = {
 				questionnaire,
 				draft: newDraft(questionnaire.questions.length),
+				written: new Map(),
 			};
 			return post<QuestionnaireAnswer | "pending" | "declined" | undefined>(
 				channelId,

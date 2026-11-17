@@ -7,6 +7,7 @@ import {
 	type AgentPanelMessage,
 } from "./agent-commands.ts";
 import type { CommandGuard } from "./interaction-module.ts";
+import { ownerRefusal } from "./owner-command.ts";
 
 export interface AgentPanelOptions {
 	/** Who may press the panel's buttons and submit its forms. */
@@ -25,7 +26,9 @@ export interface AgentPanel {
 	 */
 	open(channelId: string): AgentPanelMessage;
 	/**
-	 * Answers the panel's own buttons, dropdowns and form, for the owner only and deferred as Discord needs;
+	 * Answers the panel's own buttons, dropdowns and form, deferred as Discord needs. A button opens its
+	 * form for anyone at once, since a form must come first; only an owner's dropdown or submitted form
+	 * changes the agent, and anyone else's submitted form is refused;
 	 * true when it handled the interaction. The custom ids are fixed, so panels already posted keep working.
 	 */
 	handles(interaction: Interaction): Promise<boolean>;
@@ -47,7 +50,7 @@ export function agentPanel(options: AgentPanelOptions): AgentPanel {
 				interaction.isButton() &&
 				interaction.customId.startsWith(AGENT_BUTTON_PREFIX)
 			) {
-				if (!(await guard.allows(interaction))) return true;
+				// The form is the first answer, with nothing awaited before it; the submit is checked.
 				await guard.run(interaction, () => commands.button(interaction));
 				return true;
 			}
@@ -64,7 +67,10 @@ export function agentPanel(options: AgentPanelOptions): AgentPanel {
 				interaction.isModalSubmit() &&
 				interaction.customId.startsWith(AGENT_MODAL_PREFIX)
 			) {
-				if (!(await guard.allows(interaction))) return true;
+				if (!(await guard.allows(interaction))) {
+					await interaction.reply(ownerRefusal(guard.refusalHint));
+					return true;
+				}
 				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await guard.run(interaction, () => commands.submit(interaction));
 				return true;

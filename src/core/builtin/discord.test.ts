@@ -137,6 +137,24 @@ test("a Discord formatting text with nothing in it is refused, not read as none"
 	);
 });
 
+test("an attachment read cap outside 1 byte to 100 MiB is refused, as the config file refuses it", () => {
+	for (const maxBytes of [0, -1, 1.5, Number.NaN, 100 * 1024 * 1024 + 1])
+		expect(() =>
+			discordPlugin({
+				...OPTIONS,
+				dataDir: "/nowhere",
+				attachmentRead: { maxBytes },
+			}),
+		).toThrow("discord.attachmentRead.maxBytes");
+	expect(() =>
+		discordPlugin({
+			...OPTIONS,
+			dataDir: "/nowhere",
+			attachmentRead: { maxBytes: 100 * 1024 * 1024 },
+		}),
+	).not.toThrow();
+});
+
 test("the Discord surface hands out the owner's cards for its channels", async () => {
 	const { surface } = await setUp();
 	expect(typeof surface.prompts?.("discord:555")?.confirm).toBe("function");

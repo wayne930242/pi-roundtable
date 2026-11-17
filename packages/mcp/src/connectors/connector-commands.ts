@@ -17,6 +17,7 @@ import {
 	OwnerFacingError,
 	ownerCommandModule,
 	ownerPanel,
+	ownerRefusal,
 	plain,
 	replyWithPanels,
 } from "pi-roundtable/discord";
@@ -326,12 +327,11 @@ export function connectorCommands(
 		module: ownerCommandModule(guard, {
 			owns: (group) => group === "connector",
 			autocomplete: (interaction) => commands.autocomplete(interaction),
-			// The form must be the interaction's first answer, before any deferral.
-			open: async (interaction) => {
-				if (interaction.options.getSubcommand() !== "add") return false;
-				await interaction.showModal(connectorModal(text));
-				return true;
-			},
+			// The form is the interaction's first answer, before the owner check; its submit is checked.
+			form: (interaction) =>
+				interaction.options.getSubcommand() === "add"
+					? connectorModal(text)
+					: undefined,
 			command: (interaction) => commands.command(interaction),
 			component: async (interaction) => {
 				if (
@@ -339,7 +339,10 @@ export function connectorCommands(
 					interaction.customId !== CONNECTOR_MODAL_ID
 				)
 					return false;
-				if (!(await guard.allows(interaction))) return true;
+				if (!(await guard.allows(interaction))) {
+					await interaction.reply(ownerRefusal(guard.refusalHint));
+					return true;
+				}
 				await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 				await guard.run(interaction, () => commands.submit(interaction));
 				return true;

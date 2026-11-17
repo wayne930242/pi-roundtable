@@ -33,9 +33,11 @@ export interface AttachmentBytes {
  * Why a file was not read: `not-found` (no such channel, message, or file on the message, or one
  * the bot cannot see), `too-large` (over the cap, by Discord's size or by what arrived), `gone`
  * (Discord's CDN no longer serves it), `unavailable` (Discord is not connected, did not answer in
- * time, or answered with another error; trying later may work).
+ * time, or answered with another error; trying later may work), `invalid` (the call's `maxBytes` is
+ * not a positive whole number).
  */
 export type AttachmentReadErrorCode =
+	| "invalid"
 	| "not-found"
 	| "too-large"
 	| "gone"
@@ -53,6 +55,12 @@ export class AttachmentReadError extends Error {
 
 /** The host's cap on one read when `discord.attachmentRead.maxBytes` is left out: 10 MiB. */
 export const ATTACHMENT_READ_MAX_BYTES = 10 * 1024 * 1024;
+/** The highest cap a host may set, in its config or in `discordPlugin`'s options: 100 MiB. */
+export const ATTACHMENT_READ_LIMIT_BYTES = 100 * 1024 * 1024;
+
+/** Whether `bytes` is a cap a host may set: a whole number from 1 to `ATTACHMENT_READ_LIMIT_BYTES`. */
+export const validReadCap = (bytes: number) =>
+	Number.isInteger(bytes) && bytes >= 1 && bytes <= ATTACHMENT_READ_LIMIT_BYTES;
 /** How long one file's download may take. */
 const READ_TIMEOUT_MS = 30_000;
 
@@ -102,14 +110,17 @@ export async function readAttachment(
 	}))
 		if (typeof value !== "string" || !/^\d{1,25}$/.test(value))
 			throw new AttachmentReadError("not-found", `${name} is not a Discord id`);
-	const max = Math.min(
-		options.maxBytes,
-		request.maxBytes === undefined
-			? Number.POSITIVE_INFINITY
-			: request.maxBytes,
-	);
-	if (!Number.isInteger(max) || max < 1)
-		throw new RangeError("maxBytes must be a positive integer");
+	if (!validReadCap(options.maxBytes))
+		throw new RangeError(
+			`the host's maxBytes must be a whole number from 1 to ${ATTACHMENT_READ_LIMIT_BYTES}`,
+		);
+	const asked = request.maxBytes;
+	if (asked !== undefined && !(Number.isInteger(asked) && asked >= 1))
+		throw new AttachmentReadError(
+			"invalid",
+			"maxBytes must be a positive whole number",
+		);
+	const max = Math.min(options.maxBytes, asked ?? Number.POSITIVE_INFINITY);
 	let files: readonly AttachmentFacts[] | undefined;
 	try {
 		files = await source.files(channelId, messageId);

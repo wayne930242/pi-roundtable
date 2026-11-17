@@ -4,6 +4,7 @@ import {
 	type Interaction,
 	InteractionContextType,
 	MessageFlags,
+	type ModalBuilder,
 	SlashCommandSubcommandGroupBuilder,
 } from "discord.js";
 import { messages } from "../i18n/index.ts";
@@ -121,7 +122,14 @@ export interface OwnerCommandHandlers {
 	/** Whether a root subcommand, in its group or null at the top level, is this feature's. */
 	owns(group: string | null, subcommand: string): boolean;
 	autocomplete?(interaction: AutocompleteInteraction): Promise<void>;
-	/** An answer that must be the interaction's first, such as a form; true when it answered. */
+	/**
+	 * A form the subcommand opens, or undefined: shown as the interaction's first answer before the
+	 * owner check, which may ask the identity service, since Discord takes a form only within 3 s and
+	 * only before anything else. It is shown to anyone who runs the subcommand, so it holds nothing
+	 * private; what is submitted reaches `component`, which checks the owner.
+	 */
+	form?(interaction: ChatInputCommandInteraction): ModalBuilder | undefined;
+	/** An answer that must be the interaction's first, given to an owner only; true when it answered. */
 	open?(interaction: ChatInputCommandInteraction): Promise<boolean>;
 	/** Answers a subcommand; the reply is already deferred and ephemeral. */
 	command(interaction: ChatInputCommandInteraction): Promise<void>;
@@ -129,7 +137,8 @@ export interface OwnerCommandHandlers {
 	component?(interaction: Interaction): Promise<boolean>;
 }
 
-const refusal = (hint: string | undefined) =>
+/** What someone who is not an owner is told, with the guard's `refusalHint`. */
+export const ownerRefusal = (hint: string | undefined) =>
 	ephemeralPanel({
 		title: messages().ownerRefusalTitle,
 		sections: [`${messages().ownerRefusalBody}${hint ?? ""}`],
@@ -160,8 +169,13 @@ export function ownerCommandModule(
 			if (await handlers.component?.(interaction)) return true;
 			if (!interaction.isChatInputCommand() || !owned(interaction))
 				return false;
+			const form = handlers.form?.(interaction);
+			if (form) {
+				await interaction.showModal(form);
+				return true;
+			}
 			if (!(await guard.allows(interaction))) {
-				await interaction.reply(refusal(guard.refusalHint));
+				await interaction.reply(ownerRefusal(guard.refusalHint));
 				return true;
 			}
 			if (await handlers.open?.(interaction)) return true;

@@ -112,9 +112,27 @@ export function skillsText({ skills, missing }: SkillSet): string {
 /** `/<root> profile`: an agent's prompt, avatar, model, and skills, with buttons and forms to change them. */
 export class AgentCommands {
 	readonly #options: AgentCommandsOptions;
+	/**
+	 * The models the host could run when last asked: the model form is drawn from these, since a
+	 * form must be an interaction's first answer with nothing awaited before it.
+	 */
+	#usable: readonly string[] | undefined;
 
 	constructor(options: AgentCommandsOptions) {
 		this.#options = options;
+	}
+
+	/** Asks the host again for the models it can run, in the background; a failure keeps the last answer. */
+	#refreshModels(): void {
+		const { team } = this.#options;
+		Promise.resolve()
+			.then(() => team.usableModels())
+			.then(
+				(models) => {
+					this.#usable = models;
+				},
+				() => undefined,
+			);
 	}
 
 	/** The panel for the agent of a channel; an error when the channel has none. */
@@ -127,6 +145,7 @@ export class AgentCommands {
 					? messages().agentGroupChannel
 					: messages().agentNoAgent,
 			);
+		this.#refreshModels();
 		return this.#panel(agent, note);
 	}
 
@@ -259,7 +278,11 @@ export class AgentCommands {
 			);
 	}
 
-	/** A panel button: a form opens. */
+	/**
+	 * A panel button: its form opens as the first answer, with nothing awaited before it, so it is
+	 * shown to anyone who can press it; the form shows only what the panel shows, and what is
+	 * submitted is checked against the owners (`agentPanel`).
+	 */
 	async button(interaction: ButtonInteraction): Promise<void> {
 		const [action, name] = interaction.customId
 			.slice(AGENT_BUTTON_PREFIX.length)
@@ -270,17 +293,20 @@ export class AgentCommands {
 		if (!ACTIONS.includes(action as Action))
 			throw new OwnerFacingError(messages().agentPanelOutdated);
 		await interaction.showModal(
-			action === "model"
-				? await this.#modelModal(agent)
-				: this.#editModal(agent),
+			action === "model" ? this.#modelModal(agent) : this.#editModal(agent),
 		);
+		if (action === "model") this.#refreshModels();
 	}
 
-	/** Two dropdowns: the model and the thinking level, each with "follow the assistant" first. */
-	async #modelModal(agent: Agent): Promise<ModalBuilder> {
+	/**
+	 * Two dropdowns: the model and the thinking level, each with "follow the assistant" first.
+	 * Before the host has answered which models it runs, every form model is offered; saving one
+	 * it cannot run is refused when the form is submitted.
+	 */
+	#modelModal(agent: Agent): ModalBuilder {
 		const { team } = this.#options;
 		const fallback = team.defaultModel();
-		const models = formModels(await team.usableModels(), agent.model);
+		const models = formModels(this.#usable ?? FORM_MODELS, agent.model);
 		const option = (label: string, value: string, chosen: boolean) =>
 			new StringSelectMenuOptionBuilder()
 				.setLabel(label.slice(0, 100))

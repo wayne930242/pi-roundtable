@@ -3,6 +3,8 @@ import type { Interaction } from "discord.js";
 /** What a command handler replied with, to read back in a test. */
 export interface Replies {
 	edits: unknown[];
+	/** The forms shown, in order. */
+	modals: unknown[];
 	/** The text of every component of the last reply, joined. */
 	text(): string;
 	/** The custom id of every button and menu of the last reply. */
@@ -64,6 +66,7 @@ export function fakeInteraction(options: Options): {
 	replies: Replies;
 } {
 	const edits: unknown[] = [];
+	const modals: unknown[] = [];
 	const modal = options.modal !== undefined;
 	const button = options.button !== undefined;
 	const interaction = {
@@ -100,11 +103,15 @@ export function fakeInteraction(options: Options): {
 		editReply: async (payload: unknown) => {
 			edits.push(payload);
 		},
+		showModal: async (payload: unknown) => {
+			modals.push(payload);
+		},
 	};
 	return {
 		interaction: interaction as unknown as Interaction,
 		replies: {
 			edits,
+			modals,
 			text: () => textOf(edits.at(-1)),
 			customIds: () => idsOf(edits.at(-1)),
 		},
