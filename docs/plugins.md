@@ -2487,6 +2487,8 @@ The router records the author, such as linking them at their first contact, only
 One exception: an author already linked whom the access rules now refuse is recorded as seen at no tier when the message is resolved, whether or not a claim takes it, at most once every few minutes, so their background turns stop with them.
 When that record finds the author someone else than the claim admitted, such as linked to another principal meanwhile or refused now, or cannot be made, the router drops the message: a turn admission's optional `dropped()` is called instead of `run`, so the claim frees what it holds for it, and a background admission's `unanswered` hears it skipped.
 
+A message the Discord surface delivers late, after a restart (see [`discord.catchUp`](#missed-messages-after-a-restart-discordcatchup)), carries `caughtUp: true` and is otherwise routed like any other.
+
 A claim may also hear that a message it owns changed, through `onMessageDeleted(channel, messageId)` and `onMessageEdited(message)`, which a surface reports with the second argument of its `start` (`{ deleted, edited }`, a `SurfaceMessageEvents`). Discord reports both, including for a message the bot had not cached; a surface that cannot tell never calls them. The router delivers each as it comes, to the claim that owns the channel and no other, outside the channel's queue, so a running turn does not hold it up; a throw or rejection is logged and never fails the router. A delete carries only ids, and Discord's delete event does not say who wrote the message, so the claim hears the deletion of the bot's own messages too and ignores an id it does not know. An edit carries the message as it reads now, as an `InboundMessage`, without `speaker` or `peerBot` because nobody is resolved or admitted for it; the bot's own edits are not reported, nor is a change that leaves the text, the embeds and the attachments as they were, such as a pin. A bulk delete is reported as one delete per message.
 
 A message sent while a turn runs is first offered to that turn (`busy.steer`); one the turn does not take waits in the channel's queue with `QUEUED_MARK`, and until its own turn starts the conversation port can list, cancel and edit it: `queued(channel)` returns its waiting messages oldest first (`messageId`, the author's `principalId`, the `text` its turn will use, `queuedAt`); `cancelQueued(channel, messageId, { principalId })` makes its turn never run, calling the admission's `dropped` and removing the mark; `editQueued(channel, messageId, { principalId }, text)` admits the message again with the new text through the claim's `admit`, drops the old admission, and the turn runs on the new one. Only the message's author may (a different principal gets `forbidden`, and a message with no resolved author can be changed by no one). A message whose turn has started, was steered into the running turn, or was cancelled is `unknown`; an edit the claim would no longer admit is `refused` and the old text stays. The decision is made in one synchronous step, so a cancel or an edit and the start of the turn never both win. The surface's own copy of the message is the caller's to change. When a surface reports a queued message deleted or edited (`onMessageDeleted`, `onMessageEdited` above), the router cancels it or changes its text itself, without the author check since the surface says it happened: that is how deleting a queued Discord message cancels it. The three methods are optional on `ConversationPort`, as `messageDeleted` is.
@@ -2926,6 +2928,32 @@ const statusClaim: ChannelClaim = {
 
 A reply that contains `<@id>` of a peer pings it, since replies allow user mentions; without that the peer's `mentionsBot` stays false.
 In a test, `testPlugin({ peerBots: { allow: [...] } })` puts the same list on the test router.
+
+### Missed messages after a restart: `discord.catchUp`
+
+Discord does not deliver again what was posted while no process held the connection, so a mention sent during a restart or a deploy would go unanswered.
+A host that sets `discord.catchUp` (or passes `catchUp` to `discordPlugin`) answers those messages once the connection is ready again:
+
+```ts
+discord: { token: process.env.DISCORD_TOKEN ?? "", catchUp: { windowMinutes: 10, maxMessages: 20 } },
+```
+
+It is off by default and needs the host's database.
+Once every service has started, the Discord plugin reads the channels where something was posted within `windowMinutes` (default 10, at most 1440) before the connection became ready.
+It reads the server text channels, live threads and forum posts the bot can read, which it picks from the client's cache without a request, and the direct-message channels that brought the bot a message in the last 30 days.
+It reads at most 50 channels, one page of 100 messages each, before the ready time, and Discord's rate limits pace the requests.
+A message counts when a person wrote it (not a bot, a webhook or Discord itself) to the bot: a mention, a reply to one of the bot's messages, or a direct message.
+It is left alone when it is older than the window, when the bot or one of its own webhooks posted in that channel after it, or when it was already taken in.
+Of what is left, the newest `maxMessages` (default 20, at most 100) go to routing oldest first.
+Each one passes through the same claims, identity resolution and gates as a live message, with `InboundMessage.caughtUp` set, so a claim may say its answer comes late, for example that the assistant just restarted.
+The log carries only counts and ids, never text.
+
+Nothing is answered twice.
+With catch-up on, every addressed message is recorded in the `discord_inbound_journal` table before routing hears it: by the live connection as it arrives, or by catch-up before it hands the message on.
+Whichever records a message first delivers it; the other drops it, so a second restart, or a message the gateway delivers while catch-up runs, is not answered again.
+A message that catch-up cannot record is skipped, and a crash after the record but before the turn leaves it unanswered: one missed answer is preferred to two.
+A message the old process refused while it shut down already got the restart notice and is not caught up.
+A first direct message sent during the restart is not found, since Discord does not list a bot's direct-message channels.
 
 ### Reading a file's bytes: `DISCORD.readAttachment`
 

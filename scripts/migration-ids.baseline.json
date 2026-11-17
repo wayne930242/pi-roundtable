@@ -14,6 +14,7 @@
 		"schedule-store/schedules-time-limit",
 		"prompts/prompt-overrides",
 		"prompts/prompt-history",
+		"discord/discord-inbound-journal",
 		"skills/skills",
 		"skills/skill-versions",
 		"skills/skills-guild",

@@ -53,7 +53,11 @@ import {
 	listenForJoins,
 	memberIntents,
 } from "./member-events.ts";
-import { listenForMessages, reportChanges } from "./message-changes.ts";
+import {
+	type InboundGate,
+	listenForMessages,
+	reportChanges,
+} from "./message-changes.ts";
 import type { CardChannel, LateTurn } from "./owner-cards.ts";
 import { DiscordOwnerOps } from "./owner-discord.ts";
 import { showStopPanel } from "./stop-button.ts";
@@ -81,6 +85,8 @@ export interface DiscordSurfaceOptions {
 	formatting?: string | false;
 	/** Where the agents' message cards keep their whole texts for the open button; without it a card posts as text. */
 	intercomTexts?: IntercomTexts;
+	/** Decides whether each live message is handed on, such as catch-up's journal; without it every one is. */
+	inboundGate?: InboundGate;
 	/** Reads the channel context of an addressed message; without it the surface has none. */
 	channelContext?: (
 		message: InboundMessage,
@@ -274,7 +280,12 @@ export class DiscordSurface
 		const { logger, token } = this.#options;
 		this.#onMessage = onMessage;
 		if (events) reportChanges(this.#client, events, logger);
-		listenForMessages(this.#client, onMessage, logger);
+		listenForMessages(
+			this.#client,
+			onMessage,
+			logger,
+			this.#options.inboundGate,
+		);
 		this.#client.on(Events.InteractionCreate, (interaction) => {
 			void this.#dispatch(interaction);
 		});

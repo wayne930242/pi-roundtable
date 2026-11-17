@@ -19,6 +19,14 @@ import {
 	validReadCap,
 } from "../discord/attachment-read.ts";
 import { CardCopies } from "../discord/card-copies.ts";
+import {
+	type CatchUpOptions,
+	catchUp,
+	catchUpSettings,
+	journalGate,
+} from "../discord/catch-up.ts";
+import { PgInboundJournal } from "../discord/catch-up-journal.ts";
+import { clientCatchUpReader } from "../discord/catch-up-reader.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -184,6 +192,15 @@ export interface DiscordOptions {
 	 * cards follow the same choice and `keepDays`, the newest 300, in `intercom-texts.json`.
 	 */
 	cardCopies?: { keepDays?: number; keep?: number } | false;
+	/**
+	 * Answers, once the connection is ready again, the messages addressed to the bot (a person's
+	 * mention, reply to the bot, or direct message) that came while the host was down, as the
+	 * gateway does not deliver them: those of the last `windowMinutes` (default 10) the bot did not
+	 * answer, the newest `maxMessages` (default 20), oldest first, each marked
+	 * `InboundMessage.caughtUp`. Each addressed message is recorded in the database before routing
+	 * hears it, so none is answered twice. Needs the host's database. Default: off.
+	 */
+	catchUp?: CatchUpOptions;
 }
 
 /** How many agent message cards keep their whole text for the open button, the newest. */
@@ -203,19 +220,32 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 		throw new ConfigError(
 			`discord.attachmentRead.maxBytes must be a whole number from 1 to ${ATTACHMENT_READ_LIMIT_BYTES}`,
 		);
+	const catchUpWith = options.catchUp && catchUpSettings(options.catchUp);
 	const collection = new CommandCollection();
 	let surface: DiscordSurface | undefined;
 	return {
 		name: "discord",
 		provides: [DISCORD],
+		...(catchUpWith ? { migrations: [PgInboundJournal.migration] } : {}),
 		preflight: () => {
 			// The host has applied its environment by now, so the description is in its language.
 			surface?.setCommands(
 				collection.compose(ownerRootCommand(options.rootCommand)),
 			);
 		},
-		setup: async ({ conversations, services, logger, events, dashboard }) => {
+		setup: async ({
+			conversations,
+			services,
+			logger,
+			events,
+			dashboard,
+			database,
+		}) => {
 			const identity = services.find(IDENTITY);
+			// What came in, recorded only when catch-up is on, so it answers nothing twice.
+			const journal = catchUpWith
+				? PgInboundJournal.attach(database())
+				: undefined;
 			// A host that keeps no copy texts on disk drops what an earlier run left.
 			if (options.cardCopies === false)
 				for (const name of ["card-copies.json", "intercom-texts.json"]) {
@@ -270,8 +300,10 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					: { formatting: options.formatting }),
 				...(options.memberEvents ? { memberEvents: true } : {}),
 				...(options.voice ? { voice: true } : {}),
+				...(journal ? { inboundGate: journalGate(journal, logger) } : {}),
 			});
 			surface = connected;
+			let draining = false;
 			// Voice sessions over the same client; nothing of the voice packages is loaded before its service starts.
 			const voice = options.voice
 				? voiceService({
@@ -390,6 +422,29 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 							await intercomTexts.stop();
 						},
 					},
+					// After every service is up, so the missed messages reach claims that are ready.
+					...(journal && catchUpWith
+						? [
+								{
+									name: "discord-catch-up",
+									startInBackground: async () => {
+										await catchUp({
+											reader: clientCatchUpReader(connected.client()),
+											journal,
+											deliver: (message) => {
+												void conversations.handle(message);
+											},
+											settings: catchUpWith,
+											logger,
+											stopping: () => draining,
+										});
+									},
+									beginDrain: () => {
+										draining = true;
+									},
+								},
+							]
+						: []),
 					// Fails the start when the voice packages cannot be loaded; ends every session as the host stops.
 					...(voice
 						? [

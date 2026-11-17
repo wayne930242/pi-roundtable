@@ -5,23 +5,46 @@ import { channelKey } from "../contract/surface.ts";
 import type { Logger } from "../kernel/log.ts";
 import { toInbound } from "./inbound-message.ts";
 
-/** Hands every message the client sees to `deliver` as the neutral message; the bot's own are left out. */
+/** Decides whether a message the gateway delivered is handed on: false keeps it from routing. */
+export type InboundGate = (
+	message: InboundMessage,
+	botId: string,
+) => Promise<boolean>;
+
+/**
+ * Hands every message the client sees to `deliver` as the neutral message, in the order each
+ * channel's messages came, however long reading one takes; the bot's own are left out, and so is
+ * one the gate refuses.
+ */
 export function listenForMessages(
 	client: Client,
 	deliver: (message: InboundMessage) => void,
 	logger: Logger,
+	gate?: InboundGate,
 ): void {
+	const delivering = new Map<string, Promise<void>>();
 	client.on(Events.MessageCreate, (message) => {
-		toInbound(message, {
-			botId: client.user?.id,
+		const botId = client.user?.id;
+		const read = toInbound(message, {
+			botId,
 			applicationId: client.application?.id,
-		})
+		}).then(async (inbound) => {
+			if (!inbound || !botId) return undefined;
+			return !gate || (await gate(inbound, botId)) ? inbound : undefined;
+		});
+		const { channelId } = message;
+		const after = (delivering.get(channelId) ?? Promise.resolve())
+			.then(() => read)
 			.then((inbound) => {
 				if (inbound) deliver(inbound);
 			})
 			.catch((error: unknown) =>
 				logger.error({ err: error }, "inbound message could not be read"),
 			);
+		delivering.set(channelId, after);
+		void after.then(() => {
+			if (delivering.get(channelId) === after) delivering.delete(channelId);
+		});
 	});
 }
 

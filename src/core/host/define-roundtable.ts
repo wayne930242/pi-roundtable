@@ -176,6 +176,7 @@ function discordAssembly(
 			...(discord.attachmentRead
 				? { attachmentRead: discord.attachmentRead }
 				: {}),
+			...(discord.catchUp ? { catchUp: discord.catchUp } : {}),
 		}),
 		admin: discord.admin ? [discordAdminPlugin({ owner })] : [],
 	};
