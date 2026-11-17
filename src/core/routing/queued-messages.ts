@@ -131,14 +131,25 @@ export class QueuedMessages {
 		return "done";
 	}
 
-	/** Removes the waiting mark; a failure is logged, since the message may be gone. */
-	/** Every waiting entry, in all channels. */
-	all(): QueuedEntry[] {
-		return [...this.#entries.values()].flatMap((entries) => [
-			...entries.values(),
-		]);
+	/** Takes every waiting entry off the list and refuses it, the channels in parallel, each in order; how many. */
+	async refuseAll(
+		refuse: (entry: QueuedEntry) => Promise<void>,
+	): Promise<number> {
+		let refused = 0;
+		await Promise.all(
+			[...this.#entries.values()].map(async (entries) => {
+				for (const entry of [...entries.values()]) {
+					if (!this.remove(entry)) continue;
+					this.unmark(entry);
+					await refuse(entry);
+					refused += 1;
+				}
+			}),
+		);
+		return refused;
 	}
 
+	/** Removes the waiting mark; a failure is logged, since the message may be gone. */
 	unmark(entry: QueuedEntry): void {
 		const { channel } = entry.message;
 		entry.admission.busy

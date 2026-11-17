@@ -119,6 +119,23 @@ let running: Roundtable | undefined;
  * reverse.
  */
 // pi-lens-ignore: large-class
+/** How long the messages still waiting after the drain are given to be refused, before the teardown. */
+const REFUSE_WAITING_MS = 15_000;
+
+/** `work`, or a rejection once `ms` pass; the timer never keeps the process alive. */
+async function withinMs<T>(ms: number, work: Promise<T> | T): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const late = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error(`not done in ${ms} ms`)), ms);
+		timer.unref?.();
+	});
+	try {
+		return await Promise.race([work, late]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 export class Roundtable {
 	readonly #options: RoundtableOptions;
 	readonly #plugins: readonly RoundtablePlugin[];
@@ -306,9 +323,19 @@ export class Roundtable {
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
 		// A message still waiting behind a turn never starts: its channel is told while the services run.
-		const told = await attempt(() => this.#link.router?.refuseWaiting());
+		let refused = 0;
+		const told = await attempt(async () => {
+			refused = await withinMs(
+				REFUSE_WAITING_MS,
+				this.#link.router?.refuseWaiting() ?? 0,
+			);
+		});
 		if (!told.ok)
-			logger.error({ err: told.error }, "waiting messages not refused");
+			logger.error(
+				{ err: told.error },
+				"not every waiting message was refused; the rest are not answered",
+			);
+		else if (refused > 0) logger.info({ refused }, "waiting messages refused");
 		// A turn that started during the abort grace, a report's, is stopped too, so the teardown does not wait for it.
 		if (left.length > 0) stopQueuedTurns();
 		if (left.length > 0) {

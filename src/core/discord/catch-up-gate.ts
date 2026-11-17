@@ -145,22 +145,24 @@ export function journalGate({
 	// Off the channel's chain: a process that begins to stop leaves what it recorded, and this one then takes it.
 	const retry = (message: InboundMessage, botId: string) => {
 		if (!redeliver || retryMs <= 0) return;
-		const timer = setTimeout(() => {
+		const timer = setTimeout(async () => {
 			if (draining()) return;
-			journal
-				.claim(entry(message, botId))
-				.then(async (first) => {
-					if (!first) return;
-					await wait?.(channelOf(message));
-					// Late, and after newer messages of its channel.
-					redeliver({ ...message, caughtUp: true });
-				})
-				.catch((error: unknown) =>
-					logger.warn(
-						{ messageId: message.messageId, err: error },
-						"could not claim a message again",
-					),
+			let first = false;
+			try {
+				first = await journal.claim(entry(message, botId));
+				if (!first) return;
+				await wait?.(channelOf(message));
+				// Late, and after newer messages of its channel.
+				redeliver({ ...message, caughtUp: true });
+			} catch (error) {
+				logger.warn(
+					{ messageId: message.messageId, err: error },
+					"could not claim or deliver a message again",
 				);
+				// Taken but not delivered: left, a later process answers it.
+				if (first)
+					await journal.leave(entry(message, botId)).catch(() => undefined);
+			}
 		}, retryMs);
 		timer.unref?.();
 	};

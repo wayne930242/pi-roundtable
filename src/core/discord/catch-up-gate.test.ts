@@ -235,3 +235,20 @@ test("a draining process leaves alone a message another process already took in,
 	expect(left.has("m2")).toBe(true);
 	expect(told.posted).toEqual([["notice-1", "later"]]);
 });
+
+test("a message the retry took but could not deliver is left again for a later process", async () => {
+	const { journal, rows, left } = memoryJournal();
+	rows.add("m1");
+	const gate = journalGate({
+		journal,
+		logger: silentLogger(),
+		retryMs: 5,
+		redeliver: () => {
+			throw new Error("routing gone");
+		},
+	});
+	expect(await gate(message("m1"), "9")).toBe(false);
+	left.add("m1");
+	await Bun.sleep(20);
+	expect(left.has("m1")).toBe(true);
+});
