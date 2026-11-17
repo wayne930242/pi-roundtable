@@ -83,8 +83,10 @@ export class ChannelQueue {
 		record?.begin();
 		const admitted = this.#admitted();
 		const start = () => {
-			if (this.#closed && !(admitted && !this.#sealed))
+			if (this.#closed && !(admitted && !this.#sealed)) {
+				record?.refusedByHost();
 				return Promise.reject(new HostStoppingError());
+			}
 			return admitted ? this.#finishing.run(1, task) : task();
 		};
 		this.#sizes.set(channel, this.size(channel) + 1);

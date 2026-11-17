@@ -9,9 +9,7 @@ import { HostStoppingError } from "../kernel/errors.ts";
 interface RecordHooks {
 	/** The admission and every turn and queue task under it have ended. */
 	closed(): void;
-	/** A turn or queue task under it starts after it closed. */
-	reopened(): void;
-	/** The stopping host refused a turn under it before it answered. */
+	/** The stopping host refused a turn or queue task under it while it was open. */
 	refused(): void;
 }
 
@@ -20,10 +18,12 @@ interface RecordHooks {
  * it and those steered into it, and which of them it answered. When a turn run under the admission
  * through `settleTurn` ends with `ok`, whose pipeline then posts the answer, every message the
  * record holds by then counts as answered; a stopped or failed turn answers none, and a message
- * steered in later waits for the next `ok`. A turn runs under the admission when it runs anywhere in
- * the admission's work, its `run` and what that starts, awaited or not, such as a queue task for a
- * thread it opens or a timer it sets; a background turn, an agent's message to another agent and a
- * new agent's opening task run outside it. A shutdown that cuts it before an answer leaves the
+ * steered in later waits for the next `ok`. A turn runs under the admission when it runs in the
+ * admission's work while that is open: its `run`, and what that starts, awaited or not, such as a
+ * queue task for a thread it opens, which keeps it open until it ends; a background turn, an
+ * agent's message to another agent and a new agent's opening task run outside it, and once the
+ * admission's work has ended, later work it set up, such as a timer, no longer counts. A shutdown
+ * that cuts it before an answer leaves the
  * messages still unanswered for the next process, drops what its turn handed on for later
  * (`onLeave`), and a turn under it that ends later gives a stopped result instead, so its answer is
  * not posted as well.
@@ -37,6 +37,8 @@ export class TurnRecord {
 	readonly #onLeave: { task: () => Promise<void>; since: number }[] = [];
 	/** The admission while it runs, plus each turn and queue task running under it. */
 	#open = 1;
+	/** Its admission's work has ended: what runs under it later changes nothing but a left one's late answer. */
+	#done = false;
 	readonly #hooks: RecordHooks;
 
 	constructor(message: InboundMessage, hooks: Partial<RecordHooks> = {}) {
@@ -44,7 +46,6 @@ export class TurnRecord {
 		const none = () => undefined;
 		this.#hooks = {
 			closed: hooks.closed ?? none,
-			reopened: hooks.reopened ?? none,
 			refused: hooks.refused ?? none,
 		};
 	}
@@ -66,16 +67,18 @@ export class TurnRecord {
 		this.#answered.delete(message);
 	}
 
-	/** A turn or queue task under it starts. */
+	/** A turn or queue task under it starts; it keeps it open while its admission's work is. */
 	begin(): void {
-		if (this.#open === 0) this.#hooks.reopened();
-		this.#open += 1;
+		if (!this.#done) this.#open += 1;
 	}
 
 	/** The admission, or a turn or queue task under it, ended. */
 	end(): void {
+		if (this.#done) return;
 		this.#open -= 1;
-		if (this.#open === 0) this.#hooks.closed();
+		if (this.#open > 0) return;
+		this.#done = true;
+		this.#hooks.closed();
 	}
 
 	/** Its messages no `ok` turn answered yet. */
@@ -115,21 +118,32 @@ export class TurnRecord {
 		await Promise.allSettled(due.map(({ task }) => task()));
 	}
 
-	/** The stopping host refused a turn under it before it ran. */
+	/** The stopping host refused a turn or queue task under it before it ran. */
 	refusedByHost(): void {
-		this.#hooks.refused();
+		if (!this.#done) this.#hooks.refused();
 	}
 
-	/** What a turn that ended under it gives its pipeline; an answer once its messages were left is stopped. */
+	/** Whether `onLeave` asked at `since` would run by now: its messages were left and no `ok` came since. */
+	droppedSince(since: number): boolean {
+		return this.#left && since === this.#answers;
+	}
+
+	/**
+	 * What a turn that ended under it gives its pipeline: an answer once its messages were left is
+	 * stopped, and so is the runtime's refusal of a turn asked for once the host stops, so its person
+	 * is told only that their message is answered after the restart, not to try again.
+	 */
 	settle<R>(result: R): R | StoppedResult {
 		if (!isTurnResult(result)) return result;
 		if (this.#left) return stoppedByHost();
 		if (result.ok) {
+			if (this.#done) return result;
 			this.#answers += 1;
 			for (const message of this.#messages) this.#answered.add(message);
-		} else if (!result.stopped && result.error.message === STOPPING)
-			// The runtime refuses a turn asked for once the host stops with this failure.
+		} else if (!result.stopped && result.error.message === STOPPING) {
 			this.refusedByHost();
+			return stoppedByHost();
+		}
 		return result;
 	}
 }
@@ -188,14 +202,16 @@ export class RunningTurns {
 		const { channel } = message;
 		const record: TurnRecord = new TurnRecord(message, {
 			closed: () => this.#live.delete(record),
-			reopened: () => this.#live.add(record),
 			refused: () => this.#cut.push(record),
 		});
 		this.#live.add(record);
 		this.#running.set(channel, record);
-		// An admission that throws HostStoppingError is refused by the router itself, as a waiting one is.
 		try {
 			await underRecord(record, task);
+		} catch (error) {
+			// A turn it asked for was refused as the host stops: left with the cut, once its grace is over.
+			if (!(error instanceof HostStoppingError)) throw error;
+			record.refusedByHost();
 		} finally {
 			if (this.#running.get(channel) === record) this.#running.delete(channel);
 			record.end();

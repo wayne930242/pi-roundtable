@@ -331,7 +331,10 @@ export class Roundtable {
 		const told = await attempt(() =>
 			withinMs(
 				drain?.refuseWaitingMs ?? REFUSE_WAITING_MS,
-				router?.leaveCut(tally).then(() => router.refuseWaiting(tally)),
+				router?.leaveCut(tally).then(async ({ dropping }) => {
+					await router.refuseWaiting(tally);
+					await dropping;
+				}),
 			),
 		);
 		tally.stopped = true;

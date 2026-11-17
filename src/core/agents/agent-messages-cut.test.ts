@@ -147,4 +147,39 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 		await record.leave();
 		expect(await fx.store.outbox.pending()).toEqual([]);
 	});
+	test("each send counts the answers its record had then: only one sent after the last answer is dropped when a later message is left", async () => {
+		const record = await underPerson(async (record) => {
+			fx.queue.close();
+			fx.team.message(coordinator(), "doctor", "first");
+			// Another turn of the admission answered; a message steered in after it waits.
+			record.settle({ ok: true, text: "answered" });
+			record.add({ ...person, messageId: "m2" });
+			fx.team.message(coordinator(), "infra", "second");
+			fx.runtime.stopNext = true;
+		});
+		await keptCount(2);
+		await record.leave();
+		expect(await fx.store.outbox.pending()).toEqual([
+			expect.objectContaining({ target: "doctor", text: "first" }),
+		]);
+	});
+
+	test("an answer kept after the message was left stays when its send came before an answer of the record", async () => {
+		await underPerson(
+			async (record) => {
+				fx.team.message(coordinator(), "infra", "check the disk");
+				record.settle({ ok: true, text: "answered" });
+				record.add({ ...person, messageId: "m2" });
+				await record.leave();
+			},
+			(request) => {
+				// The follow-up to the coordinator is refused: the host stops while infra works.
+				if (request.agent?.name === "infra") fx.queue.close();
+			},
+		);
+		await keptCount(1);
+		expect((await fx.store.outbox.pending())[0]).toMatchObject({
+			kind: "reply",
+		});
+	});
 });

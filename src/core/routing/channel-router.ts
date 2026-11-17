@@ -190,10 +190,7 @@ export class ChannelRouter implements ConversationPort {
 		return run;
 	}
 
-	/**
-	 * Drops a message the host no longer starts a turn for because it is shutting down, and tells
-	 * its channel as `tellStopping` does.
-	 */
+	/** Drops a message the host no longer starts a turn for as it stops, and tells its channel (`tellStopping`). */
 	async #refuse(message: InboundMessage, admission: Admission): Promise<void> {
 		const { logger, surfaces } = this.#options;
 		const { channel } = message;
@@ -280,10 +277,11 @@ export class ChannelRouter implements ConversationPort {
 	}
 
 	/**
-	 * Leaves each person's message of every turn cut at the drain limit that did not answer, through
-	 * its surface as a refused one is, counting in `tally`; call it once the abort grace is over.
+	 * Leaves each person's message of every turn cut at the drain limit, or refused as the host
+	 * stopped, that did not answer, through its surface as a refused one is, counting in `tally`;
+	 * call it once the abort grace is over. `dropping` ends once what the turns handed on is dropped.
 	 */
-	async leaveCut(tally: RefuseTally): Promise<void> {
+	async leaveCut(tally: RefuseTally): Promise<{ dropping: Promise<unknown> }> {
 		const { logger, surfaces } = this.#options;
 		const dropping: Promise<void>[] = [];
 		for (const record of this.#turns.takeCut()) {
@@ -305,7 +303,7 @@ export class ChannelRouter implements ConversationPort {
 				tally.refused += 1;
 			}
 		}
-		await Promise.all(dropping);
+		return { dropping: Promise.all(dropping) };
 	}
 
 	/** Refuses each message still waiting behind a turn after the drain, counting in `tally`. */

@@ -94,9 +94,10 @@ export class AgentMessages {
 		// The person's message the chain started from: the exchange runs outside its record, so the
 		// target's answer is not taken for the sender's, and what any hop of the chain keeps for the
 		// next start is taken out again once a shutdown leaves that message, which is then asked again.
+		// Each send under the record counts its answers then; a later hop takes the chain's.
 		const record = currentRecord();
 		chain.origin ??= record && { record, since: record.answers };
-		const { origin } = chain;
+		const origin = record ? { record, since: record.answers } : chain.origin;
 		void underRecord(undefined, () =>
 			queue.run(targetChannel, async () =>
 				this.#exchange(
@@ -267,7 +268,7 @@ export class AgentMessages {
 	#keep(origin: Chain["origin"], entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
 		const about = { kind: entry.kind, from: entry.sender, to: entry.target };
-		if (origin?.record.left) {
+		if (origin?.record.droppedSince(origin.since)) {
 			logger.info(
 				about,
 				"agent message dropped: its person's message is asked again after the restart",

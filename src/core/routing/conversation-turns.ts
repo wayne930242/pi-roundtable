@@ -23,6 +23,7 @@ import type { EventSink } from "../plugin-api/plugin.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
 import { withReplyFiles } from "../shared/reply-files.ts";
 import { endOf, settleTurn } from "./settle-turn.ts";
+import { currentRecord } from "./turn-records.ts";
 
 /** One turn of a conversation, as a claim asks for it. */
 export interface ConversationTurnInput {
@@ -174,7 +175,11 @@ export function conversationTurns(
 			const { channel, kind, speaker } = input;
 			options.linked();
 			// Refused before anything is shown or recorded, like a turn the host cannot run.
-			if (options.stopping?.()) throw new HostStoppingError();
+			if (options.stopping?.()) {
+				// The message whose admission asked for it is left with the cut turns.
+				currentRecord()?.refusedByHost();
+				throw new HostStoppingError();
+			}
 			// A host without a runtime is a setup mistake, so it is refused before anything is shown.
 			const runtime = options.runtime();
 			// A conversation that cannot be recorded runs no turn: who it belongs to would be lost.

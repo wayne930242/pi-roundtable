@@ -13,6 +13,7 @@ import { ChannelRouter } from "./channel-router.ts";
 import type { RefuseTally } from "./queued-messages.ts";
 import { settleTurn } from "./settle-turn.ts";
 import { systemTurn } from "./system-turns.ts";
+import { currentRecord } from "./turn-records.ts";
 
 const IDENTITY = mapIdentity({ owners: ["riley"] });
 
@@ -333,47 +334,118 @@ function plainRouter(
 	return { routing, left };
 }
 
-test("a turn queued from the admission keeps the message's record open until it starts, so a cut between the two still leaves it", async () => {
+/** A router whose admission queues its turn on `discord:9` behind a busy task there, without waiting. */
+function queuedBehind() {
 	const queue = new ChannelQueue();
-	const gate = Promise.withResolvers<void>();
+	const ahead = Promise.withResolvers<void>();
 	const turn = Promise.withResolvers<TurnResult>();
-	let admitted = false;
+	const busy = queue.run("discord:9", () => ahead.promise);
+	let started = false;
 	const { routing, left } = plainRouter(queue, async () => {
-		void queue.run("discord:9", async () => {
-			await gate.promise;
-			await settleTurn(() => turn.promise, "turn");
-		});
-		admitted = true;
+		void queue
+			.run("discord:9", async () => {
+				started = true;
+				await settleTurn(() => turn.promise, "turn");
+			})
+			.catch(() => undefined);
 	});
-	const done = routing.handle(message("a"));
-	await until(() => admitted);
-	await done;
-	// The admission has returned and its queued turn has not started.
-	routing.cutRunning();
-	await routing.leaveCut(tally());
-	expect(left).toEqual(["a"]);
-	gate.resolve();
-	turn.resolve(answered("late"));
+	return { queue, ahead, turn, busy, routing, left, started: () => started };
+}
+
+test("a turn the admission queued and that has not started keeps the message's record open, so a cut leaves it", async () => {
+	const w = queuedBehind();
+	await w.routing.handle(message("a"));
+	expect(w.started()).toBe(false);
+	w.routing.cutRunning();
+	await w.routing.leaveCut(tally());
+	expect(w.left).toEqual(["a"]);
+	w.ahead.resolve();
+	await w.busy;
+	w.turn.resolve(answered("late"));
 });
 
-test("a turn the stopping host refuses before it ran leaves its message once, whenever that was", async () => {
-	for (const refuse of ["result", "throw"] as const) {
+test("a turn the admission queued that the closed queue refuses leaves the message, cut or not", async () => {
+	const w = queuedBehind();
+	await w.routing.handle(message("a"));
+	w.queue.close();
+	w.ahead.resolve();
+	await w.busy;
+	await Bun.sleep(0);
+	expect(w.started()).toBe(false);
+	await w.routing.leaveCut(tally());
+	expect(w.left).toEqual(["a"]);
+});
+
+test("a turn the stopping host refuses before it ran leaves its message once, whenever that was, and posts no failure", async () => {
+	for (const refuse of ["result", "throw", "thrown in a turn"] as const) {
 		const queue = new ChannelQueue();
+		const results: unknown[] = [];
 		const { routing, left } = plainRouter(queue, async () => {
 			if (refuse === "throw") throw new HostStoppingError();
-			// As the runtime answers a turn asked for once the host stops.
-			await settleTurn(
-				async () => ({
-					ok: false,
-					error: new AgentRunError(new HostStoppingError().message),
-				}),
-				"turn",
+			results.push(
+				await settleTurn(async () => {
+					// As `context.turns` refuses a turn asked for once the host stops.
+					if (refuse === "thrown in a turn") throw new HostStoppingError();
+					// As the runtime answers one.
+					return {
+						ok: false,
+						error: new AgentRunError(new HostStoppingError().message),
+					};
+				}, "turn"),
 			);
 		});
 		await routing.handle(message("a"));
-		// Not running at the drain limit: no cut is needed. A thrown refusal the router refuses itself.
+		// Not running at the drain limit: no cut is needed.
 		await routing.leaveCut(tally());
 		expect(left).toEqual(["a"]);
+		if (refuse === "result")
+			expect(results).toEqual([expect.objectContaining({ stopped: true })]);
+	}
+});
+
+test("work an admission set up that runs after its work ended changes nothing, such as a timer's turn", async () => {
+	const queue = new ChannelQueue();
+	const timer = Promise.withResolvers<void>();
+	const fired = Promise.withResolvers<void>();
+	const { routing, left } = plainRouter(queue, async () => {
+		void timer.promise.then(async () => {
+			await settleTurn(async () => {
+				throw new HostStoppingError();
+			}, "turn");
+			fired.resolve();
+		});
+	});
+	await routing.handle(message("a"));
+	timer.resolve();
+	await fired.promise;
+	routing.cutRunning();
+	await routing.leaveCut(tally());
+	expect(left).toEqual([]);
+});
+
+test("what a cut turn handed on is dropped only when its message is left", async () => {
+	for (const [author, stopped, expected] of [
+		[{}, false, ["dropped"]],
+		[{ authorIsBot: true }, false, []],
+		[{}, true, []],
+	] as const) {
+		const queue = new ChannelQueue();
+		const turn = Promise.withResolvers<TurnResult>();
+		const dropped: string[] = [];
+		const { routing } = plainRouter(queue, async () => {
+			currentRecord()?.onLeave(async () => void dropped.push("dropped"));
+			await settleTurn(() => turn.promise, "turn");
+		});
+		const done = routing.handle(message("a", "discord:1", author));
+		await Bun.sleep(0);
+		routing.cutRunning();
+		const counted = tally();
+		counted.stopped = stopped;
+		const { dropping } = await routing.leaveCut(counted);
+		await dropping;
+		expect(dropped).toEqual([...expected]);
+		turn.resolve(answered("late"));
+		await done;
 	}
 });
 
@@ -392,4 +464,29 @@ test("a message steered into a turn routing did not start is logged as one a shu
 	);
 	hold.resolve();
 	await plugin;
+});
+
+test("telling a cut turn's channel does not wait for what it handed on to be dropped", async () => {
+	const queue = new ChannelQueue();
+	const turn = Promise.withResolvers<TurnResult>();
+	const slow = Promise.withResolvers<void>();
+	const { routing, left } = plainRouter(queue, async () => {
+		currentRecord()?.onLeave(() => slow.promise);
+		await settleTurn(() => turn.promise, "turn");
+	});
+	const done = routing.handle(message("a"));
+	await Bun.sleep(0);
+	routing.cutRunning();
+	const { dropping } = await routing.leaveCut(tally());
+	expect(left).toEqual(["a"]);
+	let dropped = false;
+	void dropping.then(() => {
+		dropped = true;
+	});
+	await Bun.sleep(1);
+	expect(dropped).toBe(false);
+	slow.resolve();
+	await dropping;
+	turn.resolve(answered("late"));
+	await done;
 });
