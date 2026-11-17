@@ -20,6 +20,14 @@ export interface InboundJournal {
 	claim(entry: JournalEntry): Promise<boolean>;
 	/** The bot's direct-message channels with a message recorded since `since`, the most recent first. */
 	directChannels(botId: string, since: Date, limit: number): Promise<string[]>;
+	/** Forgets the message, so catch-up after a restart may take it in again. */
+	release(botId: string, messageId: string): Promise<void>;
+	/**
+	 * Which of the bot's own messages `ids` are recorded: the notices it posted while it shut down,
+	 * which say a message will be answered after the restart rather than answer it. No other message
+	 * of the bot's is recorded, since only a person's is ever taken in.
+	 */
+	recordedAmong(botId: string, ids: string[]): Promise<Set<string>>;
 	/** Forgets what was recorded before `before`. */
 	prune(before: Date): Promise<void>;
 }
@@ -66,6 +74,18 @@ export const PgInboundJournal = {
 					ORDER BY max(recorded_at) DESC
 					LIMIT ${limit}`;
 				return rows.map((row) => row.channel_id);
+			},
+			async release(botId, messageId) {
+				await sql`
+					DELETE FROM discord_inbound_journal
+					WHERE bot_id = ${botId} AND message_id = ${messageId}`;
+			},
+			async recordedAmong(botId, ids) {
+				if (ids.length === 0) return new Set();
+				const rows: { message_id: string }[] = await sql`
+					SELECT message_id FROM discord_inbound_journal
+					WHERE bot_id = ${botId} AND message_id IN ${sql(ids)}`;
+				return new Set(rows.map((row) => row.message_id));
 			},
 			async prune(before) {
 				await sql`DELETE FROM discord_inbound_journal WHERE recorded_at < ${before}`;

@@ -18,6 +18,9 @@ const READ = [
 	PermissionFlagsBits.ReadMessageHistory,
 ];
 
+/** Discord's error code for a member who is not in the server. */
+const UNKNOWN_MEMBER = 10007;
+
 function channelView(
 	channel: TextBasedChannel,
 ): CatchUpChannel<Message & ScannedMessage> {
@@ -37,7 +40,8 @@ function channelView(
  * Catch-up's view of a ready client. The server channels, threads and forum posts come from the
  * client's cache, which Discord fills as the connection becomes ready, with each channel's last
  * message: choosing what to read costs no request. A message's author is fetched as a member
- * before it is read in full, so its roles are those a live message carries.
+ * before it is read in full, so its roles are those a live message carries; when that fails for
+ * any reason but the author having left, the message is not read, so a later restart may retry it.
  */
 export function clientCatchUpReader(
 	client: Client,
@@ -72,8 +76,28 @@ export function clientCatchUpReader(
 			if (message.inGuild() && !message.member)
 				await message.guild.members
 					.fetch(message.author.id)
-					.catch(() => undefined);
+					.catch((error: unknown) => {
+						// An author who left has no roles; any other failure leaves the message for a later restart.
+						if ((error as { code?: unknown }).code !== UNKNOWN_MEMBER)
+							throw error;
+					});
 			return toInbound(message, identity);
 		},
 	};
+}
+
+/** Posts `text` in a channel with no mention, as a notice; the posted message's id. */
+export async function postNotice(
+	client: Client,
+	channelId: string,
+	text: string,
+): Promise<string> {
+	const channel = await client.channels.fetch(channelId);
+	if (!channel?.isSendable())
+		throw new Error(`channel ${channelId} takes no message`);
+	const posted = await channel.send({
+		content: text,
+		allowedMentions: { parse: [] },
+	});
+	return posted.id;
 }

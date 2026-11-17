@@ -179,7 +179,8 @@ describeDb("catch-up over the journal", () => {
 		const reader = readerOf(bot, [channel]);
 		const inbound = await reader.inbound(live);
 		expect(
-			inbound && (await journalGate(journal, silentLogger())(inbound, bot)),
+			inbound &&
+				(await journalGate({ journal, logger: silentLogger() })(inbound, bot)),
 		).toBe(true);
 		const { delivered, report } = await run(reader);
 		expect(delivered).toEqual([]);
@@ -193,7 +194,8 @@ describeDb("catch-up over the journal", () => {
 		expect((await run(reader)).delivered).toHaveLength(1);
 		const inbound = await reader.inbound(missed);
 		expect(
-			inbound && (await journalGate(journal, silentLogger())(inbound, bot)),
+			inbound &&
+				(await journalGate({ journal, logger: silentLogger() })(inbound, bot)),
 		).toBe(false);
 	});
 
@@ -249,6 +251,8 @@ describeDb("catch-up over the journal", () => {
 			},
 			directChannels: async () => [],
 			prune: async () => undefined,
+			release: async () => undefined,
+			recordedAmong: async () => new Set(),
 		};
 		const delivered: InboundMessage[] = [];
 		const report = await catchUp({
@@ -265,12 +269,164 @@ describeDb("catch-up over the journal", () => {
 		// The live gateway still delivers what it cannot record.
 		const inbound = await readerOf(bot, []).inbound(posted(0, mention(bot)));
 		expect(
-			inbound && (await journalGate(broken, silentLogger())(inbound, bot)),
+			inbound &&
+				(await journalGate({ journal: broken, logger: silentLogger() })(
+					inbound,
+					bot,
+				)),
 		).toBe(true);
+	});
+
+	test("a restart notice the bot recorded as it shut down is no answer: the mention before it is answered", async () => {
+		const bot = botOf();
+		const missed = posted(4, mention(bot));
+		const notice = posted(3, { author: { id: bot, bot: true } });
+		const later = posted(2, mention(bot));
+		await journal.claim({
+			botId: bot,
+			messageId: notice.id,
+			channelId: "700000000000000013",
+			direct: false,
+		});
+		const { delivered, report } = await run(
+			readerOf(bot, [channelOf("700000000000000013", [missed, notice, later])]),
+		);
+		expect(delivered.map((m) => m.messageId)).toEqual([missed.id, later.id]);
+		expect(report.replied).toBe(0);
+	});
+
+	test("a message recorded as the host begins to stop is released, not delivered, so the next process answers it", async () => {
+		const bot = botOf();
+		const missed = posted(1, mention(bot));
+		const reader = readerOf(bot, [channelOf("700000000000000014", [missed])]);
+		let stopping = false;
+		const delivered: InboundMessage[] = [];
+		const claiming = journal.claim.bind(journal);
+		const report = await catchUp({
+			reader,
+			journal: {
+				...journal,
+				claim: async (entry) => {
+					const first = await claiming(entry);
+					stopping = true;
+					return first;
+				},
+			},
+			deliver: (message) => delivered.push(message),
+			settings,
+			logger: silentLogger(),
+			stopping: () => stopping,
+		});
+		expect(delivered).toEqual([]);
+		expect(report.delivered).toBe(0);
+		expect((await run(reader)).delivered.map((m) => m.messageId)).toEqual([
+			missed.id,
+		]);
+	});
+
+	test("the gate releases a message recorded as the drain began, and tells its channel once, recording the notice", async () => {
+		const bot = botOf();
+		const missed = posted(1, mention(bot));
+		const reader = readerOf(bot, [channelOf("700000000000000015", [missed])]);
+		const inbound = await reader.inbound(missed);
+		let draining = false;
+		const claiming = journal.claim.bind(journal);
+		const notices: string[] = [];
+		const notice = posted(0.5, { author: { id: bot, bot: true } });
+		const gate = journalGate({
+			journal: {
+				...journal,
+				claim: async (entry) => {
+					const first = await claiming(entry);
+					draining = true;
+					return first;
+				},
+			},
+			logger: silentLogger(),
+			draining: () => draining,
+			notify: async (channelId) => {
+				notices.push(channelId);
+				return notice.id;
+			},
+		});
+		expect(inbound && (await gate(inbound, bot))).toBe(false);
+		expect(inbound && (await gate({ ...inbound, messageId: "5" }, bot))).toBe(
+			false,
+		);
+		expect(notices).toEqual(["700000000000000000"]);
+		expect(await journal.recordedAmong(bot, [notice.id, missed.id])).toEqual(
+			new Set([notice.id]),
+		);
+		expect((await run(reader)).delivered.map((m) => m.messageId)).toEqual([
+			missed.id,
+		]);
+	});
+
+	test("a message the live gateway delivered without a record in this process is not caught up again", async () => {
+		const bot = botOf();
+		const missed = posted(1, mention(bot));
+		const reader = readerOf(bot, [channelOf("700000000000000016", [missed])]);
+		const unrecorded = new Set<string>();
+		const inbound = await reader.inbound(missed);
+		const gate = journalGate({
+			journal: {
+				...journal,
+				claim: async () => {
+					throw new Error("database down");
+				},
+			},
+			logger: silentLogger(),
+			unrecorded,
+		});
+		expect(inbound && (await gate(inbound, bot))).toBe(true);
+		expect([...unrecorded]).toEqual([missed.id]);
+		const delivered: InboundMessage[] = [];
+		const report = await catchUp({
+			reader,
+			journal,
+			deliver: (message) => delivered.push(message),
+			settings,
+			logger: silentLogger(),
+			passedLive: (id) => unrecorded.has(id),
+		});
+		expect(delivered).toEqual([]);
+		expect(report.handled).toBe(1);
+	});
+
+	test("the journal forgets what is older than it keeps", async () => {
+		const bot = botOf();
+		await journal.claim({
+			botId: bot,
+			messageId: "11",
+			channelId: "1",
+			direct: false,
+		});
+		await journal.prune(new Date(Date.now() + 60_000));
+		expect(await journal.recordedAmong(bot, ["11"])).toEqual(new Set());
+	});
+
+	test("a mention with a thread started from it, or a reaction of the bot's, was answered before the restart", async () => {
+		const bot = botOf();
+		const threaded = posted(4, { ...mention(bot), hasThread: true });
+		const reacted = posted(3, {
+			...mention(bot),
+			reactions: { cache: [{ me: false }, { me: true }] },
+		});
+		const othersReaction = posted(2, {
+			...mention(bot),
+			reactions: { cache: [{ me: false }] },
+		});
+		const { delivered, report } = await run(
+			readerOf(bot, [
+				channelOf("700000000000000017", [threaded, reacted, othersReaction]),
+			]),
+		);
+		expect(delivered.map((m) => m.messageId)).toEqual([othersReaction.id]);
+		expect(report.replied).toBe(2);
 	});
 });
 
-test("a message not addressed to the bot passes the gate unrecorded, and so does any while the host drains", async () => {
+test("a message not addressed to the bot passes the gate unrecorded; while the host drains, an addressed one is held back unrecorded", async () => {
 	const claimed: string[] = [];
 	const journal: InboundJournal = {
 		claim: async ({ messageId }) => {
@@ -279,6 +435,8 @@ test("a message not addressed to the bot passes the gate unrecorded, and so does
 		},
 		directChannels: async () => [],
 		prune: async () => undefined,
+		release: async () => undefined,
+		recordedAmong: async () => new Set(),
 	};
 	const message = {
 		channel: "discord:1",
@@ -292,19 +450,24 @@ test("a message not addressed to the bot passes the gate unrecorded, and so does
 		text: "hi",
 		attachments: [],
 	} satisfies InboundMessage;
-	expect(await journalGate(journal, silentLogger())(message, "9")).toBe(true);
-	// Once the host drains, an addressed message passes unrecorded, so the next process may answer it.
+	expect(
+		await journalGate({ journal, logger: silentLogger() })(message, "9"),
+	).toBe(true);
+	// Once the host drains, an addressed message is not routed nor recorded, so the next process answers it.
 	const addressedMessage = { ...message, mentionsBot: true };
 	expect(
-		await journalGate(
+		await journalGate({
 			journal,
-			silentLogger(),
-			() => true,
-		)(addressedMessage, "9"),
-	).toBe(true);
+			logger: silentLogger(),
+			draining: () => true,
+		})(addressedMessage, "9"),
+	).toBe(false);
 	expect(claimed).toEqual([]);
 	expect(
-		await journalGate(journal, silentLogger())(addressedMessage, "9"),
+		await journalGate({ journal, logger: silentLogger() })(
+			addressedMessage,
+			"9",
+		),
 	).toBe(false);
 	expect(claimed).toEqual(["2"]);
 });

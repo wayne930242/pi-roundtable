@@ -14,6 +14,7 @@ import type { PluginContext } from "../plugin-api/plugin.ts";
 import { THREADS } from "../plugin-api/services.ts";
 import { snowflakeAt } from "./catch-up.ts";
 import { clientCatchUpReader } from "./catch-up-reader.ts";
+import { catchUpWiring } from "./catch-up-service.ts";
 import { listenForMessages } from "./message-changes.ts";
 
 const BOT = "900000000000000009";
@@ -295,4 +296,136 @@ test("the reader fetches the author of a server message as a member first, so it
 	const inbound = await reader.inbound(message as never);
 	expect(inbound?.authorRoleIds).toEqual(["r1"]);
 	expect(inbound?.mentionsBot).toBe(true);
+});
+
+test("a member fetch that fails for any reason but the author having left leaves the message unread", async () => {
+	const failing = (code: number) => ({
+		...liveMessage("m2"),
+		inGuild: () => true,
+		member: null,
+		guild: {
+			members: {
+				fetch: async () => {
+					throw Object.assign(new Error("fetch failed"), { code });
+				},
+			},
+		},
+	});
+	const client = {
+		user: { id: BOT },
+		application: { id: BOT },
+		readyTimestamp: READY,
+		channels: { cache: new Map() },
+	};
+	const reader = clientCatchUpReader(client as unknown as Client);
+	await expect(reader.inbound(failing(500) as never)).rejects.toThrow(
+		"fetch failed",
+	);
+	const left = await reader.inbound(failing(10007) as never);
+	expect(left?.authorRoleIds).toBeUndefined();
+	expect(left?.mentionsBot).toBe(true);
+});
+
+test("the catch-up service prunes the journal while it runs, and stops pruning when it stops", async () => {
+	const pruned: Date[] = [];
+	let tick: (() => void) | undefined;
+	let stopped = false;
+	const { service } = catchUpWiring({
+		journal: {
+			claim: async () => true,
+			directChannels: async () => [],
+			prune: async (before) => void pruned.push(before),
+			release: async () => undefined,
+			recordedAmong: async () => new Set(),
+		},
+		settings: { windowMinutes: 10, maxMessages: 20 },
+		logger: silentLogger(),
+		client: () => {
+			throw new Error("not connected");
+		},
+		deliver: () => undefined,
+		every: (run, ms) => {
+			expect(ms).toBe(6 * 3_600_000);
+			tick = run;
+			return {
+				stop: () => {
+					stopped = true;
+				},
+			};
+		},
+	});
+	await service.start?.();
+	tick?.();
+	tick?.();
+	expect(pruned).toHaveLength(2);
+	const kept = Date.now() - (pruned[0]?.getTime() ?? 0);
+	expect(Math.round(kept / 86_400_000)).toBe(30);
+	await service.stop?.();
+	expect(stopped).toBe(true);
+});
+
+test("a live message waits for the caught-up messages of its channel; one in a channel catch-up does not read does not", async () => {
+	const missed = {
+		...liveMessage(snowflakeAt(READY - 60_000)),
+		createdTimestamp: READY - 60_000,
+		system: false,
+		inGuild: () => false,
+		mentions: { users: new Map([[BOT, {}]]), repliedUser: null },
+	};
+	const client = {
+		user: { id: BOT },
+		application: { id: BOT },
+		readyTimestamp: READY,
+		channels: {
+			cache: new Map([
+				[
+					"77",
+					cached("77", {
+						messages: { fetch: async () => new Map([[missed.id, missed]]) },
+					}),
+				],
+				["88", cached("88", { lastMessageId: snowflakeAt(READY - 3_600_000) })],
+			]),
+		},
+	};
+	const routed: string[] = [];
+	const { gate, service } = catchUpWiring({
+		journal: {
+			claim: async () => true,
+			directChannels: async () => [],
+			prune: async () => undefined,
+			release: async () => undefined,
+			recordedAmong: async () => new Set(),
+		},
+		settings: { windowMinutes: 10, maxMessages: 20 },
+		logger: silentLogger(),
+		client: () => client as unknown as Client,
+		deliver: (message) => routed.push(message.messageId),
+		every: () => ({ stop: () => undefined }),
+	});
+	const live = (channel: string, id: string) => ({
+		channel: `discord:${channel}` as const,
+		messageId: id,
+		authorId: "1",
+		authorName: "Ada",
+		authorIsBot: false,
+		isDirect: false,
+		mentionsBot: true,
+		repliesToBot: false,
+		text: "hi",
+		attachments: [],
+	});
+	const pass = (channel: string, id: string) =>
+		gate(live(channel, id), BOT).then((through) => {
+			if (through) routed.push(id);
+		});
+	const same = pass("77", "live-77");
+	const other = pass("88", "live-88");
+	await Bun.sleep(5);
+	expect(routed).toEqual([]);
+	await service.startInBackground?.();
+	await Promise.all([same, other]);
+	expect(routed.indexOf(missed.id)).toBeLessThan(routed.indexOf("live-77"));
+	expect(routed.indexOf("live-88")).toBeLessThan(routed.indexOf(missed.id));
+	await service.stop?.();
 });

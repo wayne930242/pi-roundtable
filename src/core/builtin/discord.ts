@@ -19,14 +19,9 @@ import {
 	validReadCap,
 } from "../discord/attachment-read.ts";
 import { CardCopies } from "../discord/card-copies.ts";
-import {
-	type CatchUpOptions,
-	catchUp,
-	catchUpSettings,
-	journalGate,
-} from "../discord/catch-up.ts";
+import { type CatchUpOptions, catchUpSettings } from "../discord/catch-up.ts";
 import { PgInboundJournal } from "../discord/catch-up-journal.ts";
-import { clientCatchUpReader } from "../discord/catch-up-reader.ts";
+import { catchUpWiring } from "../discord/catch-up-service.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
 import type { DiscordConnection } from "../discord/connection.ts";
@@ -246,8 +241,19 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			const journal = catchUpWith
 				? PgInboundJournal.attach(database())
 				: undefined;
-			// Set as the host begins to shut down; from then on routing refuses messages.
-			let draining = false;
+			// The journal's gate and the catch-up service, over the surface's client once it connects.
+			const caughtUp =
+				journal && catchUpWith
+					? catchUpWiring({
+							journal,
+							settings: catchUpWith,
+							logger,
+							client: () => connected.client(),
+							deliver: (message) => {
+								void conversations.handle(message);
+							},
+						})
+					: undefined;
 			// A host that keeps no copy texts on disk drops what an earlier run left.
 			if (options.cardCopies === false)
 				for (const name of ["card-copies.json", "intercom-texts.json"]) {
@@ -302,11 +308,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					: { formatting: options.formatting }),
 				...(options.memberEvents ? { memberEvents: true } : {}),
 				...(options.voice ? { voice: true } : {}),
-				...(journal
-					? {
-							inboundGate: journalGate(journal, logger, () => draining),
-						}
-					: {}),
+				...(caughtUp ? { inboundGate: caughtUp.gate } : {}),
 			});
 			surface = connected;
 			// Voice sessions over the same client; nothing of the voice packages is loaded before its service starts.
@@ -427,29 +429,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 							await intercomTexts.stop();
 						},
 					},
-					// After every service is up, so the missed messages reach claims that are ready.
-					...(journal && catchUpWith
-						? [
-								{
-									name: "discord-catch-up",
-									startInBackground: async () => {
-										await catchUp({
-											reader: clientCatchUpReader(connected.client()),
-											journal,
-											deliver: (message) => {
-												void conversations.handle(message);
-											},
-											settings: catchUpWith,
-											logger,
-											stopping: () => draining,
-										});
-									},
-									beginDrain: () => {
-										draining = true;
-									},
-								},
-							]
-						: []),
+					...(caughtUp ? [caughtUp.service] : []),
 					// Fails the start when the voice packages cannot be loaded; ends every session as the host stops.
 					...(voice
 						? [

@@ -14,6 +14,7 @@ export function conversationEn(ctx: CatalogContext) {
 			"Sorry, this reply did not go through. Please try again later.",
 		stoppedNotice: "-# Stopped.",
 		restartingNotice: `-# ${ctx.assistant} is restarting and takes no new messages right now; please send this again in a few minutes.`,
+		restartingAnswerLater: `-# ${ctx.assistant} is restarting; it will answer this once it is back, so there is no need to send it again.`,
 		roundLimitNotice:
 			"-# This round already has 8 replies, so it stops here; call us again if you need more.",
 		roundStoppedNotice:
@@ -55,6 +56,7 @@ export function conversationZhTW(
 		failureNotice: "抱歉，這次沒能完成回覆，請稍後再試一次。",
 		stoppedNotice: "-# 已停止。",
 		restartingNotice: `-# ${ctx.assistant} 正在重新啟動，暫時不接新訊息；請過幾分鐘再傳一次。`,
+		restartingAnswerLater: `-# ${ctx.assistant} 正在重新啟動，回來後會回覆這則訊息，不用再傳一次。`,
 		roundLimitNotice:
 			"-# 這一輪已經有 8 則回覆，先停在這裡；需要的話請再叫我們。",
 		roundStoppedNotice: "-# 本輪已停止，還沒輪到的成員不再發言。",
