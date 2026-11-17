@@ -1,58 +1,15 @@
 import { join } from "node:path";
-import { extractText, getDocumentProxy } from "unpdf";
 import { wasExpired } from "../attachments/attachment-expiry.ts";
 import { MAX_ATTACHMENT_BYTES } from "../attachments/attachment-fetcher.ts";
 import { isAttachmentName, plainText } from "../attachments/attachment-name.ts";
 import { AttachmentExpiredError } from "../attachments/tool-attachment.ts";
+import {
+	ATTACHMENT_TEXT_LIMIT,
+	readAttachmentText,
+} from "./attachment-text.ts";
 
 /** Characters returned per read; the model can ask for a later offset. */
-export const READ_LIMIT = 60_000;
-
-const TEXT_EXTENSIONS = new Set([
-	".txt",
-	".md",
-	".markdown",
-	".csv",
-	".tsv",
-	".json",
-	".yaml",
-	".yml",
-	".xml",
-	".html",
-	".htm",
-	".log",
-	".ts",
-	".js",
-	".py",
-	".sh",
-	".toml",
-	".ini",
-	".srt",
-	".vtt",
-]);
-
-function extension(name: string): string {
-	const dot = name.lastIndexOf(".");
-	return dot < 0 ? "" : name.slice(dot).toLowerCase();
-}
-
-function isPdf(name: string, head: Uint8Array): boolean {
-	return (
-		extension(name) === ".pdf" ||
-		new TextDecoder().decode(head.subarray(0, 5)) === "%PDF-"
-	);
-}
-
-function looksLikeText(bytes: Uint8Array): boolean {
-	const sample = bytes.subarray(0, 4096);
-	if (sample.includes(0)) return false;
-	try {
-		new TextDecoder("utf-8", { fatal: true }).decode(sample);
-		return true;
-	} catch {
-		return false;
-	}
-}
+export const READ_LIMIT = ATTACHMENT_TEXT_LIMIT;
 
 export interface ReadResult {
 	text: string;
@@ -91,18 +48,11 @@ export async function readAttachment(
 		// A file system error names the path on the host; the model sees only the attachment's name.
 		throw new Error(`"${plainText(file)}" could not be read`);
 	}
-	let text: string;
-	if (isPdf(file, bytes)) {
-		const pdf = await getDocumentProxy(bytes);
-		const result = await extractText(pdf, { mergePages: true });
-		text = `[PDF, ${result.totalPages} pages]\n${result.text}`;
-	} else if (TEXT_EXTENSIONS.has(extension(file)) || looksLikeText(bytes)) {
-		text = new TextDecoder().decode(bytes);
-	} else {
-		throw new Error(
-			`"${file}" is not a text or PDF file (${bytes.byteLength} bytes). Images are shown to you directly; audio or video can go to a tool that takes files.`,
-		);
-	}
-	const start = Math.max(0, Math.floor(offset));
-	return { text: text.slice(start, start + READ_LIMIT), total: text.length };
+	const { text, total } = await readAttachmentText({
+		name: file,
+		bytes,
+		offset: Math.max(0, Math.floor(offset)),
+		limit: READ_LIMIT,
+	});
+	return { text, total };
 }

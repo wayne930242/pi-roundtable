@@ -640,7 +640,9 @@
 	"discord": {
 		"values": [
 			"ATTACHMENT_READ_MAX_BYTES",
+			"ATTACHMENT_TEXT_LIMIT",
 			"AttachmentReadError",
+			"AttachmentTextError",
 			"CHANNEL_CONTEXT_DEFAULTS",
 			"CHANNEL_OPERATIONS",
 			"CHANNEL_TOOLS",
@@ -673,6 +675,7 @@
 			"ownerRootCommand",
 			"parseChannelTool",
 			"plain",
+			"readAttachmentText",
 			"replyWithPanels",
 			"withChannelContext",
 			"withChannelContextImages"
@@ -684,6 +687,9 @@
 			"AttachmentBytes",
 			"AttachmentReadErrorCode",
 			"AttachmentReadRequest",
+			"AttachmentText",
+			"AttachmentTextErrorCode",
+			"AttachmentTextRequest",
 			"CardButton",
 			"CardLink",
 			"CardPicture",

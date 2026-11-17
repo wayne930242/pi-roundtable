@@ -2957,6 +2957,18 @@ if (file?.id && file.messageId) {
 }
 ```
 
+To give the model a file's text, pass the bytes to `readAttachmentText({ name, contentType?, bytes, offset?, limit? })` from the same entry; it reads as the core's `read_attachment` tool does.
+A text file (by its extension, a `text/*` or JSON, XML, YAML or TOML media type, or UTF-8 bytes with no NUL) is decoded; a PDF (by `.pdf`, `application/pdf` or its `%PDF-` start) has its text extracted, led by `[PDF, <n> pages]`.
+It resolves with `AttachmentText`: `kind` (`text` or `pdf`), `text` (at most `limit` characters from `offset`; default `ATTACHMENT_TEXT_LIMIT`, 60,000), `offset`, `nextOffset` when there is more, `total` characters and a PDF's `pages`.
+It rejects with an `AttachmentTextError` whose `code` is `unsupported` (an image, audio, an archive or other binary), `unreadable` (a PDF that cannot be parsed) or `invalid` (an `offset` or `limit` that is not a whole number, or a `limit` below 1); its message names the file only.
+
+```ts
+import { AttachmentTextError, readAttachmentText } from "pi-roundtable/discord";
+
+const piece = await readAttachmentText({ ...read, offset: 0 });
+// piece.nextOffset, when set, is the offset of the next piece
+```
+
 ### Posting through `DISCORD.poster`
 
 `DISCORD.poster` (`DiscordPoster`, from `pi-roundtable/discord`) is Discord's REST API for a plugin's own posts, over the Discord plugin's own client.
@@ -5196,6 +5208,11 @@ Import from the entries listed below; source area files are internal.
 | `AttachmentReadError` | `pi-roundtable/discord` | value |
 | `AttachmentReadErrorCode` | `pi-roundtable/discord` | type |
 | `AttachmentReadRequest` | `pi-roundtable/discord` | type |
+| `ATTACHMENT_TEXT_LIMIT` | `pi-roundtable/discord` | value |
+| `AttachmentText` | `pi-roundtable/discord` | type |
+| `AttachmentTextError` | `pi-roundtable/discord` | value |
+| `AttachmentTextErrorCode` | `pi-roundtable/discord` | type |
+| `AttachmentTextRequest` | `pi-roundtable/discord` | type |
 | `CHANNEL_CONTEXT_DEFAULTS` | `pi-roundtable/discord` | value |
 | `CONTEXT_ATTACHMENT_LINES` | `pi-roundtable/discord` | value |
 | `CHANNEL_OPERATIONS` | `pi-roundtable/discord` | value |
@@ -5293,6 +5310,7 @@ Import from the entries listed below; source area files are internal.
 | `ownerRootCommand` | `pi-roundtable/discord` | value |
 | `parseChannelTool` | `pi-roundtable/discord` | value |
 | `plain` | `pi-roundtable/discord` | value |
+| `readAttachmentText` | `pi-roundtable/discord` | value |
 | `replyWithPanels` | `pi-roundtable/discord` | value |
 | `withChannelContext` | `pi-roundtable/discord` | value |
 | `withChannelContextImages` | `pi-roundtable/discord` | value |
