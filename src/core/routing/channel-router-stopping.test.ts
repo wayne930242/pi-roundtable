@@ -89,3 +89,57 @@ test("without the surface taking it, or when it fails, routing tells the channel
 	await bot.routing.handle(message("c", { authorIsBot: true }));
 	expect(bot.refused).toEqual([]);
 });
+
+test("a message still waiting behind a turn when the drain ends is refused at once, through its surface, and never runs", async () => {
+	const ran: string[] = [];
+	const running = Promise.withResolvers<void>();
+	const claim: ChannelClaim = {
+		name: "owner",
+		priority: 0,
+		owns: () => true,
+		admit: (m) => ({
+			kind: "turn",
+			busy: { react: async () => undefined, unreact: async () => undefined },
+			run: async () => {
+				ran.push(m.messageId);
+				if (m.messageId === "first") await running.promise;
+			},
+			failure: "failed",
+		}),
+		startFresh: async () => "owner",
+	};
+	const refused: string[] = [];
+	const queue = new ChannelQueue();
+	const routing = new ChannelRouter({
+		claims: [claim],
+		targets: () => undefined,
+		queue,
+		logger: silentLogger(),
+		contacts: IDENTITY,
+		principals: IDENTITY,
+		surfaces: {
+			of: () =>
+				({
+					refuseStopping: async (m: InboundMessage) => {
+						refused.push(m.messageId);
+						return true;
+					},
+				}) as ChatSurface,
+			sendReply: async () => undefined,
+		},
+	});
+	const first = routing.handle(message("first"));
+	await Bun.sleep(1);
+	const waiting = routing.handle(message("waiting"));
+	await Bun.sleep(1);
+	queue.close();
+	queue.seal();
+	await routing.refuseWaiting();
+	expect(refused).toEqual(["waiting"]);
+	expect(routing.queued("discord:1")).toEqual([]);
+	running.resolve();
+	await Promise.all([first, waiting]);
+	await Bun.sleep(1);
+	expect(ran).toEqual(["first"]);
+	expect(refused).toEqual(["waiting"]);
+});

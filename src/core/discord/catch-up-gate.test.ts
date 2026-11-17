@@ -28,6 +28,12 @@ function memoryJournal() {
 			rows.add(messageId);
 			left.add(messageId);
 		},
+		leaveNew: async ({ messageId }) => {
+			if (rows.has(messageId)) return false;
+			rows.add(messageId);
+			left.add(messageId);
+			return true;
+		},
 		left: async () => [],
 		recordedAmong: async (_bot, ids) =>
 			new Set(ids.filter((id) => rows.has(id))),
@@ -102,7 +108,7 @@ test("a message that cannot be left for the next process gets the notice to send
 	const gate = journalGate({
 		journal: {
 			...journal,
-			leave: async () => {
+			leaveNew: async () => {
 				throw new Error("database down");
 			},
 		},
@@ -137,13 +143,13 @@ test("a message another process recorded first is claimed once more off the chan
 		journal,
 		logger: silentLogger(),
 		retryMs: 10,
-		redeliver: (m) => redelivered.push(m.messageId),
+		redeliver: (m) => redelivered.push(`${m.messageId} ${m.caughtUp}`),
 	});
 	expect(await gate(message("m1"), "9")).toBe(false);
 	expect(await gate(message("m2"), "9")).toBe(false);
 	left.add("m1");
 	await Bun.sleep(30);
-	expect(redelivered).toEqual(["m1"]);
+	expect(redelivered).toEqual(["m1 true"]);
 });
 
 const READY = Date.parse("2026-11-17T07:00:00Z");
@@ -210,4 +216,22 @@ test("when catch-up cannot tell its restart notices, it leaves the channel unrea
 	expect(report.unread).toBe(1);
 	expect(report.replied).toBe(0);
 	expect(delivered).toEqual([]);
+});
+
+test("a draining process leaves alone a message another process already took in, and tells no one", async () => {
+	const { journal, rows, left } = memoryJournal();
+	rows.add("m1");
+	const told = notices();
+	const gate = journalGate({
+		journal,
+		logger: silentLogger(),
+		draining: () => true,
+		notify: told.notify,
+	});
+	expect(await gate(message("m1"), "9")).toBe(false);
+	expect(left.has("m1")).toBe(false);
+	expect(told.posted).toEqual([]);
+	expect(await gate(message("m2"), "9")).toBe(false);
+	expect(left.has("m2")).toBe(true);
+	expect(told.posted).toEqual([["notice-1", "later"]]);
 });

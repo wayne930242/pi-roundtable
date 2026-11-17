@@ -20,8 +20,10 @@ export interface InboundJournal {
 	claim(entry: JournalEntry): Promise<boolean>;
 	/** The bot's direct-message channels with a message recorded since `since`, the most recent first. */
 	directChannels(botId: string, since: Date, limit: number): Promise<string[]>;
-	/** Records the message as left by a process that stops before running it, for the next one to take. */
+	/** Records a message this process took in as left, as it stops before running it, for the next process to take. */
 	leave(entry: JournalEntry): Promise<void>;
+	/** Records a message no one took in yet as left; false when someone did, and it is theirs. */
+	leaveNew(entry: JournalEntry): Promise<boolean>;
 	/** The messages left since `since`, the oldest first. */
 	left(botId: string, since: Date): Promise<JournalEntry[]>;
 	/**
@@ -83,6 +85,14 @@ export const PgInboundJournal = {
 					INSERT INTO discord_inbound_journal (bot_id, message_id, channel_id, direct, left_at)
 					VALUES (${botId}, ${messageId}, ${channelId}, ${direct}, now())
 					ON CONFLICT (bot_id, message_id) DO UPDATE SET left_at = now()`;
+			},
+			async leaveNew({ botId, messageId, channelId, direct }) {
+				const rows: unknown[] = await sql`
+					INSERT INTO discord_inbound_journal (bot_id, message_id, channel_id, direct, left_at)
+					VALUES (${botId}, ${messageId}, ${channelId}, ${direct}, now())
+					ON CONFLICT (bot_id, message_id) DO NOTHING
+					RETURNING message_id`;
+				return rows.length > 0;
 			},
 			async left(botId, since) {
 				const rows: {

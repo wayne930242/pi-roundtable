@@ -132,6 +132,13 @@ export class QueuedMessages {
 	}
 
 	/** Removes the waiting mark; a failure is logged, since the message may be gone. */
+	/** Every waiting entry, in all channels. */
+	all(): QueuedEntry[] {
+		return [...this.#entries.values()].flatMap((entries) => [
+			...entries.values(),
+		]);
+	}
+
 	unmark(entry: QueuedEntry): void {
 		const { channel } = entry.message;
 		entry.admission.busy

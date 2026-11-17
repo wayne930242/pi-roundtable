@@ -323,6 +323,15 @@ export class ChannelRouter implements ConversationPort {
 		return { done };
 	}
 
+	/** Refuses each message still waiting behind a turn after the drain, while the services still run. */
+	async refuseWaiting(): Promise<void> {
+		for (const entry of this.#queued.all()) {
+			if (!this.#queued.remove(entry)) continue;
+			this.#queued.unmark(entry);
+			await this.#refuse(entry.message, entry.admission);
+		}
+	}
+
 	queued(channel: ChannelKey): readonly QueuedMessage[] {
 		return this.#queued.list(channel);
 	}

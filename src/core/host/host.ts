@@ -305,6 +305,10 @@ export class Roundtable {
 		});
 		// Only what ran before the drain ended finishes; nothing delivered later starts.
 		this.#link.queue.seal();
+		// A message still waiting behind a turn never starts: its channel is told while the services run.
+		const told = await attempt(() => this.#link.router?.refuseWaiting());
+		if (!told.ok)
+			logger.error({ err: told.error }, "waiting messages not refused");
 		// A turn that started during the abort grace, a report's, is stopped too, so the teardown does not wait for it.
 		if (left.length > 0) stopQueuedTurns();
 		if (left.length > 0) {

@@ -257,6 +257,7 @@ describeDb("catch-up over the journal", () => {
 			directChannels: async () => [],
 			prune: async () => undefined,
 			leave: async () => undefined,
+			leaveNew: async () => true,
 			left: async () => [],
 			recordedAmong: async () => new Set(),
 		};
@@ -460,6 +461,7 @@ test("a message not addressed to the bot passes the gate unrecorded; while the h
 		directChannels: async () => [],
 		prune: async () => undefined,
 		leave: async () => undefined,
+		leaveNew: async () => true,
 		left: async () => [],
 		recordedAmong: async () => new Set(),
 	};

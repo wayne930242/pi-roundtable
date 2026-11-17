@@ -112,13 +112,25 @@ export function journalGate({
 		direct: message.isDirect,
 	});
 	// Left in the journal, the next process answers it whatever its channel shows; unrecorded, the channel is told to send it again.
-	const leave = async (message: InboundMessage, botId: string) => {
+	const leave = async (
+		message: InboundMessage,
+		botId: string,
+		taken = true,
+	) => {
 		const where = {
 			channelId: channelOf(message),
 			messageId: message.messageId,
 		};
 		try {
-			await journal.leave(entry(message, botId));
+			if (taken) await journal.leave(entry(message, botId));
+			else if (!(await journal.leaveNew(entry(message, botId)))) {
+				// Another process took it in, and answers it.
+				logger.info(
+					where,
+					"shutting down; another process took this message in",
+				);
+				return;
+			}
 		} catch (error) {
 			logger.warn(
 				{ ...where, err: error },
@@ -137,8 +149,11 @@ export function journalGate({
 			if (draining()) return;
 			journal
 				.claim(entry(message, botId))
-				.then((first) => {
-					if (first) redeliver(message);
+				.then(async (first) => {
+					if (!first) return;
+					await wait?.(channelOf(message));
+					// Late, and after newer messages of its channel.
+					redeliver({ ...message, caughtUp: true });
 				})
 				.catch((error: unknown) =>
 					logger.warn(
@@ -152,7 +167,7 @@ export function journalGate({
 	const pass = async (message: InboundMessage, botId: string) => {
 		if (!addressed(message)) return true;
 		if (draining()) {
-			await leave(message, botId);
+			await leave(message, botId, false);
 			return false;
 		}
 		const channelId = channelOf(message);
