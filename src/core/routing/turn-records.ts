@@ -93,7 +93,8 @@ export class TurnRecord {
 
 	/**
 	 * The channels its turns and queue tasks run in now; while work runs under it that names none,
-	 * its admission or a bare `settleTurn`, its first message's channel too.
+	 * its admission or a bare `settleTurn` (`context.turns` and the agent team name theirs), its
+	 * first message's channel too.
 	 */
 	channels(): ChannelKey[] {
 		let named = 0;

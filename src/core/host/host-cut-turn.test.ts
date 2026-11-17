@@ -58,7 +58,7 @@ function setup(
 	steers = false,
 	graceMs = 40,
 	/** How the admission runs its turn: through `context.turns`, awaited or not, or a bare `settleTurn` it does not wait for. */
-	runs: "awaits" | "detached" | "bare" = "awaits",
+	runs: "awaits" | "detached" | "thread" | "bare" = "awaits",
 ) {
 	const log: string[] = [];
 	const replies: string[] = [];
@@ -103,7 +103,8 @@ function setup(
 					return;
 				}
 				const turn = taken.turns?.run({
-					channel: m.channel,
+					// A thread's answering turn runs in its own channel.
+					channel: runs === "thread" ? "fake:thread" : m.channel,
 					kind: "plain",
 					text: m.text,
 					speaker: OWNER_SPEAKER,
@@ -238,6 +239,14 @@ describe("a turn the shutdown cuts", () => {
 		await holdATurn(s);
 		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
 		expect(s.stops[0]).toBe(ROOM);
+		expect(s.log).toEqual(["left first", "stop runtime"]);
+	});
+	test("that its admission started in another channel, as a thread's, is stopped there, not in the message's channel", async () => {
+		const s = setup("obeys", false, 40, "thread");
+		await holdATurn(s);
+		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
+		expect(s.stops[0]).toBe("fake:thread");
+		expect(s.stops).not.toContain(ROOM);
 		expect(s.log).toEqual(["left first", "stop runtime"]);
 	});
 });

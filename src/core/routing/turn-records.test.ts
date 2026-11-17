@@ -50,3 +50,13 @@ test("a record counts the channels its turns run in until each ends", () => {
 	open.end();
 	expect(open.channels()).toEqual([]);
 });
+
+test("a context.turns turn names its channel, so a thread's answering turn does not report the parent channel", () => {
+	const open = new TurnRecord(message);
+	// A queue task in the thread, a turn through it, the settled turn inside, then the admission ends.
+	open.begin("discord:thread");
+	open.begin("discord:thread");
+	open.begin("discord:thread");
+	open.end();
+	expect(open.channels()).toEqual(["discord:thread"]);
+});

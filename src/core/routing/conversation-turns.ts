@@ -22,7 +22,7 @@ import type { Logger } from "../kernel/log.ts";
 import type { EventSink } from "../plugin-api/plugin.ts";
 import { isQuiet, replyBody } from "../presentation/reply-body.ts";
 import { withReplyFiles } from "../shared/reply-files.ts";
-import { endOf, settleTurn } from "./settle-turn.ts";
+import { endOf, settleTurnIn } from "./settle-turn.ts";
 import { currentRecord } from "./turn-records.ts";
 
 /** One turn of a conversation, as a claim asks for it. */
@@ -203,7 +203,8 @@ export function conversationTurns(
 		};
 		let result: TurnResult;
 		try {
-			result = await settleTurn(
+			result = await settleTurnIn(
+				channel,
 				() =>
 					withReplyFiles(surfaces.of(channel)?.supportsFiles === true, () =>
 						runtime.runTurn({

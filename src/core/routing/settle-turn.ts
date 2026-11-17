@@ -1,6 +1,7 @@
 import type { ScheduledOutcome } from "../contract/channels.ts";
 import type { TurnResult } from "../domain/conversation.ts";
 import { AgentRunError } from "../domain/errors.ts";
+import type { ChannelKey } from "../domain/sessions.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import type { TurnEndEvent } from "../plugin-api/plugin.ts";
 import { currentRecord } from "./turn-records.ts";
@@ -11,14 +12,27 @@ import { currentRecord } from "./turn-records.ts";
  * such as a queue task, an `ok` result counts as the answer to that message, and a turn that ends
  * after a shutdown left the message for the next process gives a stopped result instead. Started
  * without waiting and outside any channel queue's task and `context.turns.run`, the drain still
- * waits for it in the channel of the admission's first message and stops it there at its limit.
+ * waits for it in the channel of the admission's first message, and asks that channel's turn to
+ * stop at its limit.
  */
-export async function settleTurn<R>(
+export function settleTurn<R>(
+	run: () => Promise<R>,
+	what: string,
+): Promise<R | { ok: false; error: AgentRunError }> {
+	return settleTurnIn(undefined, run, what);
+}
+
+/**
+ * `settleTurn` for a turn that runs in `channel`, as `context.turns` and the agent team run theirs:
+ * the drain then waits for it in that channel rather than in that of the admission's first message.
+ */
+export async function settleTurnIn<R>(
+	channel: ChannelKey | undefined,
 	run: () => Promise<R>,
 	what: string,
 ): Promise<R | { ok: false; error: AgentRunError }> {
 	const record = currentRecord();
-	record?.begin();
+	record?.begin(channel);
 	let result: R | { ok: false; error: AgentRunError };
 	try {
 		result = await run();
@@ -34,7 +48,7 @@ export async function settleTurn<R>(
 	}
 	if (!record) return result;
 	const settled = record.settle(result);
-	record.end();
+	record.end(channel);
 	return settled;
 }
 
