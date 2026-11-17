@@ -136,11 +136,19 @@ function setup(stopping: Stopping, steers = false) {
 	return { roundtable, log, replies, stops, turns, taken };
 }
 
+async function until(done: () => boolean): Promise<void> {
+	const deadline = Date.now() + 2_000;
+	while (!done()) {
+		if (Date.now() > deadline) throw new Error("timed out waiting");
+		await Bun.sleep(1);
+	}
+}
+
 /** Starts the turn of `first` and returns once the runtime runs it. */
 async function holdATurn(s: ReturnType<typeof setup>): Promise<void> {
 	await s.roundtable.run();
 	void s.taken.conversations?.handle(message("first"));
-	while (s.turns.length === 0) await Bun.sleep(1);
+	await until(() => s.turns.length > 0);
 }
 
 describe("a turn the shutdown cuts", () => {
@@ -158,8 +166,9 @@ describe("a turn the shutdown cuts", () => {
 		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
 		expect(s.log).toEqual(["left first", "stop runtime"]);
 		s.turns[0]?.resolve({ ok: true, text: "the answer" });
-		await Bun.sleep(5);
-		expect(s.replies.some((reply) => reply.includes("the answer"))).toBe(false);
+		// Its pipeline posts the stopped notice in its place.
+		await until(() => s.replies.length > 0);
+		expect(s.replies).toEqual(["-# Stopped."]);
 	});
 
 	test("that answers within the grace is not left", async () => {
@@ -167,7 +176,7 @@ describe("a turn the shutdown cuts", () => {
 		await holdATurn(s);
 		const stopped = s.roundtable.shutdown("SIGTERM");
 		// Past the drain limit, within the grace.
-		while (s.stops.length === 0) await Bun.sleep(1);
+		await until(() => s.stops.length > 0);
 		s.turns[0]?.resolve({ ok: true, text: "the answer" });
 		expect(await stopped).toBe(0);
 		expect(s.log).toEqual(["stop runtime"]);
@@ -183,7 +192,7 @@ describe("a turn the shutdown cuts", () => {
 		const waiting = setup("deaf");
 		await holdATurn(waiting);
 		void waiting.taken.conversations?.handle(message("waiting"));
-		await Bun.sleep(5);
+		await until(() => waiting.taken.conversations?.queued?.(ROOM).length === 1);
 		expect(await waiting.roundtable.shutdown("SIGTERM")).toBe(0);
 		expect(waiting.log).toEqual(["left first", "left waiting", "stop runtime"]);
 	});

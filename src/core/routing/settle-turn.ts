@@ -5,9 +5,10 @@ import type { TurnEndEvent } from "../plugin-api/plugin.ts";
 import { currentRecord } from "./turn-records.ts";
 
 /**
- * Runs a turn; a thrown error becomes its failed result, labelled `<what> crashed`. Run under a
- * message's admission, an `ok` result counts as the answer to that message, and a turn that ends
- * after a shutdown left the message for the next process gives a stopped result instead.
+ * Runs a turn; a thrown error becomes its failed result, labelled `<what> crashed`. Run in the
+ * work of a message's admission, its `run` or anything it started, awaited or not, such as a
+ * timer it set, an `ok` result counts as the answer to that message, and a turn that ends after a
+ * shutdown left the message for the next process gives a stopped result instead.
  */
 export async function settleTurn<R>(
 	run: () => Promise<R>,

@@ -7,15 +7,19 @@ import { HostStoppingError } from "../kernel/errors.ts";
 
 /**
  * The person's messages one admitted turn answers, as the router runs it: the message that started
- * it and those steered into it, and whether it answered them. A turn counts as answered once a turn
- * run under its admission, through `settleTurn`, ends with `ok`, whose pipeline then posts the
- * answer; a stopped or failed turn does not. A shutdown that cuts it before that leaves its messages
- * for the next process, and a turn under it that ends later gives a stopped result instead, so its
- * answer is not posted as well.
+ * it and those steered into it, and whether it answered them. They count as answered once a turn
+ * run under the admission through `settleTurn` ends with `ok`, whose pipeline then posts the
+ * answer; a stopped or failed turn does not. A turn runs under the admission when it runs anywhere
+ * in the admission's work, its `run` and what that starts, awaited or not, such as a queue task for
+ * a thread it opens or a timer it sets; a background turn and an agent's message to another agent
+ * run outside it. A shutdown that cuts it before an answer leaves its messages for the next
+ * process, and a turn under it that ends later gives a stopped result instead, so its answer is
+ * not posted as well.
  */
 export class TurnRecord {
 	readonly messages: InboundMessage[];
 	#answered = false;
+	#cut = false;
 	#left = false;
 	/** The admission while it runs, plus each turn running under it. */
 	#open = 1;
@@ -36,6 +40,21 @@ export class TurnRecord {
 	end(): void {
 		this.#open -= 1;
 		if (this.#open === 0) this.#closed();
+	}
+
+	/** The drain limit found it running. */
+	markCut(): void {
+		this.#cut = true;
+	}
+
+	/**
+	 * The shutdown cut it before a turn answered: unless one answers within the abort grace, its
+	 * messages are left for the next process or their channels told to send them again, so what its
+	 * turn would have handed on to a later turn, such as an agent message kept for the next start,
+	 * is not needed.
+	 */
+	get cutUnanswered(): boolean {
+		return this.#cut && !this.#answered;
 	}
 
 	/** Marks its messages left for the next process, unless a turn answered them; whether it did. */
@@ -97,7 +116,10 @@ export class RunningTurns {
 	#cut: TurnRecord[] = [];
 
 	/** Runs the admission of `message` under a new record, as its channel's running turn. */
-	async run(message: InboundMessage, task: () => Promise<void>): Promise<void> {
+	async run(
+		message: InboundMessage,
+		task: () => Promise<unknown>,
+	): Promise<void> {
 		const { channel } = message;
 		const record: TurnRecord = new TurnRecord(message, () =>
 			this.#live.delete(record),
@@ -119,6 +141,7 @@ export class RunningTurns {
 
 	/** Marks every record still open as cut: the drain limit found its turn running. */
 	cut(): void {
+		for (const record of this.#live) record.markCut();
 		this.#cut.push(...this.#live);
 	}
 

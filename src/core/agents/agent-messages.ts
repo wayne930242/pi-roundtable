@@ -6,6 +6,11 @@ import { addressee, type Speaker } from "../identity/speakers.ts";
 import { HostStoppingError } from "../kernel/errors.ts";
 import { intercomPlain } from "../presentation/intercom.ts";
 import { isQuiet } from "../presentation/reply-body.ts";
+import {
+	currentRecord,
+	type TurnRecord,
+	underRecord,
+} from "../routing/turn-records.ts";
 import type { OutboxEntry, StoredOutboxEntry } from "./agent-outbox.ts";
 import {
 	agentFailureText,
@@ -90,13 +95,25 @@ export class AgentMessages {
 			peer: this.#peer(target),
 			text,
 		});
-		void queue
-			.run(targetChannel, async () =>
-				this.#exchange(sender, target, text, chain, targetChannel, parent),
-			)
+		// The person's message the sender's turn answers: the exchange runs outside it, so the
+		// target's answer is not taken for the sender's, and what it would keep is dropped once a
+		// shutdown cut the sender's turn before it answered, since that message is then asked again.
+		const record = currentRecord();
+		void underRecord(undefined, () =>
+			queue.run(targetChannel, async () =>
+				this.#exchange(
+					sender,
+					target,
+					text,
+					chain,
+					{ targetChannel, senderChannel: parent },
+					record,
+				),
+			),
+		)
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
-					this.#keep({
+					this.#keep(record, {
 						kind: "message",
 						sender: sender.name,
 						target: target.name,
@@ -156,8 +173,11 @@ export class AgentMessages {
 		target: Agent,
 		text: string,
 		chain: Chain,
-		targetChannel: ChannelKey,
-		senderChannel: ChannelKey,
+		{
+			targetChannel,
+			senderChannel,
+		}: { targetChannel: ChannelKey; senderChannel: ChannelKey },
+		record: TurnRecord | undefined,
 	): Promise<void> {
 		const { queue, logger } = this.#host.options;
 		await this.#host.post(targetChannel, this.#host.current(sender), {
@@ -213,7 +233,7 @@ export class AgentMessages {
 			.catch((error: unknown) => {
 				if (error instanceof HostStoppingError) {
 					// The sender would wait for this answer forever, so it waits in the outbox for the next start.
-					this.#keep({
+					this.#keep(record, {
 						kind: "reply",
 						sender: current.name,
 						target: target.name,
@@ -240,9 +260,20 @@ export class AgentMessages {
 		);
 	}
 
-	/** Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. */
-	#keep(entry: OutboxEntry): void {
+	/**
+	 * Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. One
+	 * sent from a turn the shutdown cut before it answered its person's message is dropped instead:
+	 * that message is answered again, or its author asked to send it again, after the restart.
+	 */
+	#keep(record: TurnRecord | undefined, entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
+		if (record?.cutUnanswered) {
+			logger.info(
+				{ kind: entry.kind, from: entry.sender, to: entry.target },
+				"agent message dropped: the turn that sent it was cut before it answered, and its message is asked again",
+			);
+			return;
+		}
 		const write = this.#lastKept
 			.then(() => store.outbox.keep(entry))
 			.then(
@@ -361,8 +392,8 @@ export class AgentMessages {
 				target,
 				entry.text,
 				chain,
-				entry.channel,
-				origin,
+				{ targetChannel: entry.channel, senderChannel: origin },
+				undefined,
 			);
 		} finally {
 			this.#host.helpers.end(target.name);

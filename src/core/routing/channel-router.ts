@@ -227,7 +227,12 @@ export class ChannelRouter implements ConversationPort {
 			const running = this.#turns.running(message.channel);
 			if (await busy.steer?.()) {
 				// It is answered with that turn, or left with it when a shutdown cuts it.
-				running?.messages.push(message);
+				if (running) running.messages.push(message);
+				else
+					logger.warn(
+						{ channel: message.channel },
+						"message steered into a turn routing did not start; a shutdown that cuts that turn does not refuse it",
+					);
 				return { done: busy.react(STEERED_MARK) };
 			}
 			// Listed before the mark is placed, so a delete or cancel during that wait reaches it.
@@ -275,17 +280,23 @@ export class ChannelRouter implements ConversationPort {
 	 */
 	async leaveCut(tally: RefuseTally): Promise<void> {
 		const { logger, surfaces } = this.#options;
-		const left = this.#turns.takeCut().filter((record) => record.leave());
-		for (const record of left)
-			for (const message of record.messages) {
-				if (tally.stopped) return;
-				logger.info(
-					{ channel: message.channel },
-					"turn cut by the shutdown before it answered",
-				);
+		for (const record of this.#turns.takeCut()) {
+			// A bot's or an integration's message is told nothing, so its turn's late answer stays.
+			const people = record.messages.filter(
+				(message) => !message.authorIsBot && !message.integration,
+			);
+			// Left only as its channel is told, so one the limit stops before keeps its late answer.
+			if (tally.stopped) return;
+			if (people.length === 0 || !record.leave()) continue;
+			logger.info(
+				{ channel: record.messages[0]?.channel },
+				"turn cut by the shutdown before it answered; its messages are refused",
+			);
+			for (const message of people) {
 				await tellStopping(message, surfaces, this.#told, logger);
 				tally.refused += 1;
 			}
+		}
 	}
 
 	/** Refuses each message still waiting behind a turn after the drain, counting in `tally`. */
@@ -453,6 +464,10 @@ export class ChannelRouter implements ConversationPort {
 	abort(channel: ChannelKey): boolean {
 		const owner = this.#owner(channel);
 		if (owner?.stop) return owner.stop(channel);
+		this.#options.logger.info(
+			{ channel },
+			"shutting down: stopping a turn whose claim has no stop through the runtime",
+		);
 		return this.#options.stopTurn?.(channel) ?? false;
 	}
 
