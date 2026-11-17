@@ -34,6 +34,11 @@ export interface CardChannel {
 	send(payload: CardPayload): Promise<CardMessage>;
 	/** A thread, where those a card is for are mentioned so they hear of it; a channel mentions no one. */
 	thread?: boolean;
+	/**
+	 * The thread's parent and its kind, read as the card is posted, so a press never waits on
+	 * Discord to learn it; absent outside a thread.
+	 */
+	parent?: InboundMessage["thread"];
 }
 
 /** A turn a card answered after its turn stopped waiting starts, as a message in its channel. */
@@ -88,8 +93,12 @@ export interface OpenCard {
 	form?: QuestionnaireForm;
 	/** The questions whose previews the Previews button shows, on a card that is not a questionnaire card. */
 	previews?: Questionnaire;
-	/** Options chosen together with "Other…", kept while its form is open. */
-	picked?: string[];
+	/** Options each user chose together with "Other…", by user id, kept while their form is open. */
+	picked: Map<string, string[]>;
+	/** The footer the card shows while open, to draw it again unanswered. */
+	footer: string;
+	/** The thread the card was posted in and its parent, as its channel said when it was posted. */
+	thread?: InboundMessage["thread"];
 	/** Posted in a thread, so it leads with the mention of who may answer. */
 	mention?: boolean;
 	/** Who may answer, and what to tell someone else who presses it. */

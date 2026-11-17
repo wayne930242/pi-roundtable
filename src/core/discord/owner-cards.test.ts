@@ -59,8 +59,8 @@ describe("OwnerCards", () => {
 		const yes = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`);
 		expect(await cards.handle(yes.interaction)).toBe(true);
 		expect(await answer).toBe("approved");
-		expect(json(yes.updates[0])).toContain(messages().cardApproved);
-		expect(json(yes.updates[0])).toContain('"disabled":true');
+		expect(json(yes.drawn[0])).toContain(messages().cardApproved);
+		expect(json(yes.drawn[0])).toContain('"disabled":true');
 	});
 
 	test("a card in a channel mentions nobody", async () => {
@@ -99,7 +99,7 @@ describe("OwnerCards", () => {
 		await threadCards.handle(yes.interaction);
 		expect(await answer).toBe("approved");
 		// The closed card keeps its mention line.
-		expect(json(yes.updates[0])).toContain(`<@${OWNER}>`);
+		expect(json(yes.drawn[0])).toContain(`<@${OWNER}>`);
 	});
 
 	test("only the owner may answer; anyone else is refused and the card stays open", async () => {
@@ -109,12 +109,12 @@ describe("OwnerCards", () => {
 		const id = fake.cardId();
 		const stranger = press("button", `${CARD_PREFIX}${id}:yes`, { user: "1" });
 		await cards.handle(stranger.interaction);
-		expect(stranger.replies).toEqual([messages().cardOwnerOnly]);
-		expect(stranger.updates).toHaveLength(0);
+		expect(stranger.notices).toEqual([messages().cardOwnerOnly]);
+		expect(stranger.drawn).toHaveLength(0);
 		const no = press("button", `${CARD_PREFIX}${id}:no`);
 		await cards.handle(no.interaction);
 		expect(await answer).toBe("declined");
-		expect(json(no.updates[0])).toContain(messages().cardDeclined);
+		expect(json(no.drawn[0])).toContain(messages().cardDeclined);
 	});
 
 	test("without a way to resume, an unanswered card waits, with no countdown, until it is answered", async () => {
@@ -177,7 +177,7 @@ describe("OwnerCards", () => {
 		const yes = press("button", `${CARD_PREFIX}${id}:yes`);
 		await cards.handle(yes.interaction);
 		expect(await first).toBe("approved");
-		expect(json(yes.updates[0])).toContain("Went on.");
+		expect(json(yes.drawn[0])).toContain("Went on.");
 
 		const second = prompts.confirm(
 			"t",
@@ -199,7 +199,7 @@ describe("OwnerCards", () => {
 		expect(json(fake.edits.at(-1))).toContain("The turn finished.");
 		const late = press("button", `${CARD_PREFIX}${secondId}:yes`);
 		await cards.handle(late.interaction);
-		expect(late.replies).toEqual([messages().cardInactive]);
+		expect(late.notices).toEqual([messages().cardInactive]);
 	});
 
 	test("a card that cannot be posted is unavailable", async () => {
@@ -215,7 +215,7 @@ describe("OwnerCards", () => {
 		const { cards } = setup();
 		const old = press("button", `${CARD_PREFIX}gone:yes`);
 		expect(await cards.handle(old.interaction)).toBe(true);
-		expect(old.replies[0]).toContain(messages().cardInactive);
+		expect(old.notices[0]).toContain(messages().cardInactive);
 	});
 
 	test("other components are left to other modules", async () => {
@@ -254,7 +254,7 @@ describe("OwnerCards", () => {
 			});
 			await cards.handle(pick.interaction);
 			expect(await answer).toEqual({ choices: ["Sunday"] });
-			expect(json(pick.updates[0])).toContain(
+			expect(json(pick.drawn[0])).toContain(
 				messages().cardAnswered(["Sunday"]),
 			);
 		});
@@ -286,7 +286,7 @@ describe("OwnerCards", () => {
 			});
 			await cards.handle(pick.interaction);
 			expect(pick.modals).toHaveLength(1);
-			expect(pick.updates).toHaveLength(0);
+			expect(pick.drawn).toHaveLength(0);
 			const submit = press("modal", `${CARD_PREFIX}${id}:text`, {
 				text: "Wednesday evening",
 			});
@@ -295,7 +295,7 @@ describe("OwnerCards", () => {
 				choices: ["Saturday"],
 				text: "Wednesday evening",
 			});
-			expect(json(submit.updates[0])).toContain("Wednesday evening");
+			expect(json(submit.drawn[0])).toContain("Wednesday evening");
 		});
 
 		test("without options, a button opens the answer form", async () => {
@@ -363,7 +363,7 @@ describe("cards for lower tiers", () => {
 		});
 		await cards.handle(admin.interaction);
 		expect(await answer).toBe("approved");
-		expect(admin.replies).toEqual([]);
+		expect(admin.notices).toEqual([]);
 	});
 
 	test("the owner may approve it too, but a member may not", async () => {
@@ -374,7 +374,7 @@ describe("cards for lower tiers", () => {
 			roles: [ROLE],
 		});
 		await cards.handle(member.interaction);
-		expect(member.replies).toEqual([messages().cardApproversRefusal]);
+		expect(member.notices).toEqual([messages().cardApproversRefusal]);
 		const owner = press("button", `${CARD_PREFIX}${fake.cardId()}:no`, {
 			user: OWNER,
 		});
@@ -417,7 +417,7 @@ describe("cards for lower tiers", () => {
 			roles: [ROLE],
 		});
 		await cards.handle(other.interaction);
-		expect(other.replies).toEqual([messages().cardApproversRefusal]);
+		expect(other.notices).toEqual([messages().cardApproversRefusal]);
 		const own = press("button", `${CARD_PREFIX}${fake.cardId()}:yes`, {
 			user: MEMBER,
 			roles: [ROLE],
@@ -438,7 +438,7 @@ describe("cards for lower tiers", () => {
 			roles: [ROLE],
 		});
 		await cards.handle(member.interaction);
-		expect(member.replies).toEqual([messages().cardOwnerOnly]);
+		expect(member.notices).toEqual([messages().cardOwnerOnly]);
 		const owner = press("button", `${CARD_PREFIX}${fake.cardId()}:no`, {
 			user: OWNER,
 		});
@@ -473,7 +473,7 @@ describe("cards for lower tiers", () => {
 				roles: [...roles],
 			});
 			await cards.handle(pressed.interaction);
-			expect(pressed.replies).toEqual([messages().cardOwnerOnly]);
+			expect(pressed.notices).toEqual([messages().cardOwnerOnly]);
 		}
 	});
 
@@ -541,7 +541,7 @@ describe("cards for lower tiers", () => {
 			user: ADMIN,
 		});
 		await cards.handle(admin.interaction);
-		expect(admin.replies).toEqual([messages().cardOwnerOnly]);
+		expect(admin.notices).toEqual([messages().cardOwnerOnly]);
 	});
 
 	test("a question is for the speaker who is asked, and the owner", async () => {
@@ -573,7 +573,7 @@ describe("cards for lower tiers", () => {
 			values: ["0"],
 		});
 		await cards.handle(stranger.interaction);
-		expect(stranger.replies).toEqual([messages().cardAskerRefusal]);
+		expect(stranger.notices).toEqual([messages().cardAskerRefusal]);
 		const asked = press("select", `${CARD_PREFIX}${fake.cardId()}:pick`, {
 			user: ADMIN,
 			values: ["1"],

@@ -53,10 +53,15 @@ export function press(
 		fields?: Record<string, string>;
 		/** Holds `deferUpdate` until it resolves, so the card can change while the press is in flight. */
 		gate?: Promise<void>;
-		/** The thread the card sits in: its parent and the parent's kind. */
-		thread?: { parentId: string; forum: boolean };
+		/**
+		 * The thread the card sits in: its parent and the parent's kind. `uncached` leaves the parent
+		 * out of the client's cache, so reading it is a fetch that never resolves.
+		 */
+		thread?: { parentId: string; forum: boolean; uncached?: boolean };
 	} = {},
 ) {
+	/** Every response and fetch the press made, in the order it was called (not settled). */
+	const calls: string[] = [];
 	const replies: string[] = [];
 	/** Everything a reply carried besides its text. */
 	const replied: { files?: unknown[]; flags?: unknown }[] = [];
@@ -66,6 +71,10 @@ export function press(
 	const edited: CardPayload[] = [];
 	const followUps: { content?: string; flags?: unknown }[] = [];
 	const deferred: string[] = [];
+	/** The card as the press drew it, by `update` or, once deferred, `editReply`, in order. */
+	const drawn: CardPayload[] = [];
+	/** What the press told its presser alone, by `reply` or, once deferred, `followUp`, in order. */
+	const notices: (string | undefined)[] = [];
 	// SAFETY: the cards read only these members of an interaction.
 	const interaction = {
 		isButton: () => kind === "button",
@@ -80,10 +89,20 @@ export function press(
 			? {
 					isThread: () => true,
 					parentId: options.thread.parentId,
-					parent: {
-						type: options.thread.forum
-							? ChannelType.GuildForum
-							: ChannelType.GuildText,
+					parent: options.thread.uncached
+						? null
+						: {
+								type: options.thread.forum
+									? ChannelType.GuildForum
+									: ChannelType.GuildText,
+							},
+					guild: {
+						channels: {
+							fetch: () => {
+								calls.push("fetch");
+								return new Promise(() => {});
+							},
+						},
 					},
 				}
 			: null,
@@ -101,28 +120,39 @@ export function press(
 			files?: unknown[];
 			flags?: unknown;
 		}) => {
+			calls.push("reply");
 			replies.push(answer.content);
+			notices.push(answer.content);
 			replied.push(answer);
 		},
 		update: async (payload: CardPayload) => {
+			calls.push("update");
 			updates.push(payload);
+			drawn.push(payload);
 		},
 		showModal: async (modal: unknown) => {
+			calls.push("showModal");
 			modals.push(modal);
 		},
 		deferUpdate: async () => {
+			calls.push("deferUpdate");
 			await options.gate;
 			deferred.push("update");
 		},
 		editReply: async (payload: CardPayload) => {
+			calls.push("editReply");
 			edited.push(payload);
+			drawn.push(payload);
 		},
 		followUp: async (answer: { content?: string; flags?: unknown }) => {
+			calls.push("followUp");
 			followUps.push(answer);
+			notices.push(answer.content);
 		},
 	} as unknown as Interaction;
 	return {
 		interaction,
+		calls,
 		replies,
 		replied,
 		updates,
@@ -130,6 +160,8 @@ export function press(
 		edited,
 		followUps,
 		deferred,
+		drawn,
+		notices,
 	};
 }
 

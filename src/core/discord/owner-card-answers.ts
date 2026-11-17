@@ -23,7 +23,12 @@ const ephemeral = (content: string) => ({
 	flags: MessageFlags.Ephemeral as const,
 });
 
-/** The single-question card's controls: a menu pick, "Write answer…", and the answer form. */
+/**
+ * The single-question card's controls: a menu pick, "Write answer…", and the answer form. A press
+ * that opens the form shows it at once, before anything is read (Discord takes no deferral in
+ * front of a form); whoever submits it is checked then. Any other press is deferred before the
+ * audience is read, and someone the card is not for is told so with the card unchanged.
+ */
 export async function answerSingle(
 	card: OpenCard,
 	id: string,
@@ -33,8 +38,9 @@ export async function answerSingle(
 ): Promise<void> {
 	const question = card.question;
 	if (!question) return;
+	const userId = by.user.id;
 	if (interaction.isButton() && action === "write") {
-		card.picked = [];
+		card.picked.set(userId, []);
 		await interaction.showModal(answerModal(id));
 		return;
 	}
@@ -44,24 +50,42 @@ export async function answerSingle(
 			values.includes(String(i)) ? [option.label] : [],
 		);
 		if (values.includes(OTHER)) {
-			card.picked = choices;
+			card.picked.set(userId, choices);
 			await interaction.showModal(answerModal(id));
 			return;
 		}
+		await interaction.deferUpdate();
+		if (!(await card.audience.allows(by.user))) {
+			await interaction.followUp(ephemeral(card.audience.refusal));
+			// Their menu shows the refused pick until the card is drawn again.
+			if (card.isOpen())
+				await interaction.editReply(card.view(card.footer, false));
+			return;
+		}
 		const answer = { choices };
-		card.end(answer, by);
-		await interaction.update(card.view(answeredLine(answer)));
+		if (!card.end(answer, by)) {
+			await interaction.followUp(ephemeral(messages().cardInactive));
+			return;
+		}
+		await interaction.editReply(card.view(answeredLine(answer)));
 		return;
 	}
 	if (interaction.isModalSubmit() && action === "text") {
+		await interaction.deferUpdate();
+		if (!(await card.audience.allows(by.user))) {
+			await interaction.followUp(ephemeral(card.audience.refusal));
+			return;
+		}
 		const answer = {
-			choices: card.picked ?? [],
+			choices: card.picked.get(userId) ?? [],
 			text: interaction.fields.getTextInputValue(TEXT_FIELD),
 		};
-		card.end(answer, by);
+		if (!card.end(answer, by)) {
+			await interaction.followUp(ephemeral(messages().cardInactive));
+			return;
+		}
 		if (interaction.isFromMessage())
-			await interaction.update(card.view(answeredLine(answer)));
-		else await interaction.deferUpdate();
+			await interaction.editReply(card.view(answeredLine(answer)));
 	}
 }
 
@@ -164,7 +188,10 @@ export async function answerDeferred(
 	await interaction.editReply(card.view(endedFooter(card)));
 }
 
-/** "Write answers / note…": opens the form, which a modal cannot defer; the audience was checked. */
+/**
+ * "Write answers / note…": opens the form at once, since nothing may be awaited before a form is
+ * shown; the audience is checked when it is submitted (`answerDeferred`).
+ */
 export async function answerForm(
 	card: OpenCard,
 	id: string,

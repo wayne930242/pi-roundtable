@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { type Interaction, MessageFlags, TextDisplayBuilder } from "discord.js";
+import {
+	type ButtonInteraction,
+	type Interaction,
+	MessageFlags,
+	type ModalSubmitInteraction,
+	type StringSelectMenuInteraction,
+	TextDisplayBuilder,
+} from "discord.js";
 import { parseChannelKey } from "../contract/surface.ts";
 import type { ChannelKey } from "../domain/conversation.ts";
 import { messages } from "../i18n/index.ts";
@@ -12,7 +19,7 @@ import type { Logger } from "../kernel/log.ts";
 import { type CardAudienceOptions, CardAudiences } from "./card-audience.ts";
 import { CardCopies, copyReply, offeredCopy } from "./card-copies.ts";
 import { DiscordOwners, discordUser } from "./discord-owners.ts";
-import { threadOf } from "./inbound-message.ts";
+import { cachedThreadOf } from "./inbound-message.ts";
 import type { InteractionModule } from "./interaction-module.ts";
 import {
 	answerDeferred,
@@ -21,6 +28,11 @@ import {
 	showPreviews,
 } from "./owner-card-answers.ts";
 import { askPrompts } from "./owner-card-asks.ts";
+import {
+	answerApproval,
+	cancelQuestion,
+	onFirstResponse,
+} from "./owner-card-press.ts";
 import {
 	approvalRows,
 	CARD_PREFIX,
@@ -274,6 +286,8 @@ export class OwnerCards implements InteractionModule {
 					timer = arm();
 				},
 				audience: card.audience,
+				picked: new Map(),
+				footer: card.footer,
 				end: (value, by) => {
 					// Withdrawn or answered already: this answer changes nothing.
 					if (!this.#open.has(id)) return false;
@@ -314,6 +328,7 @@ export class OwnerCards implements InteractionModule {
 				.channel(channelId)
 				.then((channel) => {
 					open.mention = channel.thread === true;
+					if (channel.parent) open.thread = channel.parent;
 					return channel.send(view(card.footer, false));
 				})
 				.then((posted) => {
@@ -360,6 +375,37 @@ export class OwnerCards implements InteractionModule {
 		const [id = "", action = "", index = ""] = interaction.customId
 			.slice(CARD_PREFIX.length)
 			.split(":");
+		const started = performance.now();
+		let firstResponseMs: number | undefined;
+		onFirstResponse(interaction, () => {
+			firstResponseMs = Math.round(performance.now() - started);
+		});
+		try {
+			await this.#press(interaction, id, action, Number(index));
+		} finally {
+			// Which card and control, and how soon Discord heard back; never what was answered.
+			this.#options.logger.debug(
+				{ cardId: id, action, firstResponseMs },
+				"card press",
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * One press of a card's control. Its first response to Discord comes before anything that can
+	 * take a while: a press that opens a form shows it at once, and every other one is answered or
+	 * deferred before the audience, the thread or anything else is read.
+	 */
+	async #press(
+		interaction:
+			| ButtonInteraction
+			| StringSelectMenuInteraction
+			| ModalSubmitInteraction,
+		id: string,
+		action: string,
+		index: number,
+	): Promise<void> {
 		// Copying answers nothing: anyone who sees the card may copy, as often as they like, also
 		// once the card has ended or the process restarted.
 		if (interaction.isButton() && action === "copy") {
@@ -369,7 +415,7 @@ export class OwnerCards implements InteractionModule {
 					? { content: messages().cardCopyGone, flags: MessageFlags.Ephemeral }
 					: copyReply(text),
 			);
-			return true;
+			return;
 		}
 		const card = this.#open.get(id);
 		if (!card) {
@@ -377,14 +423,12 @@ export class OwnerCards implements InteractionModule {
 				content: messages().cardInactive,
 				flags: MessageFlags.Ephemeral,
 			});
-			return true;
+			return;
 		}
-		if (action === "previews") {
-			await showPreviews(card, interaction);
-			return true;
-		}
+		if (action === "previews") return showPreviews(card, interaction);
 		const user = discordUser(interaction);
-		const thread = await threadOf(interaction.channel);
+		// The thread as it was when the card was posted, else the client's cache: never a fetch.
+		const thread = card.thread ?? cachedThreadOf(interaction.channel);
 		const by: Answerer = {
 			user,
 			...(interaction.message ? { messageId: interaction.message.id } : {}),
@@ -392,67 +436,20 @@ export class OwnerCards implements InteractionModule {
 			isDirect: !interaction.inGuild(),
 			...(thread ? { thread } : {}),
 		};
-		// A menu pick or Submit is deferred before the audience is looked up, which may take a while.
-		if (
-			card.form &&
-			(action === "qpick" || action === "submit" || action === "qtext")
-		) {
-			await answerDeferred(card, action, Number(index), interaction, by);
-			return true;
-		}
-		if (!(await card.audience.allows(user))) {
-			await interaction.reply({
-				content: card.audience.refusal,
-				flags: MessageFlags.Ephemeral,
-			});
-			return true;
-		}
-		if (interaction.isButton() && (action === "yes" || action === "no")) {
-			const approved = action === "yes";
-			const approver = approved
-				? await card.audience.approver?.(user).catch((error: unknown) => {
-						this.#options.logger.warn(
-							{ err: error },
-							"could not tell who approved; the call runs without an approver",
-						);
-						return undefined;
-					})
-				: undefined;
-			const accepted = card.end(
-				approved ? "approved" : "declined",
-				approver ? { ...by, approver } : by,
+		if (interaction.isButton() && (action === "yes" || action === "no"))
+			return answerApproval(
+				card,
+				action === "yes",
+				interaction,
+				user,
+				by,
+				this.#options.logger,
 			);
-			// The plugin withdrew the call, or another press answered, while this one was being checked.
-			if (!accepted) {
-				await interaction.reply({
-					content: messages().cardInactive,
-					flags: MessageFlags.Ephemeral,
-				});
-				return true;
-			}
-			await interaction.update(
-				card.view(
-					approved
-						? (card.outcomes?.approved ?? messages().cardApproved)
-						: (card.outcomes?.declined ?? messages().cardDeclined),
-				),
-			);
-			return true;
-		}
-		if (interaction.isButton() && action === "cancel") {
-			// Another press, a stop or a withdrawal ended it while this one was being checked.
-			if (!card.decline()) {
-				await interaction.reply({
-					content: messages().cardInactive,
-					flags: MessageFlags.Ephemeral,
-				});
-				return true;
-			}
-			await interaction.update(card.view(messages().cardQuestionCancelled));
-			return true;
-		}
-		if (card.form) await answerForm(card, id, action, interaction);
-		else await answerSingle(card, id, action, interaction, by);
-		return true;
+		if (interaction.isButton() && action === "cancel")
+			return cancelQuestion(card, interaction, user);
+		if (!card.form) return answerSingle(card, id, action, interaction, by);
+		if (action === "qpick" || action === "submit" || action === "qtext")
+			return answerDeferred(card, action, index, interaction, by);
+		return answerForm(card, id, action, interaction);
 	}
 }

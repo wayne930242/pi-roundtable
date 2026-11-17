@@ -79,10 +79,8 @@ describe("Cancel on a question card", () => {
 			const text = await result;
 			expect(text).toContain("Riley cancelled the question");
 			expect(text).toContain("Do not ask the same question again");
-			expect(json(press.updates[0])).toContain(
-				messages().cardQuestionCancelled,
-			);
-			expect(json(press.updates[0])).not.toContain('"disabled":false');
+			expect(json(press.drawn[0])).toContain(messages().cardQuestionCancelled);
+			expect(json(press.drawn[0])).not.toContain('"disabled":false');
 			expect(resumed).toEqual([]);
 		});
 
@@ -100,8 +98,8 @@ describe("Cancel on a question card", () => {
 		await tick();
 		const stranger = cancel("100000000000000009");
 		await cards.handle(stranger.interaction);
-		expect(stranger.replies).toEqual([messages().cardOwnerOnly]);
-		expect(stranger.updates).toEqual([]);
+		expect(stranger.notices).toEqual([messages().cardOwnerOnly]);
+		expect(stranger.drawn).toEqual([]);
 		await cards.handle(cancel().interaction);
 		expect(await answer).toBe("declined");
 	});
@@ -114,8 +112,8 @@ describe("Cancel on a question card", () => {
 		const again = cancel();
 		await cards.handle(again.interaction);
 		expect(await answer).toBe("declined");
-		expect(again.replies).toEqual([messages().cardInactive]);
-		expect(again.updates).toEqual([]);
+		expect(again.notices).toEqual([messages().cardInactive]);
+		expect(again.drawn).toEqual([]);
 	});
 
 	for (const [name, set] of sets)
@@ -128,16 +126,14 @@ describe("Cancel on a question card", () => {
 			expect(await answer).toBe("pending");
 			const press = cancel();
 			await cards.handle(press.interaction);
-			expect(json(press.updates[0])).toContain(
-				messages().cardQuestionCancelled,
-			);
-			expect(json(press.updates[0])).not.toContain('"disabled":false');
+			expect(json(press.drawn[0])).toContain(messages().cardQuestionCancelled);
+			expect(json(press.drawn[0])).not.toContain('"disabled":false');
 			expect(resumed).toEqual([]);
 			expect(heard).toEqual([]);
 			// Nothing is left pending: a later press finds the card ended.
 			const again = cancel();
 			await cards.handle(again.interaction);
-			expect(again.replies).toEqual([messages().cardInactive]);
+			expect(again.notices).toEqual([messages().cardInactive]);
 			expect(fake.edits).toEqual([]);
 			expect(resumed).toEqual([]);
 		});

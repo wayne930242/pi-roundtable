@@ -68,7 +68,7 @@ function cardsInThread(who: typeof identity = identity) {
 			},
 		);
 		await cards.handle(pressed.interaction);
-		return pressed.replies;
+		return pressed.notices;
 	};
 	return { fake, cards, approval, pressAs };
 }
@@ -134,7 +134,7 @@ describe("cards by the prompt scope", () => {
 			user: SECOND_OWNER,
 		});
 		await cards.handle(pressed.interaction);
-		expect(pressed.replies).toEqual([messages().cardOwnerOnly]);
+		expect(pressed.notices).toEqual([messages().cardOwnerOnly]);
 	});
 
 	test("a private conversation's call above the speaker's tier is unavailable at once, and no card is posted", async () => {
@@ -168,7 +168,7 @@ describe("cards by the prompt scope", () => {
 			values: ["0"],
 		});
 		await cards.handle(owner.interaction);
-		expect(owner.replies).toEqual([messages().cardAskerRefusal]);
+		expect(owner.notices).toEqual([messages().cardAskerRefusal]);
 		const own = press("select", `${CARD_PREFIX}${fake.cardId()}:pick`, {
 			user: ADMIN,
 			values: ["0"],
@@ -396,13 +396,13 @@ describe("cards by the prompt scope", () => {
 					user: PHONE,
 				});
 				await cards.handle(yes.interaction);
-				expect(yes.replies).toEqual([messages().cardApproversRefusal]);
+				expect(yes.notices).toEqual([messages().cardApproversRefusal]);
 				const pick = press("select", `${CARD_PREFIX}${questionCard}:pick`, {
 					user: PHONE,
 					values: ["0"],
 				});
 				await cards.handle(pick.interaction);
-				expect(pick.replies).toEqual([messages().cardAskerRefusal]);
+				expect(pick.notices).toEqual([messages().cardAskerRefusal]);
 				expect(resolved).toEqual([]);
 			} finally {
 				phone = "p_ada";

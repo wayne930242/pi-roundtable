@@ -42,6 +42,21 @@ function referenceOf(referenced: Message, mention: RegExp) {
 	};
 }
 
+function threadFacts(
+	parentId: string,
+	parent: Pick<Channel, "type"> | null | undefined,
+): NonNullable<InboundMessage["thread"]> {
+	return {
+		parentId,
+		parentKind:
+			parent?.type === ChannelType.GuildText
+				? "text"
+				: parent?.type === ChannelType.GuildForum
+					? "forum"
+					: "other",
+	};
+}
+
 /** What a thread's parent is: a text channel, a forum, or something else (also a parent that cannot be read). */
 export async function threadOf(
 	channel: Channel | null | undefined,
@@ -50,15 +65,18 @@ export async function threadOf(
 	const parent =
 		channel.parent ??
 		(await channel.guild.channels.fetch(channel.parentId).catch(() => null));
-	return {
-		parentId: channel.parentId,
-		parentKind:
-			parent?.type === ChannelType.GuildText
-				? "text"
-				: parent?.type === ChannelType.GuildForum
-					? "forum"
-					: "other",
-	};
+	return threadFacts(channel.parentId, parent);
+}
+
+/**
+ * `threadOf` from the client's cache alone, never fetching: for an interaction, which must answer
+ * Discord within three seconds. A parent that is not cached reads as "other".
+ */
+export function cachedThreadOf(
+	channel: Channel | null | undefined,
+): InboundMessage["thread"] | undefined {
+	if (!channel?.isThread() || !channel.parentId) return undefined;
+	return threadFacts(channel.parentId, channel.parent);
 }
 
 /**
