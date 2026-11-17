@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-18
+
+### Added
+
+- pi-roundtable-mcp, pi-roundtable-web: Agents get `connector_list`, `connector_add` and `connector_remove` for the owner's MCP connectors, and none takes or shows a connector's URL. `connector_list` gives each connector's name, host, tool count and purpose. `connector_remove` is held under a new rule, `connector`, which yolo mode never approves; its card names the connector and its host only. `connector_add` takes a name and purpose only. With pi-roundtable-web it returns a one-time link (an hour, single use) to the connectors page's add form, filled in, where the owner pastes the URL; the asking conversation then gets a follow-up with the outcome. On Discord it points the owner to `/<root> connector add`.
+- pi-roundtable-mcp, pi-roundtable-web: The web console stores those add requests (never a URL) in `web_connector_add_requests`, serves them under `api/connectors/requests/<id>`, and opens the add form at `#/connectors?add=<id>`.
+
+### Changed
+
+- pi-roundtable-web: The chat home in the side column keeps its pins and its folder tabs to one row each. Five pins share the row and more scroll sideways, so no pin sits alone on a second row; the folder tabs no longer wrap but scroll sideways as on a phone, shorter (36px) and tighter there, as a pointer needs no 48px target.
+
 ## [0.52.3] - 2026-11-17
 
 ### Fixed
