@@ -10,6 +10,18 @@ export interface AttachmentRef {
 	/** MIME type when the surface knows it. */
 	contentType?: string;
 	size: number;
+	/** The surface's id of the file, such as Discord's attachment id, when it has one. */
+	id?: string;
+	/**
+	 * The message that carries the file, in the message's channel, when the surface reports it:
+	 * the message itself, the one it replies to, or for a forward the forwarding message. With
+	 * `id`, `DISCORD.readAttachment` reads a Discord file's bytes.
+	 */
+	messageId?: string;
+	/** The title the uploader gave it, when the surface carries one (Discord's `title`). */
+	title?: string;
+	/** The description the uploader gave it, such as its alt text (Discord's `description`). */
+	description?: string;
 }
 
 /**

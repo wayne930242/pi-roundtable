@@ -28,7 +28,7 @@ const DEADLINE_MS = 20_000;
 const CONCURRENCY = 2;
 
 /** The bytes of a response, or undefined once they pass `max`. */
-async function boundedBody(
+export async function boundedBody(
 	response: Response,
 	max: number,
 ): Promise<Uint8Array | undefined> {

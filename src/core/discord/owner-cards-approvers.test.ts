@@ -77,7 +77,7 @@ function setup(who: typeof identity = identity) {
 			{ user },
 		);
 		await cards.handle(pressed.interaction);
-		return pressed.replies;
+		return pressed.notices;
 	};
 	return { fake, cards, approval, pressAs, approvals, late };
 }
@@ -297,7 +297,7 @@ describe("cards for a call that names its approvers", () => {
 			user: ADA,
 		});
 		await cards.handle(pressed.interaction);
-		expect(pressed.replies).toEqual([messages().cardOwnerOnly]);
+		expect(pressed.notices).toEqual([messages().cardOwnerOnly]);
 		await cards.handle(
 			press("button", `${CARD_PREFIX}${fake.cardId()}:no`, { user: OWNER })
 				.interaction,

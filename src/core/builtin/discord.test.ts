@@ -150,6 +150,7 @@ test("the plugin provides the connection, the registrar, the guard and the threa
 		"connection",
 		"guard",
 		"poster",
+		"readAttachment",
 		"threads",
 	]);
 	// The host's instance, so a plugin that reads either service sees the same threads.

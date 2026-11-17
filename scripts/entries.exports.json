@@ -412,6 +412,7 @@
 		],
 		"types": [
 			"FakeDiscord",
+			"FakeDiscordAttachment",
 			"FakeDiscordPoster",
 			"FakeDiscordVoice",
 			"FakeForum",
@@ -638,9 +639,12 @@
 	},
 	"discord": {
 		"values": [
+			"ATTACHMENT_READ_MAX_BYTES",
+			"AttachmentReadError",
 			"CHANNEL_CONTEXT_DEFAULTS",
 			"CHANNEL_OPERATIONS",
 			"CHANNEL_TOOLS",
+			"CONTEXT_ATTACHMENT_LINES",
 			"ChannelToolError",
 			"DISCORD",
 			"DISCORD_ADMIN_TOOLS",
@@ -676,6 +680,9 @@
 			"AgentPanel",
 			"AgentPanelMessage",
 			"AgentPanelOptions",
+			"AttachmentBytes",
+			"AttachmentReadErrorCode",
+			"AttachmentReadRequest",
 			"CardButton",
 			"CardLink",
 			"CardPicture",

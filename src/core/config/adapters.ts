@@ -120,6 +120,11 @@ export interface DiscordConfig {
 	 * reported as `download failed` and the turn goes on without it.
 	 */
 	attachmentDownload?: { deadlineMs?: number; idleMs?: number };
+	/**
+	 * What `DISCORD.readAttachment` reads for a plugin: `maxBytes` (default 10 MiB, at most
+	 * 100 MiB) is the most bytes of one file; a larger file is refused as `too-large`.
+	 */
+	attachmentRead?: { maxBytes?: number };
 }
 
 /** The Discord settings with every default filled in. */
@@ -146,6 +151,8 @@ export interface ResolvedDiscord {
 	cardCopies: NonNullable<DiscordConfig["cardCopies"]> | false;
 	/** As configured: left out unless set, so the defaults apply. */
 	attachmentDownload?: NonNullable<DiscordConfig["attachmentDownload"]>;
+	/** As configured: left out unless set, so the default applies. */
+	attachmentRead?: NonNullable<DiscordConfig["attachmentRead"]>;
 }
 
 /** The configured Discord settings, defaults filled in; `rootCommand` is the host's slug. */
@@ -185,6 +192,9 @@ export function resolvedDiscord(
 		...(discord.attachmentDownload === undefined
 			? {}
 			: { attachmentDownload: discord.attachmentDownload }),
+		...(discord.attachmentRead === undefined
+			? {}
+			: { attachmentRead: discord.attachmentRead }),
 	};
 }
 
@@ -259,6 +269,9 @@ export const discordShape = shape({
 			deadlineMs: optional(integer(1_000, 600_000)),
 			idleMs: optional(integer(1_000, 600_000)),
 		}),
+	),
+	attachmentRead: optional(
+		shape({ maxBytes: optional(integer(1, 100 * 1024 * 1024)) }),
 	),
 });
 

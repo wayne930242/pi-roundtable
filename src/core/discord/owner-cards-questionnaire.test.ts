@@ -229,10 +229,17 @@ describe("the Discord questionnaire card", () => {
 		const noSubmit = press("button", custom(id, "submit"), { user: "1" });
 		await cards.handle(noSubmit.interaction);
 		expect(noSubmit.followUps[0]?.content).toBe(messages().cardOwnerOnly);
+		// The form opens at once, before anyone is looked up; what they write in it is refused.
 		const notes = press("button", custom(id, "notes"), { user: "1" });
 		await cards.handle(notes.interaction);
-		expect(notes.replies).toEqual([messages().cardOwnerOnly]);
-		expect(notes.modals).toEqual([]);
+		expect(notes.modals).toHaveLength(1);
+		const written = press("modal", custom(id, "qtext"), {
+			user: "1",
+			text: "stranger's words",
+		});
+		await cards.handle(written.interaction);
+		expect(written.notices).toEqual([messages().cardOwnerOnly]);
+		expect(written.edited).toEqual([]);
 		// The owner's Submit finds nothing in the draft: the stranger's pick did not count.
 		const own = press("button", custom(id, "submit"));
 		await cards.handle(own.interaction);
@@ -262,7 +269,7 @@ describe("the Discord questionnaire card", () => {
 		const shown = JSON.stringify(stranger.replied);
 		expect(shown).toContain("SAT-PREVIEW");
 		expect(shown).toContain("SUN-PREVIEW");
-		expect(stranger.updates).toEqual([]);
+		expect(stranger.drawn).toEqual([]);
 		// The card is still open: the owner answers it.
 		await cards.handle(
 			press("select", custom(id, "qpick:0"), { values: ["0"] }).interaction,
@@ -326,7 +333,7 @@ describe("the Discord questionnaire card", () => {
 		const pick = press("select", custom(id, "pick"), { values: ["1"] });
 		await cards.handle(pick.interaction);
 		expect(await answer).toEqual({ answers: [{ choices: ["Sunday"] }] });
-		expect(json(pick.updates[0])).toContain('"disabled":true');
+		expect(json(pick.drawn[0])).toContain('"disabled":true');
 	});
 
 	test("a draft edit restarts the grace period of a turn that waits on the card", async () => {
@@ -388,7 +395,7 @@ describe("the Discord questionnaire card", () => {
 		// A second Submit finds the card answered.
 		const again = press("button", custom(id, "submit"));
 		await cards.handle(again.interaction);
-		expect(again.replies).toEqual([messages().cardInactive]);
+		expect(again.notices).toEqual([messages().cardInactive]);
 		expect(resumed).toHaveLength(1);
 	});
 
@@ -402,7 +409,7 @@ describe("the Discord questionnaire card", () => {
 		const pick = press("select", custom(singleId, "pick"), { values: ["1"] });
 		await cards.handle(pick.interaction);
 		expect(await single).toEqual({ choices: ["Sunday"] });
-		expect(pick.updates).toHaveLength(1);
+		expect(pick.drawn).toHaveLength(1);
 	});
 
 	test("a stopped turn cancels its questionnaire card", async () => {

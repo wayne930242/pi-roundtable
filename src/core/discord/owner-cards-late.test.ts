@@ -110,11 +110,11 @@ describe("OwnerCards after the grace period", () => {
 				text: `late: ${JSON.stringify(heard[0])}`,
 			},
 		]);
-		expect(json(yes.updates[0])).toContain(messages().cardApproved);
-		expect(json(yes.updates[0])).toContain('"disabled":true');
+		expect(json(yes.drawn[0])).toContain(messages().cardApproved);
+		expect(json(yes.drawn[0])).toContain('"disabled":true');
 		const again = press("button", `${CARD_PREFIX}${id}:yes`);
 		await cards.handle(again.interaction);
-		expect(again.replies).toEqual([messages().cardInactive]);
+		expect(again.notices).toEqual([messages().cardInactive]);
 		expect(resumed).toHaveLength(1);
 		expect(heard).toHaveLength(1);
 	});
@@ -129,7 +129,7 @@ describe("OwnerCards after the grace period", () => {
 			{ kind: "approval", approved: false, by: OWNER, prompt: id },
 		]);
 		expect(resumed).toHaveLength(1);
-		expect(json(no.updates[0])).toContain(messages().cardDeclined);
+		expect(json(no.drawn[0])).toContain(messages().cardDeclined);
 	});
 
 	test("a late question's answer starts a turn with the answer", async () => {
@@ -143,9 +143,7 @@ describe("OwnerCards after the grace period", () => {
 			{ kind: "question", answer: { choices: ["Sunday"] }, by: OWNER },
 		]);
 		expect(resumed[0]?.text).toContain("Sunday");
-		expect(json(pick.updates[0])).toContain(
-			messages().cardAnswered(["Sunday"]),
-		);
+		expect(json(pick.drawn[0])).toContain(messages().cardAnswered(["Sunday"]));
 	});
 
 	test("a stop within the grace period cancels the card; after it the card stays the conversation's", async () => {

@@ -103,9 +103,9 @@ test("someone who may not approve copies the text, ephemerally and as often as t
 			user: STRANGER,
 		});
 		expect(await harness.cards.handle(copy.interaction)).toBe(true);
-		expect(copy.replies).toEqual(["```\necho hello\n```"]);
+		expect(copy.notices).toEqual(["```\necho hello\n```"]);
 		expect(copy.replied[0]?.flags).toBe(MessageFlags.Ephemeral);
-		expect(copy.updates).toEqual([]);
+		expect(copy.drawn).toEqual([]);
 	}
 	await tick();
 	expect(settled).toBe(false);
@@ -114,7 +114,7 @@ test("someone who may not approve copies the text, ephemerally and as often as t
 		user: STRANGER,
 	});
 	await harness.cards.handle(refused.interaction);
-	expect(refused.replies).toHaveLength(1);
+	expect(refused.notices).toHaveLength(1);
 	expect(settled).toBe(false);
 	await harness.cards.handle(
 		press("button", `${CARD_PREFIX}${id}:yes`).interaction,
@@ -131,7 +131,7 @@ test("the button keeps working once the card has ended", async () => {
 	expect(await answer).toBe("declined");
 	const copy = press("button", `${CARD_PREFIX}${id}:copy`, { user: STRANGER });
 	await harness.cards.handle(copy.interaction);
-	expect(copy.replies).toEqual(["```\necho hello\n```"]);
+	expect(copy.notices).toEqual(["```\necho hello\n```"]);
 });
 
 test("a text that does not fit a message, or holds a code fence, comes as a file", async () => {
@@ -141,7 +141,7 @@ test("a text that does not fit a message, or holds a code fence, comes as a file
 	for (const { id } of [long, fenced]) {
 		const copy = press("button", `${CARD_PREFIX}${id}:copy`);
 		await harness.cards.handle(copy.interaction);
-		expect(copy.replies).toEqual([messages().cardCopyFile]);
+		expect(copy.notices).toEqual([messages().cardCopyFile]);
 		expect(copy.replied[0]?.files).toHaveLength(1);
 		expect(copy.replied[0]?.flags).toBe(MessageFlags.Ephemeral);
 	}
@@ -157,7 +157,7 @@ test("a card the process never kept says so, and answers nothing", async () => {
 	const harness = setup();
 	const copy = press("button", `${CARD_PREFIX}no-such-card:copy`);
 	expect(await harness.cards.handle(copy.interaction)).toBe(true);
-	expect(copy.replies).toEqual([messages().cardCopyGone]);
+	expect(copy.notices).toEqual([messages().cardCopyGone]);
 });
 
 test("with a ledger the text survives a restart; without one it does not", async () => {
@@ -172,11 +172,11 @@ test("with a ledger the text survives a restart; without one it does not", async
 			user: STRANGER,
 		});
 		await restarted.cards.handle(copy.interaction);
-		expect(copy.replies).toEqual(["```\necho hello\n```"]);
+		expect(copy.notices).toEqual(["```\necho hello\n```"]);
 		const forgetful = setup();
 		const gone = press("button", `${CARD_PREFIX}${id}:copy`);
 		await forgetful.cards.handle(gone.interaction);
-		expect(gone.replies).toEqual([messages().cardCopyGone]);
+		expect(gone.notices).toEqual([messages().cardCopyGone]);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
@@ -234,11 +234,11 @@ test("without a path the texts live in memory: the button works until a restart,
 		await first.cards.flushCopies();
 		const same = press("button", `${CARD_PREFIX}${id}:copy`);
 		await first.cards.handle(same.interaction);
-		expect(same.replies).toEqual(["```\necho hello\n```"]);
+		expect(same.notices).toEqual(["```\necho hello\n```"]);
 		const restarted = setup({ copies: {} });
 		const gone = press("button", `${CARD_PREFIX}${id}:copy`);
 		await restarted.cards.handle(gone.interaction);
-		expect(gone.replies).toEqual([messages().cardCopyGone]);
+		expect(gone.notices).toEqual([messages().cardCopyGone]);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

@@ -46,7 +46,7 @@ import { readMessagesBefore, readThreadStarter } from "./context-reading.ts";
 import { DiscordThreadHost } from "./dispatch-thread-host.ts";
 import { DISCORD_FORMATTING, pickFormatting } from "./formatting.ts";
 import { DEFAULT_FRESH_MARKER, postFreshMarker } from "./fresh-marker.ts";
-import { lateAnswerMessage } from "./inbound-message.ts";
+import { lateAnswerMessage, threadOf } from "./inbound-message.ts";
 import type { IntercomTexts } from "./intercom-cards.ts";
 import {
 	explainIntents,
@@ -409,8 +409,10 @@ export class DiscordSurface
 	/** Where the owner's cards in a channel are posted. */
 	async cardChannel(channelId: string): Promise<CardChannel> {
 		const target = await this.#sendable(`${PREFIX}${channelId}`);
+		const parent = await threadOf(target);
 		return {
 			thread: target.isThread(),
+			...(parent ? { parent } : {}),
 			send: async (payload) => {
 				const message = await target.send(payload);
 				return { edit: (change) => message.edit(change) };

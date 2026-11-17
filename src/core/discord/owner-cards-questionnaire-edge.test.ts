@@ -207,7 +207,7 @@ describe("the previews attachment", () => {
 		await tick();
 		const open = press("button", custom(fake.cardId(), "previews"));
 		await cards.handle(open.interaction);
-		expect(open.replies[0]).toBe(messages().cardPreviewsFile);
+		expect(open.notices[0]).toBe(messages().cardPreviewsFile);
 	});
 });
 

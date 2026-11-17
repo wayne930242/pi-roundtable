@@ -303,7 +303,10 @@ function discordMessage(extra: Record<string, unknown> = {}) {
 			[
 				"a",
 				{
+					id: "a1",
 					name: "map.png",
+					title: "The map",
+					description: "a hand-drawn map",
 					url: "https://files/map.png",
 					contentType: "image/png",
 					size: 1234,
@@ -314,7 +317,7 @@ function discordMessage(extra: Record<string, unknown> = {}) {
 	} as never;
 }
 
-test("a Discord message reads as its author's name, its mentions by name, and its stickers and files as text", () => {
+test("a Discord message reads as its author's name, its mentions by name, and its stickers as text; its files are described apart", () => {
 	expect(
 		contextSourceOf(discordMessage(), { botId: BOT, applicationId: "app" }),
 	).toEqual({
@@ -324,10 +327,13 @@ test("a Discord message reads as its author's name, its mentions by name, and it
 		bot: false,
 		own: false,
 		at: 5,
-		text: "hey @Noa N and <@!999> [sticker: wave] [image: map.png https://files/map.png]",
+		text: "hey @Noa N and <@!999> [sticker: wave]",
 		attachments: [
 			{
+				id: "a1",
 				name: "map.png",
+				title: "The map",
+				description: "a hand-drawn map",
 				url: "https://files/map.png",
 				contentType: "image/png",
 				size: 1234,

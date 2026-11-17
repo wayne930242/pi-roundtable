@@ -82,8 +82,8 @@ describe("a card whose plugin withdraws the call", () => {
 		// A press on the closed card is refused and answers nothing.
 		const yes = press("button", `${CARD_PREFIX}${id}:yes`);
 		await cards.handle(yes.interaction);
-		expect(yes.replies).toEqual([messages().cardInactive]);
-		expect(yes.updates).toEqual([]);
+		expect(yes.notices).toEqual([messages().cardInactive]);
+		expect(yes.drawn).toEqual([]);
 		expect(heard).toEqual([]);
 		expect(resumed).toEqual([]);
 	});
@@ -98,7 +98,7 @@ describe("a card whose plugin withdraws the call", () => {
 		withdraw.abort("too late");
 		expect(await answer).toBe("approved");
 		expect(fake.edits).toEqual([]);
-		expect(json(yes.updates[0])).toContain(messages().cardApproved);
+		expect(json(yes.drawn[0])).toContain(messages().cardApproved);
 	});
 
 	test("a card answered late first starts its turn once, and the withdrawal after it edits nothing", async () => {
@@ -123,8 +123,8 @@ describe("a card whose plugin withdraws the call", () => {
 		const handling = cards.handle(yes.interaction);
 		withdraw.abort();
 		await handling;
-		expect(yes.replies).toEqual([messages().cardInactive]);
-		expect(yes.updates).toEqual([]);
+		expect(yes.notices).toEqual([messages().cardInactive]);
+		expect(yes.drawn).toEqual([]);
 		expect(heard).toEqual([]);
 		expect(resumed).toEqual([]);
 	});

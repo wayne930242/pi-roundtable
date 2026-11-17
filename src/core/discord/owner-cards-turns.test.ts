@@ -100,13 +100,13 @@ describe("a card answered after its turn stopped waiting", () => {
 		});
 		expect(message.text).toContain("Question: Which day?");
 		expect(message.text).toContain("chose: Sunday");
-		expect(json(pick.updates[0])).toContain('"disabled":true');
+		expect(json(pick.drawn[0])).toContain('"disabled":true');
 		// A second press starts nothing more.
 		const again = press("select", `${CARD_PREFIX}${fake.cardId()}:pick`, {
 			values: ["0"],
 		});
 		await owner.handle(again.interaction);
-		expect(again.replies).toEqual([messages().cardInactive]);
+		expect(again.notices).toEqual([messages().cardInactive]);
 		expect(resumed).toHaveLength(1);
 	});
 

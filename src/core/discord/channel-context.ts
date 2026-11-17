@@ -32,15 +32,7 @@ export type ContextSourceMessage = ChannelContextSource;
 /** A file attached to a fetched message, as Discord describes it. */
 export type ContextSourceAttachment = ChannelContextSourceAttachment;
 
-function attachmentLabel(contentType: string | null | undefined): string {
-	const type = contentType ?? "";
-	if (type.startsWith("image/")) return "image";
-	if (type.startsWith("video/")) return "video";
-	if (type.startsWith("audio/")) return "audio";
-	return "file";
-}
-
-/** The facts of a fetched Discord message channel context reads: mentions by name, stickers and files as text, never their bytes. */
+/** The facts of a fetched Discord message channel context reads: mentions by name and stickers as text, its files described, never their bytes. */
 export function contextSourceOf(
 	message: Message,
 	{ botId, applicationId }: BotIdentity,
@@ -55,10 +47,6 @@ export function contextSourceOf(
 	const parts = [text.trim(), embeds].filter(Boolean);
 	for (const sticker of message.stickers.values())
 		parts.push(`[sticker: ${sticker.name}]`);
-	for (const file of message.attachments.values())
-		parts.push(
-			`[${attachmentLabel(file.contentType)}: ${file.name} ${file.url}]`,
-		);
 	const ownWebhook =
 		message.webhookId !== null &&
 		message.applicationId !== null &&
@@ -78,7 +66,10 @@ export function contextSourceOf(
 		at: message.createdTimestamp,
 		text: parts.join(" "),
 		attachments: [...message.attachments.values()].map((file) => ({
+			id: file.id,
 			name: file.name,
+			...(file.title ? { title: file.title } : {}),
+			...(file.description ? { description: file.description } : {}),
 			contentType: file.contentType ?? "",
 			size: file.size,
 			url: file.url,
@@ -111,9 +102,22 @@ function similarity(a: string, b: string): number {
 	return longest / longer.length;
 }
 
+/** Whether two messages carry the same files, by name and size: a repost's files have new ids. */
+function sameFiles(a: ContextSourceMessage, b: ContextSourceMessage): boolean {
+	const files = (message: ContextSourceMessage) =>
+		(message.attachments ?? []).map((file) => `${file.name}\u0000${file.size}`);
+	const [x, y] = [files(a), files(b)];
+	return x.length === y.length && x.every((file, i) => file === y[i]);
+}
+
+/** A message that says something: text, or a file. */
+const saysSomething = (message: ContextSourceMessage) =>
+	message.text !== "" || (message.attachments?.length ?? 0) > 0;
+
 /**
- * Consecutive messages of one author at least `threshold` alike become the later one. A `foreign`
- * message is one of a webhook that carries many people, so it also needs the same name.
+ * Consecutive messages of one author at least `threshold` alike, with the same files, become the
+ * later one. A `foreign` message is one of a webhook that carries many people, so it also needs
+ * the same name.
  */
 function merged(
 	messages: readonly ContextSourceMessage[],
@@ -127,6 +131,7 @@ function merged(
 			last &&
 			last.authorId === message.authorId &&
 			(!foreign(message) || last.authorName === message.authorName) &&
+			sameFiles(last, message) &&
 			similarity(last.text, message.text) >= threshold
 		)
 			out[out.length - 1] = message;
@@ -150,7 +155,7 @@ export interface ChannelContextSelection {
 	/**
 	 * The thread's opening message when `ChannelContextOptions.starter` asked for it: it comes first,
 	 * outside `keep`, whether or not the fetched window holds it, unless a filter drops it (the
-	 * `authors` verdict, the assistant's own post, an empty text, a message delivered before).
+	 * `authors` verdict, the assistant's own post, a message with neither text nor files, a message delivered before).
 	 */
 	starter?: ContextSourceMessage;
 	/** What the selection reads of the settings; without `foreignWebhook` every webhook of the application is the assistant's. */
@@ -186,7 +191,7 @@ function limitOf(
 
 /**
  * The window of fetched messages (all before the addressed one): those after the assistant's
- * latest post, without its own posts, those already delivered, and empty ones; near repeats merged,
+ * latest post, without its own posts, those already delivered, and those with neither text nor files; near repeats merged,
  * the newest `keep`, oldest first. `window` is every message it considered, kept or not.
  */
 export function selectChannelContext(
@@ -224,7 +229,7 @@ export function selectChannelContext(
 	const opening =
 		starter &&
 		!seen.has(starter.id) &&
-		starter.text !== "" &&
+		saysSomething(starter) &&
 		verdict(starter) === "keep"
 			? [{ ...starter, text: cut(starter.text, limitOf(starter, selection)) }]
 			: [];
@@ -237,7 +242,7 @@ export function selectChannelContext(
 				message.id !== starter?.id &&
 				!assistants(message) &&
 				!seen.has(message.id) &&
-				message.text !== "",
+				saysSomething(message),
 		)
 		.map((message) => ({
 			...message,

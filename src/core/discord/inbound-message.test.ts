@@ -316,3 +316,58 @@ test("a message in a channel or a direct conversation reports no thread", async 
 		"thread",
 	);
 });
+
+test("each file reports its id, the message that carries it, and its title and description", async () => {
+	const file = (id: string, name: string, extra = {}) => [
+		id,
+		{
+			id,
+			url: `https://files/${name}`,
+			name,
+			contentType: "application/pdf",
+			size: 5,
+			title: null,
+			description: null,
+			...extra,
+		},
+	];
+	const inbound = await toInbound(
+		discordMessage({
+			attachments: new Map([
+				file("a1", "q3.pdf", { title: "Q3", description: "the numbers" }),
+			] as never),
+			reference: { messageId: "8", type: MessageReferenceType.Default },
+			fetchReference: async () => ({
+				id: "8",
+				author: { id: "2", username: "kai" },
+				content: "earlier",
+				webhookId: null,
+				attachments: new Map([file("a2", "old.pdf")] as never),
+				embeds: [],
+			}),
+		}),
+		identity,
+	);
+	expect(inbound?.attachments).toEqual([
+		{
+			url: "https://files/q3.pdf",
+			name: "q3.pdf",
+			contentType: "application/pdf",
+			size: 5,
+			id: "a1",
+			messageId: "m1",
+			title: "Q3",
+			description: "the numbers",
+		},
+	]);
+	expect(inbound?.reference?.attachments).toEqual([
+		{
+			url: "https://files/old.pdf",
+			name: "old.pdf",
+			contentType: "application/pdf",
+			size: 5,
+			id: "a2",
+			messageId: "8",
+		},
+	]);
+});

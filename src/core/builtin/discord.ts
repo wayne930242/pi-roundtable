@@ -9,6 +9,13 @@ import type {
 import { type ServiceKey, serviceKey } from "../contract/services.ts";
 import { discordAgentGuild } from "../discord/agent-guild.ts";
 import { discordChannelOps, discordTeamReads } from "../discord/agent-tools.ts";
+import {
+	ATTACHMENT_READ_MAX_BYTES,
+	type AttachmentBytes,
+	type AttachmentReadRequest,
+	discordAttachmentSource,
+	readAttachment,
+} from "../discord/attachment-read.ts";
 import { CardCopies } from "../discord/card-copies.ts";
 import { ChannelContextReader } from "../discord/channel-context.ts";
 import { CommandCollection } from "../discord/command-collection.ts";
@@ -65,6 +72,17 @@ export interface DiscordServices {
 		message: InboundMessage,
 		options?: ChannelContextOptions,
 	): Promise<ChannelContext | undefined>;
+	/**
+	 * One file of a message, its bytes read from Discord now: the message is fetched again in the
+	 * channel the caller names, so the download address is Discord's own and fresh, never one a
+	 * caller or a model gives; the file is found by its id (`AttachmentRef.id`, or an `<attachment>`
+	 * line's `id` and `message` in channel context). At most the host's
+	 * `discord.attachmentRead.maxBytes` (default 10 MiB) is read, or less when `maxBytes` asks.
+	 * Nothing is parsed, stored or logged. Rejects with an `AttachmentReadError` whose `code` is
+	 * `not-found`, `too-large`, `gone` or `unavailable`. Which channels a plugin reads is its own
+	 * call: pass the channel of the conversation the file was posted in, not one a model names.
+	 */
+	readAttachment(request: AttachmentReadRequest): Promise<AttachmentBytes>;
 	/**
 	 * Discord voice: joining a guild's voice channel, muted, to hear each speaker apart. There only
 	 * when the host's `discord.voice` is on; a join before the connection is ready answers
@@ -142,6 +160,8 @@ export interface DiscordOptions {
 	 * loaded as the host starts, and only then. Default: off.
 	 */
 	voice?: boolean;
+	/** The most bytes `DISCORD.readAttachment` reads of one file; default `ATTACHMENT_READ_MAX_BYTES`, 10 MiB. */
+	attachmentRead?: { maxBytes?: number };
 	/** What the model is told about how replies render in Discord; `false` tells it nothing. Default: Markdown renders, except tables. */
 	formatting?: string | false;
 	/**
@@ -301,6 +321,11 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 				poster: restPoster(restOf(connected.rest())),
 				channelContext: (message, given) =>
 					connected.channelContext(message, given),
+				readAttachment: (request) =>
+					readAttachment(discordAttachmentSource(connected.client()), request, {
+						maxBytes:
+							options.attachmentRead?.maxBytes ?? ATTACHMENT_READ_MAX_BYTES,
+					}),
 				...(voice
 					? {
 							voice: {

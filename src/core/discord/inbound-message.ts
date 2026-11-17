@@ -18,14 +18,20 @@ export interface BotIdentity {
 	applicationId: string | undefined;
 }
 
+/** The files of `message`, carried by the message `carrier` (a forward's by the forwarding message). */
 function attachmentRefs(
 	message: Pick<Message, "attachments">,
+	carrier: string,
 ): AttachmentRef[] {
 	return [...message.attachments.values()].map((attachment) => ({
 		url: attachment.url,
 		name: attachment.name,
 		...(attachment.contentType ? { contentType: attachment.contentType } : {}),
 		size: attachment.size,
+		id: attachment.id,
+		messageId: carrier,
+		...(attachment.title ? { title: attachment.title } : {}),
+		...(attachment.description ? { description: attachment.description } : {}),
 	}));
 }
 
@@ -34,11 +40,26 @@ function referenceOf(referenced: Message, mention: RegExp) {
 		text: withEmbeds(referenced.content, referenced.embeds)
 			.replace(mention, "")
 			.trim(),
-		attachments: attachmentRefs(referenced),
+		attachments: attachmentRefs(referenced, referenced.id),
 		authorId: referenced.author.id,
 		...(referenced.webhookId
 			? { webhookName: referenced.author.username }
 			: {}),
+	};
+}
+
+function threadFacts(
+	parentId: string,
+	parent: Pick<Channel, "type"> | null | undefined,
+): NonNullable<InboundMessage["thread"]> {
+	return {
+		parentId,
+		parentKind:
+			parent?.type === ChannelType.GuildText
+				? "text"
+				: parent?.type === ChannelType.GuildForum
+					? "forum"
+					: "other",
 	};
 }
 
@@ -50,15 +71,18 @@ export async function threadOf(
 	const parent =
 		channel.parent ??
 		(await channel.guild.channels.fetch(channel.parentId).catch(() => null));
-	return {
-		parentId: channel.parentId,
-		parentKind:
-			parent?.type === ChannelType.GuildText
-				? "text"
-				: parent?.type === ChannelType.GuildForum
-					? "forum"
-					: "other",
-	};
+	return threadFacts(channel.parentId, parent);
+}
+
+/**
+ * `threadOf` from the client's cache alone, never fetching: for an interaction, which must answer
+ * Discord within three seconds. A parent that is not cached reads as "other".
+ */
+export function cachedThreadOf(
+	channel: Channel | null | undefined,
+): InboundMessage["thread"] | undefined {
+	if (!channel?.isThread() || !channel.parentId) return undefined;
+	return threadFacts(channel.parentId, channel.parent);
 }
 
 /**
@@ -132,8 +156,8 @@ export async function toInbound(
 			.replace(mention, "")
 			.trim(),
 		attachments: [
-			...attachmentRefs(message),
-			...(forward ? attachmentRefs(forward) : []),
+			...attachmentRefs(message, message.id),
+			...(forward ? attachmentRefs(forward, message.id) : []),
 		],
 		...(forward && reference?.channelId
 			? {

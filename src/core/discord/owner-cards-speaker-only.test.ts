@@ -91,7 +91,7 @@ function setup(who: typeof identity | null = identity) {
 			{ user },
 		);
 		await cards.handle(pressed.interaction);
-		return pressed.replies;
+		return pressed.notices;
 	};
 	return { fake, ask, pressAs, approvals, late };
 }
