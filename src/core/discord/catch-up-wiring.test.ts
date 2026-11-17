@@ -181,6 +181,40 @@ test("a message the gate holds longer still reaches routing before the next one 
 	expect(delivered).toEqual(["slow", "quick"]);
 });
 
+test("a message that cannot be read while an earlier one waits is logged, and the earlier one still delivered", async () => {
+	const client = Object.assign(new EventEmitter(), {
+		user: { id: BOT },
+		application: { id: BOT },
+	});
+	const delivered: string[] = [];
+	const logged: string[] = [];
+	listenForMessages(
+		client as unknown as Client,
+		(message: InboundMessage) => delivered.push(message.messageId),
+		{
+			...silentLogger(),
+			error: (_: unknown, what: string) => logged.push(what),
+		} as never,
+		async (message) => {
+			if (message.messageId === "slow") await Bun.sleep(20);
+			return true;
+		},
+	);
+	client.emit(Events.MessageCreate, liveMessage("slow"));
+	client.emit(Events.MessageCreate, {
+		...liveMessage("broken"),
+		channel: {
+			isDMBased: () => {
+				throw new Error("unreadable");
+			},
+			isThread: () => false,
+		},
+	});
+	await Bun.sleep(40);
+	expect(delivered).toEqual(["slow"]);
+	expect(logged).toEqual(["inbound message could not be read"]);
+});
+
 /** A channel in the client's cache, as the reader picks among them. */
 function cached(id: string, extra: Record<string, unknown> = {}) {
 	return {

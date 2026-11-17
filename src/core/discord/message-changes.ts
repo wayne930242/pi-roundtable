@@ -28,10 +28,16 @@ export function listenForMessages(
 		const read = toInbound(message, {
 			botId,
 			applicationId: client.application?.id,
-		}).then(async (inbound) => {
-			if (!inbound || !botId) return undefined;
-			return !gate || (await gate(inbound, botId)) ? inbound : undefined;
-		});
+		})
+			.then(async (inbound) => {
+				if (!inbound || !botId) return undefined;
+				return !gate || (await gate(inbound, botId)) ? inbound : undefined;
+			})
+			// Handled here, not when its turn comes: a read that fails while an earlier one waits would otherwise go unhandled.
+			.catch((error: unknown) => {
+				logger.error({ err: error }, "inbound message could not be read");
+				return undefined;
+			});
 		const { channelId } = message;
 		const after = (delivering.get(channelId) ?? Promise.resolve())
 			.then(() => read)
@@ -39,7 +45,7 @@ export function listenForMessages(
 				if (inbound) deliver(inbound);
 			})
 			.catch((error: unknown) =>
-				logger.error({ err: error }, "inbound message could not be read"),
+				logger.error({ err: error }, "inbound message could not be delivered"),
 			);
 		delivering.set(channelId, after);
 		void after.then(() => {

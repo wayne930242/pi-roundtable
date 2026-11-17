@@ -270,7 +270,7 @@ describeDb("catch-up over the journal", () => {
 	});
 });
 
-test("a message not addressed to the bot passes the gate unrecorded", async () => {
+test("a message not addressed to the bot passes the gate unrecorded, and so does any while the host drains", async () => {
 	const claimed: string[] = [];
 	const journal: InboundJournal = {
 		claim: async ({ messageId }) => {
@@ -293,7 +293,20 @@ test("a message not addressed to the bot passes the gate unrecorded", async () =
 		attachments: [],
 	} satisfies InboundMessage;
 	expect(await journalGate(journal, silentLogger())(message, "9")).toBe(true);
+	// Once the host drains, an addressed message passes unrecorded, so the next process may answer it.
+	const addressedMessage = { ...message, mentionsBot: true };
+	expect(
+		await journalGate(
+			journal,
+			silentLogger(),
+			() => true,
+		)(addressedMessage, "9"),
+	).toBe(true);
 	expect(claimed).toEqual([]);
+	expect(
+		await journalGate(journal, silentLogger())(addressedMessage, "9"),
+	).toBe(false);
+	expect(claimed).toEqual(["2"]);
 });
 
 test("catch-up settings fill the defaults and refuse what the config file refuses", () => {

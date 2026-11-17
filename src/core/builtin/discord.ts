@@ -246,6 +246,8 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 			const journal = catchUpWith
 				? PgInboundJournal.attach(database())
 				: undefined;
+			// Set as the host begins to shut down; from then on routing refuses messages.
+			let draining = false;
 			// A host that keeps no copy texts on disk drops what an earlier run left.
 			if (options.cardCopies === false)
 				for (const name of ["card-copies.json", "intercom-texts.json"]) {
@@ -300,10 +302,13 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 					: { formatting: options.formatting }),
 				...(options.memberEvents ? { memberEvents: true } : {}),
 				...(options.voice ? { voice: true } : {}),
-				...(journal ? { inboundGate: journalGate(journal, logger) } : {}),
+				...(journal
+					? {
+							inboundGate: journalGate(journal, logger, () => draining),
+						}
+					: {}),
 			});
 			surface = connected;
-			let draining = false;
 			// Voice sessions over the same client; nothing of the voice packages is loaded before its service starts.
 			const voice = options.voice
 				? voiceService({

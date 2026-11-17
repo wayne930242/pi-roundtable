@@ -268,14 +268,17 @@ export async function catchUp<M extends ScannedMessage>(
 /**
  * Records each addressed message the live gateway delivers before routing hears it, so catch-up
  * after a restart leaves it alone; false for one already recorded, which is not delivered again.
- * A message that cannot be recorded is still delivered, and logged.
+ * A message that cannot be recorded is still delivered, and logged. Once the host drains
+ * (`draining`), nothing is recorded: routing refuses those messages, and the next process answers
+ * those its restart notice did not.
  */
 export function journalGate(
 	journal: InboundJournal,
 	logger: Logger,
+	draining: () => boolean = () => false,
 ): (message: InboundMessage, botId: string) => Promise<boolean> {
 	return async (message, botId) => {
-		if (!addressed(message)) return true;
+		if (!addressed(message) || draining()) return true;
 		const channelId = message.channel.slice("discord:".length);
 		try {
 			const first = await journal.claim({

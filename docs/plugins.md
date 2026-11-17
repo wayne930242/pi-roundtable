@@ -2941,10 +2941,11 @@ discord: { token: process.env.DISCORD_TOKEN ?? "", catchUp: { windowMinutes: 10,
 It is off by default and needs the host's database.
 Once every service has started, the Discord plugin reads the channels where something was posted within `windowMinutes` (default 10, at most 1440) before the connection became ready.
 It reads the server text channels, live threads and forum posts the bot can read, which it picks from the client's cache without a request, and the direct-message channels that brought the bot a message in the last 30 days.
-It reads at most 50 channels, one page of 100 messages each, before the ready time, and Discord's rate limits pace the requests.
+It looks into at most the 25 direct-message channels that brought a message most recently, one request each, and reads at most 50 channels, one page of 100 messages each, before the ready time; Discord's rate limits pace the requests.
 A message counts when a person wrote it (not a bot, a webhook or Discord itself) to the bot: a mention, a reply to one of the bot's messages, or a direct message.
 It is left alone when it is older than the window, when the bot or one of its own webhooks posted in that channel after it, or when it was already taken in.
 Of what is left, the newest `maxMessages` (default 20, at most 100) go to routing oldest first.
+They go once every service has started, so a message posted after the connection became ready may be answered before an older caught-up one in the same channel.
 Each one passes through the same claims, identity resolution and gates as a live message, with `InboundMessage.caughtUp` set, so a claim may say its answer comes late, for example that the assistant just restarted.
 The log carries only counts and ids, never text.
 
@@ -2952,7 +2953,9 @@ Nothing is answered twice.
 With catch-up on, every addressed message is recorded in the `discord_inbound_journal` table before routing hears it: by the live connection as it arrives, or by catch-up before it hands the message on.
 Whichever records a message first delivers it; the other drops it, so a second restart, or a message the gateway delivers while catch-up runs, is not answered again.
 A message that catch-up cannot record is skipped, and a crash after the record but before the turn leaves it unanswered: one missed answer is preferred to two.
-A message the old process refused while it shut down already got the restart notice and is not caught up.
+The live connection still delivers a message it cannot record, such as while the database is down, and logs it; only that message could be answered again, by a later restart that finds no answer to it in its channel.
+Once the old process begins to shut down it records nothing: routing refuses those messages and posts the restart notice once per channel, and the next process catches up the ones that came after that notice.
+The first restart after `catchUp` is turned on has no records from before: a message the old process handled without posting in its channel afterwards, such as one answered only with a reaction, may be answered again.
 A first direct message sent during the restart is not found, since Discord does not list a bot's direct-message channels.
 
 ### Reading a file's bytes: `DISCORD.readAttachment`
