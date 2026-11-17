@@ -71,7 +71,7 @@ test("catch-up off: no migration, no database, no catch-up service", async () =>
 
 test("catch-up on: the journal's migration, and a catch-up service over the database", async () => {
 	expect(await setUp({})).toEqual({
-		migrations: ["discord-inbound-journal"],
+		migrations: ["discord-inbound-journal", "discord-inbound-journal-left"],
 		services: ["card-copies", "discord-catch-up"],
 		opened: 1,
 	});
@@ -335,7 +335,8 @@ test("the catch-up service prunes the journal while it runs, and stops pruning w
 			claim: async () => true,
 			directChannels: async () => [],
 			prune: async (before) => void pruned.push(before),
-			release: async () => undefined,
+			leave: async () => undefined,
+			left: async () => [],
 			recordedAmong: async () => new Set(),
 		},
 		settings: { windowMinutes: 10, maxMessages: 20 },
@@ -394,7 +395,8 @@ test("a live message waits for the caught-up messages of its channel; one in a c
 			claim: async () => true,
 			directChannels: async () => [],
 			prune: async () => undefined,
-			release: async () => undefined,
+			leave: async () => undefined,
+			left: async () => [],
 			recordedAmong: async () => new Set(),
 		},
 		settings: { windowMinutes: 10, maxMessages: 20 },

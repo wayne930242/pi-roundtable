@@ -16,12 +16,14 @@ export interface JournalEntry {
  * message first, the live gateway or catch-up after a restart, is the only one that delivers it.
  */
 export interface InboundJournal {
-	/** Records the message as taken in; false when it already was. */
+	/** Records the message as taken in, or takes one a stopping process left; false when it is taken. */
 	claim(entry: JournalEntry): Promise<boolean>;
 	/** The bot's direct-message channels with a message recorded since `since`, the most recent first. */
 	directChannels(botId: string, since: Date, limit: number): Promise<string[]>;
-	/** Forgets the message, so catch-up after a restart may take it in again. */
-	release(botId: string, messageId: string): Promise<void>;
+	/** Records the message as left by a process that stops before running it, for the next one to take. */
+	leave(entry: JournalEntry): Promise<void>;
+	/** The messages left since `since`, the oldest first. */
+	left(botId: string, since: Date): Promise<JournalEntry[]>;
 	/**
 	 * Which of the bot's own messages `ids` are recorded: the notices it posted while it shut down,
 	 * which say a message will be answered after the restart rather than answer it. No other message
@@ -54,17 +56,49 @@ const migration: Migration = {
  * The journal over the host's pool, built from closures rather than private fields, so a test
  * proxy can carry it. One insert that does nothing on a conflict decides who records a message.
  */
+/** Marks a message left by a stopping process, so the next one answers it whatever the channel shows. */
+const leftMigration: Migration = {
+	name: "discord-inbound-journal-left",
+	up: async (sql) => {
+		await sql`
+			ALTER TABLE discord_inbound_journal ADD COLUMN IF NOT EXISTS left_at timestamptz`;
+	},
+};
+
 export const PgInboundJournal = {
-	migration,
+	migrations: [migration, leftMigration],
 	attach(sql: SQL): InboundJournal {
 		return {
 			async claim({ botId, messageId, channelId, direct }) {
 				const rows: unknown[] = await sql`
 					INSERT INTO discord_inbound_journal (bot_id, message_id, channel_id, direct)
 					VALUES (${botId}, ${messageId}, ${channelId}, ${direct})
-					ON CONFLICT (bot_id, message_id) DO NOTHING
+					ON CONFLICT (bot_id, message_id) DO UPDATE SET left_at = NULL
+					WHERE discord_inbound_journal.left_at IS NOT NULL
 					RETURNING message_id`;
 				return rows.length > 0;
+			},
+			async leave({ botId, messageId, channelId, direct }) {
+				await sql`
+					INSERT INTO discord_inbound_journal (bot_id, message_id, channel_id, direct, left_at)
+					VALUES (${botId}, ${messageId}, ${channelId}, ${direct}, now())
+					ON CONFLICT (bot_id, message_id) DO UPDATE SET left_at = now()`;
+			},
+			async left(botId, since) {
+				const rows: {
+					message_id: string;
+					channel_id: string;
+					direct: boolean;
+				}[] = await sql`
+						SELECT message_id, channel_id, direct FROM discord_inbound_journal
+						WHERE bot_id = ${botId} AND left_at >= ${since}
+						ORDER BY left_at`;
+				return rows.map((row) => ({
+					botId,
+					messageId: row.message_id,
+					channelId: row.channel_id,
+					direct: row.direct,
+				}));
 			},
 			async directChannels(botId, since, limit) {
 				const rows: { channel_id: string }[] = await sql`
@@ -74,11 +108,6 @@ export const PgInboundJournal = {
 					ORDER BY max(recorded_at) DESC
 					LIMIT ${limit}`;
 				return rows.map((row) => row.channel_id);
-			},
-			async release(botId, messageId) {
-				await sql`
-					DELETE FROM discord_inbound_journal
-					WHERE bot_id = ${botId} AND message_id = ${messageId}`;
 			},
 			async recordedAmong(botId, ids) {
 				if (ids.length === 0) return new Set();

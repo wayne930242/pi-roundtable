@@ -27,9 +27,11 @@ export interface GateOptions {
 	unrecorded?: Pick<Set<string>, "add">;
 	/**
 	 * How long a message another process recorded first is given before it is claimed once more,
-	 * since a process that begins to shut down releases what it recorded. Default 2000; 0 = never.
+	 * since a process that begins to shut down leaves what it recorded. Default 2000; 0 = never.
 	 */
 	retryMs?: number;
+	/** Hands a message the retry claimed to routing; without it there is no retry. */
+	redeliver?: (message: InboundMessage) => void;
 }
 
 /** The gate: whether a live message reaches routing, and `refused`, for one routing refuses as the host stops. */
@@ -47,8 +49,8 @@ const DEFAULT_RETRY_MS = 2000;
  * Records each addressed message the live gateway delivers before routing hears it, so catch-up
  * after a restart leaves it alone; false for one already recorded, which is not delivered again.
  * A message that cannot be recorded is still delivered, logged, and kept in `unrecorded`.
- * Once the host drains, an addressed message is not recorded, or its record is released, and it
- * does not run: the next process answers it, and its channel is told so once. Any other message
+ * Once the host drains, an addressed message that has not run is recorded as left, and the next
+ * process answers it whatever its channel shows since; its channel is told so once. Any other message
  * routing refuses then tells its channel once to send it again. Each notice is recorded, so
  * catch-up does not take it for an answer, and deleted again when it cannot be.
  */
@@ -60,6 +62,7 @@ export function journalGate({
 	wait,
 	unrecorded,
 	retryMs = DEFAULT_RETRY_MS,
+	redeliver,
 }: GateOptions): JournalGate {
 	const told = { later: new Set<string>(), resend: new Set<string>() };
 	const channelOf = (message: InboundMessage) =>
@@ -102,20 +105,50 @@ export function journalGate({
 				);
 		}
 	};
+	const entry = (message: InboundMessage, botId: string) => ({
+		botId,
+		messageId: message.messageId,
+		channelId: channelOf(message),
+		direct: message.isDirect,
+	});
+	// Left in the journal, the next process answers it whatever its channel shows; unrecorded, the channel is told to send it again.
 	const leave = async (message: InboundMessage, botId: string) => {
-		logger.info(
-			{ channelId: channelOf(message), messageId: message.messageId },
-			"shutting down; the next process answers this message",
-		);
+		const where = {
+			channelId: channelOf(message),
+			messageId: message.messageId,
+		};
+		try {
+			await journal.leave(entry(message, botId));
+		} catch (error) {
+			logger.warn(
+				{ ...where, err: error },
+				"could not leave a message for the next process; its channel is told to send it again",
+			);
+			await tell("resend", message, botId);
+			return;
+		}
+		logger.info(where, "shutting down; the next process answers this message");
 		await tell("later", message, botId);
 	};
-	const claim = (message: InboundMessage, botId: string) =>
-		journal.claim({
-			botId,
-			messageId: message.messageId,
-			channelId: channelOf(message),
-			direct: message.isDirect,
-		});
+	// Off the channel's chain: a process that begins to stop leaves what it recorded, and this one then takes it.
+	const retry = (message: InboundMessage, botId: string) => {
+		if (!redeliver || retryMs <= 0) return;
+		const timer = setTimeout(() => {
+			if (draining()) return;
+			journal
+				.claim(entry(message, botId))
+				.then((first) => {
+					if (first) redeliver(message);
+				})
+				.catch((error: unknown) =>
+					logger.warn(
+						{ messageId: message.messageId, err: error },
+						"could not claim a message again",
+					),
+				);
+		}, retryMs);
+		timer.unref?.();
+	};
 	const pass = async (message: InboundMessage, botId: string) => {
 		if (!addressed(message)) return true;
 		if (draining()) {
@@ -125,22 +158,17 @@ export function journalGate({
 		const channelId = channelOf(message);
 		const { messageId } = message;
 		try {
-			let first = await claim(message, botId);
-			if (!first && retryMs > 0) {
-				await Bun.sleep(retryMs);
-				if (!draining()) first = await claim(message, botId);
-			}
-			if (!first) {
+			if (!(await journal.claim(entry(message, botId)))) {
 				logger.info(
 					{ channelId, messageId },
 					"message already taken in; not delivered again",
 				);
+				retry(message, botId);
 				return false;
 			}
 			await wait?.(channelId);
 			if (!draining()) return true;
 			// The drain began while it was recorded: routing would refuse it, so the next process takes it.
-			await journal.release(botId, messageId);
 			await leave(message, botId);
 			return false;
 		} catch (error) {
@@ -154,21 +182,8 @@ export function journalGate({
 	};
 	const refused = async (message: InboundMessage, botId: string) => {
 		if (!notify || message.authorIsBot || message.integration) return false;
-		if (!addressed(message)) {
-			await tell("resend", message, botId);
-			return true;
-		}
-		await journal.release(botId, message.messageId).catch((error: unknown) =>
-			logger.warn(
-				{
-					channelId: channelOf(message),
-					messageId: message.messageId,
-					err: error,
-				},
-				"could not release a refused message; the next process does not answer it",
-			),
-		);
-		await leave(message, botId);
+		if (addressed(message)) await leave(message, botId);
+		else await tell("resend", message, botId);
 		return true;
 	};
 	return Object.assign(pass, { refused });

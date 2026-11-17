@@ -14,21 +14,27 @@ import type { InboundJournal } from "./catch-up-journal.ts";
 /** A journal in memory, whose claims may fail on demand. */
 function memoryJournal() {
 	const rows = new Set<string>();
+	const left = new Set<string>();
 	const state = { failClaims: false };
 	const journal: InboundJournal = {
 		claim: async ({ messageId }) => {
 			if (state.failClaims) throw new Error("database down");
+			if (left.delete(messageId)) return true;
 			if (rows.has(messageId)) return false;
 			rows.add(messageId);
 			return true;
 		},
-		release: async (_bot, messageId) => void rows.delete(messageId),
+		leave: async ({ messageId }) => {
+			rows.add(messageId);
+			left.add(messageId);
+		},
+		left: async () => [],
 		recordedAmong: async (_bot, ids) =>
 			new Set(ids.filter((id) => rows.has(id))),
 		directChannels: async () => [],
 		prune: async () => undefined,
 	};
-	return { journal, rows, state };
+	return { journal, rows, left, state };
 }
 
 const message = (id: string, extra: Partial<InboundMessage> = {}) =>
@@ -62,8 +68,8 @@ function notices() {
 	};
 }
 
-test("a recorded message routing refuses as the host stops is released and its channel told it is answered later, once; any other gets one recorded notice to send it again", async () => {
-	const { journal, rows } = memoryJournal();
+test("a recorded message routing refuses as the host stops is left for the next process and its channel told so, once; any other gets one recorded notice to send it again", async () => {
+	const { journal, rows, left } = memoryJournal();
 	const told = notices();
 	const gate = journalGate({
 		journal,
@@ -71,7 +77,6 @@ test("a recorded message routing refuses as the host stops is released and its c
 		notify: told.notify,
 	});
 	expect(await gate(message("m1"), "9")).toBe(true);
-	expect(rows.has("m1")).toBe(true);
 	expect(await gate.refused(message("m1"), "9")).toBe(true);
 	expect(await gate.refused(message("m2"), "9")).toBe(true);
 	expect(await gate.refused(message("x", { mentionsBot: false }), "9")).toBe(
@@ -83,12 +88,30 @@ test("a recorded message routing refuses as the host stops is released and its c
 	expect(await gate.refused(message("b", { authorIsBot: true }), "9")).toBe(
 		false,
 	);
-	expect(rows.has("m1")).toBe(false);
+	expect([...left]).toEqual(["m1", "m2"]);
 	expect(told.posted).toEqual([
 		["notice-1", "later"],
 		["notice-2", "resend"],
 	]);
-	expect([...rows]).toEqual(["notice-1", "notice-2"]);
+	expect([...rows].toSorted()).toEqual(["m1", "m2", "notice-1", "notice-2"]);
+});
+
+test("a message that cannot be left for the next process gets the notice to send it again instead", async () => {
+	const { journal } = memoryJournal();
+	const told = notices();
+	const gate = journalGate({
+		journal: {
+			...journal,
+			leave: async () => {
+				throw new Error("database down");
+			},
+		},
+		logger: silentLogger(),
+		draining: () => true,
+		notify: told.notify,
+	});
+	expect(await gate(message("m1"), "9")).toBe(false);
+	expect(told.posted).toEqual([["notice-1", "resend"]]);
 });
 
 test("a notice that cannot be recorded is deleted again, so catch-up never takes it for an answer", async () => {
@@ -105,15 +128,22 @@ test("a notice that cannot be recorded is deleted again, so catch-up never takes
 	expect(told.retracted).toEqual(["notice-1"]);
 });
 
-test("a message another process recorded first is claimed once more after a while, so one that process released on its drain is still answered", async () => {
-	const { journal, rows } = memoryJournal();
+test("a message another process recorded first is claimed once more off the channel's chain, so one that process left on its drain is still answered", async () => {
+	const { journal, rows, left } = memoryJournal();
 	rows.add("m1");
-	const gate = journalGate({ journal, logger: silentLogger(), retryMs: 10 });
-	const passing = gate(message("m1"), "9");
-	rows.delete("m1");
-	expect(await passing).toBe(true);
 	rows.add("m2");
+	const redelivered: string[] = [];
+	const gate = journalGate({
+		journal,
+		logger: silentLogger(),
+		retryMs: 10,
+		redeliver: (m) => redelivered.push(m.messageId),
+	});
+	expect(await gate(message("m1"), "9")).toBe(false);
 	expect(await gate(message("m2"), "9")).toBe(false);
+	left.add("m1");
+	await Bun.sleep(30);
+	expect(redelivered).toEqual(["m1"]);
 });
 
 const READY = Date.parse("2026-11-17T07:00:00Z");
@@ -152,6 +182,7 @@ function readerWith(events: string[]): CatchUpReader<ScannedMessage> {
 			events.push(`fetch ${id}`);
 			return undefined;
 		},
+		message: async () => undefined,
 		inbound: async (m) => message(m.id),
 	};
 }

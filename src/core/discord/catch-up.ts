@@ -25,6 +25,8 @@ const MAX_CHANNEL_READS = 50;
 /** The messages read before the ready time in each channel, one page. */
 const PAGE = 100;
 export const DAY_MS = 86_400_000;
+/** How long a message a stopping process left is still answered by the next. */
+const LEFT_KEPT_MS = DAY_MS;
 const DISCORD_EPOCH = 1_420_070_400_000n;
 
 const whole = (value: number | undefined, low: number, high: number) =>
@@ -104,6 +106,8 @@ export interface CatchUpReader<M extends ScannedMessage> {
 	channels(): CatchUpChannel<M>[];
 	/** A direct-message channel by its id; undefined when it is not one. */
 	direct(channelId: string): Promise<CatchUpChannel<M> | undefined>;
+	/** A message by its channel and id; undefined when it is gone. */
+	message(channelId: string, messageId: string): Promise<M | undefined>;
 	/** The message as the live gateway would deliver it. */
 	inbound(message: M): Promise<InboundMessage | undefined>;
 }
@@ -144,6 +148,7 @@ async function channelsToRead<M extends ScannedMessage>(
 	deps: CatchUpDeps<M>,
 	since: number,
 	now: number,
+	leftIn: string[],
 ): Promise<CatchUpChannel<M>[]> {
 	const { reader, journal, logger } = deps;
 	const known = reader.channels();
@@ -164,6 +169,7 @@ async function channelsToRead<M extends ScannedMessage>(
 			.filter((channel) => (channel.lastMessageAt ?? 0) >= since)
 			.map((channel) => channel.id),
 		...directs,
+		...leftIn,
 	]);
 	for (const id of directs) {
 		if (ids.has(id)) continue;
@@ -221,13 +227,49 @@ export async function catchUp<M extends ScannedMessage>(
 	const byBot = (message: M) =>
 		message.author.id === botId ||
 		(message.webhookId !== null && message.applicationId === own);
-	const missed: { message: M; channel: CatchUpChannel<M> }[] = [];
-	const reading = await channelsToRead(deps, since, now).catch(
-		(error: unknown) => {
-			logger.warn({ err: error }, "catch-up could not list its channels");
+	type Missed = {
+		message: M;
+		channel: Pick<CatchUpChannel<M>, "id" | "direct">;
+		left?: true;
+	};
+	const missed: Missed[] = [];
+	// What a stopping process left is answered whatever its channel shows since, outside the window and the cap.
+	const left = await journal
+		.left(botId, new Date(now - LEFT_KEPT_MS))
+		.catch((error: unknown) => {
+			logger.warn(
+				{ err: error },
+				"catch-up could not list the messages left to it",
+			);
 			return [];
-		},
-	);
+		});
+	// The left messages read, which the channel reads below leave alone.
+	const leftIds = new Set<string>();
+	const reading = await channelsToRead(
+		deps,
+		since,
+		now,
+		left.map((entry) => entry.channelId),
+	).catch((error: unknown) => {
+		logger.warn({ err: error }, "catch-up could not list its channels");
+		return [];
+	});
+	for (const entry of left) {
+		const channel = { id: entry.channelId, direct: entry.direct };
+		try {
+			const message = await reader.message(entry.channelId, entry.messageId);
+			if (message) {
+				missed.push({ message, channel, left: true });
+				leftIds.add(message.id);
+			}
+		} catch (error) {
+			report.failed += 1;
+			logger.warn(
+				{ ...channel, messageId: entry.messageId, err: error },
+				"catch-up could not read a message left to it",
+			);
+		}
+	}
 	for (const channel of reading) {
 		if (deps.stopping?.()) return report;
 		report.channels += 1;
@@ -257,6 +299,7 @@ export async function catchUp<M extends ScannedMessage>(
 		for (const message of messages) {
 			const { author, mentions } = message;
 			if (
+				leftIds.has(message.id) ||
 				message.createdTimestamp < since ||
 				message.createdTimestamp >= readyAt ||
 				author.bot ||
@@ -282,8 +325,10 @@ export async function catchUp<M extends ScannedMessage>(
 	}
 	missed.sort((a, b) => (BigInt(a.message.id) < BigInt(b.message.id) ? -1 : 1));
 	report.missed = missed.length;
-	report.overCap = Math.max(0, missed.length - settings.maxMessages);
-	for (const { message, channel } of missed.slice(report.overCap)) {
+	const found = missed.filter((item) => !item.left);
+	report.overCap = Math.max(0, found.length - settings.maxMessages);
+	const dropped = new Set(found.slice(0, report.overCap));
+	for (const { message, channel } of missed.filter((m) => !dropped.has(m))) {
 		if (deps.stopping?.()) break;
 		if (deps.passedLive?.(message.id)) {
 			report.handled += 1;
@@ -305,11 +350,16 @@ export async function catchUp<M extends ScannedMessage>(
 			// Routing refuses it once the host shuts down; the next process takes it in instead.
 			if (deps.stopping?.()) {
 				await journal
-					.release(botId, message.id)
+					.leave({
+						botId,
+						messageId: message.id,
+						channelId: channel.id,
+						direct: channel.direct,
+					})
 					.catch((error: unknown) =>
 						logger.warn(
 							{ channelId: channel.id, messageId: message.id, err: error },
-							"catch-up could not release a message as the host stops; no process answers it",
+							"catch-up could not leave a message as the host stops; no process answers it",
 						),
 					);
 				break;

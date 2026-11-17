@@ -82,6 +82,11 @@ function readerOf(
 		readyAt,
 		channels: () => [...channels],
 		direct: async (id) => directs.find((channel) => channel.id === id),
+		message: async (channelId, messageId) => {
+			const channel = [...channels, ...directs].find((c) => c.id === channelId);
+			const all = (await channel?.read(snowflakeAt(Date.now()), 1000)) ?? [];
+			return all.find((m) => m.id === messageId);
+		},
 		inbound: async (message) => ({
 			channel: "discord:700000000000000000",
 			messageId: message.id,
@@ -104,7 +109,7 @@ describeDb("catch-up over the journal", () => {
 	let journal: InboundJournal;
 
 	beforeAll(async () => {
-		sql = await migratedPool(PgInboundJournal.migration);
+		sql = await migratedPool(...PgInboundJournal.migrations);
 		journal = PgInboundJournal.attach(sql);
 	});
 
@@ -251,7 +256,8 @@ describeDb("catch-up over the journal", () => {
 			},
 			directChannels: async () => [],
 			prune: async () => undefined,
-			release: async () => undefined,
+			leave: async () => undefined,
+			left: async () => [],
 			recordedAmong: async () => new Set(),
 		};
 		const delivered: InboundMessage[] = [];
@@ -295,7 +301,7 @@ describeDb("catch-up over the journal", () => {
 		expect(report.replied).toBe(0);
 	});
 
-	test("a message recorded as the host begins to stop is released, not delivered, so the next process answers it", async () => {
+	test("a message recorded as the host begins to stop is left, not delivered, so the next process answers it", async () => {
 		const bot = botOf();
 		const missed = posted(1, mention(bot));
 		const reader = readerOf(bot, [channelOf("700000000000000014", [missed])]);
@@ -324,7 +330,7 @@ describeDb("catch-up over the journal", () => {
 		]);
 	});
 
-	test("the gate releases a message recorded as the drain began, and tells its channel once, recording the notice", async () => {
+	test("the gate leaves a message recorded as the drain began to the next process, and tells its channel once, recording the notice", async () => {
 		const bot = botOf();
 		const missed = posted(1, mention(bot));
 		const reader = readerOf(bot, [channelOf("700000000000000015", [missed])]);
@@ -355,7 +361,7 @@ describeDb("catch-up over the journal", () => {
 		);
 		expect(notices).toEqual(["700000000000000000"]);
 		expect(await journal.recordedAmong(bot, [notice.id, missed.id])).toEqual(
-			new Set([notice.id]),
+			new Set([notice.id, missed.id]),
 		);
 		expect((await run(reader)).delivered.map((m) => m.messageId)).toEqual([
 			missed.id,
@@ -424,6 +430,24 @@ describeDb("catch-up over the journal", () => {
 		expect(delivered.map((m) => m.messageId)).toEqual([othersReaction.id]);
 		expect(report.replied).toBe(2);
 	});
+
+	test("a message a stopping process left is answered even when the bot posted in its channel after it, outside the window", async () => {
+		const bot = botOf();
+		const held = posted(30, mention(bot));
+		const answerToOther = posted(20, { author: { id: bot, bot: true } });
+		const channel = channelOf("700000000000000018", [held, answerToOther]);
+		await journal.leave({
+			botId: bot,
+			messageId: held.id,
+			channelId: channel.id,
+			direct: false,
+		});
+		const first = await run(readerOf(bot, [channel]));
+		expect(first.delivered.map((m) => [m.messageId, m.caughtUp])).toEqual([
+			[held.id, true],
+		]);
+		expect((await run(readerOf(bot, [channel]))).delivered).toEqual([]);
+	});
 });
 
 test("a message not addressed to the bot passes the gate unrecorded; while the host drains, an addressed one is held back unrecorded", async () => {
@@ -435,7 +459,8 @@ test("a message not addressed to the bot passes the gate unrecorded; while the h
 		},
 		directChannels: async () => [],
 		prune: async () => undefined,
-		release: async () => undefined,
+		leave: async () => undefined,
+		left: async () => [],
 		recordedAmong: async () => new Set(),
 	};
 	const message = {

@@ -221,7 +221,7 @@ export function discordPlugin(options: DiscordOptions): RoundtablePlugin {
 	return {
 		name: "discord",
 		provides: [DISCORD],
-		...(catchUpWith ? { migrations: [PgInboundJournal.migration] } : {}),
+		...(catchUpWith ? { migrations: PgInboundJournal.migrations } : {}),
 		preflight: () => {
 			// The host has applied its environment by now, so the description is in its language.
 			surface?.setCommands(

@@ -21,6 +21,8 @@ const READ = [
 
 /** Discord's error code for a member who is not in the server. */
 const UNKNOWN_MEMBER = 10007;
+/** Discord's error code for a message that is not there. */
+const UNKNOWN_MESSAGE = 10008;
 
 function channelView(
 	channel: TextBasedChannel,
@@ -72,6 +74,16 @@ export function clientCatchUpReader(
 			return channel?.isDMBased() && channel.isTextBased()
 				? channelView(channel)
 				: undefined;
+		},
+		message: async (channelId, messageId) => {
+			const channel = await client.channels.fetch(channelId);
+			if (!channel?.isTextBased()) return undefined;
+			return channel.messages.fetch(messageId).catch((error: unknown) => {
+				// Deleted since: nothing to answer.
+				if ((error as { code?: unknown }).code === UNKNOWN_MESSAGE)
+					return undefined;
+				throw error;
+			});
 		},
 		inbound: async (message) => {
 			if (message.inGuild() && !message.member)

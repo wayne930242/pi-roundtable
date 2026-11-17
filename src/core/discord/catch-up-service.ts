@@ -75,7 +75,8 @@ export function catchUpWiring(options: CatchUpWiringOptions): {
 			.catch((error: unknown) =>
 				logger.warn({ err: error }, "could not prune the inbound journal"),
 			);
-	const gate = journalGate({
+	let seenBot: string | undefined;
+	const passing = journalGate({
 		journal,
 		logger,
 		draining: () => draining,
@@ -88,14 +89,23 @@ export function catchUpWiring(options: CatchUpWiringOptions): {
 					: messages().restartingNotice,
 			),
 		wait,
+		redeliver: options.deliver,
 		unrecorded: {
 			add: (id) => (caughtUp ? unrecorded : unrecorded.add(id)),
 		},
 	});
+	const gate: JournalGate = Object.assign(
+		(message: InboundMessage, botId: string) => {
+			seenBot = botId;
+			return passing(message, botId);
+		},
+		{ refused: passing.refused },
+	);
 	return {
 		gate,
 		refused: async (message) => {
-			const botId = options.client().user?.id;
+			// A refused message passed the gate, so the bot is known by then.
+			const botId = options.client().user?.id ?? seenBot;
 			return botId !== undefined && gate.refused(message, botId);
 		},
 		service: {
