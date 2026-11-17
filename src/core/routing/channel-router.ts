@@ -458,11 +458,12 @@ export class ChannelRouter implements ConversationPort {
 	abort(channel: ChannelKey): boolean {
 		const owner = this.#owner(channel);
 		if (owner?.stop) return owner.stop(channel);
+		const stopped = this.#options.stopTurn?.(channel) ?? false;
 		this.#options.logger.info(
-			{ channel },
-			"shutting down: stopping a turn whose claim has no stop through the runtime",
+			{ channel, stopped },
+			"shutting down: asked the runtime to stop a turn whose claim has no stop",
 		);
-		return this.#options.stopTurn?.(channel) ?? false;
+		return stopped;
 	}
 
 	postsInPlace(channel: ChannelKey): boolean {
