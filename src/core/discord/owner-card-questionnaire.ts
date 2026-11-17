@@ -37,7 +37,9 @@ export interface QuestionnaireForm {
 	draft: Draft;
 	/**
 	 * The text answers and note each user last wrote and was allowed to, by user id: their form
-	 * opens with these, never with the shared draft, which may hold someone else's unsent text.
+	 * opens with these, never with the shared draft, which may hold someone else's unsent text. A
+	 * submit writes to the draft only the fields that differ from these, so a field a user left as
+	 * their form showed it keeps what another wrote there.
 	 */
 	written: Map<string, Written>;
 }

@@ -2960,7 +2960,10 @@ if (file?.id && file.messageId) {
 To give the model a file's text, pass the bytes to `readAttachmentText({ name, contentType?, bytes, offset?, limit? })` from the same entry; it reads as the core's `read_attachment` tool does.
 A text file (by its extension, a `text/*` or JSON, XML, YAML or TOML media type, or UTF-8 bytes with no NUL) is decoded; a PDF (by `.pdf`, `application/pdf` or its `%PDF-` start) has its text extracted, led by `[PDF, <n> pages]`.
 It resolves with `AttachmentText`: `kind` (`text` or `pdf`), `text` (at most `limit` characters from `offset`; default `ATTACHMENT_TEXT_LIMIT`, 60,000), `offset`, `nextOffset` when there is more, `total` characters and a PDF's `pages`.
-It rejects with an `AttachmentTextError` whose `code` is `unsupported` (an image, audio, an archive or other binary), `unreadable` (a PDF that cannot be parsed) or `invalid` (an `offset` or `limit` that is not a whole number, or a `limit` below 1); its message names the file only.
+Characters, `offset`, `limit` and `total` count UTF-16 units, as a JavaScript string's `length` does. A piece never ends between the two halves of a surrogate pair (an emoji, for example): it stops one unit short, or with a `limit` of 1 at a pair takes both halves, and `nextOffset` follows it.
+It leaves `bytes` as it was, so the pieces of one file are read from one array.
+A PDF is parsed in a worker thread of its own, so a large or crafted file does not hold the host's event loop. It takes at most 25 MiB, reads at most 2,000 pages and 5,000,000 characters (its text is then led by `[PDF, <n> pages; text of the first <m> only]`, the same for every piece), and is refused when it takes longer than 30 seconds.
+It rejects with an `AttachmentTextError` whose `code` is `unsupported` (an image, audio, an archive or other binary), `unreadable` (a PDF that cannot be parsed or takes longer than 30 seconds, or bytes that cannot be read at all), `tooLarge` (a PDF over 25 MiB) or `invalid` (an `offset` or `limit` that is not a whole number, or a `limit` below 1); its message names the file only.
 
 ```ts
 import { AttachmentTextError, readAttachmentText } from "pi-roundtable/discord";

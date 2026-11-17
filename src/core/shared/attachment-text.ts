@@ -1,5 +1,5 @@
-import { extractText, getDocumentProxy } from "unpdf";
 import { plainText } from "../attachments/attachment-name.ts";
+import { PDF_LIMITS, PdfTextError, pdfText } from "./pdf-text.ts";
 
 /** Characters one read returns by default, as the core's `read_attachment` tool reads; ask for a later `offset` for more. */
 export const ATTACHMENT_TEXT_LIMIT = 60_000;
@@ -52,6 +52,8 @@ function isPdf(name: string, type: string, head: Uint8Array): boolean {
 	);
 }
 
+const isHighSurrogate = (unit: number) => unit >= 0xd800 && unit <= 0xdbff;
+
 function looksLikeText(bytes: Uint8Array): boolean {
 	const sample = bytes.subarray(0, 4096);
 	if (sample.includes(0)) return false;
@@ -68,9 +70,13 @@ export interface AttachmentTextRequest {
 	name: string;
 	contentType?: string | null;
 	bytes: Uint8Array;
-	/** The character to start from; default 0. */
+	/** The character (UTF-16 unit) to start from; default 0. */
 	offset?: number;
-	/** The most characters returned; default `ATTACHMENT_TEXT_LIMIT`, 60,000. */
+	/**
+	 * The most characters (UTF-16 units) returned; default `ATTACHMENT_TEXT_LIMIT`, 60,000. A piece
+	 * never ends between the two halves of a surrogate pair, so it may hold one fewer, or, with a
+	 * `limit` of 1 at a pair, both halves.
+	 */
 	limit?: number;
 }
 
@@ -78,13 +84,17 @@ export interface AttachmentTextRequest {
 export interface AttachmentText {
 	/** `pdf` when the text was extracted from a PDF, else `text`. */
 	kind: "text" | "pdf";
-	/** The characters from `offset`, at most `limit` of them; a PDF's text starts with `[PDF, <n> pages]`. */
+	/**
+	 * The characters from `offset`, at most `limit` of them; a PDF's text starts with
+	 * `[PDF, <n> pages]`, or `[PDF, <n> pages; text of the first <m> only]` when it stopped after
+	 * 2,000 pages or 5,000,000 characters.
+	 */
 	text: string;
 	/** Where this piece starts. */
 	offset: number;
 	/** Where the next piece starts; absent when this piece reaches the end. */
 	nextOffset?: number;
-	/** Characters in the whole text. */
+	/** Characters (UTF-16 units, as `offset` and `limit` count) in the whole text. */
 	total: number;
 	/** A PDF's page count. */
 	pages?: number;
@@ -92,10 +102,15 @@ export interface AttachmentText {
 
 /**
  * Why a file was not read as text: `unsupported` (not text or a PDF, such as an image, audio or an
- * archive), `unreadable` (a PDF that could not be parsed), `invalid` (an `offset` or `limit` that
- * is not a whole number, or a `limit` below 1).
+ * archive), `unreadable` (a PDF that could not be parsed or took longer than 30 seconds, or
+ * bytes that could not be read at all), `invalid` (an `offset` or `limit` that is not a whole
+ * number, or a `limit` below 1), `tooLarge` (a PDF over 25 MiB).
  */
-export type AttachmentTextErrorCode = "unsupported" | "unreadable" | "invalid";
+export type AttachmentTextErrorCode =
+	| "unsupported"
+	| "unreadable"
+	| "invalid"
+	| "tooLarge";
 
 /** What `readAttachmentText` rejects with; `message` names the file, never its bytes. */
 export class AttachmentTextError extends Error {
@@ -116,7 +131,7 @@ export class AttachmentTextError extends Error {
 export async function readAttachmentText(
 	request: AttachmentTextRequest,
 ): Promise<AttachmentText> {
-	const { name, bytes } = request;
+	const { name } = request;
 	const offset = request.offset ?? 0;
 	const limit = request.limit ?? ATTACHMENT_TEXT_LIMIT;
 	if (!Number.isInteger(offset) || offset < 0)
@@ -129,25 +144,50 @@ export async function readAttachmentText(
 			"invalid",
 			"limit must be a positive whole number",
 		);
+	try {
+		return await read(request, offset, limit);
+	} catch (error) {
+		if (error instanceof AttachmentTextError) throw error;
+		throw new AttachmentTextError(
+			"unreadable",
+			`"${plainText(name)}" could not be read`,
+		);
+	}
+}
+
+async function read(
+	request: AttachmentTextRequest,
+	offset: number,
+	limit: number,
+): Promise<AttachmentText> {
+	const { name, bytes } = request;
 	const type = mediaType(request.contentType);
 	let kind: AttachmentText["kind"];
 	let text: string;
 	let pages: number | undefined;
 	if (isPdf(name, type, bytes)) {
-		let result: { totalPages: number; text: string };
+		if (bytes.byteLength > PDF_LIMITS.bytes)
+			throw new AttachmentTextError(
+				"tooLarge",
+				`"${plainText(name)}" is too large to read as a PDF (${bytes.byteLength} bytes; at most ${PDF_LIMITS.bytes})`,
+			);
+		let result: Awaited<ReturnType<typeof pdfText>>;
 		try {
-			result = await extractText(await getDocumentProxy(bytes), {
-				mergePages: true,
-			});
-		} catch {
+			result = await pdfText(bytes);
+		} catch (error) {
 			throw new AttachmentTextError(
 				"unreadable",
-				`"${plainText(name)}" could not be read as a PDF`,
+				error instanceof PdfTextError && error.reason === "slow"
+					? `"${plainText(name)}" took too long to read as a PDF`
+					: `"${plainText(name)}" could not be read as a PDF`,
 			);
 		}
 		kind = "pdf";
 		pages = result.totalPages;
-		text = `[PDF, ${result.totalPages} pages]\n${result.text}`;
+		const head = result.cut
+			? `[PDF, ${result.totalPages} pages; text of the first ${result.pagesRead} only]`
+			: `[PDF, ${result.totalPages} pages]`;
+		text = `${head}\n${result.text}`;
 	} else if (
 		TEXT_EXTENSIONS.has(extension(name)) ||
 		type.startsWith("text/") ||
@@ -162,7 +202,15 @@ export async function readAttachmentText(
 			`"${plainText(name)}" is not a text or PDF file (${bytes.byteLength} bytes). Images are shown to you directly; audio or video can go to a tool that takes files.`,
 		);
 	}
-	const end = Math.min(text.length, offset + limit);
+	let end = Math.min(text.length, offset + limit);
+	// A piece never ends between the halves of a surrogate pair: it stops before the pair, or, when
+	// that would leave it empty, takes the whole pair.
+	if (
+		end < text.length &&
+		end > offset &&
+		isHighSurrogate(text.charCodeAt(end - 1))
+	)
+		end += end - 1 > offset ? -1 : 1;
 	return {
 		kind,
 		text: text.slice(offset, end),

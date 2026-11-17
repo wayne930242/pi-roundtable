@@ -161,6 +161,55 @@ describe("the form submit", () => {
 		expect(own.followUps[0]?.content).toBe(messages().cardNothingYet);
 		expect(json(fake.sent[0])).toContain(custom(id, "qpick:0"));
 	});
+
+	const SECOND = "100000000000000002";
+
+	/** A card two owners may answer: no scope, and an identity naming both. */
+	async function twoOwners() {
+		const fake = fakeChannel();
+		const cards = new OwnerCards({
+			ownerId: OWNER,
+			channel: fake.channel,
+			logger: silentLogger(),
+			identity: mapIdentity({ owners: [OWNER, SECOND] }),
+		});
+		const answer = cards.prompts("discord:555")?.questionnaire?.("T", two);
+		await tick();
+		const id = fake.cardId();
+		const write = async (user: string, fields: Record<string, string>) =>
+			cards.handle(
+				press("modal", custom(id, "qtext"), { user, fields }).interaction,
+			);
+		const submit = () =>
+			cards.handle(press("button", custom(id, "submit")).interaction);
+		return { answer, write, submit };
+	}
+
+	test("writes only the fields this user changed: another's empty field keeps the first one's text", async () => {
+		const { answer, write, submit } = await twoOwners();
+		await write(OWNER, { t0: "OWNER-TEXT" });
+		// SECOND's form opened empty (they wrote nothing yet); they send only a note.
+		await write(SECOND, { note: "just a note" });
+		// OWNER's form still shows their text; sending it unchanged keeps it.
+		await write(OWNER, { t0: "OWNER-TEXT" });
+		await submit();
+		expect(await answer).toEqual({
+			answers: [{ choices: [], text: "OWNER-TEXT" }, undefined],
+			note: "just a note",
+		});
+	});
+
+	test("a field a user changes, or clears from what they wrote, is the draft's latest", async () => {
+		const { answer, write, submit } = await twoOwners();
+		await write(OWNER, { t0: "first", t1: "keep", note: "n" });
+		await write(SECOND, { t0: "second" });
+		// OWNER clears the note and their t1, and leaves t0 as their form showed it.
+		await write(OWNER, { t0: "first" });
+		await submit();
+		expect(await answer).toEqual({
+			answers: [{ choices: [], text: "second" }, undefined],
+		});
+	});
 });
 
 describe("previews with many options on one question", () => {

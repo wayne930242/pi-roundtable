@@ -168,10 +168,16 @@ export async function answerDeferred(
 		const { texts, note } = formFields(form, (field) =>
 			interaction.fields.getTextInputValue(field),
 		);
+		// The form opened with what this user wrote before, not the shared draft; a field they left as
+		// it was is no change of theirs, so it must not overwrite what another wrote there since.
+		const before = form.written.get(by.user.id);
 		const own: Written = { texts: [] };
-		for (const [i, value] of texts)
-			form.draft.texts[i] = own.texts[i] = value.trim() || undefined;
-		form.draft.note = own.note = note.trim() || undefined;
+		for (const [i, value] of texts) {
+			own.texts[i] = value.trim() || undefined;
+			if (own.texts[i] !== before?.texts[i]) form.draft.texts[i] = own.texts[i];
+		}
+		own.note = note.trim() || undefined;
+		if (own.note !== before?.note) form.draft.note = own.note;
 		form.written.set(by.user.id, own);
 	}
 	if (!submits) {
