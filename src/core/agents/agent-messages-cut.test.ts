@@ -200,4 +200,30 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 		await record.leave();
 		expect(await fx.store.outbox.pending()).toEqual([]);
 	});
+	test("each hop takes the answers of the very send it follows, not the chain's first", async () => {
+		let infraTurns = 0;
+		const record = await underPerson(
+			async (record) => {
+				// A first send before the record answered anything, then a second one after an answer.
+				fx.team.message(coordinator(), "infra", "first");
+				record.settle({ ok: true, text: "answered" });
+				record.add({ ...person, messageId: "m2" });
+				fx.team.message(coordinator(), "infra", "second");
+				fx.runtime.stopNext = true;
+			},
+			(request) => {
+				// The second exchange's target passes it on while the host stops: kept.
+				if (request.agent?.name !== "infra" || ++infraTurns !== 2) return;
+				fx.queue.close();
+				fx.team.message(request.agent, "doctor", "and the patient");
+			},
+		);
+		// The hop to doctor and the second exchange's answer, both after the record answered.
+		await keptCount(2);
+		expect(await fx.store.outbox.pending()).toContainEqual(
+			expect.objectContaining({ kind: "message", target: "doctor" }),
+		);
+		await record.leave();
+		expect(await fx.store.outbox.pending()).toEqual([]);
+	});
 });

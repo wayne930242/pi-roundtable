@@ -8,11 +8,13 @@ import type { AgentRuntime } from "../contract/runtime.ts";
 import type { ChatSurface } from "../contract/surface.ts";
 import type { ConversationRegistry } from "../conversations/conversation-registry.ts";
 import type { TurnResult } from "../domain/conversation.ts";
+import type { TurnRequest } from "../domain/ports.ts";
 import type { ChannelKey } from "../domain/sessions.ts";
 import { silentLogger } from "../kernel/log.ts";
 import type { RoundtablePlugin } from "../plugin-api/plugin.ts";
 import { CONVERSATIONS, RUNTIME } from "../plugin-api/services.ts";
 import type { ConversationTurns } from "../routing/conversation-turns.ts";
+import { settleTurn } from "../routing/settle-turn.ts";
 import { OWNER_SPEAKER } from "../testing/owner.ts";
 import { Roundtable } from "./host.ts";
 
@@ -55,7 +57,8 @@ function setup(
 	stopping: Stopping,
 	steers = false,
 	graceMs = 40,
-	awaits = true,
+	/** How the admission runs its turn: through `context.turns`, awaited or not, or a bare `settleTurn` it does not wait for. */
+	runs: "awaits" | "detached" | "bare" = "awaits",
 ) {
 	const log: string[] = [];
 	const replies: string[] = [];
@@ -88,13 +91,24 @@ function setup(
 				unreact: async () => undefined,
 			},
 			run: async () => {
+				if (runs === "bare") {
+					void settleTurn(
+						() =>
+							runtime.runTurn({
+								channel: m.channel,
+								text: m.text,
+							} as TurnRequest),
+						"bare turn",
+					);
+					return;
+				}
 				const turn = taken.turns?.run({
 					channel: m.channel,
 					kind: "plain",
 					text: m.text,
 					speaker: OWNER_SPEAKER,
 				});
-				if (awaits) await turn;
+				if (runs === "awaits") await turn;
 				else void turn?.catch(() => undefined);
 			},
 			failure: "failed",
@@ -213,10 +227,17 @@ describe("a turn the shutdown cuts", () => {
 		expect(waiting.log).toEqual(["left first", "left waiting", "stop runtime"]);
 	});
 	test("that its admission started without waiting for it is waited for, then stopped and left as well", async () => {
-		const s = setup("obeys", false, 40, false);
+		const s = setup("obeys", false, 40, "detached");
 		await holdATurn(s);
 		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
 		expect(s.stops[0]).toBe(ROOM);
+		expect(s.log).toEqual(["left first", "stop runtime"]);
+	});
+	test("that its admission ran through a bare settleTurn without waiting for it, which the drain cannot see, is left once the drain ends", async () => {
+		const s = setup("deaf", false, 40, "bare");
+		await holdATurn(s);
+		expect(await s.roundtable.shutdown("SIGTERM")).toBe(0);
+		expect(s.stops).toEqual([]);
 		expect(s.log).toEqual(["left first", "stop runtime"]);
 	});
 });
