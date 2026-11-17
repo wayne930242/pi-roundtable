@@ -122,6 +122,12 @@ export interface InboundMessage {
 		/** The name a webhook posted the referenced message under, such as an agent's. */
 		webhookName?: string;
 	};
+	/**
+	 * Set when the surface delivers the message late, after the host restarted, because it came
+	 * while no process was listening (Discord's `discord.catchUp`). It is routed like any other; a
+	 * claim may say the answer is late, such as that the assistant just restarted.
+	 */
+	caughtUp?: true;
 	/** The message the author forwarded with this one; its attachments are in `attachments`. */
 	forwarded?: {
 		text: string;

@@ -105,6 +105,7 @@ export async function declaredMigrationIds(): Promise<MigrationIds> {
 				token: "token",
 				guild: "900000000000000001",
 				entryChannel: "900000000000000002",
+				catchUp: {},
 			},
 			database: { url: "postgres://localhost/roundtable" },
 			dataDir,

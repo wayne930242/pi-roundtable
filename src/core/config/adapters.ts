@@ -125,6 +125,16 @@ export interface DiscordConfig {
 	 * 100 MiB) is the most bytes of one file; a larger file is refused as `too-large`.
 	 */
 	attachmentRead?: { maxBytes?: number };
+	/**
+	 * Answers, after a restart, the messages addressed to the bot that came while no process was
+	 * listening, which Discord does not deliver again: a person's mention, reply to the bot, or
+	 * direct message from the last `windowMinutes` (default 10, at most 1440) before the connection
+	 * is ready that the bot did not answer, the newest `maxMessages` (default 20, at most 100),
+	 * oldest first, through the usual claims and gates and marked `InboundMessage.caughtUp`. Each
+	 * addressed message is recorded in the database as it comes in, so none is answered twice.
+	 * Left out, nothing missed is answered.
+	 */
+	catchUp?: { windowMinutes?: number; maxMessages?: number };
 }
 
 /** The Discord settings with every default filled in. */
@@ -153,6 +163,8 @@ export interface ResolvedDiscord {
 	attachmentDownload?: NonNullable<DiscordConfig["attachmentDownload"]>;
 	/** As configured: left out unless set, so the default applies. */
 	attachmentRead?: NonNullable<DiscordConfig["attachmentRead"]>;
+	/** As configured: left out when off. */
+	catchUp?: NonNullable<DiscordConfig["catchUp"]>;
 }
 
 /** The configured Discord settings, defaults filled in; `rootCommand` is the host's slug. */
@@ -195,6 +207,7 @@ export function resolvedDiscord(
 		...(discord.attachmentRead === undefined
 			? {}
 			: { attachmentRead: discord.attachmentRead }),
+		...(discord.catchUp === undefined ? {} : { catchUp: discord.catchUp }),
 	};
 }
 
@@ -272,6 +285,12 @@ export const discordShape = shape({
 	),
 	attachmentRead: optional(
 		shape({ maxBytes: optional(integer(1, 100 * 1024 * 1024)) }),
+	),
+	catchUp: optional(
+		shape({
+			windowMinutes: optional(integer(1, 1440)),
+			maxMessages: optional(integer(1, 100)),
+		}),
 	),
 });
 
