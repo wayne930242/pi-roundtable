@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.52.2] - 2026-11-17
+
+- Release in lockstep with pi-roundtable 0.52.2 (catch-up promises only what routing refuses; every waiting message refused at shutdown; configurable abort grace and refusal cap); no package-specific behavior changes.
+
 ## [0.52.1] - 2026-11-17
 
 - Release in lockstep with pi-roundtable 0.52.1 (Discord catch-up answers drain-time messages once); no package-specific behavior changes.
