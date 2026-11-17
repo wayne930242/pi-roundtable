@@ -71,7 +71,7 @@ function fakeAttachmentReader(
 	const fetchImpl = (async (address: string) => {
 		const file = files.find((f) => url(f) === address);
 		return file && !file.gone
-			? new Response(bytesOf(file))
+			? new Response(bytesOf(file).slice())
 			: new Response(null, { status: 404 });
 	}) as unknown as typeof fetch;
 	return (request) =>
