@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-17
+
+- Release in lockstep with pi-roundtable 0.52.0 (Discord catch-up of messages missed during a restart); no package-specific behavior changes.
+
 ## [0.51.2] - 2026-11-17
 
 - Release in lockstep with pi-roundtable 0.51.2 (attachment text keeps caller bytes, bounded PDF worker, card form merges only changed fields); no package-specific behavior changes.
