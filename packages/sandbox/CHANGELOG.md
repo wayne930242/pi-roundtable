@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.51.2] - 2026-11-17
+
+- Release in lockstep with pi-roundtable 0.51.2 (attachment text keeps caller bytes, bounded PDF worker, card form merges only changed fields); no package-specific behavior changes.
+
 ## [0.51.1] - 2026-11-17
 
 - Release in lockstep with pi-roundtable 0.51.1 (card form privacy, forms first, attachment text); no package-specific behavior changes.
