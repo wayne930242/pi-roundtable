@@ -96,8 +96,8 @@ export class AgentMessages {
 			text,
 		});
 		// The person's message the sender's turn answers: the exchange runs outside it, so the
-		// target's answer is not taken for the sender's, and what it would keep is dropped once a
-		// shutdown cut the sender's turn before it answered, since that message is then asked again.
+		// target's answer is not taken for the sender's, and what it keeps for the next start is
+		// taken out again once a shutdown leaves that message, which is then asked again.
 		const record = currentRecord();
 		void underRecord(undefined, () =>
 			queue.run(targetChannel, async () =>
@@ -261,41 +261,56 @@ export class AgentMessages {
 	}
 
 	/**
-	 * Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. One
-	 * sent from a turn the shutdown cut before it answered its person's message is dropped instead:
-	 * that message is answered again, or its author asked to send it again, after the restart.
+	 * Writes an entry the queue refused to the outbox; the write is waited for by the shutdown. When
+	 * the shutdown leaves the person's message of the turn that sent it, the entry is taken out
+	 * again, or not written at all: the next process answers that message anew, or its author is
+	 * asked to send it again, and the turn sends it again then.
 	 */
 	#keep(record: TurnRecord | undefined, entry: OutboxEntry): void {
 		const { store, logger } = this.#host.options;
-		if (record?.cutUnanswered) {
+		const about = { kind: entry.kind, from: entry.sender, to: entry.target };
+		if (record?.left) {
 			logger.info(
-				{ kind: entry.kind, from: entry.sender, to: entry.target },
-				"agent message dropped: the turn that sent it was cut before it answered, and its message is asked again",
+				about,
+				"agent message dropped: its person's message is asked again after the restart",
 			);
 			return;
 		}
 		const write = this.#lastKept
 			.then(() => store.outbox.keep(entry))
 			.then(
-				() =>
-					logger.info(
-						{ kind: entry.kind, from: entry.sender, to: entry.target },
-						"agent message kept for the next start",
-					),
-				(error: unknown) =>
+				(id) => {
+					logger.info(about, "agent message kept for the next start");
+					return id;
+				},
+				(error: unknown) => {
 					logger.error(
-						{
-							kind: entry.kind,
-							from: entry.sender,
-							to: entry.target,
-							err: error,
-						},
+						{ ...about, err: error },
 						"agent message lost: not kept for the next start",
-					),
+					);
+					return undefined;
+				},
 			);
-		this.#lastKept = write;
-		this.#keeping.add(write);
-		void write.finally(() => this.#keeping.delete(write));
+		this.#lastKept = write.then(() => undefined);
+		const kept = write.then(() => undefined);
+		this.#keeping.add(kept);
+		void kept.finally(() => this.#keeping.delete(kept));
+		record?.onLeave(async () => {
+			const id = await write;
+			if (id === undefined) return;
+			try {
+				await store.outbox.claim(id);
+				logger.info(
+					about,
+					"kept agent message dropped: its person's message is asked again after the restart",
+				);
+			} catch (error) {
+				logger.warn(
+					{ ...about, err: error },
+					"kept agent message not dropped; it is replayed after the restart",
+				);
+			}
+		});
 	}
 
 	/**

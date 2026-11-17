@@ -50,7 +50,7 @@ type Stopping = "obeys" | "told" | "deaf";
  * surface takes every refused message, as the Discord surface does with catch-up, and `log`
  * records what was left and when the services stopped.
  */
-function setup(stopping: Stopping, steers = false) {
+function setup(stopping: Stopping, steers = false, graceMs = 40) {
 	const log: string[] = [];
 	const replies: string[] = [];
 	const stops: string[] = [];
@@ -128,7 +128,7 @@ function setup(stopping: Stopping, steers = false) {
 	const roundtable = new Roundtable(
 		{
 			logger: silentLogger(),
-			drain: { intervalMs: 1, limitMs: 40, abortGraceMs: 40 },
+			drain: { intervalMs: 1, limitMs: 40, abortGraceMs: graceMs },
 		},
 		plugins,
 	);
@@ -172,7 +172,8 @@ describe("a turn the shutdown cuts", () => {
 	});
 
 	test("that answers within the grace is not left", async () => {
-		const s = setup("told");
+		// A long grace, which the drain ends as soon as the turn does.
+		const s = setup("told", false, 5_000);
 		await holdATurn(s);
 		const stopped = s.roundtable.shutdown("SIGTERM");
 		// Past the drain limit, within the grace.

@@ -68,19 +68,48 @@ describeDb("agent messages from a turn the shutdown cuts", () => {
 			fx.runtime.stopNext = true;
 		});
 		expect(answeredCard()).toBe(true);
-		record.markCut();
-		expect(record.leave()).toBe(true);
+		expect(record.unanswered()).toEqual([person]);
 	});
 
-	test("a message the cut turn sent is dropped, not kept for the next start, since its person's message is asked again", async () => {
-		await underPerson(async (_record, turns) => {
+	/** Waits until the outbox holds `count` entries; the write to it is not part of the turn. */
+	async function keptCount(count: number): Promise<void> {
+		const deadline = Date.now() + 5_000;
+		while (
+			(await fx.store.outbox.pending()).length !== count &&
+			Date.now() < deadline
+		)
+			await Bun.sleep(5);
+		expect(await fx.store.outbox.pending()).toHaveLength(count);
+	}
+
+	/** The coordinator's turn messages infra while the host stops, so the message is kept. */
+	const sendWhileStopping = () =>
+		underPerson(async () => {
 			fx.queue.close();
-			turns.cut();
 			fx.team.message(coordinator(), "infra", "check the disk");
 			fx.runtime.stopNext = true;
 		});
-		expect(fx.team.busy()).toEqual([]);
+
+	test("a message its turn sent is kept until the shutdown leaves the person's message, then taken out, since the next process asks it again", async () => {
+		const record = await sendWhileStopping();
+		await keptCount(1);
+		await record.leave();
 		expect(await fx.store.outbox.pending()).toEqual([]);
 		expect(fx.runtime.turns.map((t) => t.agent?.name)).toEqual(["coordinator"]);
+	});
+
+	test("a message its turn sent stays kept when the person's message is not left, as when the turn answered in the grace", async () => {
+		await sendWhileStopping();
+		await keptCount(1);
+	});
+
+	test("a message sent after the person's message was left is not kept at all", async () => {
+		await underPerson(async (record) => {
+			await record.leave();
+			fx.queue.close();
+			fx.team.message(coordinator(), "infra", "check the disk");
+		});
+		expect(fx.team.busy()).toEqual([]);
+		expect(await fx.store.outbox.pending()).toEqual([]);
 	});
 });

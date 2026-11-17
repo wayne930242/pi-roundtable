@@ -9,6 +9,7 @@ import { SYSTEM_PRINCIPAL } from "../identity/principal-store.ts";
 import { addressee, type Speaker } from "../identity/speakers.ts";
 import type { ConversationModes } from "../modes/conversation-modes.ts";
 import type { AgentChange, NewAgent } from "../plugin-api/services.ts";
+import { underRecord } from "../routing/turn-records.ts";
 import { openingTaskText } from "./agent-prompt.ts";
 import { modelSetting, thinkingSetting } from "./agent-settings.ts";
 import type { Agent } from "./agent-store.ts";
@@ -382,8 +383,9 @@ export class TeamEditing {
 				text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It has no room to start its opening task in yet.`,
 			};
 		}
-		void queue
-			.run(home, () =>
+		// Outside the turn that made the agent: the opening task does not answer that turn's message.
+		void underRecord(undefined, () =>
+			queue.run(home, () =>
 				this.#ctx.turns.answerBackground(
 					home,
 					who.speaker,
@@ -393,10 +395,10 @@ export class TeamEditing {
 						addressee(who.speaker, this.#ctx.options.owner),
 					),
 				),
-			)
-			.catch((error: unknown) =>
-				logger.error({ agent: agent.name, err: error }, "opening turn failed"),
-			);
+			),
+		).catch((error: unknown) =>
+			logger.error({ agent: agent.name, err: error }, "opening turn failed"),
+		);
 		return {
 			agent,
 			text: `Created "${agent.displayName}" (${agent.name})${where}; ${avatar}. It is starting on its opening task now.`,

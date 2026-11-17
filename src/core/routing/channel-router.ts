@@ -282,17 +282,20 @@ export class ChannelRouter implements ConversationPort {
 		const { logger, surfaces } = this.#options;
 		for (const record of this.#turns.takeCut()) {
 			// A bot's or an integration's message is told nothing, so its turn's late answer stays.
-			const people = record.messages.filter(
-				(message) => !message.authorIsBot && !message.integration,
-			);
+			const people = record
+				.unanswered()
+				.filter((message) => !message.authorIsBot && !message.integration);
 			// Left only as its channel is told, so one the limit stops before keeps its late answer.
 			if (tally.stopped) return;
-			if (people.length === 0 || !record.leave()) continue;
+			if (people.length === 0) continue;
 			logger.info(
 				{ channel: record.messages[0]?.channel },
 				"turn cut by the shutdown before it answered; its messages are refused",
 			);
+			await record.leave();
 			for (const message of people) {
+				// A message the limit stops before is neither told nor answered (see docs/plugins.md).
+				if (tally.stopped) return;
 				await tellStopping(message, surfaces, this.#told, logger);
 				tally.refused += 1;
 			}

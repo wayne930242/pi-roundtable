@@ -50,6 +50,16 @@ function world(onLeft?: (id: string) => void) {
 	const results = new Map<string, TurnResult>();
 	const left: string[] = [];
 	let routing!: ChannelRouter;
+	const queue = new ChannelQueue();
+	/** Runs the message's turn through `settleTurn` until the test ends it. */
+	const answer = async (id: string) => {
+		const turn = Promise.withResolvers<TurnResult>();
+		turns.set(id, turn);
+		results.set(
+			id,
+			(await settleTurn(() => turn.promise, "turn")) as TurnResult,
+		);
+	};
 	const claim: ChannelClaim = {
 		name: "owner",
 		priority: 0,
@@ -68,12 +78,14 @@ function world(onLeft?: (id: string) => void) {
 							text: "report",
 						}),
 					);
-				const turn = Promise.withResolvers<TurnResult>();
-				turns.set(m.messageId, turn);
-				results.set(
-					m.messageId,
-					(await settleTurn(() => turn.promise, "turn")) as TurnResult,
-				);
+				// Answered in a queue task of a thread it opens, not waited for, as a plugin's claim may.
+				if (m.messageId.startsWith("detached"))
+					void queue.run("discord:9", async () => {
+						// Its turn starts only after the admission ended, as one that records its conversation first.
+						await Bun.sleep(2);
+						await answer(m.messageId);
+					});
+				else await answer(m.messageId);
 			},
 			failure: "failed",
 		}),
@@ -87,7 +99,7 @@ function world(onLeft?: (id: string) => void) {
 		claims: [claim],
 		targets: (name) =>
 			name === PERSONAL_TARGET.name ? PERSONAL_TARGET : undefined,
-		queue: new ChannelQueue(),
+		queue,
 		logger: silentLogger(),
 		contacts: IDENTITY,
 		principals: IDENTITY,
@@ -113,7 +125,7 @@ function world(onLeft?: (id: string) => void) {
 }
 
 const tally = (): RefuseTally => ({ refused: 0, failed: 0, stopped: false });
-const answer = (text: string): TurnResult => ({ ok: true, text });
+const answered = (text: string): TurnResult => ({ ok: true, text });
 
 test("a background turn a message's turn asks for does not answer that message", async () => {
 	const { routing, turns, left, start } = world();
@@ -121,7 +133,7 @@ test("a background turn a message's turn asks for does not answer that message",
 	routing.cutRunning();
 	await routing.leaveCut(tally());
 	expect(left).toEqual(["reports"]);
-	turns.get("reports")?.resolve(answer("late"));
+	turns.get("reports")?.resolve(answered("late"));
 	await done;
 });
 
@@ -134,7 +146,7 @@ test("only turns running when the drain limit passes are cut, each left once, an
 	await routing.leaveCut(tally());
 	await routing.leaveCut(tally());
 	expect(left).toEqual(["a"]);
-	turns.get("a")?.resolve(answer("late"));
+	turns.get("a")?.resolve(answered("late"));
 	await done;
 	expect(results.get("a")).toMatchObject({ ok: false, stopped: true });
 });
@@ -143,7 +155,7 @@ test("a turn that failed or was stopped before the cut leaves its message; one t
 	for (const [result, expected] of [
 		[{ ok: false, error: new Error("boom") }, ["a"]],
 		[{ ok: false, error: new Error("stopped"), stopped: true }, ["a"]],
-		[answer("answer"), []],
+		[answered("answer"), []],
 	] as const) {
 		const { routing, turns, left, start } = world();
 		const { done } = await start(message("a"));
@@ -168,11 +180,11 @@ test("once the refusal's time is up, a cut turn not yet reached is not left, and
 	await routing.leaveCut(counted);
 	expect(left).toEqual(["a"]);
 	expect(counted.refused).toBe(1);
-	turns.get("a")?.resolve(answer("late"));
-	turns.get("b")?.resolve(answer("late"));
+	turns.get("a")?.resolve(answered("late"));
+	turns.get("b")?.resolve(answered("late"));
 	await Promise.all([first, second]);
 	expect(results.get("a")).toMatchObject({ ok: false, stopped: true });
-	expect(results.get("b")).toEqual(answer("late"));
+	expect(results.get("b")).toEqual(answered("late"));
 });
 
 test("a cut turn for a bot's message is not left or counted, and its late answer is posted", async () => {
@@ -185,7 +197,84 @@ test("a cut turn for a bot's message is not left or counted, and its late answer
 	await routing.leaveCut(counted);
 	expect(left).toEqual([]);
 	expect(counted.refused).toBe(0);
-	turns.get("bot")?.resolve(answer("late"));
+	turns.get("bot")?.resolve(answered("late"));
 	await done;
-	expect(results.get("bot")).toEqual(answer("late"));
+	expect(results.get("bot")).toEqual(answered("late"));
+});
+
+test("a turn the admission queues without waiting for it answers its message, or leaves it when cut", async () => {
+	for (const [result, expected] of [
+		[answered("answer"), []],
+		[undefined, ["detached"]],
+	] as const) {
+		const { routing, turns, left, start } = world();
+		await start(message("detached"));
+		routing.cutRunning();
+		if (result) turns.get("detached")?.resolve(result);
+		await Bun.sleep(0);
+		await routing.leaveCut(tally());
+		expect(left).toEqual([...expected]);
+		turns.get("detached")?.resolve(answered("late"));
+	}
+});
+
+test("a message steered into a turn after an earlier turn of it answered is left when the turn is cut", async () => {
+	const left: string[] = [];
+	const results = new Map<string, TurnResult>();
+	let steer = false;
+	// The admission runs two turns, as a group round of two members does.
+	const first = Promise.withResolvers<TurnResult>();
+	const second = Promise.withResolvers<TurnResult>();
+	const claim: ChannelClaim = {
+		name: "rounds",
+		priority: 1,
+		owns: () => true,
+		admit: (m) => ({
+			kind: "turn",
+			busy: {
+				steer: async () => steer,
+				react: async () => undefined,
+				unreact: async () => undefined,
+			},
+			run: async () => {
+				await settleTurn(() => first.promise, "member one");
+				results.set(
+					m.messageId,
+					(await settleTurn(() => second.promise, "member two")) as TurnResult,
+				);
+			},
+			failure: "failed",
+		}),
+		startFresh: async () => "rounds",
+	};
+	const rounds = new ChannelRouter({
+		claims: [claim],
+		targets: () => undefined,
+		queue: new ChannelQueue(),
+		logger: silentLogger(),
+		contacts: IDENTITY,
+		principals: IDENTITY,
+		surfaces: {
+			of: () =>
+				({
+					refuseStopping: async (m: InboundMessage) => {
+						left.push(m.messageId);
+						return true;
+					},
+				}) as ChatSurface,
+			sendReply: async () => undefined,
+		},
+	});
+	const done = rounds.handle(message("a"));
+	await Bun.sleep(0);
+	first.resolve(answered("one"));
+	await Bun.sleep(1);
+	steer = true;
+	await rounds.handle(message("b"));
+	rounds.cutRunning();
+	await rounds.leaveCut(tally());
+	expect(left).toEqual(["b"]);
+	second.resolve(answered("two"));
+	await done;
+	expect(results.get("a")).toMatchObject({ stopped: true });
 });

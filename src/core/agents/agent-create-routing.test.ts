@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { ResolvedRouting } from "../config/routing.ts";
+import type { InboundMessage } from "../contract/channels.ts";
 import { discordKey } from "../contract/discord-key.ts";
 import type { AgentTurnScope } from "../domain/sessions.ts";
 import type { Speaker } from "../identity/speakers.ts";
+import {
+	currentRecord,
+	TurnRecord,
+	underRecord,
+} from "../routing/turn-records.ts";
 import { TEST_OWNER } from "../testing/owner.ts";
 import { legacyRows, testPlaces } from "../testing/team-places.ts";
 import type { Agent } from "./agent-store.ts";
@@ -35,6 +41,7 @@ const NEW_AGENT = {
 function editing(working: string | undefined, routing?: ResolvedRouting) {
 	const rows = new Map<string, Agent>();
 	const opened: string[] = [];
+	const records: (TurnRecord | undefined)[] = [];
 	const store = {
 		agents: () => [...rows.values()],
 		agent: (name: string) => rows.get(name),
@@ -76,12 +83,13 @@ function editing(working: string | undefined, routing?: ResolvedRouting) {
 			speakerOf: () => OWNER,
 			answerBackground: async (channel: string) => {
 				opened.push(channel);
+				records.push(currentRecord());
 			},
 			workingIn: () => working,
 		},
 		changed: () => undefined,
 	} as unknown as TeamContext;
-	return { editing: new TeamEditing(ctx), opened };
+	return { editing: new TeamEditing(ctx), opened, records };
 }
 
 const create = async (f: ReturnType<typeof editing>) => {
@@ -132,4 +140,14 @@ describe("the opening task's place (R8)", () => {
 		await Bun.sleep(5);
 		expect(f.opened).toEqual(["app:agent.scout"]);
 	});
+});
+
+test("the opening task runs outside the turn that made the agent, so it does not answer that turn's message", async () => {
+	const f = editing("discord:ch-coordinator");
+	const message = { channel: "discord:ch-coordinator", messageId: "m1" };
+	const record = new TurnRecord(message as InboundMessage, () => undefined);
+	await underRecord(record, () => f.editing.create(SCOPE, NEW_AGENT));
+	await Bun.sleep(5);
+	expect(f.opened).toEqual(["discord:ch-scout"]);
+	expect(f.records).toEqual([undefined]);
 });
