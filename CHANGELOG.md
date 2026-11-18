@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.1] - 2026-11-18
+
+### Added
+
+- `InboundMessage.reference.channel` is the channel key of the message a reply quotes, which the Discord surface now sets on live and caught-up messages alike. A claim compares it with the message's own `channel` to tell a reply within the conversation, such as one to a forum post's starter, from a reply to a message of another channel, before it acts on `reference.attachments`.
+
 ## [0.53.0] - 2026-11-18
 
 ### Added
