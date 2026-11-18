@@ -2983,6 +2983,7 @@ It resolves with `AttachmentBytes` (`id`, `name`, `contentType`, empty when Disc
 At most the host's `discord.attachmentRead.maxBytes` (default `ATTACHMENT_READ_MAX_BYTES`, 10 MiB; at most 100 MiB) is read, and a call's `maxBytes` may lower that, never raise it; a `maxBytes` that is not a positive whole number rejects with the code `invalid`. `discordPlugin` throws a `ConfigError` for an `attachmentRead.maxBytes` outside 1 to 100 MiB, as the config file does.
 Nothing is parsed, stored or logged: what the bytes are for (text extraction, an image for the model, a file in the workspace) is the plugin's call.
 The core checks nothing about who may read which channel beyond what the bot can see: pass the channel of the conversation the file was posted in, such as the addressed message's channel, never one a model names in a tool call.
+A reply may quote a message of another channel, so a reply's `reference.channel` names the channel the quoted message is in (the Discord surface sets it, live and when it catches up): read a quoted file in that channel, and compare it with the message's `channel` before treating the quoted files as the conversation's own, such as a forum post's starter.
 
 ```ts
 import { AttachmentReadError, DISCORD } from "pi-roundtable/discord";
