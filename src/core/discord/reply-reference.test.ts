@@ -14,13 +14,15 @@ import { listenForMessages } from "./message-changes.ts";
 const BOT = "900000000000000009";
 const POST = "700000000000000001";
 const FORUM_CHANNEL = "600000000000000001";
+const TEXT_CHANNEL = "600000000000000002";
+/** A message of a text channel, such as a crosspost's source, that a reply in the post quotes. */
+const ELSEWHERE = { channelId: TEXT_CHANNEL, messageId: "500000000000000001" };
+/** The post's starter, which shares the post's id and is in the post. */
+const STARTER = { channelId: POST, messageId: POST };
 
-/**
- * A person's reply in a forum post, `POST`, to a message in `channelId`: the post's starter shares
- * the post's id and channel, while a message of another channel is one Discord let them reply to
- * from elsewhere.
- */
-function reply(channelId: string) {
+/** A person's reply in the forum post `POST` to the message `quoted`, which carries one file. */
+function reply(quoted: { channelId: string; messageId: string }) {
+	const { channelId, messageId } = quoted;
 	return {
 		id: "m1",
 		channelId: POST,
@@ -34,7 +36,7 @@ function reply(channelId: string) {
 			type: MessageReferenceType.Default,
 			channelId,
 			guildId: "g1",
-			messageId: POST,
+			messageId,
 		},
 		fetchReference: async () => ({
 			channelId,
@@ -79,14 +81,14 @@ test("a live reply carries the replied-to message's channel, so a claim tells a 
 		(message) => delivered.push(message),
 		silentLogger(),
 	);
-	client.emit(Events.MessageCreate, reply(POST));
-	client.emit(Events.MessageCreate, reply(FORUM_CHANNEL));
+	client.emit(Events.MessageCreate, reply(STARTER));
+	client.emit(Events.MessageCreate, reply(ELSEWHERE));
 	await Bun.sleep(5);
 	expect(
 		delivered.map((message) => [message.channel, message.reference?.channel]),
 	).toEqual([
 		[`discord:${POST}`, `discord:${POST}`],
-		[`discord:${POST}`, `discord:${FORUM_CHANNEL}`],
+		[`discord:${POST}`, `discord:${TEXT_CHANNEL}`],
 	]);
 	expect(delivered[0]?.reference?.attachments.map((file) => file.name)).toEqual(
 		["spec.pdf"],
@@ -101,9 +103,9 @@ test("a reply caught up after a restart carries the replied-to message's channel
 		channels: { cache: new Map() },
 	};
 	const reader = clientCatchUpReader(client as unknown as Client);
-	const own = await reader.inbound(reply(POST) as never);
-	const other = await reader.inbound(reply(FORUM_CHANNEL) as never);
+	const own = await reader.inbound(reply(STARTER) as never);
+	const other = await reader.inbound(reply(ELSEWHERE) as never);
 	expect(own?.reference?.channel).toBe(`discord:${POST}`);
 	expect(own?.reference?.channel).toBe(own?.channel);
-	expect(other?.reference?.channel).toBe(`discord:${FORUM_CHANNEL}`);
+	expect(other?.reference?.channel).toBe(`discord:${TEXT_CHANNEL}`);
 });
