@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.53.1] - 2026-11-18
+
+- Release in lockstep with pi-roundtable 0.53.1 (a reply's reference names the channel of the message it quotes); no package-specific behavior changes.
+
 ## [0.53.0] - 2026-11-18
 
 - Release in lockstep with pi-roundtable 0.53.0; no package-specific behavior changes.
