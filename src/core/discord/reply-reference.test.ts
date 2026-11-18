@@ -15,7 +15,7 @@ const BOT = "900000000000000009";
 const POST = "700000000000000001";
 const FORUM_CHANNEL = "600000000000000001";
 const TEXT_CHANNEL = "600000000000000002";
-/** A message of a text channel, such as a crosspost's source, that a reply in the post quotes. */
+/** A message of another (text) channel, which a reply in the post quotes. */
 const ELSEWHERE = { channelId: TEXT_CHANNEL, messageId: "500000000000000001" };
 /** The post's starter, which shares the post's id and is in the post. */
 const STARTER = { channelId: POST, messageId: POST };
@@ -39,6 +39,7 @@ function reply(quoted: { channelId: string; messageId: string }) {
 			messageId,
 		},
 		fetchReference: async () => ({
+			id: messageId,
 			channelId,
 			author: { id: "2", username: "bo" },
 			content: "the starter",
@@ -90,9 +91,15 @@ test("a live reply carries the replied-to message's channel, so a claim tells a 
 		[`discord:${POST}`, `discord:${POST}`],
 		[`discord:${POST}`, `discord:${TEXT_CHANNEL}`],
 	]);
-	expect(delivered[0]?.reference?.attachments.map((file) => file.name)).toEqual(
-		["spec.pdf"],
-	);
+	// Each quoted file names the message and channel `readAttachment` reads it from.
+	expect(
+		delivered.map((message) =>
+			message.reference?.attachments.map((file) => [file.name, file.messageId]),
+		),
+	).toEqual([
+		[["spec.pdf", STARTER.messageId]],
+		[["spec.pdf", ELSEWHERE.messageId]],
+	]);
 });
 
 test("a reply caught up after a restart carries the replied-to message's channel as a live one does", async () => {
