@@ -41,6 +41,8 @@ function referenceOf(referenced: Message, mention: RegExp) {
 			.replace(mention, "")
 			.trim(),
 		attachments: attachmentRefs(referenced, referenced.id),
+		// The fetched message's own channel: a forum post's starter is in the post itself; a referenced message elsewhere, such as a crosspost's source, is in another channel.
+		channel: channelKey("discord", referenced.channelId),
 		authorId: referenced.author.id,
 		...(referenced.webhookId
 			? { webhookName: referenced.author.username }

@@ -168,6 +168,7 @@ test("a reply to one of the bot's messages says so, and a replied-to webhook pos
 		discordMessage({
 			reference: { messageId: "8", type: MessageReferenceType.Default },
 			fetchReference: async () => ({
+				channelId: "77",
 				author: { id: BOT, username: "Scout" },
 				content: `<@${BOT}> earlier`,
 				webhookId: "hook-2",
@@ -181,6 +182,7 @@ test("a reply to one of the bot's messages says so, and a replied-to webhook pos
 	expect(inbound?.reference).toEqual({
 		text: "earlier",
 		attachments: [],
+		channel: "discord:77",
 		authorId: BOT,
 		webhookName: "Scout",
 	});

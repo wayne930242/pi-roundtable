@@ -117,6 +117,12 @@ export interface InboundMessage {
 	reference?: {
 		text: string;
 		attachments: AttachmentRef[];
+		/**
+		 * The channel the referenced message is in, when the surface reports it; Discord does. Compare
+		 * it with `channel` to tell a reply within the conversation (such as to a forum post's starter)
+		 * from one to a message of another channel.
+		 */
+		channel?: ChannelKey;
 		/** The surface's id of the referenced message's author, when the surface reports it. */
 		authorId?: string;
 		/** The name a webhook posted the referenced message under, such as an agent's. */
