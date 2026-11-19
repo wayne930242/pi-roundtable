@@ -19,6 +19,7 @@ import {
 	agentReplyText,
 	chainLimitReason,
 	deliveredMessagePost,
+	helperChainLimitReason,
 } from "./agent-prompt.ts";
 import { answersTo } from "./agent-rules.ts";
 import type { Agent } from "./agent-store.ts";
@@ -26,6 +27,7 @@ import { conversationLabel, messageTarget } from "./message-target.ts";
 import {
 	type Chain,
 	MAX_CHAIN_MESSAGES,
+	MAX_HELPER_MESSAGES,
 	type TurnHost,
 } from "./team-turn-types.ts";
 
@@ -77,7 +79,16 @@ export class AgentMessages {
 			throw new AgentError(
 				"message_agent can only be used during an agent turn.",
 			);
-		if (chain.messages >= MAX_CHAIN_MESSAGES)
+		// Between an agent and its own temp knight the run is one agent's work, so it does not count
+		// toward the chain cap; a higher cap of its own only stops the two writing to each other forever.
+		const kin = target.parent === caller.name || sender.parent === target.name;
+		if (kin && (chain.helperMessages ?? 0) >= MAX_HELPER_MESSAGES)
+			throw new AgentError(
+				helperChainLimitReason(
+					addressee(chain.speaker, this.#host.options.owner),
+				),
+			);
+		if (!kin && chain.messages >= MAX_CHAIN_MESSAGES)
 			throw new AgentError(
 				chainLimitReason(addressee(chain.speaker, this.#host.options.owner)),
 			);
@@ -87,7 +98,8 @@ export class AgentMessages {
 			throw new AgentError(
 				`"${target.name}" is a temp knight of "${target.parent}" and answers only the conversation that made it; ask "${target.parent}" there.`,
 			);
-		chain.messages += 1;
+		if (kin) chain.helperMessages = (chain.helperMessages ?? 0) + 1;
+		else chain.messages += 1;
 		// A temp knight is working from the moment a message is handed to it until it has answered.
 		this.#host.helpers.begin(target.name);
 		// The request shows in the sender's turn channel as a small card under the sender's name.

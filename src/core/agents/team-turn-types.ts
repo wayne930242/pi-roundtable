@@ -25,11 +25,18 @@ import type { TeamPlaces } from "./team-places.ts";
 
 /** Agent messages without an owner message in between (spec behavior 13). */
 export const MAX_CHAIN_MESSAGES = 8;
+/**
+ * Messages between an agent and its own temp knights in one run, which `MAX_CHAIN_MESSAGES` does
+ * not count; this higher cap only stops a parent and its temp knight writing to each other forever.
+ */
+export const MAX_HELPER_MESSAGES = 40;
 export const BACKLOG_LIMIT = 40;
 
 /** A run of agent messages started by one owner message, schedule, or report. */
 export interface Chain {
 	messages: number;
+	/** Messages between an agent and its own temp knights, counted apart from `messages`. */
+	helperMessages?: number;
 	/** Whoever started the run; the agents it wakes work for the same person. */
 	speaker: Speaker;
 }

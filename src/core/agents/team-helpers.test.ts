@@ -159,16 +159,32 @@ describeDb("temp knights (Discord)", () => {
 			expect(fx.channels.threads.size).toBe(0);
 		});
 
+		test("messages to its own temp knight do not count toward the chain cap, and leave it to other agents", async () => {
+			await asCoordinator(async (caller) => {
+				// The chain is at its cap of 8 messages between independent agents.
+				for (let i = 0; i < 8; i += 1)
+					fx.team.message(caller, "doctor", `ping ${i}`);
+				await fx.team.helperCreate(caller, SCOUT);
+				for (let i = 0; i < 5; i += 1)
+					fx.team.message(caller, "coordinator-1", `more ${i}`);
+				expect(() => fx.team.message(caller, "doctor", "again")).toThrow(
+					"8 messages",
+				);
+			});
+			expect(fx.store.agent("coordinator-1")?.status).toBe("active");
+		});
+
 		test("a task that cannot be handed over leaves no idle temp knight behind", async () => {
 			await expect(
 				asCoordinator(async (caller) => {
-					// The chain is at its cap of 8 messages.
-					for (let i = 0; i < 8; i += 1)
-						fx.team.message(caller, "doctor", `ping ${i}`);
+					await fx.team.helperCreate(caller, SCOUT);
+					// The run is at its cap of 40 messages between the knight and its temp knights.
+					for (let i = 0; i < 39; i += 1)
+						fx.team.message(caller, "coordinator-1", `ping ${i}`);
 					return fx.team.helperCreate(caller, SCOUT);
 				}),
-			).rejects.toThrow("8 messages");
-			expect(fx.store.agent("coordinator-1")?.status).toBe("archived");
+			).rejects.toThrow("40 messages");
+			expect(fx.store.agent("coordinator-2")?.status).toBe("archived");
 		});
 	});
 

@@ -190,6 +190,12 @@ export function chainLimitReason(who: OwnerIdentity): string {
 	return `This chain of agent messages has reached 8 messages without ${o.name} in between, so it is stopped. Tell ${o.him} what was done and ask whether to continue.`;
 }
 
+/** Why a parent and its own temp knights stop writing to each other without the owner in between. */
+export function helperChainLimitReason(who: OwnerIdentity): string {
+	const o = ownerWords(who);
+	return `You and your temp knights have sent each other 40 messages without ${o.name} in between, so this is stopped. Tell ${o.him} what was done and ask whether to continue.`;
+}
+
 /**
  * Where a turn's conversation is: the surface of the turn's conversation (`home`: the agent's own
  * channel or room, or the group's in a group round), named by its `label`, and the other surfaces the agents have places on:
