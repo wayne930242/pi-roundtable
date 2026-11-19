@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.2] - 2026-11-19
+
+### Changed
+
+- Messages between an agent and its own temp knights no longer count toward the cap of 8 agent messages without the owner in between: the parent's `message_agent` to its temp knight, and the temp knight's to its parent, count on their own, toward a cap of 40 (`MAX_HELPER_MESSAGES`) that only stops the two writing to each other forever. The cap of 8 still holds for messages between independent agents, in the same run.
+
 ## [0.53.1] - 2026-11-18
 
 ### Added
