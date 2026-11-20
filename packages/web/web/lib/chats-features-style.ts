@@ -94,32 +94,59 @@ button.feature-tile:hover .feature-icon {
 	background: var(--surface-3);
 }
 
-.feature-badge {
-	position: absolute;
-	top: -0.4rem;
-	right: -0.4rem;
-	display: grid;
-	place-items: center;
-	min-width: 1.4rem;
-	height: 1.4rem;
-	padding: 0 0.35rem;
-	border-radius: var(--radius-full);
-	background: var(--warn);
-	color: var(--bg);
-	font-size: var(--text-xs);
-	font-weight: var(--weight-bold);
-}
-
 .feature-label {
 	overflow-wrap: anywhere;
 }
 
-/* On a wide screen the grid is a popover beside its button, bottom left of the column. */
+/* On a wide screen the grid is a compact popover beside its button, bottom left of the column: a row
+   per entry, icon and label, in two columns. */
 @media (min-width: 720px) {
 	dialog.sheet.features {
 		inset: auto auto 5rem var(--space-4);
 		width: 24rem;
 		margin: 0;
+	}
+
+	dialog.sheet.features .feature-groups {
+		gap: var(--space-3);
+	}
+
+	dialog.sheet.features .feature-group h3 {
+		margin-bottom: var(--space-1);
+		padding-left: var(--space-2);
+		font-size: var(--text-xs);
+	}
+
+	dialog.sheet.features .feature-group ul {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--space-1);
+	}
+
+	dialog.sheet.features button.feature-tile {
+		flex-direction: row;
+		justify-content: flex-start;
+		gap: var(--space-2);
+		min-height: 2.5rem;
+		padding: 0 var(--space-2);
+		border-radius: var(--radius);
+		text-align: left;
+	}
+
+	dialog.sheet.features button.feature-tile:hover:not(:disabled) {
+		background: var(--surface-2);
+	}
+
+	dialog.sheet.features .feature-icon,
+	dialog.sheet.features button.feature-tile:hover .feature-icon {
+		width: 1.5rem;
+		height: 1.5rem;
+		background: none;
+		color: var(--muted);
+	}
+
+	dialog.sheet.features .feature-icon svg {
+		width: 1.25rem;
+		height: 1.25rem;
 	}
 }
 `;

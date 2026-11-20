@@ -1,5 +1,8 @@
 // What the "all features" grid holds: the fixed entries of the app and every pane or main page the
-// config names, in four groups. Pure, so a test needs no browser; the sheet draws what it returns.
+// config names, in three groups. The account's own entries (profile, settings, connectors, the
+// scheme, logging out) are in the menu under the person's picture, and the cards waiting have their
+// button in the home's top row, so neither is here. Pure, so a test needs no browser; the sheet
+// draws what it returns.
 
 import type { PageLinkView, PaneName } from "../../src/api-types.ts";
 import type { IconName } from "../components/icons.tsx";
@@ -7,23 +10,17 @@ import { PANE_ICONS, PANE_LABELS } from "../pages/more.tsx";
 import { translate as t } from "./messages.ts";
 
 /** What pressing a tile does. */
-export type TileAction =
-	| { kind: "go"; pane: string }
-	| { kind: "arrange" }
-	| { kind: "waiting" }
-	| { kind: "theme" };
+export type TileAction = { kind: "go"; pane: string } | { kind: "arrange" };
 
 export interface Tile {
 	id: string;
 	label: string;
 	icon: IconName;
 	action: TileAction;
-	/** A count on the tile's corner, such as the cards waiting. */
-	badge?: number;
 }
 
 export interface TileGroup {
-	id: "organize" | "work" | "assistant" | "system";
+	id: "organize" | "work" | "assistant";
 	title: string;
 	tiles: Tile[];
 }
@@ -31,11 +28,8 @@ export interface TileGroup {
 export interface FeatureInput {
 	panes: readonly PaneName[];
 	pages: readonly PageLinkView[];
-	/** The owner app is served: its arranging, hiding, settings and profile exist. */
+	/** The owner app is served: its arranging and hiding exist. */
 	hasApp: boolean;
-	waiting: number;
-	/** The page is dark now, so the toggle offers light. */
-	dark: boolean;
 }
 
 export function featureGroups(input: FeatureInput): TileGroup[] {
@@ -56,14 +50,7 @@ export function featureGroups(input: FeatureInput): TileGroup[] {
 		label: string,
 		icon: IconName,
 		action: TileAction,
-		badge?: number,
-	): Tile => ({
-		id,
-		label,
-		icon,
-		action,
-		...(badge ? { badge } : {}),
-	});
+	): Tile => ({ id, label, icon, action });
 	const groups: TileGroup[] = [
 		{
 			id: "organize",
@@ -79,13 +66,6 @@ export function featureGroups(input: FeatureInput): TileGroup[] {
 				...pane("schedules"),
 				...(hasApp
 					? [
-							own(
-								"waiting",
-								t("Waiting"),
-								"hourglass",
-								{ kind: "waiting" },
-								input.waiting,
-							),
 							own("hidden", t("Hidden and archived"), "archive", {
 								kind: "go",
 								pane: "hidden",
@@ -121,29 +101,6 @@ export function featureGroups(input: FeatureInput): TileGroup[] {
 				...pane("skills"),
 				...pane("presets"),
 				...pane("webhooks"),
-			],
-		},
-		{
-			id: "system",
-			title: t("System"),
-			tiles: [
-				...pane("connectors"),
-				...(hasApp
-					? [
-							own("settings", t("Settings"), PANE_ICONS.settings, {
-								kind: "go",
-								pane: "settings",
-							}),
-						]
-					: []),
-				// The profile is a pane a host opts into: without it the route does not open.
-				...pane("profile"),
-				own(
-					"theme",
-					input.dark ? t("Switch to light") : t("Switch to dark"),
-					input.dark ? "sun" : "moon",
-					{ kind: "theme" },
-				),
 			],
 		},
 	];

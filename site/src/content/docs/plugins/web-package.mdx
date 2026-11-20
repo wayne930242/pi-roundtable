@@ -86,7 +86,7 @@ The page has a Modern look and a Camelot look (parchment by day, a night castle 
 `appearance.home: "chats"` opens the app on a chat list instead of the arranged room list; hosts that leave it out keep the room list.
 The pinned rooms are big figures on top (Home first, with a star), the folders are chips that filter one list of the other rooms by latest activity, and one collapsed row leads to the hidden rooms and the archive.
 A room can be hidden from its menu: it keeps answering, running schedules and pushing, and only leaves the home and the switcher; the owners share the hidden rooms like the pins (`PUT api/rooms/<key>/hidden`).
-Everything else (arranging, schedules, files, settings) is behind the grid button, as a sheet on a phone and a popover on a wide screen; there is no tab bar or rail, and from 1024 px the home is a 380 px column beside the open room.
+The person's picture opens their account menu: profile, settings, connectors, the scheme, and logging out. The rest (arranging, schedules, files, the round table, the knights' notes, skills, presets and webhooks) is behind the grid button, as a sheet of tiles on a phone and a compact two-column menu on a wide screen; there is no tab bar or rail, and from 1024 px the home is a 380 px column beside the open room, whose top row and bottom bar stay in place while the list scrolls.
 Dispatch threads and temp knights are reached from a control in their room's header.
 
 ### Incoming webhooks

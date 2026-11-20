@@ -47,6 +47,6 @@ export const openAddMenu = (button: HTMLElement, leave?: Leave): void =>
 /** Opens the "me" menu under a person's picture. */
 export const openMeMenu = (
 	button: HTMLElement,
-	options: { profile: boolean },
+	options: { profile: boolean; connectors: boolean },
 ): void =>
 	void import("./me-menu.ts").then((one) => one.openMeMenu(button, options));

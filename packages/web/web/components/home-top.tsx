@@ -10,12 +10,17 @@ import { Icon } from "./icons.tsx";
 
 /**
  * The chat home's top row: the person's own picture (their knight when they made one; the menu of their account), the cards waiting on them, the
- * notice bell where the app admits more than its owners, and the "+" of the add menu.
+ * notice bell where the app admits more than its owners, and the "+" of the add menu. While the live connection is lost it says so here;
+ * a working connection shows nothing.
  */
 export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
 	const config = useConfig();
 	const me = useSelector((state) => state.principal);
 	const waiting = useSelector(openCards);
+	const lost = useSelector(
+		(state) =>
+			state.connection === "reconnecting" || state.connection === "closed",
+	);
 	const label = waiting
 		? plural(waiting, "{count} card waiting", "{count} cards waiting")
 		: "";
@@ -30,6 +35,7 @@ export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
 				onClick={(event) =>
 					openMeMenu(event.currentTarget, {
 						profile: config.panes.includes("profile"),
+						connectors: config.panes.includes("connectors"),
 					})
 				}
 			>
@@ -39,6 +45,11 @@ export function HomeTop(props: { onAdd(button: HTMLElement): void }) {
 					<Icon name="profile" size={18} />
 				)}
 			</button>
+			{lost ? (
+				<span className="live-chip chats-offline" role="status">
+					{t("Reconnecting…")}
+				</span>
+			) : null}
 			{waiting ? (
 				<button
 					type="button"

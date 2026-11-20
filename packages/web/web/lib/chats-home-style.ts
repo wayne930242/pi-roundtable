@@ -33,6 +33,29 @@ export const CHATS_HOME_CSS = `
 	min-height: var(--touch);
 }
 
+/*
+ * In the column beside a room the top row stays at the column's top and the bottom bar at its bottom,
+ * however long or short the list: the column is at least as tall as the screen, and the row reaches
+ * over the column's padding so the list scrolls under it.
+ */
+.split-list .chats[data-column] {
+	min-height: 100%;
+}
+
+.split-list .chats[data-column] .chats-top {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1)
+		calc(var(--space-2) * -1);
+	padding: var(--space-4) var(--space-4) var(--space-2);
+	background: var(--bg);
+}
+
+.chats-offline {
+	color: var(--warn);
+}
+
 .chats-top-end {
 	display: flex;
 	align-items: center;

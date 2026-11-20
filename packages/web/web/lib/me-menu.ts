@@ -1,8 +1,10 @@
 // The "me" menu under a person's picture on the chat home: who is signed in, their profile where
-// the host serves one, settings, the scheme, and logging out. It loads with the
+// the host serves one, settings, the connectors where the host serves them, the scheme, and logging
+// out. The "all features" grid leaves these to it. It loads with the
 // first menu, not with the page.
 
 import type { SessionView } from "../../src/api-types.ts";
+import { PANE_ICONS } from "../pages/more.tsx";
 import { type MenuItem, openMenu } from "./action-menu.ts";
 import { api } from "./api.ts";
 import { store } from "./app-store.ts";
@@ -15,6 +17,8 @@ import { resolvedTheme, setTheme } from "./theme.ts";
 export interface MeMenuOptions {
 	/** The host serves the profile pane; where it does not, the route opens nothing. */
 	profile: boolean;
+	/** The host serves the connectors pane. */
+	connectors: boolean;
 }
 
 /** Stops this device's pushes, then posts the logout form so the server clears the cookie. */
@@ -52,6 +56,13 @@ export async function meMenu(
 		icon: "settings",
 		run: () => navigate("settings"),
 	});
+	if (options.connectors)
+		items.push({
+			id: "connectors",
+			label: t("Connectors"),
+			icon: PANE_ICONS.connectors,
+			run: () => navigate("connectors"),
+		});
 	items.push({
 		id: "theme",
 		label: dark ? t("Switch to light") : t("Switch to dark"),

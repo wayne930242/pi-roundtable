@@ -876,6 +876,13 @@ button.room-picture:hover:not(:disabled) {
 	 * browser anchors the scroll (not Safari), it keeps what is read in place as they settle.
 	 */
 	overflow-anchor: auto;
+	/*
+	 * The containing block of what a message positions, so it scrolls with the messages: a block's
+	 * screen-reader text (pi-better-show) placed against the room instead stretched the room past the
+	 * screen, and bringing a message into view then scrolled the room's header and the list beside it
+	 * away.
+	 */
+	position: relative;
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;

@@ -100,8 +100,9 @@ kbd {
 	padding-right: var(--safe-right);
 }
 
+/* A page that fills the screen scrolls inside itself; clipped, not hidden, so nothing (a scroll into view included) can scroll the frame away. */
 .stage[data-fill] {
-	overflow: hidden;
+	overflow: clip;
 }
 
 .route {

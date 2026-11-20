@@ -49,6 +49,21 @@ test("the person's picture opens a menu titled with their name; Profile is in it
 	]);
 });
 
+test("Connectors is in the menu where the host serves the connectors pane, after Settings", async () => {
+	await open(served([...chatsConfig.panes, "connectors"]));
+	expect(labels()).toEqual([
+		"Profile",
+		"Settings",
+		"Connectors",
+		"Switch to dark",
+		"Log out",
+	]);
+	await choose("Connectors");
+	expect(location.hash).toContain("connectors");
+	await open(NOT_SERVED);
+	expect(labels()).not.toContain("Connectors");
+});
+
 test("a host that does not serve the profile pane has no Profile item", async () => {
 	await open(NOT_SERVED);
 	expect(labels()).not.toContain("Profile");

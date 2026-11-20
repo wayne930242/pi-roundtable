@@ -261,7 +261,7 @@ test("the open room's row is marked and the column version has four pins to a ro
 	expect(q(".chats")?.hasAttribute("data-column")).toBe(true);
 });
 
-test("the grid button opens all features, grouped from the config's panes, with the cards waiting on its tile", async () => {
+test("the grid button opens all features, grouped from the config's panes; the account's entries and the cards waiting are elsewhere", async () => {
 	const stub = seed();
 	loadChats({});
 	store.dispatch({
@@ -276,6 +276,8 @@ test("the grid button opens all features, grouped from the config's panes, with 
 		},
 	});
 	await show(<Home />);
+	// The cards waiting have their button in the top row.
+	expect(q(".chats-waiting")).not.toBeNull();
 	await page.click(q(".chats-grid"));
 	await until(() => all(".feature-tile").length > 0);
 	// The dialog's own class is `features`: the groups' container must not share it, or the
@@ -283,31 +285,40 @@ test("the grid button opens all features, grouped from the config's panes, with 
 	expect(
 		q("dialog.sheet.features > .sheet-body .feature-groups"),
 	).not.toBeNull();
-	expect(names(".feature-group h3")).toEqual([
-		"Organize",
-		"Work",
-		"Knights",
-		"System",
-	]);
+	expect(names(".feature-group h3")).toEqual(["Organize", "Work", "Knights"]);
 	const tiles = names(".feature-label");
 	for (const label of [
 		"Folders and order",
 		"Schedules",
-		"Waiting",
 		"Hidden and archived",
 		"Files",
 		"Round table",
 		"Notes",
 		"Skills",
-		"Settings",
-		"Profile",
 	])
 		expect(tiles).toContain(label);
+	for (const label of ["Waiting", "Settings", "Profile", "Switch to light"])
+		expect(tiles).not.toContain(label);
 	// Panes the host does not serve have no tile.
 	expect(tiles).not.toContain("Webhooks");
-	expect(q(".feature-badge")?.textContent).toBe("1");
+	// A working connection is not announced.
+	expect(q("dialog.sheet.features .live-chip")).toBeNull();
 	store.dispatch({ type: "prompt_closed", prompt: "p2", outcome: "approved" });
 	stub.mockRestore();
+});
+
+test("the top row says the live connection is lost while it is, and nothing while it works", async () => {
+	seed();
+	loadChats({});
+	await show(<Home />);
+	store.dispatch({ type: "connection", status: "open" });
+	await new Promise((resolve) => setTimeout(resolve, 20));
+	expect(q(".chats-offline")).toBeNull();
+	store.dispatch({ type: "connection", status: "reconnecting" });
+	await until(() => q(".chats-offline") !== null);
+	expect(q(".chats-offline")?.textContent).toBe("Reconnecting…");
+	store.dispatch({ type: "connection", status: "open" });
+	await until(() => q(".chats-offline") === null);
 });
 
 test("hiding from the home is the layout API's; the home applies the server's answer", async () => {
