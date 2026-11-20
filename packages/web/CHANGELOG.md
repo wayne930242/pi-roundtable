@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.3] - 2026-11-20
+
+### Changed
+
+- The chat home's "All features" holds three groups (Organize, Work, Knights) instead of four. Profile, Settings, the scheme and logging out were already in the menu under the person's picture; Connectors joins them there, and the System group is gone. The Waiting tile is gone too: the cards waiting keep their button in the home's top row. On a wide screen the popover is a compact menu, an icon and a label per row in two columns; a phone keeps the sheet of big tiles.
+- The home no longer shows "Receiving live updates" while the connection works; while it is lost, the top row says "Reconnecting…".
+
+### Fixed
+
+- On a wide screen a room's header and the chat column beside it no longer scroll out of view: a block's screen-reader text (forms, tables, checklists) was placed against the room instead of its message list and stretched the room past the screen, so bringing a message into view moved the whole frame. The message list now holds what a message positions, and a page that fills the screen clips instead of hiding its overflow.
+- In the chat column beside a room, the top row (the person's picture and "+") stays at the top while the list scrolls, and the bottom bar (all features and search) stays at the bottom even when the list is short.
+
 ## [0.53.2] - 2026-11-19
 
 - Release in lockstep with pi-roundtable 0.53.2; no package-specific behavior changes.

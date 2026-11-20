@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.53.3] - 2026-11-20
+
+- Release in lockstep with pi-roundtable 0.53.3 (web: desktop frame stays in place, trimmed all features); no package-specific behavior changes.
+
 ## [0.53.2] - 2026-11-19
 
 - Release in lockstep with pi-roundtable 0.53.2; no package-specific behavior changes.
