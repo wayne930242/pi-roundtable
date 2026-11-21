@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.4] - 2026-11-21
+
+- Release in lockstep with pi-roundtable 0.53.4; no package-specific behavior changes.
+
 ## [0.53.3] - 2026-11-20
 
 - Release in lockstep with pi-roundtable 0.53.3 (web: desktop frame stays in place, trimmed all features); no package-specific behavior changes.

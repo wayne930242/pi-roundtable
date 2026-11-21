@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.4] - 2026-11-21
+
+### Changed
+
+- pi-roundtable-web: Every Markdown view draws a fenced code block with one shared element, `CodeBlock`, whose button copies the code: a message and a host room as before, and now a skill document too, which had its own block without the button. On a screen with a mouse the button shows faintly until the block is pointed at, instead of not at all. The message menu's "Select text" sheet shows the text in a read-only field, which keeps its own selection, so scrolling a long message while selecting no longer loses what was picked; its Close and Copy all buttons stay in view below the field.
+
 ## [0.53.3] - 2026-11-20
 
 ### Changed
