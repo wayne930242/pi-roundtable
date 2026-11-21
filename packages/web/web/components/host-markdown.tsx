@@ -2,7 +2,7 @@ import { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { translate as t } from "../lib/messages.ts";
-import { Pre } from "./message-markdown.tsx";
+import { CodeBlock } from "./code-block.tsx";
 
 /** A file the host saved in the room, named in an image: `![alt](file:<id>)`. */
 const FILE_IMAGE = /^file:([A-Za-z0-9_-]{1,64})$/;
@@ -67,7 +67,7 @@ export const HostMarkdown = memo(function HostMarkdown({
 							<span>{alt}</span>
 						);
 					},
-					pre: Pre,
+					pre: CodeBlock,
 					table: ({ children }) => (
 						<div className="table-wrap">
 							<table>{children}</table>

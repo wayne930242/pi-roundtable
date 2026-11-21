@@ -1,12 +1,11 @@
-import { lazy, memo, Suspense, useContext, useState } from "react";
+import { lazy, memo, Suspense, useContext } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BLOCK_HINT } from "../lib/block-hint.ts";
 import { ConfigContext } from "../lib/config.ts";
-import { translate as t } from "../lib/messages.ts";
 import { remarkChat } from "../lib/remark-chat.ts";
 import { hrefFor } from "../lib/router.ts";
-import { Icon } from "./icons.tsx";
+import { CodeBlock } from "./code-block.tsx";
 
 const escapeRegExp = (text: string): string =>
 	text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -26,39 +25,6 @@ export const hasThreadLink = (
 	new RegExp(`\\]\\(${escapeRegExp(surface)}:thread\\.[0-9a-f-]{36}\\)`).test(
 		text,
 	);
-
-/** A fenced code block with a button that copies it. */
-export function Pre({ children }: { children?: React.ReactNode }) {
-	const [copied, setCopied] = useState(false);
-	const text = (node: React.ReactNode): string => {
-		if (typeof node === "string") return node;
-		if (Array.isArray(node)) return node.map(text).join("");
-		if (node && typeof node === "object" && "props" in node)
-			return text((node.props as { children?: React.ReactNode }).children);
-		return "";
-	};
-	return (
-		<div className="code-block">
-			<pre>{children}</pre>
-			<button
-				type="button"
-				className="icon-button code-copy"
-				aria-label={t("Copy")}
-				onClick={() => {
-					navigator.clipboard
-						?.writeText(text(children))
-						.then(() => {
-							setCopied(true);
-							setTimeout(() => setCopied(false), 1400);
-						})
-						.catch(() => undefined);
-				}}
-			>
-				<Icon name={copied ? "check" : "copy"} size={16} />
-			</button>
-		</div>
-	);
-}
 
 // Display blocks (cards, tables, diagrams, ...) are drawn by pi-better-show's elements, which a
 // message without a block never loads.
@@ -95,7 +61,7 @@ export const MarkdownContent = memo(function MarkdownContent({
 						<span>{children}</span>
 					),
 				img: ({ alt }) => <span>{alt}</span>,
-				pre: Pre,
+				pre: CodeBlock,
 				table: ({ children }) => (
 					<div className="table-wrap">
 						<table>{children}</table>

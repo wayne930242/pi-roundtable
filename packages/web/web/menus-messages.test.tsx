@@ -115,11 +115,15 @@ test("on a phone Select text opens the message's text alone in a sheet, where no
 	await rightClick(q("li.message"));
 	await choose("Select text");
 	await page.act(async () => void (await settle(300)));
-	const text = document.querySelector<HTMLElement>("pre.select-text");
+	const text = document.querySelector<HTMLTextAreaElement>(
+		"textarea.select-text",
+	);
 	const sheet = text?.closest("dialog");
 	expect(sheet?.open).toBe(true);
 	// Exactly what was written, as stored: the Markdown marks and the line break too.
-	expect(text?.textContent).toBe("hello **bold**\nsecond line");
+	expect(text?.value).toBe("hello **bold**\nsecond line");
+	// A read-only field: its selection is its own, so scrolling it keeps what was picked.
+	expect(text?.readOnly).toBe(true);
 	expect(sheet?.querySelector("[data-hold]")).toBeNull();
 	expect(text?.closest("[data-hold]")).toBeNull();
 	expect(window.getSelection()?.toString() ?? "").toBe("");

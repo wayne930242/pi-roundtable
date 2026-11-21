@@ -1,5 +1,6 @@
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CodeBlock } from "./code-block.tsx";
 
 /** Read-only skill Markdown: raw HTML stays text and links cannot target local/private files. */
 export function MarkdownDocument({ source }: { source: string }) {
@@ -17,12 +18,7 @@ export function MarkdownDocument({ source }: { source: string }) {
 							<span>{children}</span>
 						),
 					img: ({ alt }) => <span>{alt}</span>,
-					// A long line scrolls inside its own block, not the panel.
-					pre: ({ children }) => (
-						<div className="code-block">
-							<pre>{children}</pre>
-						</div>
-					),
+					pre: CodeBlock,
 					table: ({ children }) => (
 						<div className="table-wrap">
 							<table>{children}</table>

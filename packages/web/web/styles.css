@@ -1476,7 +1476,8 @@ a.menu-item:focus-visible,
 	min-width: 2rem;
 	height: 2rem;
 	min-height: 2rem;
-	opacity: 0;
+	/* Faint until the block is pointed at, so it is found without crowding the code. */
+	opacity: 0.45;
 	transition: opacity var(--dur) var(--ease-out);
 }
 
