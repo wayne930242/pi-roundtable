@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.53.5] - 2026-11-24
+
+- Release in lockstep with pi-roundtable 0.53.5 (pi-better-show 0.8.0: diagram colours, alt text, wide-diagram scroll); no package-specific behavior changes.
+
 ## [0.53.4] - 2026-11-21
 
 - Release in lockstep with pi-roundtable 0.53.4; no package-specific behavior changes.
